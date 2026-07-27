@@ -36,7 +36,7 @@ const INITIAL: LowState = {
   currentTool: 'pencil',
   activeSurface: null,
   mirrorMode: false,
-  brushSettings: { color: '#22252e', size: 12, opacity: 1, hardness: 0.8, pressureSensitivity: 0.6 },
+  brushSettings: { color: '#22252e', size: 12, opacity: 1, hardness: 0.8, pressureSensitivity: 0.6, stabilization: 0.35 },
   selectedObject: null,
   layers: [{ id: 'layer-0', name: 'Capa 1', visible: true, locked: false, opacity: 1 }],
   activeLayerId: 'layer-0',

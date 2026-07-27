@@ -431,7 +431,6 @@ function bind() {
   $("#btnModelSearch").onclick = modalModelSearch;
   $("#abDesign").onclick = designEntry;
   $("#abL3d").onclick = () => ($("#l3dView").hidden ? openL3d() : closeL3d());
-  $("#l3dExit").onclick = closeL3d;
   $("#btnKeys").onclick = modalKeys;
   $("#btnCmp").onclick = modalCompare;
   $("#btnWs").onclick = pickWs;
