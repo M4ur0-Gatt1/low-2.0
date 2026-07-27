@@ -543,7 +543,17 @@ export class WebGLDesign3D {
   /** Rayo → superficie/guía si hay; si no, plano que mira a la cámara. */
   private resolveHit(): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
     this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
-    const targets = this.surfaces.map((s) => s.mesh);
+    const targets: THREE.Object3D[] = this.surfaces.map((s) => s.mesh);
+    // Una vez que ya hay forma armada, no hace falta seguir creando guías
+    // para todo: se puede dibujar directamente APOYADO en los trazos ya
+    // hechos (como el Grease Pencil de Blender sobre una malla), igual que
+    // Feather permite dibujar sobre la superficie de un volumen existente.
+    // No aplica al crear una guía nueva (tool 'guide'): ahí conviene que la
+    // normal de apoyo salga de una superficie plana real, no del borde
+    // curvo de un tubo de tinta.
+    if (this.tool !== 'guide') {
+      this.strokesGroup.traverse((o) => { if ((o as THREE.Mesh).isMesh) targets.push(o); });
+    }
     if (targets.length) {
       const hits = this.raycaster.intersectObjects(targets, false);
       if (hits.length) {
@@ -1316,6 +1326,19 @@ export class WebGLDesign3D {
 
   hasGuide(): boolean {
     return this.guides.length > 0;
+  }
+
+  /** "Guía invisible" (truco de Feather): bajar la opacidad a 0 no la
+   *  desactiva — sigue dando soporte matemático a los trazos (resolveHit no
+   *  mira la opacidad), solo deja de estorbar visualmente. Afecta a TODAS
+   *  las guías activas por igual. */
+  setGuideOpacity(v: number): void {
+    const op = THREE.MathUtils.clamp(v, 0, 1);
+    for (const g of this.guides) {
+      (g.mesh.material as THREE.MeshStandardMaterial).opacity = op * 0.08;
+      const edges = g.mesh.children.find((c) => c instanceof THREE.LineSegments) as THREE.LineSegments | undefined;
+      if (edges) (edges.material as THREE.LineBasicMaterial).opacity = op * 0.25;
+    }
   }
 
   // ---------------------------------------------------------------- selección
