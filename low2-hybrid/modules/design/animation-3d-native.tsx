@@ -191,7 +191,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
           pointerEvents: 'none',
         }}
       >
-Teclas: P lápiz · G guía · V mover · A puntos · E goma · Shift recta · Alt hilo tenso (eje X/Y/Z) · Ctrl+C/V copia · Supr borra · Ctrl+Z/Ctrl+Alt+Z
+Teclas: P lápiz · G guía · V mover · A puntos · E goma · C tijera · Shift recta · Alt hilo tenso (eje X/Y/Z) · Ctrl+C/V copia · Supr borra · Ctrl+Z/Ctrl+Alt+Z
       </div>
     </div>
   );
