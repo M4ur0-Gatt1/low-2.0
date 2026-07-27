@@ -9,7 +9,8 @@
  * @module design/components/Toolbar3D
  */
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLowStore } from '../../../store/low-store';
 import { ToolType, SurfaceType, GizmoMode, BrushSettings } from '../../../types/design-types';
 import { ColorWheel } from './ColorWheel';
@@ -83,6 +84,15 @@ export const Toolbar3D: React.FC = () => {
     mirrorMode, setMirrorMode, brushSettings, setBrushSettings, gizmoMode, setGizmoMode,
   } = useLowStore();
   const [showWheel, setShowWheel] = useState(false);
+  const [wheelPos, setWheelPos] = useState<{ top: number; left: number } | null>(null);
+  const swatchRef = useRef<HTMLButtonElement>(null);
+  const toggleWheel = () => {
+    if (!showWheel && swatchRef.current) {
+      const r = swatchRef.current.getBoundingClientRect();
+      setWheelPos({ top: r.top, left: r.right + 8 });
+    }
+    setShowWheel((v) => !v);
+  };
   const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, seleccion: false, superficies: false, pincel: true });
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
@@ -156,19 +166,28 @@ export const Toolbar3D: React.FC = () => {
             {p.label}
           </button>
         ))}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginTop: 4 }}>
-          <button onClick={() => setShowWheel(!showWheel)} title="Color del pincel (círculo cromático)"
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginTop: 4 }}>
+          <button ref={swatchRef} onClick={toggleWheel} title="Color del pincel (círculo cromático)"
             style={{ width: 40, height: 40, border: showWheel ? '2px solid #0078d4' : '2px solid transparent', borderRadius: 6, cursor: 'pointer', backgroundColor: brushSettings.color }} />
-          {showWheel && (
-            <div style={{ position: 'absolute', left: '48px', top: 0, zIndex: 200, padding: 12, backgroundColor: '#2d2d2d', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
-              <ColorWheel value={brushSettings.color} onChange={(color) => setBrushSettings({ ...brushSettings, color })} />
-            </div>
-          )}
           <input type="range" min="1" max="100" value={brushSettings.size}
             onChange={(e) => setBrushSettings({ ...brushSettings, size: Number(e.target.value) })}
             title="Tamaño del pincel" style={{ flex: 1, accentColor: '#0078d4' }} />
         </div>
       </Section>
+
+      {showWheel && wheelPos && createPortal(
+        <>
+          {/* fondo invisible: clickear afuera cierra la rueda */}
+          <div onClick={() => setShowWheel(false)} style={{ position: 'fixed', inset: 0, zIndex: 99998 }} />
+          <div style={{
+            position: 'fixed', top: wheelPos.top, left: wheelPos.left, zIndex: 99999,
+            padding: 12, backgroundColor: '#2d2d2d', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          }}>
+            <ColorWheel value={brushSettings.color} onChange={(color) => setBrushSettings({ ...brushSettings, color })} />
+          </div>
+        </>,
+        document.body,
+      )}
     </div>
   );
 };
