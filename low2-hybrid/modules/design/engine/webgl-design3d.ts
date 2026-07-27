@@ -74,7 +74,7 @@ export class WebGLDesign3D {
 
   private surfaces: SurfaceObj[] = [];
   private strokes: StrokeRecord[] = [];
-  private activeGuide: { id: string; mesh: THREE.Mesh } | null = null;
+  private activeGuide: { id: string; mesh: THREE.Mesh; plane?: THREE.Plane } | null = null;
   private selected = new Set<StrokeRecord>();
 
   private fallbackPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
@@ -516,6 +516,17 @@ export class WebGLDesign3D {
         return { point: h.point.clone(), normal };
       }
     }
+    // Guía activa: si el rayo no tocó la malla finita, proyectar sobre el PLANO
+    // (infinito) de la guía → los trazos caen EXACTAMENTE donde se hizo la guía,
+    // no en el centro del dibujo (como esperaba el usuario en vista de lado).
+    // NO al crear una guía nueva (tool 'guide'): esa se dibuja sobre el plano
+    // de la cámara, no sobre la guía anterior.
+    if (this.tool !== 'guide' && this.activeGuide?.plane) {
+      const gp = new THREE.Vector3();
+      if (this.raycaster.ray.intersectPlane(this.activeGuide.plane, gp)) {
+        return { point: gp.clone(), normal: this.activeGuide.plane.normal.clone() };
+      }
+    }
     const camDir = new THREE.Vector3();
     (this.camera as THREE.Camera).getWorldDirection(camDir);
     this.fallbackPlane.setFromNormalAndCoplanarPoint(camDir.clone().negate(), this.controls.target);
@@ -934,6 +945,18 @@ export class WebGLDesign3D {
     mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(back), edgeMat.clone()));
     mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),
       new THREE.LineBasicMaterial({ color: 0xffa53a }))); // naranja = trazo original
+
+    // plano de la guía (infinito): el trazo original + el eje de extrusión
+    // definen su plano. Sirve para que los trazos se proyecten SOBRE la guía
+    // aunque el cursor salga de la malla finita (ver resolveHit).
+    const centroid = new THREE.Vector3();
+    points.forEach((p) => centroid.add(p));
+    centroid.multiplyScalar(1 / points.length);
+    const dir = points[points.length - 1].clone().sub(points[0]);
+    let normal = dir.lengthSq() > 1e-6 ? dir.clone().cross(axis) : axis.clone();
+    if (normal.lengthSq() < 1e-6) normal.copy(axis);
+    normal.normalize();
+    mesh.userData.guidePlane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, centroid);
     return mesh;
   }
 
@@ -1096,10 +1119,11 @@ export class WebGLDesign3D {
     const id = `guide-${this.seq++}`;
     mesh.userData.surfaceId = id;
     mesh.userData.strokeId = id;
+    const plane = mesh.userData.guidePlane as THREE.Plane | undefined;
     const attach = () => {
       this.guidesGroup.add(mesh);
       this.surfaces.push({ id, type: 'loft', mesh });
-      this.activeGuide = { id, mesh };
+      this.activeGuide = { id, mesh, plane };
     };
     if (prev) this.detachGuide(prev);
     attach();
