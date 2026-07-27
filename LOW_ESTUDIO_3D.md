@@ -52,11 +52,22 @@ se abre, no antes). Ver `openL3d()` / `closeL3d()` en `ui/app.js`.
 ## Cómo hacer una corrección al motor 3D
 
 El código que hay que editar para corregir/mejorar el dibujo 3D está en
-**`low2-hybrid/src/`** (TypeScript + React + Three.js), NO en `ui/estudio3d/`
-(esa carpeta es un build generado, se pisa entera cada vez).
+**`low2-hybrid/modules/design/`** (TypeScript + React + Three.js):
+- `engine/webgl-design3d.ts` — el motor real (dibujo, selección, gizmo, ejes,
+  puntos de fuga, undo/redo). La gran mayoría de las correcciones van acá.
+- `components/Toolbar3D.tsx`, `PropertiesPanel3D.tsx`, `ColorWheel.tsx`,
+  `LayerManager3D.tsx` — la UI flotante sobre el canvas.
+- `animation-3d-native.tsx` — monta el motor + la UI, tiene los botones de
+  vista (Persp/Frente/…/Abajo) y deshacer/rehacer.
+- `store/low-store.ts`, `types/design-types.ts` — estado global (herramienta
+  activa, pincel, gizmo) y sus tipos.
+
+`low2-hybrid/src/main.tsx` es SOLO el punto de entrada de Vite (15 líneas),
+no el motor — no confundir. `low2-hybrid/native/` y `include/Low/` (C++) son
+el plan aspiracional de motor nativo, tampoco es esto (ver más abajo).
 
 Flujo:
-1. Editar el código en `low2-hybrid/src/...`
+1. Editar el código en `low2-hybrid/modules/design/...`
 2. `cd low2-hybrid && npm run build:renderer` (equivale a `vite build`,
    genera `low2-hybrid/dist/renderer/`)
 3. Copiar el resultado a `ui/estudio3d/` (reemplaza todo el contenido):
@@ -89,6 +100,39 @@ el motor como app de escritorio suelta, y quedó descartado (ver abajo).
   cada punto (reusa el cálculo de frames de Three.js, no lo reimplementa).
   `BrushSettings.hardness` ahora también afecta la rugosidad del material
   (antes existía en el tipo pero no se usaba en ningún lado).
+- Atajos de teclado (jul-2026, `TOOL_KEYS` en `onKeyDown`): P lápiz, G guía,
+  V mover, A editar puntos, E goma, L liquify. Se ignoran si hay un
+  `<input>/<textarea>/<select>` enfocado (paneles de propiedades).
+- Snap a vértices (`findSnapVertex`): al arrancar o continuar un trazo, si el
+  puntero está a ≤14px en pantalla de un punto de un trazo YA HECHO, ancla
+  ahí exacto — para conectar líneas sin tener que apuntar perfecto. Las
+  guías no cuentan (no retienen sus puntos tras dibujarlas).
+- Shift = recta libre; Alt = "hilo tenso" (`snapToNearestAxis`): ajusta el
+  trazo para que quede paralelo al eje X/Y/Z del mundo más parecido al
+  gesto. Una recta paralela a un eje SIEMPRE converge a SU punto de fuga en
+  perspectiva — por eso alcanza con tirar en esa dirección, no hace falta
+  apuntar al punto de fuga a mano.
+- `select` con el gizmo (jul-2026): con la herramienta `move` y exactamente
+  un trazo seleccionado aparece un `TransformControls` (modo translate o
+  scale, toggle en la Toolbar). Pensado como base para animación futura
+  (posar piezas y grabar keyframes). Solo responde al botón izquierdo del
+  mouse — el giro con el botón derecho de `OrbitControls` nunca se pisa.
+  Con más de un trazo seleccionado sigue funcionando el arrastre libre de
+  siempre.
+- Presets de pincel (`BRUSH_PRESETS` en `Toolbar3D.tsx`): Lápiz/Tinta/Pincel
+  son solo combinaciones distintas de los mismos parámetros (tamaño,
+  dureza, sensibilidad a presión, estabilizador) — no hay geometría nueva
+  por preset.
+- `ColorWheel.tsx`: rueda HSV (matiz=ángulo, saturación=radio, valor=slider)
+  hecha con gradientes CSS puros (conic + radial), sin canvas ni deps
+  nuevas. Se abre haciendo click en el swatch de color de la Toolbar.
+- Ejes XYZ + puntos de fuga automáticos (`toggleAxes`/`updateVPOverlay`):
+  guía pura vía overlay SVG, recalculada cada frame según la cámara — nunca
+  se dibuja ni se exporta. Solo con perspectiva (en ortográfica no hay
+  convergencia real).
+- Ícono del botón 🧊 en `ui/index.html` (`#i-cube-sketch`, no `#i-cube`):
+  cubo a mano alzada con doble trazo levemente desalineado ("línea
+  peluda"). El `#i-cube` original queda intacto por si algo más lo usa.
 
 ## Cámara multiplano del editor 2D (¡ojo, es OTRO código!)
 

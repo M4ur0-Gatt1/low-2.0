@@ -469,6 +469,7 @@ export class WebGLDesign3D {
     if (key && key !== this.lastSurfaceKey) this.addSurface(s.activeSurface!.type);
     this.lastSurfaceKey = key;
     if (toolChanged) this.syncGizmo();
+    this.gizmo?.setMode(s.gizmoMode || 'translate');
   }
 
   // ---------------------------------------------------------------- input
@@ -582,8 +583,19 @@ export class WebGLDesign3D {
     try { this.canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
   };
 
+  private static readonly TOOL_KEYS: Record<string, ToolType> = {
+    p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify',
+  };
+
   private onKeyDown = (e: KeyboardEvent): void => {
     const ctrl = e.ctrlKey || e.metaKey;
+    const target = document.activeElement;
+    const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+    if (!ctrl && !e.altKey && !typing && WebGLDesign3D.TOOL_KEYS[e.key.toLowerCase()]) {
+      e.preventDefault();
+      lowStore.setCurrentTool(WebGLDesign3D.TOOL_KEYS[e.key.toLowerCase()]);
+      return;
+    }
     if (ctrl && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       if (e.shiftKey || e.altKey) this.redo();
@@ -647,8 +659,53 @@ export class WebGLDesign3D {
     return THREE.MathUtils.clamp(e.pressure || 0.5, 0, 1);
   }
 
+  private static readonly SNAP_PX = 14;
+
+  /** Si el puntero está cerca (en pantalla) de un vértice de un trazo ya
+   *  dibujado, devuelve ese punto exacto en mundo — para poder arrancar (o
+   *  terminar) una línea nueva pegada a una existente sin tener que apuntar
+   *  perfecto. Las guías no cuentan: no retienen sus puntos tras dibujarlas. */
+  private findSnapVertex(e: PointerEvent): THREE.Vector3 | null {
+    const rect = this.canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left, py = e.clientY - rect.top;
+    const cam = this.camera as THREE.Camera;
+    let best: THREE.Vector3 | null = null;
+    let bestDist = WebGLDesign3D.SNAP_PX;
+    for (const rec of this.strokes) {
+      for (const p of rec.points) {
+        const world = p.clone().add(rec.object.position);
+        const v = world.clone().project(cam);
+        const sx = ((v.x + 1) / 2) * rect.width, sy = ((1 - v.y) / 2) * rect.height;
+        const d = Math.hypot(sx - px, sy - py);
+        if (d < bestDist) { bestDist = d; best = world; }
+      }
+    }
+    return best;
+  }
+
+  /** "Hilo tenso": ajusta el punto final para que el segmento start→raw
+   *  quede exactamente paralelo al eje X, Y o Z del mundo (el que más se
+   *  parezca a la dirección real que tiró el gesto) — proyecta el vector de
+   *  arrastre sobre ese eje. Una recta paralela a un eje SIEMPRE converge a
+   *  el punto de fuga de ese eje al verla en perspectiva, sin importar desde
+   *  dónde salga — por eso no hace falta apuntar al punto de fuga a mano. */
+  private snapToNearestAxis(start: THREE.Vector3, raw: THREE.Vector3): THREE.Vector3 {
+    const drag = raw.clone().sub(start);
+    if (drag.lengthSq() < 1e-10) return raw;
+    const dragN = drag.clone().normalize();
+    let bestAxis = WebGLDesign3D.VP_AXES[0][0];
+    let bestAbsCos = -1;
+    for (const [axis] of WebGLDesign3D.VP_AXES) {
+      const c = Math.abs(dragN.dot(axis));
+      if (c > bestAbsCos) { bestAbsCos = c; bestAxis = axis; }
+    }
+    const proj = drag.dot(bestAxis);
+    return start.clone().add(bestAxis.clone().multiplyScalar(proj));
+  }
+
   private beginDraw(e: PointerEvent): void {
-    const hit = this.resolveHit();
+    const snap = this.findSnapVertex(e);
+    const hit = snap ? { point: snap, normal: new THREE.Vector3(0, 0, 1) } : this.resolveHit();
     if (!hit) return;
     this.canvas.setPointerCapture(e.pointerId);
     this.mode = 'draw';
@@ -682,13 +739,50 @@ export class WebGLDesign3D {
 
   private moveDraw(e: PointerEvent): void {
     if (!this.current) return;
-    const hit = this.resolveHit();
+    const snap = this.findSnapVertex(e);
+    const hit = snap ? { point: snap, normal: new THREE.Vector3(0, 0, 1) } : this.resolveHit();
     if (!hit) return;
-    const point = this.stabilizedPoint(hit.point).clone();
     const pts = this.current.points;
+    const pressures = this.current.pressures;
+
+    if (e.altKey && pts.length >= 1) {
+      // "Hilo tenso": recta pegada al eje X/Y/Z más parecido al gesto —
+      // al ser paralela a ese eje del mundo, converge sola hacia SU punto de
+      // fuga cuando se ve en perspectiva (ver updateVPOverlay). No hace falta
+      // apuntar al punto de fuga a mano, alcanza con tirar en esa dirección.
+      const start = pts[0];
+      const raw = snap ? hit.point : this.stabilizedPoint(hit.point).clone();
+      const end = this.snapToNearestAxis(start, raw);
+      pts.length = 1;
+      pressures.length = 1;
+      if (end.distanceTo(start) >= MIN_SAMPLE_DIST) {
+        pts.push(end);
+        pressures.push(this.samplePressure(e));
+      }
+      this.updatePreview();
+      return;
+    }
+
+    if (e.shiftKey && pts.length >= 1) {
+      // Shift: línea recta desde el punto inicial hasta el punto actual — se
+      // reemplazan los intermedios en cada movimiento (rubber-band), no se
+      // "traba" en modo recto: al soltar Shift sigue a mano libre normal.
+      const start = pts[0];
+      const end = snap ? hit.point : this.stabilizedPoint(hit.point).clone();
+      pts.length = 1;
+      pressures.length = 1;
+      if (end.distanceTo(start) >= MIN_SAMPLE_DIST) {
+        pts.push(end);
+        pressures.push(this.samplePressure(e));
+      }
+      this.updatePreview();
+      return;
+    }
+
+    const point = snap ? hit.point : this.stabilizedPoint(hit.point).clone();
     if (point.distanceTo(pts[pts.length - 1]) < MIN_SAMPLE_DIST) return;
     pts.push(point);
-    this.current.pressures.push(this.samplePressure(e));
+    pressures.push(this.samplePressure(e));
     this.updatePreview();
   }
 

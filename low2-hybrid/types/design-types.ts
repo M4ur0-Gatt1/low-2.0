@@ -14,6 +14,10 @@
  *  trazo ya hecho (arrastrar un nodo individual), no el trazo entero. */
 export type ToolType = 'pencil' | 'guide' | 'move' | 'select' | 'eraser' | 'liquify';
 
+/** Modo del gizmo de transformación de la herramienta 'move' (con un solo
+ *  trazo seleccionado): mover libremente por ejes, o redimensionar. */
+export type GizmoMode = 'translate' | 'scale';
+
 /** Superficies guía sobre las que se proyecta el trazo. */
 export type SurfaceType = 'plane' | 'cylinder' | 'sphere' | 'torus' | 'loft';
 
