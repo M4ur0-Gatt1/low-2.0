@@ -92,6 +92,18 @@ const actions = {
     patch({
       layers: state.layers.map((l) => (l.id === id ? { ...l, locked: !l.locked } : l)),
     }),
+
+  renameLayer: (id: string, name: string) =>
+    patch({
+      layers: state.layers.map((l) => (l.id === id ? { ...l, name } : l)),
+    }),
+
+  setLayerOpacity: (id: string, opacity: number) =>
+    patch({
+      layers: state.layers.map((l) =>
+        l.id === id ? { ...l, opacity: Math.max(0, Math.min(1, opacity)) } : l
+      ),
+    }),
 };
 
 /** Snapshot combinado (estado + acciones). Referencia estable entre mutaciones. */

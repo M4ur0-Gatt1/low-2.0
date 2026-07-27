@@ -40,6 +40,12 @@ interface StrokeRecord {
    *  trazos ('stroke'); las guías no varían de ancho. */
   pressures: number[];
   kind: 'stroke' | 'guide';
+  /** Capa/grupo al que pertenece el trazo (id del store). Determina
+   *  visibilidad y opacidad grupal. */
+  layerId: string;
+  /** Opacidad propia del trazo (del pincel al crearlo); la opacidad efectiva
+   *  es baseOpacity × opacidad de la capa. */
+  baseOpacity: number;
 }
 
 interface Command {
@@ -470,6 +476,7 @@ export class WebGLDesign3D {
     this.lastSurfaceKey = key;
     if (toolChanged) this.syncGizmo();
     this.gizmo?.setMode(s.gizmoMode || 'translate');
+    this.applyLayerStyles(); // visibilidad/opacidad de capas
   }
 
   // ---------------------------------------------------------------- input
@@ -637,7 +644,10 @@ export class WebGLDesign3D {
       const a = this.buildTube(pts, pressures);
       if (a) group.add(a);
       group.position.copy(offset);
-      const rec: StrokeRecord = { id: `stroke-${this.seq++}`, object: group, points: pts, pressures, kind: 'stroke' };
+      const rec: StrokeRecord = {
+        id: `stroke-${this.seq++}`, object: group, points: pts, pressures, kind: 'stroke',
+        layerId: this.activeLayerId(), baseOpacity: 1,
+      };
       group.userData.strokeId = rec.id;
       created.push(rec);
     }
@@ -665,7 +675,7 @@ export class WebGLDesign3D {
    *  dibujado, devuelve ese punto exacto en mundo — para poder arrancar (o
    *  terminar) una línea nueva pegada a una existente sin tener que apuntar
    *  perfecto. Las guías no cuentan: no retienen sus puntos tras dibujarlas. */
-  private findSnapVertex(e: PointerEvent): THREE.Vector3 | null {
+  private findSnapVertex(e: PointerEvent, refPoint?: THREE.Vector3, maxWorld = Infinity): THREE.Vector3 | null {
     const rect = this.canvas.getBoundingClientRect();
     const px = e.clientX - rect.left, py = e.clientY - rect.top;
     const cam = this.camera as THREE.Camera;
@@ -674,6 +684,9 @@ export class WebGLDesign3D {
     for (const rec of this.strokes) {
       for (const p of rec.points) {
         const world = p.clone().add(rec.object.position);
+        // filtro de PROFUNDIDAD: no enganchar vértices que solo caen cerca en
+        // pantalla pero están a otra profundidad (lo que rompía en vista de lado)
+        if (refPoint && world.distanceTo(refPoint) > maxWorld) continue;
         const v = world.clone().project(cam);
         const sx = ((v.x + 1) / 2) * rect.width, sy = ((1 - v.y) / 2) * rect.height;
         const d = Math.hypot(sx - px, sy - py);
@@ -704,8 +717,12 @@ export class WebGLDesign3D {
   }
 
   private beginDraw(e: PointerEvent): void {
-    const snap = this.findSnapVertex(e);
-    const hit = snap ? { point: snap, normal: new THREE.Vector3(0, 0, 1) } : this.resolveHit();
+    // arrancar puede engancharse a un vértice existente, pero SOLO si está cerca
+    // en 3D de la superficie donde se dibuja (evita agarrar un vértice de otro
+    // plano que solo cae cerca en pantalla, p. ej. en vista de lado).
+    const surf = this.resolveHit();
+    const snap = this.findSnapVertex(e, surf?.point, 0.8);
+    const hit = snap ? { point: snap, normal: surf?.normal ?? new THREE.Vector3(0, 0, 1) } : surf;
     if (!hit) return;
     this.canvas.setPointerCapture(e.pointerId);
     this.mode = 'draw';
@@ -739,8 +756,10 @@ export class WebGLDesign3D {
 
   private moveDraw(e: PointerEvent): void {
     if (!this.current) return;
-    const snap = this.findSnapVertex(e);
-    const hit = snap ? { point: snap, normal: new THREE.Vector3(0, 0, 1) } : this.resolveHit();
+    // El cuerpo del trazo NO engancha a vértices (eso hacía saltar los puntos a
+    // vértices de otros planos en vista de lado). El snap solo aplica al inicio
+    // (beginDraw) y al cierre (endDraw).
+    const hit = this.resolveHit();
     if (!hit) return;
     const pts = this.current.points;
     const pressures = this.current.pressures;
@@ -751,7 +770,7 @@ export class WebGLDesign3D {
       // fuga cuando se ve en perspectiva (ver updateVPOverlay). No hace falta
       // apuntar al punto de fuga a mano, alcanza con tirar en esa dirección.
       const start = pts[0];
-      const raw = snap ? hit.point : this.stabilizedPoint(hit.point).clone();
+      const raw = this.stabilizedPoint(hit.point).clone();
       const end = this.snapToNearestAxis(start, raw);
       pts.length = 1;
       pressures.length = 1;
@@ -768,7 +787,7 @@ export class WebGLDesign3D {
       // reemplazan los intermedios en cada movimiento (rubber-band), no se
       // "traba" en modo recto: al soltar Shift sigue a mano libre normal.
       const start = pts[0];
-      const end = snap ? hit.point : this.stabilizedPoint(hit.point).clone();
+      const end = this.stabilizedPoint(hit.point).clone();
       pts.length = 1;
       pressures.length = 1;
       if (end.distanceTo(start) >= MIN_SAMPLE_DIST) {
@@ -779,14 +798,23 @@ export class WebGLDesign3D {
       return;
     }
 
-    const point = snap ? hit.point : this.stabilizedPoint(hit.point).clone();
+    const point = this.stabilizedPoint(hit.point).clone();
     if (point.distanceTo(pts[pts.length - 1]) < MIN_SAMPLE_DIST) return;
     pts.push(point);
     pressures.push(this.samplePressure(e));
     this.updatePreview();
   }
 
-  private endDraw(_e: PointerEvent): void {
+  private endDraw(e: PointerEvent): void {
+    // cierre opcional: enganchar SOLO el último punto a un vértice existente
+    // cercano en pantalla Y en 3D → conectar limpio con una línea previa sin
+    // afectar el cuerpo del trazo.
+    if (this.current && this.current.points.length >= 2 && this.current.kind === 'stroke') {
+      const pts = this.current.points;
+      const last = pts[pts.length - 1];
+      const v = this.findSnapVertex(e, last, 0.6);
+      if (v) pts[pts.length - 1] = v.clone();
+    }
     this.commitStroke();
   }
 
@@ -935,7 +963,10 @@ export class WebGLDesign3D {
     const a = this.buildTube(points, pressures);
     if (a) group.add(a);
     if (this.mirror) { const b = this.buildTube(this.mirrored(points), pressures); if (b) group.add(b); }
-    const rec: StrokeRecord = { id: `stroke-${this.seq++}`, object: group, points, pressures, kind };
+    const rec: StrokeRecord = {
+      id: `stroke-${this.seq++}`, object: group, points, pressures, kind,
+      layerId: this.activeLayerId(), baseOpacity: this.brush.opacity,
+    };
     group.userData.strokeId = rec.id;
     this.addStrokeRecord(rec);
     this.pushCmd({
@@ -965,6 +996,7 @@ export class WebGLDesign3D {
   private addStrokeRecord(rec: StrokeRecord): void {
     this.strokesGroup.add(rec.object);
     if (!this.strokes.includes(rec)) this.strokes.push(rec);
+    this.applyLayerStyles();
   }
 
   private removeStrokeRecord(rec: StrokeRecord): void {
@@ -973,6 +1005,88 @@ export class WebGLDesign3D {
     this.selected.delete(rec);
     if (this.editingStroke === rec) this.clearPointEdit();
     if (this.gizmo?.object === rec.object) this.gizmo.detach();
+  }
+
+  // ---------------------------------------------------------------- capas / grupos
+
+  private activeLayerId(): string {
+    return lowStore.getState().activeLayerId ?? 'layer-0';
+  }
+
+  /** Aplica visibilidad y opacidad de cada capa a sus trazos. Se llama en cada
+   *  cambio del store (visibilidad, opacidad) y al agregar trazos. */
+  private applyLayerStyles(): void {
+    const layers = lowStore.getState().layers;
+    const byId = new Map(layers.map((l) => [l.id, l]));
+    for (const rec of this.strokes) {
+      const layer = byId.get(rec.layerId);
+      const visible = layer ? layer.visible : true;
+      const op = layer ? layer.opacity : 1;
+      rec.object.visible = visible;
+      rec.object.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+        if (m && 'opacity' in m) {
+          m.opacity = rec.baseOpacity * op;
+          m.transparent = m.opacity < 1;
+          m.needsUpdate = true;
+        }
+      });
+    }
+  }
+
+  private strokesOfLayer(id: string): StrokeRecord[] {
+    return this.strokes.filter((r) => r.layerId === id);
+  }
+
+  /** Selección masiva: todas las curvas de una capa (para transformar o
+   *  recolorear en bloque, como el long-press de grupo en Feather). */
+  selectLayer(id: string): void {
+    this.setSelection(this.strokesOfLayer(id));
+    this.syncGizmo();
+  }
+
+  private getStrokeColor(rec: StrokeRecord): string {
+    let hex = '#22252e';
+    rec.object.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (m && m.color) hex = '#' + m.color.getHexString();
+    });
+    return hex;
+  }
+
+  private paintStroke(rec: StrokeRecord, hex: string): void {
+    const col = new THREE.Color(hex);
+    rec.object.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (m && m.color) {
+        m.color.copy(col);
+        if (m.emissive) m.emissive.copy(col.clone().multiplyScalar(0.06));
+        m.needsUpdate = true;
+      }
+    });
+  }
+
+  /** Cambia el color de TODOS los trazos de una capa (undoable). */
+  setLayerColor(id: string, hex: string): void {
+    const recs = this.strokesOfLayer(id);
+    if (!recs.length) return;
+    const before = recs.map((r) => this.getStrokeColor(r));
+    const apply = () => recs.forEach((r) => this.paintStroke(r, hex));
+    apply();
+    this.pushCmd({
+      undo: () => recs.forEach((r, i) => this.paintStroke(r, before[i])),
+      redo: apply,
+    });
+  }
+
+  /** Borra una capa Y sus trazos (undoable), luego quita la metadata del store. */
+  deleteLayer(id: string): void {
+    const recs = this.strokesOfLayer(id);
+    const remove = () => recs.forEach((r) => this.removeStrokeRecord(r));
+    const add = () => recs.forEach((r) => this.addStrokeRecord(r));
+    remove();
+    if (recs.length) this.pushCmd({ undo: add, redo: remove });
+    lowStore.removeLayer(id);
   }
 
   // ---------------------------------------------------------------- guías
@@ -1351,7 +1465,10 @@ export class WebGLDesign3D {
     const g = new THREE.Group();
     const t = this.buildTube(pts, pressures);
     if (t) g.add(t);
-    const rec: StrokeRecord = { id: `stroke-${this.seq++}`, object: g, points: pts, pressures, kind: 'stroke' };
+    const rec: StrokeRecord = {
+      id: `stroke-${this.seq++}`, object: g, points: pts, pressures, kind: 'stroke',
+      layerId: this.activeLayerId(), baseOpacity: 1,
+    };
     g.userData.strokeId = rec.id;
     this.addStrokeRecord(rec);
   }
