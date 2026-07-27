@@ -688,7 +688,10 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   });
   // <i class='fas fa-masks-theater'></i> diorama: toggle, cerrar y arrastre del panel
   $("#dzZBtn").onclick = dzZPanelToggle;
-  $("#dz3DBtn").onclick = dz3dToggle;
+  // "Espacio 3D" (dz3d*, ~1100 líneas más abajo) quedó retirado del toolbar:
+  // el dibujo/orbit 3D real ahora vive en LOW Estudio (ui/estudio3d/). El
+  // código dz3d* sigue en este archivo sin usar — no borrado por si hace
+  // falta rescatar algo (matrices de plano orientado, anchor snapping).
   $("#dzRulersBtn").onclick = dzRulersToggle;
   $("#dzGridBtn").onclick = dzGridToggle;
   $("#dzGuidesBtn").onclick = dzGuidesToggle;
@@ -5422,11 +5425,23 @@ function dzCamView(svgText, cam) {
     if (n.classList && n.classList.contains("dz-onion")) return;
     const z = Math.max(-60, Math.min(400, parseFloat(n.getAttribute && n.getAttribute("data-z")) || 0));
     if (z) {
-      // multiplano: lo lejano acompaña a la cámara (se mueve menos en pantalla)
+      // multiplano real (paneo Y dolly/zoom), como una cámara multiplano física:
+      // p = cuánto acompaña esta capa el movimiento de la cámara (1 = igual que
+      // el plano de acción; <1 = lejos, se mueve/escala menos; >1 = cerca, más)
       const p = 100 / (100 + z);
       const dx = (cam.cx - vbcx) * (1 - p), dy = (cam.cy - vbcy) * (1 - p);
+      // dolly: el viewBox de salida ya escala TODO por (vb[2]/cam.w) al hacer
+      // zoom. Para que la profundidad se sienta (lo cercano crece más rápido,
+      // lo lejano casi no cambia de tamaño al acercar la cámara) hay que
+      // contrarrestar ese escalado uniforme en proporción a 1-p.
+      const zoomRatio = cam.w / vb[2]; // <1 = cámara acercada (dolly in)
+      const extraScale = zoomRatio + (1 - zoomRatio) * p;
       const w = document.createElementNS(NS, "g");
-      w.setAttribute("transform", `translate(${dx.toFixed(1)} ${dy.toFixed(1)})`);
+      let tf = `translate(${dx.toFixed(1)} ${dy.toFixed(1)})`;
+      if (Math.abs(extraScale - 1) > 1e-4) {
+        tf += ` translate(${cam.cx.toFixed(1)} ${cam.cy.toFixed(1)}) scale(${extraScale.toFixed(4)}) translate(${(-cam.cx).toFixed(1)} ${(-cam.cy).toFixed(1)})`;
+      }
+      w.setAttribute("transform", tf);
       w.appendChild(n.cloneNode(true));
       g.appendChild(w);
     } else g.appendChild(n.cloneNode(true));

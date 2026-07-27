@@ -1,0 +1,169 @@
+/**
+ * Panel de propiedades del módulo 3D.
+ *
+ * Controles finos que no entran en la Toolbar: opacidad y dureza del pincel, y
+ * los parámetros geométricos de la superficie guía activa (radio, segmentos).
+ * Todo se sincroniza con el store global.
+ *
+ * @module design/components/PropertiesPanel3D
+ */
+
+import React from 'react';
+import { useLowStore } from '../../../store/low-store';
+
+const panelStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '12px',
+  padding: '14px',
+  width: '220px',
+  backgroundColor: '#2d2d2d',
+  borderRadius: '8px',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+  color: '#ccc',
+  fontSize: '12px',
+  fontFamily: 'system-ui, sans-serif',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: '8px',
+};
+
+const sliderStyle: React.CSSProperties = {
+  width: '100%',
+  accentColor: '#0078d4',
+};
+
+const sectionTitle: React.CSSProperties = {
+  fontSize: '11px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  color: '#888',
+  marginBottom: '2px',
+};
+
+export const PropertiesPanel3D: React.FC = () => {
+  const { brushSettings, setBrushSettings, activeSurface, setActiveSurface, selectedObject } =
+    useLowStore();
+
+  const surfaceRadius = Number(activeSurface?.params.radius ?? 1);
+  const surfaceSegments = Number(activeSurface?.params.segments ?? 32);
+
+  const updateSurfaceParam = (key: string, value: number) => {
+    if (!activeSurface) return;
+    setActiveSurface({
+      ...activeSurface,
+      params: { ...activeSurface.params, [key]: value },
+    });
+  };
+
+  return (
+    <div style={panelStyle}>
+      {/* Pincel */}
+      <div style={sectionTitle}>Pincel</div>
+
+      <label style={labelStyle}>
+        <span>Opacidad</span>
+        <span>{Math.round(brushSettings.opacity * 100)}%</span>
+      </label>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={Math.round(brushSettings.opacity * 100)}
+        onChange={(e) =>
+          setBrushSettings({ ...brushSettings, opacity: Number(e.target.value) / 100 })
+        }
+        style={sliderStyle}
+      />
+
+      <label style={labelStyle}>
+        <span>Dureza</span>
+        <span>{Math.round(brushSettings.hardness * 100)}%</span>
+      </label>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={Math.round(brushSettings.hardness * 100)}
+        onChange={(e) =>
+          setBrushSettings({ ...brushSettings, hardness: Number(e.target.value) / 100 })
+        }
+        style={sliderStyle}
+      />
+
+      <label style={labelStyle}>
+        <span>Sensibilidad a la presión</span>
+        <span>{Math.round(brushSettings.pressureSensitivity * 100)}%</span>
+      </label>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={Math.round(brushSettings.pressureSensitivity * 100)}
+        onChange={(e) =>
+          setBrushSettings({ ...brushSettings, pressureSensitivity: Number(e.target.value) / 100 })
+        }
+        title="Cuánto adelgaza el trazo con poca presión del lápiz (0% = ancho constante). El mouse siempre dibuja a ancho completo."
+        style={sliderStyle}
+      />
+
+      {/* Superficie activa */}
+      <div style={{ height: '1px', backgroundColor: '#444', margin: '2px 0' }} />
+      <div style={sectionTitle}>
+        Superficie{activeSurface ? `: ${activeSurface.type}` : ''}
+      </div>
+
+      {activeSurface ? (
+        <>
+          <label style={labelStyle}>
+            <span>Radio</span>
+            <span>{surfaceRadius.toFixed(1)}</span>
+          </label>
+          <input
+            type="range"
+            min={1}
+            max={100}
+            value={surfaceRadius * 10}
+            onChange={(e) => updateSurfaceParam('radius', Number(e.target.value) / 10)}
+            style={sliderStyle}
+          />
+
+          <label style={labelStyle}>
+            <span>Segmentos</span>
+            <span>{surfaceSegments}</span>
+          </label>
+          <input
+            type="range"
+            min={3}
+            max={128}
+            value={surfaceSegments}
+            onChange={(e) => updateSurfaceParam('segments', Number(e.target.value))}
+            style={sliderStyle}
+          />
+        </>
+      ) : (
+        <div style={{ opacity: 0.6, fontStyle: 'italic' }}>
+          Elegí una superficie en la barra para editar sus parámetros.
+        </div>
+      )}
+
+      {/* Selección */}
+      {selectedObject && (
+        <>
+          <div style={{ height: '1px', backgroundColor: '#444', margin: '2px 0' }} />
+          <div style={sectionTitle}>Selección</div>
+          <div>
+            {selectedObject.name ?? selectedObject.id}{' '}
+            <span style={{ opacity: 0.6 }}>({selectedObject.type})</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default PropertiesPanel3D;
