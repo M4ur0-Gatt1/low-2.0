@@ -50,6 +50,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
   }, [theme]);
 
   const [view, setView] = useState<ViewName>('persp');
+  const [axes, setAxes] = useState(false);
 
   const dark = theme === 'dark';
   const chipBg = dark ? 'rgba(20,22,28,0.6)' : 'rgba(255,255,255,0.7)';
@@ -137,8 +138,14 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
         <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
         {barBtn('Persp', () => applyView('persp'), view === 'persp')}
         {barBtn('Frente', () => applyView('front'), view === 'front', 'Vista ortogonal de frente (para el primer dibujo)')}
-        {barBtn('Lado', () => applyView('right'), view === 'right', 'Vista ortogonal de lado')}
+        {barBtn('Detrás', () => applyView('back'), view === 'back', 'Vista ortogonal de atrás')}
+        {barBtn('Lado', () => applyView('right'), view === 'right', 'Vista ortogonal de lado (derecha)')}
+        {barBtn('Otro lado', () => applyView('left'), view === 'left', 'Vista ortogonal de lado (izquierda)')}
         {barBtn('Arriba', () => applyView('top'), view === 'top', 'Vista ortogonal desde arriba')}
+        {barBtn('Abajo', () => applyView('bottom'), view === 'bottom', 'Vista ortogonal desde abajo')}
+        <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
+        {barBtn('XYZ', () => setAxes(!!eng()?.toggleAxes()), axes,
+          'Ejes globales XYZ + puntos de fuga de cada eje (solo en perspectiva) — guía visual, no se dibuja ni exporta')}
       </div>
 
       <button
