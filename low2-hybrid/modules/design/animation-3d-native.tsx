@@ -10,9 +10,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { WebGLDesign3D, type Theme, type ViewName } from './engine/webgl-design3d';
+import { lowStore } from '../../store/low-store';
 import { Toolbar3D } from './components/Toolbar3D';
 import { PropertiesPanel3D } from './components/PropertiesPanel3D';
 import { LayerManager3D } from './components/LayerManager3D';
+import { Panel3D } from './components/Panel3D';
 
 const bg: Record<Theme, string> = {
   light: 'radial-gradient(120% 120% at 50% 10%, #ffffff 0%, #eef1f6 70%, #e6eaf1 100%)',
@@ -37,6 +39,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
     engine.setTheme(theme);
     engineRef.current = engine;
     (window as unknown as { __low3d?: WebGLDesign3D }).__low3d = engine;
+    (window as unknown as { __lowStore?: typeof lowStore }).__lowStore = lowStore;
     return () => {
       engine.dispose();
       engineRef.current = null;
@@ -86,15 +89,15 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
     <div style={{ position: 'relative', width: '100%', height: '100%', background: bg[theme], overflow: 'hidden' }} ref={containerRef}>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} onContextMenu={(e) => e.preventDefault()} />
 
-      <div style={{ position: 'absolute', top: 14, left: 14, zIndex: 100 }}>
+      <Panel3D title="Herramientas" initial={{ left: 14, top: 60 }}>
         <Toolbar3D />
-      </div>
-      <div style={{ position: 'absolute', top: 14, right: 14, zIndex: 100 }}>
+      </Panel3D>
+      <Panel3D title="Pincel / Superficie" initial={{ right: 14, top: 60 }} width={220}>
         <PropertiesPanel3D />
-      </div>
-      <div style={{ position: 'absolute', bottom: 14, left: 14, zIndex: 100 }}>
-        <LayerManager3D />
-      </div>
+      </Panel3D>
+      <Panel3D title="Capas" initial={{ left: 14, bottom: 14 }} width={240}>
+        <LayerManager3D engine={engineRef} />
+      </Panel3D>
 
       <button
         onClick={() => setTheme(dark ? 'light' : 'dark')}
@@ -139,8 +142,8 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
         {barBtn('Persp', () => applyView('persp'), view === 'persp')}
         {barBtn('Frente', () => applyView('front'), view === 'front', 'Vista ortogonal de frente (para el primer dibujo)')}
         {barBtn('Detrás', () => applyView('back'), view === 'back', 'Vista ortogonal de atrás')}
-        {barBtn('Lado', () => applyView('right'), view === 'right', 'Vista ortogonal de lado (derecha)')}
-        {barBtn('Otro lado', () => applyView('left'), view === 'left', 'Vista ortogonal de lado (izquierda)')}
+        {barBtn('Izquierda', () => applyView('left'), view === 'left', 'Vista ortogonal desde la izquierda')}
+        {barBtn('Derecha', () => applyView('right'), view === 'right', 'Vista ortogonal desde la derecha')}
         {barBtn('Arriba', () => applyView('top'), view === 'top', 'Vista ortogonal desde arriba')}
         {barBtn('Abajo', () => applyView('bottom'), view === 'bottom', 'Vista ortogonal desde abajo')}
         <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
