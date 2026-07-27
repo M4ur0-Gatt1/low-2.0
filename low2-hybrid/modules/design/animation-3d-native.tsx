@@ -153,7 +153,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
 
       <button
         onClick={() => engineRef.current?.deleteGuide()}
-        title="Borrar la guía actual (los trazos se conservan)"
+        title="Borrar la última guía creada (los trazos se conservan) — para borrar cualquier otra, Goma + click sobre ella"
         style={{
           position: 'absolute',
           top: 14,

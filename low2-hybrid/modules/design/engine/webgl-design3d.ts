@@ -74,6 +74,11 @@ export class WebGLDesign3D {
 
   private surfaces: SurfaceObj[] = [];
   private strokes: StrokeRecord[] = [];
+  // varias guías pueden coexistir (crear una nueva ya NO borra las
+  // anteriores) — `activeGuide` es la más reciente, usada como fallback de
+  // plano infinito en resolveHit; cualquiera se borra individualmente con la
+  // goma (click sobre ella) o deleteGuide() borra la última.
+  private guides: { id: string; mesh: THREE.Mesh; plane?: THREE.Plane }[] = [];
   private activeGuide: { id: string; mesh: THREE.Mesh; plane?: THREE.Plane } | null = null;
   private selected = new Set<StrokeRecord>();
 
@@ -1134,44 +1139,69 @@ export class WebGLDesign3D {
 
   // ---------------------------------------------------------------- guías
 
+  /** Agrega una guía SIN tocar las que ya existen — se puede tener varias
+   *  guías a la vez, cada una se borra individualmente (goma, click sobre
+   *  ella) en vez de que la última creada reemplace a la anterior. */
   private setGuide(mesh: THREE.Mesh): void {
-    const prev = this.activeGuide;
     const id = `guide-${this.seq++}`;
     mesh.userData.surfaceId = id;
-    mesh.userData.strokeId = id;
+    mesh.userData.guideId = id;
     const plane = mesh.userData.guidePlane as THREE.Plane | undefined;
+    const g = { id, mesh, plane };
     const attach = () => {
       this.guidesGroup.add(mesh);
       this.surfaces.push({ id, type: 'loft', mesh });
-      this.activeGuide = { id, mesh, plane };
+      this.guides.push(g);
+      this.activeGuide = g;
     };
-    if (prev) this.detachGuide(prev);
     attach();
     this.pushCmd({
-      undo: () => { this.detachGuide({ id, mesh }); if (prev) { this.guidesGroup.add(prev.mesh); this.surfaces.push({ id: prev.id, type: 'loft', mesh: prev.mesh }); this.activeGuide = prev; } },
-      redo: () => { if (prev) this.detachGuide(prev); attach(); },
+      undo: () => this.detachGuide(g),
+      redo: () => attach(),
     });
   }
 
   private detachGuide(g: { id: string; mesh: THREE.Mesh }): void {
     this.guidesGroup.remove(g.mesh);
     this.surfaces = this.surfaces.filter((s) => s.id !== g.id);
-    if (this.activeGuide?.id === g.id) this.activeGuide = null;
+    this.guides = this.guides.filter((x) => x.id !== g.id);
+    if (this.activeGuide?.id === g.id) this.activeGuide = this.guides[this.guides.length - 1] ?? null;
   }
 
+  /** Borra la ÚLTIMA guía creada (botón "Borrar guía" de la barra). */
   deleteGuide(): boolean {
-    const g = this.activeGuide;
+    if (!this.activeGuide) return false;
+    return this.deleteGuideById(this.activeGuide.id);
+  }
+
+  /** Borra una guía específica por id (undoable) — usado por el botón
+   *  "Borrar guía" (la última) y por la goma con click sobre cualquiera. */
+  private deleteGuideById(id: string): boolean {
+    const g = this.guides.find((x) => x.id === id);
     if (!g) return false;
     this.detachGuide(g);
     this.pushCmd({
-      undo: () => { this.guidesGroup.add(g.mesh); this.surfaces.push({ id: g.id, type: 'loft', mesh: g.mesh }); this.activeGuide = g; },
+      undo: () => { this.guidesGroup.add(g.mesh); this.surfaces.push({ id: g.id, type: 'loft', mesh: g.mesh }); this.guides.push(g); this.activeGuide = g; },
       redo: () => this.detachGuide(g),
     });
     return true;
   }
 
+  /** Guía bajo el puntero actual (para borrarla individualmente con la
+   *  goma), o null si no hay ninguna ahí. */
+  private pickGuide(): { id: string; mesh: THREE.Mesh } | null {
+    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    const hits = this.raycaster.intersectObjects(this.guidesGroup.children, false);
+    if (!hits.length) return null;
+    let obj: THREE.Object3D | null = hits[0].object;
+    while (obj && !obj.userData.guideId) obj = obj.parent;
+    if (!obj) return null;
+    const id = obj.userData.guideId as string;
+    return this.guides.find((g) => g.id === id) ?? null;
+  }
+
   hasGuide(): boolean {
-    return this.activeGuide !== null;
+    return this.guides.length > 0;
   }
 
   // ---------------------------------------------------------------- selección
@@ -1377,6 +1407,7 @@ export class WebGLDesign3D {
       const rec = this.pickStroke();
       if (this.tool === 'eraser') {
         if (rec) { this.setSelection([rec]); this.deleteSelection(); }
+        else { const g = this.pickGuide(); if (g) this.deleteGuideById(g.id); } // click en una guía: borra solo esa
       } else {
         this.setSelection(rec ? [rec] : []);
       }
@@ -1462,7 +1493,7 @@ export class WebGLDesign3D {
   clear(): void {
     for (const rec of this.strokes) { rec.object.parent?.remove(rec.object); }
     this.strokes = [];
-    if (this.activeGuide) this.detachGuide(this.activeGuide);
+    for (const g of [...this.guides]) this.detachGuide(g);
     this.selected.clear();
     this.clearPointEdit();
     this.gizmo?.detach();
