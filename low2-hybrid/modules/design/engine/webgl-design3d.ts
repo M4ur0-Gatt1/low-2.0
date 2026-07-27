@@ -437,7 +437,32 @@ export class WebGLDesign3D {
 
   // ---------------------------------------------------------------- superficies-guía (toolbar)
 
+  /** Superficie primitiva activa (plano/cilindro/esfera/toro/loft) — solo UNA
+   *  a la vez, como ya sugiere el botón-toggle de la barra. Antes, apagar o
+   *  cambiar de tipo nunca borraba la malla anterior: quedaban "fantasmas"
+   *  acumulados en `surfaces` interfiriendo con resolveHit (raycasts que
+   *  pegaban en un plano viejo en una orientación rarísima e inesperada). */
+  private activeSurfaceId: string | null = null;
+
+  private removeActiveSurface(): void {
+    if (!this.activeSurfaceId) return;
+    const s = this.surfaces.find((x) => x.id === this.activeSurfaceId);
+    if (s) {
+      this.surfacesGroup.remove(s.mesh);
+      s.mesh.traverse((o) => {
+        const m = o as THREE.Mesh;
+        m.geometry?.dispose();
+        const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
+        else mat?.dispose();
+      });
+      this.surfaces = this.surfaces.filter((x) => x.id !== this.activeSurfaceId);
+    }
+    this.activeSurfaceId = null;
+  }
+
   private addSurface(type: SurfaceType): void {
+    this.removeActiveSurface();
     const geo = type === 'plane' ? new THREE.PlaneGeometry(4, 4) : this.surfaceGeometry(type, 1.4);
     const mesh = this.makeSurfaceMesh(geo);
     mesh.position.copy(this.controls.target);
@@ -446,6 +471,7 @@ export class WebGLDesign3D {
     mesh.userData.surfaceId = s.id;
     this.surfacesGroup.add(mesh);
     this.surfaces.push(s);
+    this.activeSurfaceId = s.id;
   }
 
   private makeSurfaceMesh(geo: THREE.BufferGeometry): THREE.Mesh {
@@ -481,7 +507,10 @@ export class WebGLDesign3D {
     this.brush = s.brushSettings;
     this.mirror = s.mirrorMode;
     const key = s.activeSurface ? s.activeSurface.type : '';
-    if (key && key !== this.lastSurfaceKey) this.addSurface(s.activeSurface!.type);
+    if (key !== this.lastSurfaceKey) {
+      if (key) this.addSurface(s.activeSurface!.type);
+      else this.removeActiveSurface();
+    }
     this.lastSurfaceKey = key;
     if (toolChanged) this.syncGizmo();
     this.gizmo?.setMode(s.gizmoMode || 'translate');
@@ -1516,6 +1545,7 @@ export class WebGLDesign3D {
     for (const rec of this.strokes) { rec.object.parent?.remove(rec.object); }
     this.strokes = [];
     for (const g of [...this.guides]) this.detachGuide(g);
+    this.removeActiveSurface();
     this.selected.clear();
     this.clearPointEdit();
     this.gizmo?.detach();
