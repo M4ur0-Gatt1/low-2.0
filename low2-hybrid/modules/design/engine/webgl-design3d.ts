@@ -91,6 +91,12 @@ export class WebGLDesign3D {
   private lassoEl!: SVGSVGElement;
   private lassoPoly!: SVGPolygonElement;
 
+  // ejes globales XYZ + puntos de fuga automáticos (solo guía visual — NUNCA
+  // se dibujan ni se exportan, se recalculan en vivo según la cámara)
+  private axesHelper!: THREE.AxesHelper;
+  private showAxes = false;
+  private vpEl!: SVGSVGElement;
+
   // edición de nodos (herramienta 'select'): un trazo a la vez, sus puntos de
   // control se muestran como esferitas arrastrables en 3D.
   private handlesGroup!: THREE.Group;
@@ -147,6 +153,18 @@ export class WebGLDesign3D {
     this.handlesGroup = new THREE.Group();
     this.scene.add(this.surfacesGroup, this.guidesGroup, this.strokesGroup, this.handlesGroup);
 
+    this.axesHelper = new THREE.AxesHelper(3);
+    this.axesHelper.visible = false;
+    this.scene.add(this.axesHelper);
+
+    // overlay SVG para los puntos de fuga (guía pura, no se dibuja ni exporta)
+    this.vpEl = document.createElementNS(NS, 'svg') as SVGSVGElement;
+    Object.assign(this.vpEl.style, {
+      position: 'absolute', left: '0', top: '0', width: '100%', height: '100%',
+      pointerEvents: 'none', zIndex: '20', display: 'none',
+    } as CSSStyleDeclaration);
+    container.appendChild(this.vpEl);
+
     this.cursorEl = document.createElement('div');
     Object.assign(this.cursorEl.style, {
       position: 'absolute', left: '0', top: '0', borderRadius: '50%',
@@ -199,6 +217,7 @@ export class WebGLDesign3D {
     window.removeEventListener('keydown', this.onKeyDown);
     this.cursorEl?.remove();
     this.lassoEl?.remove();
+    this.vpEl?.remove();
     this.controls?.dispose();
     this.scene?.traverse((o) => this.disposeNode(o));
     this.renderer?.dispose();
@@ -251,6 +270,76 @@ export class WebGLDesign3D {
     colors.needsUpdate = true;
     gm.opacity = dark ? 0.35 : 0.5;
     this.cursorEl.style.borderColor = dark ? '#e6ebf5' : '#2a2f3a';
+  }
+
+  // ---------------------------------------------------------------- ejes / puntos de fuga
+
+  /** Prende/apaga los ejes XYZ y, en perspectiva, los puntos de fuga de cada
+   *  eje (recalculados en vivo — es guía pura, jamás se dibuja ni exporta). */
+  toggleAxes(): boolean {
+    this.showAxes = !this.showAxes;
+    this.axesHelper.visible = this.showAxes;
+    this.updateVPOverlay();
+    return this.showAxes;
+  }
+
+  axesOn(): boolean { return this.showAxes; }
+
+  private static readonly VP_AXES: [THREE.Vector3, string][] = [
+    [new THREE.Vector3(1, 0, 0), '#e74c3c'],
+    [new THREE.Vector3(0, 1, 0), '#2ecc71'],
+    [new THREE.Vector3(0, 0, 1), '#3b82f6'],
+  ];
+
+  /** Punto de fuga = a dónde converge en pantalla una dirección del mundo al
+   *  proyectarla al infinito. Solo tiene sentido en perspectiva — en
+   *  ortográfica las líneas paralelas a un eje siguen paralelas en pantalla,
+   *  no convergen a ningún punto. Se recalcula cada frame según la cámara. */
+  private updateVPOverlay(): void {
+    if (!this.vpEl) return;
+    if (!this.showAxes || this.view !== 'persp') {
+      this.vpEl.style.display = 'none';
+      return;
+    }
+    this.vpEl.style.display = 'block';
+    while (this.vpEl.lastChild) this.vpEl.removeChild(this.vpEl.lastChild);
+    const rect = this.canvas.getBoundingClientRect();
+    const w = rect.width || 1, h = rect.height || 1;
+    const cam = this.camera as THREE.Camera;
+    const camFwd = new THREE.Vector3();
+    cam.getWorldDirection(camFwd);
+    const span = Math.max(w, h) * 3;
+    for (const [axis, color] of WebGLDesign3D.VP_AXES) {
+      // de las dos direcciones (+eje/-eje) usamos la que mira "hacia adelante"
+      // — así el punto de fuga aparece del lado que se está mirando, no
+      // detrás de la cámara.
+      const align = camFwd.dot(axis);
+      if (Math.abs(align) > 0.985) continue; // cámara casi alineada con el eje: sin convergencia útil
+      const d = align >= 0 ? axis : axis.clone().negate();
+      const far = cam.position.clone().add(d.clone().multiplyScalar(500));
+      const ndc = far.project(cam);
+      if (!isFinite(ndc.x) || !isFinite(ndc.y)) continue;
+      const sx = ((ndc.x + 1) / 2) * w, sy = ((1 - ndc.y) / 2) * h;
+      if (Math.abs(sx) > w * 4 || Math.abs(sy) > h * 4) continue; // demasiado lejos: no aporta
+      const g = document.createElementNS(NS, 'g');
+      const N = 8;
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2;
+        const line = document.createElementNS(NS, 'line');
+        line.setAttribute('x1', sx.toFixed(1)); line.setAttribute('y1', sy.toFixed(1));
+        line.setAttribute('x2', (sx + Math.cos(a) * span).toFixed(1));
+        line.setAttribute('y2', (sy + Math.sin(a) * span).toFixed(1));
+        line.setAttribute('stroke', color);
+        line.setAttribute('stroke-width', '1.4');
+        line.setAttribute('stroke-opacity', '0.4');
+        g.appendChild(line);
+      }
+      const dot = document.createElementNS(NS, 'circle');
+      dot.setAttribute('cx', sx.toFixed(1)); dot.setAttribute('cy', sy.toFixed(1));
+      dot.setAttribute('r', '5'); dot.setAttribute('fill', color);
+      g.appendChild(dot);
+      this.vpEl.appendChild(g);
+    }
   }
 
   // ---------------------------------------------------------------- vistas orto / persp
@@ -1037,6 +1126,7 @@ export class WebGLDesign3D {
     this.resize();
     this.controls.update();
     this.renderer.render(this.scene, this.camera as THREE.Camera);
+    if (this.showAxes) this.updateVPOverlay();
   };
 
   // ---------------------------------------------------------------- debug
