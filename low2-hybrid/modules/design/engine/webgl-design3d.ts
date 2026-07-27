@@ -765,6 +765,31 @@ export class WebGLDesign3D {
     return this.smoothed;
   }
 
+  /** Segunda pasada de "Stable Strokes": al soltar el trazo, además del
+   *  retraso en vivo (`stabilizedPoint`), se aplican unas pasadas de media
+   *  móvil de 3 puntos (like `dzRefineStroke`/`dzMovingAvg` del editor 2D) —
+   *  el temblor de alta frecuencia que el retraso en vivo no llega a limar
+   *  del todo queda mejor resuelto post-trazo, sin perder los extremos
+   *  (inicio/fin no se tocan, para no mover dónde arrancó/terminó el gesto). */
+  private refineStroke(points: THREE.Vector3[], pressures: number[]): { points: THREE.Vector3[]; pressures: number[] } {
+    const amt = THREE.MathUtils.clamp(this.brush.stabilization ?? 0, 0, 1);
+    if (amt <= 0 || points.length < 4) return { points, pressures };
+    const passes = Math.round(THREE.MathUtils.lerp(0, 3, amt));
+    let pts = points.map((p) => p.clone());
+    let prs = [...pressures];
+    for (let pass = 0; pass < passes; pass++) {
+      const nextPts = pts.map((p, i) => (i === 0 || i === pts.length - 1)
+        ? p.clone()
+        : pts[i - 1].clone().add(p).add(pts[i + 1]).divideScalar(3));
+      const nextPrs = prs.map((v, i) => (i === 0 || i === prs.length - 1)
+        ? v
+        : (prs[i - 1] + v + prs[i + 1]) / 3);
+      pts = nextPts;
+      prs = nextPrs;
+    }
+    return { points: pts, pressures: prs };
+  }
+
   private moveDraw(e: PointerEvent): void {
     if (!this.current) return;
     // El cuerpo del trazo NO engancha a vértices (eso hacía saltar los puntos a
@@ -910,53 +935,46 @@ export class WebGLDesign3D {
 
   /** Superficie-guía: extruye el trazo perpendicular a la vista. Limpia: solo
    *  borde + línea naranja (sin secciones que confundan con trazos). */
+  /** Guía 3D estilo Feather: una "hoja" GRANDE de cara a la cámara (normal =
+   *  eje de vista en el momento de dibujar), no una tira angosta con la
+   *  forma exacta del trazo — así se puede seguir dibujando en cualquier
+   *  dirección sobre ella, lejos de la línea que la creó, con la misma
+   *  precisión. El trazo original queda marcado en naranja como referencia,
+   *  pero no define el límite de la superficie. */
+  private static readonly GUIDE_SIZE = 24;
+
   private buildGuideSurface(points: THREE.Vector3[]): THREE.Mesh | null {
     if (points.length < 2) return null;
     const axis = new THREE.Vector3();
     (this.camera as THREE.Camera).getWorldDirection(axis).normalize();
-    const box = new THREE.Box3().setFromPoints(points);
-    const D = THREE.MathUtils.clamp(box.getSize(new THREE.Vector3()).length() * 0.6, 1, 4);
-    const n = points.length;
-    const pos: number[] = [];
-    const idx: number[] = [];
-    const front: THREE.Vector3[] = [];
-    const back: THREE.Vector3[] = [];
-    for (let i = 0; i < n; i++) {
-      const p = points[i];
-      const f = p.clone().add(axis.clone().multiplyScalar(D));
-      const b = p.clone().add(axis.clone().multiplyScalar(-D));
-      front.push(f); back.push(b);
-      pos.push(f.x, f.y, f.z, b.x, b.y, b.z);
-    }
-    for (let i = 0; i < n - 1; i++) {
-      const a = 2 * i, b = 2 * i + 1, c = 2 * (i + 1), d = 2 * (i + 1) + 1;
-      idx.push(a, b, c, c, b, d);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setIndex(idx);
-    geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: 0x4c9bff, roughness: 1, metalness: 0, transparent: true,
-      opacity: 0.1, side: THREE.DoubleSide, depthWrite: false,
-    }));
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0x4c9bff, transparent: true, opacity: 0.25 });
-    mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(front), edgeMat));
-    mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(back), edgeMat.clone()));
-    mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineBasicMaterial({ color: 0xffa53a }))); // naranja = trazo original
 
-    // plano de la guía (infinito): el trazo original + el eje de extrusión
-    // definen su plano. Sirve para que los trazos se proyecten SOBRE la guía
-    // aunque el cursor salga de la malla finita (ver resolveHit).
     const centroid = new THREE.Vector3();
     points.forEach((p) => centroid.add(p));
     centroid.multiplyScalar(1 / points.length);
-    const dir = points[points.length - 1].clone().sub(points[0]);
-    let normal = dir.lengthSq() > 1e-6 ? dir.clone().cross(axis) : axis.clone();
-    if (normal.lengthSq() < 1e-6) normal.copy(axis);
-    normal.normalize();
-    mesh.userData.guidePlane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, centroid);
+
+    const size = WebGLDesign3D.GUIDE_SIZE;
+    const geo = new THREE.PlaneGeometry(size, size);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      color: 0x4c9bff, roughness: 1, metalness: 0, transparent: true,
+      opacity: 0.08, side: THREE.DoubleSide, depthWrite: false,
+    }));
+    mesh.position.copy(centroid);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
+
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x4c9bff, transparent: true, opacity: 0.25 })));
+
+    // trazo original en espacio LOCAL de la guía (queda pegado al plano
+    // aunque no defina su tamaño)
+    const invQ = mesh.quaternion.clone().invert();
+    const localPts = points.map((p) => p.clone().sub(centroid).applyQuaternion(invQ));
+    mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(localPts),
+      new THREE.LineBasicMaterial({ color: 0xffa53a })));
+
+    // plano infinito: por lejos que se dibuje del cuadrado finito, el rayo
+    // sigue proyectando sobre este plano (ver resolveHit) — nunca se "sale"
+    // de la guía.
+    mesh.userData.guidePlane = new THREE.Plane().setFromNormalAndCoplanarPoint(axis, centroid);
     return mesh;
   }
 
@@ -973,7 +991,8 @@ export class WebGLDesign3D {
       l.geometry.dispose();
       (l.material as THREE.Material).dispose();
     }
-    const { points, pressures, kind } = this.current;
+    let { points, pressures } = this.current;
+    const { kind } = this.current;
     this.current = null;
     if (points.length < 2) return;
 
@@ -982,6 +1001,7 @@ export class WebGLDesign3D {
       if (mesh) this.setGuide(mesh);
       return;
     }
+    ({ points, pressures } = this.refineStroke(points, pressures));
     const group = new THREE.Group();
     const a = this.buildTube(points, pressures);
     if (a) group.add(a);
