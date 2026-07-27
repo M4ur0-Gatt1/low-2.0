@@ -133,6 +133,39 @@ el motor como app de escritorio suelta, y quedó descartado (ver abajo).
 - Ícono del botón 🧊 en `ui/index.html` (`#i-cube-sketch`, no `#i-cube`):
   cubo a mano alzada con doble trazo levemente desalineado ("línea
   peluda"). El `#i-cube` original queda intacto por si algo más lo usa.
+- Guías (jul-2026, revisado dos veces tras feedback del usuario): son un
+  plano GRANDE (24×24, `GUIDE_SIZE`), no una tira con la forma del trazo, y
+  **perpendicular al plano de apoyo** sobre el que se dibujó la línea que la
+  creó — no de cara a la cámara. `normal = dirección_del_trazo ×
+  normal_del_plano_de_apoyo` (`buildGuideSurface`, recibe `baseNormal`
+  capturado en `beginDraw`). Coexisten varias a la vez (`this.guides[]`,
+  crear una nueva ya NO borra las anteriores) — cada una se borra individual
+  con la Goma + click sobre ella (`pickGuide`/`deleteGuideById`), o la más
+  reciente con el botón "Borrar guía".
+- Superficies primitivas (plano/cilindro/esfera/toro/loft, botones de
+  "Superficies"): solo UNA a la vez — `addSurface()` llama
+  `removeActiveSurface()` antes de agregar. Antes NO se borraban nunca al
+  togglear/cambiar de tipo → quedaban mallas fantasma interfiriendo con
+  `resolveHit` de forma impredecible.
+- `scissors` (tijera, tecla C, jul-2026): corta un trazo en dos donde se
+  clickea encima (`pickCutPoint` + `cutStroke`) — no detecta el cruce con
+  OTRA curva, corta donde cae el click, que en la práctica suele ser justo
+  el cruce visual entre dos líneas.
+- **Limitación conocida, no corregida todavía**: `buildTube`/
+  `rebuildStrokeMesh`/`cutStroke` usan `this.brush.color` (el color ACTUAL
+  del pincel), no un color guardado por trazo — `StrokeRecord` no tiene
+  campo `color`. Si editás un punto de un trazo rojo (herramienta `select`)
+  o lo cortás con la tijera después de cambiar el pincel a otro color, el
+  trazo/las mitades salen con el color nuevo, no el original. Para
+  arreglarlo de raíz hay que agregar `color` a `StrokeRecord` y usarlo en
+  vez de `this.brush.color` en esos tres lugares (más `commitStroke`,
+  `pasteClipboard`, `debugDemo`, que son los que crean StrokeRecords).
+- `ColorWheel` se abre vía **React Portal a `document.body`** (no como hijo
+  absoluto de la Toolbar) — la Toolbar tiene `overflowY:auto` (scroll
+  interno) y por regla de CSS eso fuerza a `overflow-x` a `auto` también,
+  clippeando cualquier hijo absoluto que se saliera del panel. Si se agrega
+  otro popover/flotante a la Toolbar en el futuro, usar el mismo patrón
+  (`createPortal` + `position:fixed` + `getBoundingClientRect` del disparador).
 
 ## Cámara multiplano del editor 2D (¡ojo, es OTRO código!)
 
