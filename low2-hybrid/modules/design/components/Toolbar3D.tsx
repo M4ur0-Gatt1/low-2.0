@@ -44,30 +44,58 @@ const Icons = {
   GizmoScale: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="9" height="9"/><path d="M13 20h7v-7M20 20L11 11"/></svg>,
 };
 
+/** Sección desplegable (toggle) de la barra. */
+const Section: React.FC<{ title: string; open: boolean; onToggle: () => void; children: React.ReactNode }> = ({
+  title, open, onToggle, children,
+}) => (
+  <div>
+    <button
+      onClick={onToggle}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        width: '100%', border: 'none', background: 'transparent', color: '#9aa3b2',
+        cursor: 'pointer', fontSize: '10px', textTransform: 'uppercase',
+        letterSpacing: '0.5px', padding: '4px 2px', fontFamily: 'system-ui, sans-serif',
+      }}
+    >
+      <span>{title}</span>
+      <span style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+    </button>
+    {open && <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', padding: '2px 0 6px' }}>{children}</div>}
+  </div>
+);
+
+const iconBtn = (active: boolean): React.CSSProperties => ({
+  width: '40px', height: '40px', border: 'none', borderRadius: '6px',
+  backgroundColor: active ? '#0078d4' : 'transparent', color: active ? '#fff' : '#ccc',
+  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
+});
+const hoverIn = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => {
+  if (!active) { e.currentTarget.style.backgroundColor = '#3d3d3d'; e.currentTarget.style.color = '#fff'; }
+};
+const hoverOut = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => {
+  if (!active) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#ccc'; }
+};
+
 export const Toolbar3D: React.FC = () => {
   const {
-    currentTool,
-    setCurrentTool,
-    activeSurface,
-    setActiveSurface,
-    mirrorMode,
-    setMirrorMode,
-    brushSettings,
-    setBrushSettings,
-    gizmoMode,
-    setGizmoMode,
+    currentTool, setCurrentTool, activeSurface, setActiveSurface,
+    mirrorMode, setMirrorMode, brushSettings, setBrushSettings, gizmoMode, setGizmoMode,
   } = useLowStore();
   const [showWheel, setShowWheel] = useState(false);
+  const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, seleccion: false, superficies: false, pincel: true });
+  const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
-  const tools: { id: ToolType; icon: React.FC; label: string }[] = [
-    { id: 'pencil', icon: Icons.Pencil, label: 'Lápiz' },
-    { id: 'guide', icon: Icons.Guide, label: 'Línea guía (referencia punteada)' },
-    { id: 'move', icon: Icons.Move, label: 'Seleccionar / Mover (click o lazo)' },
-    { id: 'select', icon: Icons.Select, label: 'Editar puntos (nodos del vector, como la flecha blanca)' },
-    { id: 'eraser', icon: Icons.Eraser, label: 'Borrar' },
-    { id: 'liquify', icon: Icons.Liquify, label: 'Liquify' },
+  const draw: { id: ToolType; icon: React.FC; label: string }[] = [
+    { id: 'pencil', icon: Icons.Pencil, label: 'Lápiz (P)' },
+    { id: 'guide', icon: Icons.Guide, label: 'Línea guía — define un plano de dibujo (G)' },
+    { id: 'eraser', icon: Icons.Eraser, label: 'Borrar (E)' },
+    { id: 'liquify', icon: Icons.Liquify, label: 'Liquify (L)' },
   ];
-
+  const sel: { id: ToolType; icon: React.FC; label: string }[] = [
+    { id: 'move', icon: Icons.Move, label: 'Seleccionar / Mover (click o lazo) (V)' },
+    { id: 'select', icon: Icons.Select, label: 'Editar puntos del vector (A)' },
+  ];
   const surfaces: { id: SurfaceType; icon: React.FC; label: string }[] = [
     { id: 'plane', icon: Icons.Plane, label: 'Plano' },
     { id: 'cylinder', icon: Icons.Cylinder, label: 'Cilindro' },
@@ -76,226 +104,71 @@ export const Toolbar3D: React.FC = () => {
     { id: 'loft', icon: Icons.Loft, label: 'Loft' },
   ];
 
+  const toolBtn = (t: { id: ToolType; icon: React.FC; label: string }) => (
+    <button key={t.id} onClick={() => setCurrentTool(t.id)} title={t.label} style={iconBtn(currentTool === t.id)}
+      onMouseEnter={(e) => hoverIn(e, currentTool === t.id)} onMouseLeave={(e) => hoverOut(e, currentTool === t.id)}>
+      <div style={{ width: '20px', height: '20px' }}><t.icon /></div>
+    </button>
+  );
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-        padding: '12px',
-        backgroundColor: '#2d2d2d',
-        borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-        minWidth: '60px',
-        maxHeight: 'calc(100vh - 28px)',
-        overflowY: 'auto',
-      }}
-    >
-      {/* Herramientas */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        {tools.map((tool) => (
-          <button
-            key={tool.id}
-            onClick={() => setCurrentTool(tool.id)}
-            title={tool.label}
-            style={{
-              width: '40px',
-              height: '40px',
-              border: 'none',
-              borderRadius: '6px',
-              backgroundColor: currentTool === tool.id ? '#0078d4' : 'transparent',
-              color: currentTool === tool.id ? '#fff' : '#ccc',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (currentTool !== tool.id) {
-                e.currentTarget.style.backgroundColor = '#3d3d3d';
-                e.currentTarget.style.color = '#fff';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (currentTool !== tool.id) {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#ccc';
-              }
-            }}
-          >
-            <div style={{ width: '20px', height: '20px' }}>
-              <tool.icon />
-            </div>
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: '2px', padding: '10px',
+      backgroundColor: '#2d2d2d', width: 156, maxHeight: 'calc(100vh - 90px)', overflowY: 'auto',
+    }}>
+      <Section title="Dibujo" open={open.dibujo} onToggle={() => toggle('dibujo')}>
+        {draw.map(toolBtn)}
+      </Section>
+
+      <Section title="Selección" open={open.seleccion} onToggle={() => toggle('seleccion')}>
+        {sel.map(toolBtn)}
+        {currentTool === 'move' && ([
+          { id: 'translate' as GizmoMode, icon: Icons.GizmoMove, label: 'Gizmo: mover' },
+          { id: 'scale' as GizmoMode, icon: Icons.GizmoScale, label: 'Gizmo: redimensionar' },
+        ]).map((g) => (
+          <button key={g.id} onClick={() => setGizmoMode(g.id)} title={g.label} style={{ ...iconBtn(gizmoMode === g.id), width: 32, height: 32 }}>
+            <div style={{ width: '16px', height: '16px' }}><g.icon /></div>
           </button>
         ))}
-      </div>
+      </Section>
 
-      {currentTool === 'move' && (
-        <>
-          <div style={{ height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
-          {/* Modo del gizmo (con 1 trazo seleccionado): mover o redimensionar */}
-          <div style={{ display: 'flex', gap: '4px' }}>
-            {([
-              { id: 'translate' as GizmoMode, icon: Icons.GizmoMove, label: 'Mover (gizmo por ejes)' },
-              { id: 'scale' as GizmoMode, icon: Icons.GizmoScale, label: 'Redimensionar (gizmo)' },
-            ]).map((g) => (
-              <button
-                key={g.id}
-                onClick={() => setGizmoMode(g.id)}
-                title={g.label}
-                style={{
-                  width: '32px', height: '32px', border: 'none', borderRadius: '6px',
-                  backgroundColor: gizmoMode === g.id ? '#0078d4' : 'transparent',
-                  color: gizmoMode === g.id ? '#fff' : '#ccc', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <div style={{ width: '16px', height: '16px' }}><g.icon /></div>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      <div style={{ height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
-
-      {/* Superficies guía */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        {surfaces.map((surface) => (
-          <button
-            key={surface.id}
-            onClick={() =>
-              setActiveSurface(
-                surface.id === activeSurface?.type
-                  ? null
-                  : { type: surface.id, params: {} }
-              )
-            }
-            title={surface.label}
-            style={{
-              width: '40px',
-              height: '40px',
-              border: 'none',
-              borderRadius: '6px',
-              backgroundColor: activeSurface?.type === surface.id ? '#0078d4' : 'transparent',
-              color: activeSurface?.type === surface.id ? '#fff' : '#ccc',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (activeSurface?.type !== surface.id) {
-                e.currentTarget.style.backgroundColor = '#3d3d3d';
-                e.currentTarget.style.color = '#fff';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (activeSurface?.type !== surface.id) {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#ccc';
-              }
-            }}
-          >
-            <div style={{ width: '20px', height: '20px' }}>
-              <surface.icon />
-            </div>
+      <Section title="Superficies" open={open.superficies} onToggle={() => toggle('superficies')}>
+        {surfaces.map((s) => (
+          <button key={s.id}
+            onClick={() => setActiveSurface(s.id === activeSurface?.type ? null : { type: s.id, params: {} })}
+            title={s.label} style={iconBtn(activeSurface?.type === s.id)}
+            onMouseEnter={(e) => hoverIn(e, activeSurface?.type === s.id)} onMouseLeave={(e) => hoverOut(e, activeSurface?.type === s.id)}>
+            <div style={{ width: '20px', height: '20px' }}><s.icon /></div>
           </button>
         ))}
-      </div>
+        <button onClick={() => setMirrorMode(!mirrorMode)} title="Modo Espejo X" style={iconBtn(mirrorMode)}
+          onMouseEnter={(e) => hoverIn(e, mirrorMode)} onMouseLeave={(e) => hoverOut(e, mirrorMode)}>
+          <div style={{ width: '20px', height: '20px' }}><Icons.Mirror /></div>
+        </button>
+      </Section>
 
-      <div style={{ height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
-
-      {/* Modo espejo */}
-      <button
-        onClick={() => setMirrorMode(!mirrorMode)}
-        title="Modo Espejo X"
-        style={{
-          width: '40px',
-          height: '40px',
-          border: 'none',
-          borderRadius: '6px',
-          backgroundColor: mirrorMode ? '#0078d4' : 'transparent',
-          color: mirrorMode ? '#fff' : '#ccc',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'all 0.2s',
-        }}
-      >
-        <div style={{ width: '20px', height: '20px' }}>
-          <Icons.Mirror />
-        </div>
-      </button>
-
-      {/* Presets de pincel: mismos parámetros, distinta sensación */}
-      <div style={{ height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <Section title="Pincel" open={open.pincel} onToggle={() => toggle('pincel')}>
         {BRUSH_PRESETS.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setBrushSettings({ ...brushSettings, ...p.values })}
-            title={`Preset "${p.label}"`}
-            style={{
-              width: '40px', height: '26px', border: 'none', borderRadius: '6px',
-              backgroundColor: 'transparent', color: '#ccc', cursor: 'pointer',
-              fontSize: '9px', fontFamily: 'system-ui, sans-serif',
-            }}
+          <button key={p.id} onClick={() => setBrushSettings({ ...brushSettings, ...p.values })} title={`Preset "${p.label}"`}
+            style={{ height: 26, minWidth: 42, padding: '0 6px', border: 'none', borderRadius: 6, backgroundColor: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: 10, fontFamily: 'system-ui, sans-serif' }}
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#3d3d3d'; e.currentTarget.style.color = '#fff'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#ccc'; }}
-          >
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#ccc'; }}>
             {p.label}
           </button>
         ))}
-      </div>
-
-      {/* Pincel: color + grosor */}
-      <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
-        <button
-          onClick={() => setShowWheel(!showWheel)}
-          title="Color del pincel (círculo cromático)"
-          style={{
-            width: '40px',
-            height: '40px',
-            border: showWheel ? '2px solid #0078d4' : '2px solid transparent',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            backgroundColor: brushSettings.color,
-          }}
-        />
-        {showWheel && (
-          <div
-            style={{
-              position: 'absolute', left: '48px', top: '0', zIndex: 200,
-              padding: '12px', backgroundColor: '#2d2d2d', borderRadius: '8px',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-            }}
-          >
-            <ColorWheel
-              value={brushSettings.color}
-              onChange={(color) => setBrushSettings({ ...brushSettings, color })}
-            />
-          </div>
-        )}
-        <input
-          type="range"
-          min="1"
-          max="100"
-          value={brushSettings.size}
-          onChange={(e) => setBrushSettings({ ...brushSettings, size: Number(e.target.value) })}
-          title="Tamaño del pincel"
-          style={{
-            width: '40px',
-            height: '4px',
-            writingMode: 'vertical-lr',
-            direction: 'rtl',
-            accentColor: '#0078d4',
-          }}
-        />
-      </div>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginTop: 4 }}>
+          <button onClick={() => setShowWheel(!showWheel)} title="Color del pincel (círculo cromático)"
+            style={{ width: 40, height: 40, border: showWheel ? '2px solid #0078d4' : '2px solid transparent', borderRadius: 6, cursor: 'pointer', backgroundColor: brushSettings.color }} />
+          {showWheel && (
+            <div style={{ position: 'absolute', left: '48px', top: 0, zIndex: 200, padding: 12, backgroundColor: '#2d2d2d', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
+              <ColorWheel value={brushSettings.color} onChange={(color) => setBrushSettings({ ...brushSettings, color })} />
+            </div>
+          )}
+          <input type="range" min="1" max="100" value={brushSettings.size}
+            onChange={(e) => setBrushSettings({ ...brushSettings, size: Number(e.target.value) })}
+            title="Tamaño del pincel" style={{ flex: 1, accentColor: '#0078d4' }} />
+        </div>
+      </Section>
     </div>
   );
 };
