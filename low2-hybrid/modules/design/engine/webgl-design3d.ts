@@ -95,6 +95,10 @@ export class WebGLDesign3D {
     kind: 'stroke' | 'guide';
     line?: THREE.Line;
     mirrorLine?: THREE.Line;
+    /** normal de la superficie sobre la que se apoyó el primer punto — para
+     *  que una guía nueva salga PERPENDICULAR al plano en el que se estaba
+     *  dibujando (ver buildGuideSurface), no siempre de cara a la cámara. */
+    baseNormal?: THREE.Vector3;
   } | null = null;
   private downScreen = new THREE.Vector2();
   private lastMoveWorld = new THREE.Vector3();
@@ -752,7 +756,10 @@ export class WebGLDesign3D {
       this.strokesGroup.add(mirrorLine);
     }
     this.smoothed = hit.point.clone(); // sin retraso en el primer punto
-    this.current = { points: [hit.point], pressures: [this.samplePressure(e)], kind, line, mirrorLine };
+    this.current = {
+      points: [hit.point], pressures: [this.samplePressure(e)], kind, line, mirrorLine,
+      baseNormal: hit.normal.clone(),
+    };
     this.updatePreview();
   }
 
@@ -938,24 +945,39 @@ export class WebGLDesign3D {
     }));
   }
 
-  /** Superficie-guía: extruye el trazo perpendicular a la vista. Limpia: solo
-   *  borde + línea naranja (sin secciones que confundan con trazos). */
-  /** Guía 3D estilo Feather: una "hoja" GRANDE de cara a la cámara (normal =
-   *  eje de vista en el momento de dibujar), no una tira angosta con la
-   *  forma exacta del trazo — así se puede seguir dibujando en cualquier
+  /** Guía 3D estilo Feather: una "hoja" GRANDE (no una tira angosta con la
+   *  forma exacta del trazo) — así se puede seguir dibujando en cualquier
    *  dirección sobre ella, lejos de la línea que la creó, con la misma
    *  precisión. El trazo original queda marcado en naranja como referencia,
-   *  pero no define el límite de la superficie. */
+   *  pero no define el límite de la superficie.
+   *
+   *  Orientación: la guía nueva sale PERPENDICULAR al plano sobre el que se
+   *  estaba dibujando (el "suelo", otra guía, una superficie primitiva…),
+   *  como cuando en Feather trazás un lado de la base y aparece una "hoja"
+   *  vertical parada sobre ese lado — no siempre de cara a la cámara. Si no
+   *  había ninguna superficie activa (el primer trazo del proyecto, dibujado
+   *  sobre el plano de reserva que mira a la cámara), el resultado es
+   *  equivalente a una guía de cara a la cámara, que es lo correcto en ese
+   *  caso — no es un caso especial, sale solo de la misma fórmula. */
   private static readonly GUIDE_SIZE = 24;
 
-  private buildGuideSurface(points: THREE.Vector3[]): THREE.Mesh | null {
+  private buildGuideSurface(points: THREE.Vector3[], baseNormal?: THREE.Vector3): THREE.Mesh | null {
     if (points.length < 2) return null;
-    const axis = new THREE.Vector3();
-    (this.camera as THREE.Camera).getWorldDirection(axis).normalize();
+    const camAxis = new THREE.Vector3();
+    (this.camera as THREE.Camera).getWorldDirection(camAxis).normalize();
 
     const centroid = new THREE.Vector3();
     points.forEach((p) => centroid.add(p));
     centroid.multiplyScalar(1 / points.length);
+
+    // normal = (dirección del trazo) × (normal del plano de apoyo) → un
+    // plano que CONTIENE la línea trazada y es perpendicular al plano donde
+    // se apoyó (dos planos son perpendiculares cuando sus normales lo son).
+    const lineDir = points[points.length - 1].clone().sub(points[0]);
+    const base = baseNormal ?? camAxis;
+    let axis = lineDir.lengthSq() > 1e-6 ? lineDir.clone().cross(base) : base.clone();
+    if (axis.lengthSq() < 1e-6) axis = camAxis.clone(); // trazo paralelo al eje de apoyo: no hay perpendicular única
+    axis.normalize();
 
     const size = WebGLDesign3D.GUIDE_SIZE;
     const geo = new THREE.PlaneGeometry(size, size);
@@ -997,12 +1019,12 @@ export class WebGLDesign3D {
       (l.material as THREE.Material).dispose();
     }
     let { points, pressures } = this.current;
-    const { kind } = this.current;
+    const { kind, baseNormal } = this.current;
     this.current = null;
     if (points.length < 2) return;
 
     if (kind === 'guide') {
-      const mesh = this.buildGuideSurface(points);
+      const mesh = this.buildGuideSurface(points, baseNormal);
       if (mesh) this.setGuide(mesh);
       return;
     }
