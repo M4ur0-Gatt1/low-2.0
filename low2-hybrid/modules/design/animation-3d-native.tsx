@@ -54,6 +54,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
 
   const [view, setView] = useState<ViewName>('persp');
   const [axes, setAxes] = useState(false);
+  const [guideOpacity, setGuideOpacity] = useState(100);
 
   const dark = theme === 'dark';
   const chipBg = dark ? 'rgba(20,22,28,0.6)' : 'rgba(255,255,255,0.7)';
@@ -174,6 +175,20 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
       >
         🗑 Borrar guía
       </button>
+
+      <div
+        title="Opacidad de las guías — bajala a 0 para dibujar 'en el aire' sin que la hoja estorbe visualmente; sigue dando soporte a los trazos aunque no se vea (truco de Feather)"
+        style={{
+          position: 'absolute', top: 14, right: 356, zIndex: 100,
+          height: 36, padding: '0 10px', borderRadius: 8, background: chipBg,
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}
+      >
+        <span style={{ fontSize: 11, color: chipFg }}>👻</span>
+        <input type="range" min={0} max={100} value={guideOpacity}
+          onChange={(e) => { const v = Number(e.target.value); setGuideOpacity(v); eng()?.setGuideOpacity(v / 100); }}
+          style={{ width: 70, accentColor: '#0078d4' }} />
+      </div>
 
       <div
         style={{
