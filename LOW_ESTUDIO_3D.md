@@ -71,6 +71,38 @@ No hace falta tocar `electron/`, `electron-builder`, ni nada del empaquetado
 de Electron de `low2-hybrid` para este flujo — eso solo se usaba para probar
 el motor como app de escritorio suelta, y quedó descartado (ver abajo).
 
+## Herramientas del motor (`webgl-design3d.ts`)
+
+- `pencil` / `guide`: dibujar / crear superficie-guía Feather-style.
+- `move`: seleccionar (click o lazo) y mover el TRAZO entero.
+- `select` (jul-2026): edición de nodos — muestra los puntos de control de
+  UN trazo como esferitas arrastrables en 3D y permite reposicionar cada
+  punto individualmente (reconstruye el tubo en vivo). Distinto de `move`:
+  es la "flecha blanca" (edición directa de vectores) frente a la "flecha
+  negra" (mover el objeto entero).
+- `eraser`, `liquify` (liquify: tipo declarado, sin implementar todavía).
+- Presión del lápiz (jul-2026): `BrushSettings.pressureSensitivity` (0–1)
+  hace que el ancho del trazo varíe con la presión real del dispositivo
+  `pointerType==='pen'` — el mouse siempre dibuja a ancho completo, no hay
+  presión real que leer ahí. Implementado re-escalando los anillos de un
+  `THREE.TubeGeometry` de radio unitario según la presión interpolada en
+  cada punto (reusa el cálculo de frames de Three.js, no lo reimplementa).
+  `BrushSettings.hardness` ahora también afecta la rugosidad del material
+  (antes existía en el tipo pero no se usaba en ningún lado).
+
+## Cámara multiplano del editor 2D (¡ojo, es OTRO código!)
+
+`ui/app.js` (`dzZBtn`/`dzCamAt`/`dzCamView`, no `webgl-design3d.ts`) tiene su
+propia cámara multiplano 2D/SVG para el editor de animación clásico (línea de
+tiempo + papel cebolla) — capas con `data-z` que producen parallax real al
+panear/zoomear la cámara, estilo Toon Boom/OpenToonz. No confundir con LOW
+Estudio: es un sistema totalmente distinto (SVG + transforms 2D, no
+WebGL/Three.js). En jul-2026 se le agregó escala-por-profundidad al hacer
+zoom (antes solo paneaba con parallax, el zoom afectaba a todas las capas
+por igual) y se retiró `#dz3DBtn` ("Espacio 3D", ~1100 líneas de un visor
+CSS-3D aparte) porque quedó redundante con LOW Estudio — el código sigue en
+`app.js` sin usar, no borrado.
+
 ## Intentos anteriores / NO usar como referencia
 
 Hubo (al menos) tres líneas de trabajo distintas para "dibujo 3D" en este
