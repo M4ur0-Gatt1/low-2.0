@@ -430,7 +430,8 @@ function bind() {
   };
   $("#btnModelSearch").onclick = modalModelSearch;
   $("#abDesign").onclick = designEntry;
-  $("#abL3d").onclick = () => l3dToggle();   // Lienzo 3D (WebGL, lienzo3d.js)
+  $("#abL3d").onclick = () => ($("#l3dView").hidden ? openL3d() : closeL3d());
+  $("#l3dExit").onclick = closeL3d;
   $("#btnKeys").onclick = modalKeys;
   $("#btnCmp").onclick = modalCompare;
   $("#btnWs").onclick = pickWs;
@@ -918,7 +919,8 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       if (!$("#overlay").hidden) closeModal();         // 1º cierra modal abierto
       else if (!$("#designView").hidden) closeDesign(); // 2º cierra el entorno de diseño
       else if (!$("#artView").hidden) closeArtifacts(); // 3º cierra el visor de artefactos
-      else if (S.busy) cancelRequest();                // 4º detiene consulta en curso
+      else if (!$("#l3dView").hidden) closeL3d();       // 4º cierra LOW Estudio (3D)
+      else if (S.busy) cancelRequest();                // 5º detiene consulta en curso
     }
   });
   $("#overlay").onclick = e => { if (e.target === $("#overlay")) closeModal(); };
@@ -2089,6 +2091,18 @@ function showArtifacts() {
   paintArtifact();
 }
 function closeArtifacts() { $("#artView").hidden = true; }
+
+/* ══ LOW Estudio: dibujo 3D con guías estilo Feather (bundle propio, ui/estudio3d/) ══ */
+function openL3d() {
+  const frame = $("#l3dFrame");
+  if (!frame.getAttribute("src")) frame.src = "estudio3d/index.html";
+  $("#l3dView").hidden = false;
+  $("#abL3d").classList.add("active");
+}
+function closeL3d() {
+  $("#l3dView").hidden = true;
+  $("#abL3d").classList.remove("active");
+}
 
 /* ══ Entorno de diseño: SVG vivo + inspector por elemento ══ */
 const DZ = { path: null, sel: null, zoom: 1 };

@@ -1,5 +1,12 @@
 # LOW 2.0 - Architecture Decision Record (ADR)
 
+> ⚠️ **Este documento es un plan aspiracional (motor nativo C++20/OpenGL), NO
+> lo que corre hoy en producción.** El módulo de dibujo 3D que el usuario usa
+> hoy ("LOW Estudio", botón 🧊) es un motor React/TypeScript/Three.js
+> incrustado desde `low2-hybrid/`. Ver [`LOW_ESTUDIO_3D.md`](LOW_ESTUDIO_3D.md)
+> para la arquitectura real y vigente. Si se retoma este plan de motor
+> nativo en C++, actualizar ambos documentos.
+
 ## Visión General
 LOW 2.0 es un motor de dibujo 3D procedural para Windows, diseñado para artistas técnicos. No es un clon de Feather, sino una reinterpretación optimizada para flujo de trabajo con Mouse, Wacom y SpaceMouse.
 
