@@ -11,8 +11,9 @@
 /** Herramientas de dibujo/edición expuestas en la Toolbar.
  *  'guide' = traza líneas punteadas de referencia espacial (no tinta).
  *  'select' = selección directa de nodos: edita los puntos de control de un
- *  trazo ya hecho (arrastrar un nodo individual), no el trazo entero. */
-export type ToolType = 'pencil' | 'guide' | 'move' | 'select' | 'eraser' | 'liquify';
+ *  trazo ya hecho (arrastrar un nodo individual), no el trazo entero.
+ *  'scissors' = corta un trazo en dos en el punto donde se clickea sobre él. */
+export type ToolType = 'pencil' | 'guide' | 'move' | 'select' | 'eraser' | 'liquify' | 'scissors';
 
 /** Modo del gizmo de transformación de la herramienta 'move' (con un solo
  *  trazo seleccionado): mover libremente por ejes, o redimensionar. */

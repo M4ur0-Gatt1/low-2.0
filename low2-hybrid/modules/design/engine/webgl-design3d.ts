@@ -589,6 +589,66 @@ export class WebGLDesign3D {
     return this.strokes.find((s) => s.id === obj!.userData.strokeId) ?? null;
   }
 
+  // ---------------------------------------------------------------- tijera (cortar trazos)
+
+  /** Trazo + índice del punto de control más cercano al click — ahí se corta.
+   *  No hace falta detectar el cruce con OTRA curva: se corta donde el
+   *  usuario clickea sobre la línea, igual que la herramienta Tijera de
+   *  Illustrator — que suele ser justo donde dos trazos se cruzan visualmente. */
+  private pickCutPoint(): { rec: StrokeRecord; index: number } | null {
+    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    const meshes: THREE.Object3D[] = [];
+    this.strokesGroup.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o); });
+    const hits = this.raycaster.intersectObjects(meshes, false);
+    if (!hits.length) return null;
+    let obj: THREE.Object3D | null = hits[0].object;
+    while (obj && !obj.userData.strokeId) obj = obj.parent;
+    if (!obj) return null;
+    const rec = this.strokes.find((s) => s.id === obj!.userData.strokeId);
+    if (!rec || rec.points.length < 3) return null; // muy corto: nada que cortar en el medio
+    const localHit = hits[0].point.clone().sub(rec.object.position);
+    let best = 0, bestDist = Infinity;
+    for (let i = 0; i < rec.points.length; i++) {
+      const d = rec.points[i].distanceToSquared(localHit);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return { rec, index: best };
+  }
+
+  /** Divide un trazo en dos en el índice dado (ambos comparten el punto de
+   *  corte, sin hueco visual). Deshacer restaura el trazo original entero. */
+  private cutStroke(rec: StrokeRecord, index: number): void {
+    if (index <= 0 || index >= rec.points.length - 1) return; // nada que cortar en una punta
+    const ptsA = rec.points.slice(0, index + 1).map((p) => p.clone());
+    const prsA = rec.pressures.slice(0, index + 1);
+    const ptsB = rec.points.slice(index).map((p) => p.clone());
+    const prsB = rec.pressures.slice(index);
+    if (ptsA.length < 2 || ptsB.length < 2) return;
+
+    const makeHalf = (pts: THREE.Vector3[], prs: number[]): StrokeRecord => {
+      const group = new THREE.Group();
+      group.position.copy(rec.object.position);
+      const a = this.buildTube(pts, prs);
+      if (a) group.add(a);
+      const half: StrokeRecord = {
+        id: `stroke-${this.seq++}`, object: group, points: pts, pressures: prs,
+        kind: 'stroke', layerId: rec.layerId, baseOpacity: rec.baseOpacity,
+      };
+      group.userData.strokeId = half.id;
+      return half;
+    };
+
+    const halfA = makeHalf(ptsA, prsA);
+    const halfB = makeHalf(ptsB, prsB);
+    this.removeStrokeRecord(rec);
+    this.addStrokeRecord(halfA);
+    this.addStrokeRecord(halfB);
+    this.pushCmd({
+      undo: () => { this.removeStrokeRecord(halfA); this.removeStrokeRecord(halfB); this.addStrokeRecord(rec); },
+      redo: () => { this.removeStrokeRecord(rec); this.addStrokeRecord(halfA); this.addStrokeRecord(halfB); },
+    });
+  }
+
   private onPointerDown = (e: PointerEvent): void => {
     if (e.button !== 0 || e.pointerType === 'touch') return;
     this.setPointerFromEvent(e);
@@ -613,6 +673,9 @@ export class WebGLDesign3D {
       this.onSelectPointerDown(e);
     } else if (this.tool === 'eraser') {
       this.beginLasso(e); // click corto = borrar bajo cursor; arrastre = lazo
+    } else if (this.tool === 'scissors') {
+      const cut = this.pickCutPoint();
+      if (cut) this.cutStroke(cut.rec, cut.index);
     }
   };
 
@@ -640,7 +703,7 @@ export class WebGLDesign3D {
   };
 
   private static readonly TOOL_KEYS: Record<string, ToolType> = {
-    p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify',
+    p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify', c: 'scissors',
   };
 
   private onKeyDown = (e: KeyboardEvent): void => {
