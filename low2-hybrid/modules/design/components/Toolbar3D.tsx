@@ -9,9 +9,20 @@
  * @module design/components/Toolbar3D
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useLowStore } from '../../../store/low-store';
-import { ToolType, SurfaceType } from '../../../types/design-types';
+import { ToolType, SurfaceType, GizmoMode, BrushSettings } from '../../../types/design-types';
+import { ColorWheel } from './ColorWheel';
+
+/** Presets de pincel: mismos parámetros del motor (size/hardness/presión/
+ *  estabilizador), solo con distintos valores por defecto para que cada uno
+ *  se sienta distinto — lápiz fino y parejo, tinta con calado marcado y
+ *  brillo, pincel grueso y mate ("con volumen"). El color no se toca. */
+const BRUSH_PRESETS: { id: string; label: string; values: Omit<BrushSettings, 'color'> }[] = [
+  { id: 'pencil', label: 'Lápiz', values: { size: 6, opacity: 1, hardness: 0.3, pressureSensitivity: 0.25, stabilization: 0.2 } },
+  { id: 'ink', label: 'Tinta', values: { size: 10, opacity: 1, hardness: 0.95, pressureSensitivity: 0.75, stabilization: 0.45 } },
+  { id: 'brush', label: 'Pincel', values: { size: 22, opacity: 0.92, hardness: 0.15, pressureSensitivity: 0.55, stabilization: 0.35 } },
+];
 
 const Icons = {
   Pencil: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 2l4 4-10 10H7v-5L18 2z"/></svg>,
@@ -26,6 +37,8 @@ const Icons = {
   Torus: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="9" ry="4"/></svg>,
   Loft: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7c3-2 6-2 9 0s6 2 9 0M3 17c3-2 6-2 9 0s6 2 9 0"/><path d="M3 7v10M21 7v10"/></svg>,
   Mirror: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v18M3 12h18"/><path d="M8 7l-4 5 4 5M16 7l4 5-4 5"/></svg>,
+  GizmoMove: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M2 12h20"/><path d="M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3"/></svg>,
+  GizmoScale: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="9" height="9"/><path d="M13 20h7v-7M20 20L11 11"/></svg>,
 };
 
 export const Toolbar3D: React.FC = () => {
@@ -38,7 +51,10 @@ export const Toolbar3D: React.FC = () => {
     setMirrorMode,
     brushSettings,
     setBrushSettings,
+    gizmoMode,
+    setGizmoMode,
   } = useLowStore();
+  const [showWheel, setShowWheel] = useState(false);
 
   const tools: { id: ToolType; icon: React.FC; label: string }[] = [
     { id: 'pencil', icon: Icons.Pencil, label: 'Lápiz' },
@@ -68,6 +84,8 @@ export const Toolbar3D: React.FC = () => {
         borderRadius: '8px',
         boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
         minWidth: '60px',
+        maxHeight: 'calc(100vh - 28px)',
+        overflowY: 'auto',
       }}
     >
       {/* Herramientas */}
@@ -109,6 +127,33 @@ export const Toolbar3D: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {currentTool === 'move' && (
+        <>
+          <div style={{ height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
+          {/* Modo del gizmo (con 1 trazo seleccionado): mover o redimensionar */}
+          <div style={{ display: 'flex', gap: '4px' }}>
+            {([
+              { id: 'translate' as GizmoMode, icon: Icons.GizmoMove, label: 'Mover (gizmo por ejes)' },
+              { id: 'scale' as GizmoMode, icon: Icons.GizmoScale, label: 'Redimensionar (gizmo)' },
+            ]).map((g) => (
+              <button
+                key={g.id}
+                onClick={() => setGizmoMode(g.id)}
+                title={g.label}
+                style={{
+                  width: '32px', height: '32px', border: 'none', borderRadius: '6px',
+                  backgroundColor: gizmoMode === g.id ? '#0078d4' : 'transparent',
+                  color: gizmoMode === g.id ? '#fff' : '#ccc', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <div style={{ width: '16px', height: '16px' }}><g.icon /></div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       <div style={{ height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
 
@@ -183,22 +228,55 @@ export const Toolbar3D: React.FC = () => {
         </div>
       </button>
 
+      {/* Presets de pincel: mismos parámetros, distinta sensación */}
+      <div style={{ height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {BRUSH_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setBrushSettings({ ...brushSettings, ...p.values })}
+            title={`Preset "${p.label}"`}
+            style={{
+              width: '40px', height: '26px', border: 'none', borderRadius: '6px',
+              backgroundColor: 'transparent', color: '#ccc', cursor: 'pointer',
+              fontSize: '9px', fontFamily: 'system-ui, sans-serif',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#3d3d3d'; e.currentTarget.style.color = '#fff'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#ccc'; }}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       {/* Pincel: color + grosor */}
-      <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <input
-          type="color"
-          value={brushSettings.color}
-          onChange={(e) => setBrushSettings({ ...brushSettings, color: e.target.value })}
-          title="Color del pincel"
+      <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
+        <button
+          onClick={() => setShowWheel(!showWheel)}
+          title="Color del pincel (círculo cromático)"
           style={{
             width: '40px',
             height: '40px',
-            border: 'none',
+            border: showWheel ? '2px solid #0078d4' : '2px solid transparent',
             borderRadius: '6px',
             cursor: 'pointer',
-            backgroundColor: 'transparent',
+            backgroundColor: brushSettings.color,
           }}
         />
+        {showWheel && (
+          <div
+            style={{
+              position: 'absolute', left: '48px', top: '0', zIndex: 200,
+              padding: '12px', backgroundColor: '#2d2d2d', borderRadius: '8px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            }}
+          >
+            <ColorWheel
+              value={brushSettings.color}
+              onChange={(color) => setBrushSettings({ ...brushSettings, color })}
+            />
+          </div>
+        )}
         <input
           type="range"
           min="1"

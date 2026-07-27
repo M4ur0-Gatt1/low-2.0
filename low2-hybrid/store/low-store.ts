@@ -18,6 +18,7 @@ import type {
   ToolType,
   ActiveSurface,
   BrushSettings,
+  GizmoMode,
   Layer,
   SelectedObject,
 } from '../types/design-types';
@@ -30,6 +31,7 @@ interface LowState {
   selectedObject: SelectedObject | null;
   layers: Layer[];
   activeLayerId: string | null;
+  gizmoMode: GizmoMode;
 }
 
 const INITIAL: LowState = {
@@ -40,6 +42,7 @@ const INITIAL: LowState = {
   selectedObject: null,
   layers: [{ id: 'layer-0', name: 'Capa 1', visible: true, locked: false, opacity: 1 }],
   activeLayerId: 'layer-0',
+  gizmoMode: 'translate',
 };
 
 let state: LowState = INITIAL;
@@ -54,6 +57,7 @@ const actions = {
   setMirrorMode: (mirrorMode: boolean) => patch({ mirrorMode }),
   setBrushSettings: (brushSettings: BrushSettings) => patch({ brushSettings }),
   setSelectedObject: (selectedObject: SelectedObject | null) => patch({ selectedObject }),
+  setGizmoMode: (gizmoMode: GizmoMode) => patch({ gizmoMode }),
 
   addLayer: () => {
     const id = `layer-${layerSeq++}`;
