@@ -111,6 +111,22 @@ export const PropertiesPanel3D: React.FC = () => {
         style={sliderStyle}
       />
 
+      <label style={labelStyle}>
+        <span>Estabilizador (pulso)</span>
+        <span>{Math.round(brushSettings.stabilization * 100)}%</span>
+      </label>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={Math.round(brushSettings.stabilization * 100)}
+        onChange={(e) =>
+          setBrushSettings({ ...brushSettings, stabilization: Number(e.target.value) / 100 })
+        }
+        title="Suaviza el temblor de la mano retrasando un poco el trazo respecto al puntero real (0% = crudo, como antes)."
+        style={sliderStyle}
+      />
+
       {/* Superficie activa */}
       <div style={{ height: '1px', backgroundColor: '#444', margin: '2px 0' }} />
       <div style={sectionTitle}>
