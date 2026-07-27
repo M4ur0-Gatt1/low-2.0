@@ -31,6 +31,10 @@ export interface BrushSettings {
    *  del grosor con presión mínima, grosor completo a fondo). Solo aplica a
    *  dispositivos 'pen' — el mouse siempre dibuja a ancho completo. */
   pressureSensitivity: number;
+  /** "Stable Strokes": 0–1, cuánto retraso hay entre el puntero real y el
+   *  punto que se agrega al trazo. 0 = sin estabilizar (crudo, como antes).
+   *  Suaviza el pulso a costa de "cortar camino" en curvas muy rápidas. */
+  stabilization: number;
 }
 
 /** Parámetros geométricos de una superficie guía. Abierto para que el motor

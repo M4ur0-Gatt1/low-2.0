@@ -210,13 +210,12 @@
   </div>
 
   <!-- ══ LOW Estudio (WebGL): dibujo 3D con guías estilo Feather — motor unificado
-       (ex low2-hybrid, embebido como bundle estático propio: sin Electron) ══ -->
+       (ex low2-hybrid, embebido como bundle estático propio: sin Electron).
+       Sin barra propia: el motor ya tiene su toolbar completa adentro del
+       iframe (Persp/vistas/XYZ arriba, herramientas a la izquierda) — una
+       barra "LOW Estudio" externa se pisaba con esa toolbar interna y no se
+       podía mover. Para salir: Esc, o volver a clickear el ícono 🧊. ══ -->
   <div id="l3dView" hidden>
-    <div class="l3d-tools">
-      <span class="l3d-title"><svg class="ico"><use href="#i-cube"/></svg> LOW Estudio</span>
-      <span class="vsep"></span>
-      <button id="l3dExit" title="Salir (Esc)"><svg class="ico"><use href="#i-x"/></svg></button>
-    </div>
     <iframe id="l3dFrame" class="l3d-host" sandbox="allow-scripts allow-same-origin"></iframe>
   </div>
 

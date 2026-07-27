@@ -188,7 +188,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
           pointerEvents: 'none',
         }}
       >
-        Guía: perfil → orbitá (der.) → Lápiz sobre ella · Mover: click o lazo para seleccionar, arrastrá para mover, Supr borra · Goma: click o lazo · Ctrl+Z / Ctrl+Alt+Z
+        Guía: perfil → orbitá (der.) → Lápiz sobre ella · Mover: click o lazo, arrastrá para mover libre o usá el gizmo con 1 seleccionado · Ctrl+C/V copia · Supr borra · Ctrl+Z / Ctrl+Alt+Z
       </div>
     </div>
   );

@@ -19,6 +19,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { lowStore, type LowStore } from '../../../store/low-store';
 import type { BrushSettings, SurfaceType, ToolType } from '../../../types/design-types';
 
@@ -105,6 +106,19 @@ export class WebGLDesign3D {
   private dragPointIndex = -1;
   private dragPointStart = new THREE.Vector3();
 
+  // gizmo de transformación (herramienta 'move', un solo trazo seleccionado):
+  // pensado como base para animación futura (posar y grabar keyframes).
+  private gizmo?: TransformControls;
+  private gizmoTarget: THREE.Object3D | null = null;
+  private gizmoDragStart = new THREE.Vector3();
+
+  // portapapeles: copiar/pegar trazos (Ctrl+C / Ctrl+V)
+  private clipboard: { points: THREE.Vector3[]; pressures: number[] }[] = [];
+
+  // estabilizador de pulso ("Stable Strokes"): el punto que se agrega al
+  // trazo persigue con retraso al punto crudo del puntero.
+  private smoothed: THREE.Vector3 | null = null;
+
   // historia
   private undoStack: Command[] = [];
   private redoStack: Command[] = [];
@@ -119,7 +133,7 @@ export class WebGLDesign3D {
   private disposed = false;
 
   private tool: ToolType = 'pencil';
-  private brush: BrushSettings = { color: '#22252e', size: 12, opacity: 1, hardness: 0.8, pressureSensitivity: 0.6 };
+  private brush: BrushSettings = { color: '#22252e', size: 12, opacity: 1, hardness: 0.8, pressureSensitivity: 0.6, stabilization: 0.35 };
   private mirror = false;
   private theme: Theme = 'light';
   private lastSurfaceKey = '';
@@ -156,6 +170,31 @@ export class WebGLDesign3D {
     this.axesHelper = new THREE.AxesHelper(3);
     this.axesHelper.visible = false;
     this.scene.add(this.axesHelper);
+
+    // gizmo de mover (translate): solo responde al botón izquierdo (lo
+    // decide TransformControls internamente), así que nunca pisa el
+    // giro con el botón derecho de OrbitControls. Empieza sin objeto — inerte
+    // hasta que haya exactamente un trazo seleccionado con la herramienta 'move'.
+    this.gizmo = new TransformControls(this.camera, this.canvas);
+    this.gizmo.setMode('translate');
+    this.gizmo.setSize(0.85);
+    this.gizmo.detach();
+    this.gizmo.addEventListener('dragging-changed', (ev) => {
+      this.controls.enabled = !ev.value;
+      if (ev.value) {
+        this.gizmoTarget = (this.gizmo!.object as THREE.Object3D | undefined) ?? null;
+        if (this.gizmoTarget) this.gizmoDragStart.copy(this.gizmoTarget.position);
+      } else if (this.gizmoTarget) {
+        const obj = this.gizmoTarget;
+        const before = this.gizmoDragStart.clone();
+        const after = obj.position.clone();
+        this.gizmoTarget = null;
+        if (before.distanceToSquared(after) > 1e-8) {
+          this.pushCmd({ undo: () => obj.position.copy(before), redo: () => obj.position.copy(after) });
+        }
+      }
+    });
+    this.scene.add(this.gizmo);
 
     // overlay SVG para los puntos de fuga (guía pura, no se dibuja ni exporta)
     this.vpEl = document.createElementNS(NS, 'svg') as SVGSVGElement;
@@ -218,6 +257,7 @@ export class WebGLDesign3D {
     this.cursorEl?.remove();
     this.lassoEl?.remove();
     this.vpEl?.remove();
+    this.gizmo?.dispose();
     this.controls?.dispose();
     this.scene?.traverse((o) => this.disposeNode(o));
     this.renderer?.dispose();
@@ -365,6 +405,7 @@ export class WebGLDesign3D {
     this.makeControls();
     this.controls.target.copy(t);
     this.applyOrthoFrustum();
+    if (this.gizmo) this.gizmo.camera = this.camera as THREE.Camera;
   }
 
   private applyOrthoFrustum(): void {
@@ -420,12 +461,14 @@ export class WebGLDesign3D {
 
   private syncFromStore(s: LowStore): void {
     if (this.tool === 'select' && s.currentTool !== 'select') this.clearPointEdit();
+    const toolChanged = this.tool !== s.currentTool;
     this.tool = s.currentTool;
     this.brush = s.brushSettings;
     this.mirror = s.mirrorMode;
     const key = s.activeSurface ? s.activeSurface.type : '';
     if (key && key !== this.lastSurfaceKey) this.addSurface(s.activeSurface!.type);
     this.lastSurfaceKey = key;
+    if (toolChanged) this.syncGizmo();
   }
 
   // ---------------------------------------------------------------- input
@@ -498,6 +541,10 @@ export class WebGLDesign3D {
     if (this.tool === 'pencil' || this.tool === 'guide') {
       this.beginDraw(e);
     } else if (this.tool === 'move') {
+      // el pointerdown sobre un handle del gizmo lo maneja TransformControls
+      // solo (su propio listener, ya enterado por el hover del pointermove
+      // anterior) — no arrancar además un lazo/mover libre encima.
+      if (this.gizmo?.axis) return;
       const rec = this.pickStroke();
       if (rec) {
         if (!this.selected.has(rec)) this.setSelection([rec]);
@@ -546,11 +593,49 @@ export class WebGLDesign3D {
       this.redo();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (this.selected.size) { e.preventDefault(); this.deleteSelection(); }
+    } else if (ctrl && e.key.toLowerCase() === 'c') {
+      if (this.selected.size) { e.preventDefault(); this.copySelection(); }
+    } else if (ctrl && e.key.toLowerCase() === 'v') {
+      if (this.clipboard.length) { e.preventDefault(); this.pasteClipboard(); }
     } else if (e.key === 'Escape') {
       this.setSelection([]);
       this.clearPointEdit();
     }
   };
+
+  // ---------------------------------------------------------------- portapapeles
+
+  copySelection(): void {
+    const strokesOnly = [...this.selected].filter((r) => r.kind === 'stroke');
+    if (!strokesOnly.length) return;
+    this.clipboard = strokesOnly.map((r) => ({
+      points: r.points.map((p) => p.clone().add(r.object.position)),
+      pressures: [...r.pressures],
+    }));
+  }
+
+  pasteClipboard(): void {
+    if (!this.clipboard.length) return;
+    const offset = new THREE.Vector3(0.18, 0, 0.18); // corrido para no tapar el original
+    const created: StrokeRecord[] = [];
+    for (const c of this.clipboard) {
+      const pts = c.points.map((p) => p.clone());
+      const pressures = [...c.pressures];
+      const group = new THREE.Group();
+      const a = this.buildTube(pts, pressures);
+      if (a) group.add(a);
+      group.position.copy(offset);
+      const rec: StrokeRecord = { id: `stroke-${this.seq++}`, object: group, points: pts, pressures, kind: 'stroke' };
+      group.userData.strokeId = rec.id;
+      created.push(rec);
+    }
+    for (const rec of created) this.addStrokeRecord(rec);
+    this.setSelection(created);
+    this.pushCmd({
+      undo: () => created.forEach((r) => this.removeStrokeRecord(r)),
+      redo: () => created.forEach((r) => this.addStrokeRecord(r)),
+    });
+  }
 
   // ---------------------------------------------------------------- dibujo
 
@@ -576,17 +661,33 @@ export class WebGLDesign3D {
       mirrorLine = this.makePreviewLine(kind);
       this.strokesGroup.add(mirrorLine);
     }
+    this.smoothed = hit.point.clone(); // sin retraso en el primer punto
     this.current = { points: [hit.point], pressures: [this.samplePressure(e)], kind, line, mirrorLine };
     this.updatePreview();
+  }
+
+  /** "Stable Strokes": qué tan rápido el punto agregado al trazo alcanza al
+   *  punto crudo del puntero. 0 = sin estabilizar (comportamiento de antes,
+   *  sigue exacto). Más cerca de 1 = más retraso = pulso más limpio, a costa
+   *  de "cortar camino" en curvas muy rápidas — por eso el piso en 0.15, no
+   *  0, para que nunca se vuelva inmanejable. */
+  private stabilizedPoint(raw: THREE.Vector3): THREE.Vector3 {
+    const amt = THREE.MathUtils.clamp(this.brush.stabilization ?? 0, 0, 1);
+    if (!this.smoothed) this.smoothed = raw.clone();
+    if (amt <= 0) { this.smoothed.copy(raw); return raw; }
+    const catchUp = THREE.MathUtils.lerp(1, 0.15, amt);
+    this.smoothed.lerp(raw, catchUp);
+    return this.smoothed;
   }
 
   private moveDraw(e: PointerEvent): void {
     if (!this.current) return;
     const hit = this.resolveHit();
     if (!hit) return;
+    const point = this.stabilizedPoint(hit.point).clone();
     const pts = this.current.points;
-    if (hit.point.distanceTo(pts[pts.length - 1]) < MIN_SAMPLE_DIST) return;
-    pts.push(hit.point);
+    if (point.distanceTo(pts[pts.length - 1]) < MIN_SAMPLE_DIST) return;
+    pts.push(point);
     this.current.pressures.push(this.samplePressure(e));
     this.updatePreview();
   }
@@ -720,6 +821,7 @@ export class WebGLDesign3D {
 
   private commitStroke(): void {
     if (!this.current) return;
+    this.smoothed = null;
     for (const l of [this.current.line, this.current.mirrorLine]) {
       if (!l) continue;
       this.strokesGroup.remove(l);
@@ -776,6 +878,7 @@ export class WebGLDesign3D {
     this.strokes = this.strokes.filter((s) => s !== rec);
     this.selected.delete(rec);
     if (this.editingStroke === rec) this.clearPointEdit();
+    if (this.gizmo?.object === rec.object) this.gizmo.detach();
   }
 
   // ---------------------------------------------------------------- guías
@@ -825,6 +928,19 @@ export class WebGLDesign3D {
     for (const r of this.selected) this.highlight(r, false);
     this.selected = new Set(recs);
     for (const r of this.selected) this.highlight(r, true);
+    this.syncGizmo();
+  }
+
+  /** El gizmo de mover solo se muestra con la herramienta 'move' y
+   *  exactamente UN trazo seleccionado (con varios, sigue funcionando el
+   *  arrastre libre de siempre — el gizmo es para posar con precisión). */
+  private syncGizmo(): void {
+    if (!this.gizmo) return;
+    if (this.tool === 'move' && this.selected.size === 1) {
+      this.gizmo.attach([...this.selected][0].object);
+    } else {
+      this.gizmo.detach();
+    }
   }
 
   private highlight(rec: StrokeRecord, on: boolean): void {
@@ -1097,6 +1213,7 @@ export class WebGLDesign3D {
     if (this.activeGuide) this.detachGuide(this.activeGuide);
     this.selected.clear();
     this.clearPointEdit();
+    this.gizmo?.detach();
     this.undoStack = [];
     this.redoStack = [];
   }
