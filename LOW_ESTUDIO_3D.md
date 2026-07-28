@@ -141,7 +141,25 @@ el motor como app de escritorio suelta, y quedó descartado (ver abajo).
   capturado en `beginDraw`). Coexisten varias a la vez (`this.guides[]`,
   crear una nueva ya NO borra las anteriores) — cada una se borra individual
   con la Goma + click sobre ella (`pickGuide`/`deleteGuideById`), o la más
-  reciente con el botón "Borrar guía".
+  reciente con el botón "Borrar guía". Opacidad ajustable con el slider 👻
+  de la barra (`setGuideOpacity`) sin desactivarla (el "truco de la guía
+  invisible" de Feather — resolveHit no mira la opacidad). Con la
+  herramienta `move`, click sobre una guía la selecciona (`selectGuide`) y
+  le adjunta el MISMO gizmo (translate/scale) que usan los trazos → mover y
+  deformar sin código de arrastre nuevo. Ctrl+D la duplica
+  (`duplicateGuide`, desplazada para no tapar la original). También se
+  puede dibujar directamente APOYADO en trazos ya hechos, no solo en guías
+  (`resolveHit` raycastea `strokesGroup` además de `surfaces` cuando la
+  herramienta no es `guide`) — una vez armada una forma, no hace falta
+  seguir creando guías para cada línea nueva.
+- `resamplePoints` (jul-2026, corre SIEMPRE, no depende del estabilizador):
+  si el mouse se movió rápido y dos muestras consecutivas quedaron muy
+  separadas, inserta puntos intermedios por interpolación lineal antes de
+  `refineStroke`/`buildTube`. Es el "Resample Curve" que menciona la
+  documentación de Feather — sin esto, `CatmullRomCurve3` puede hacer
+  overshoot/rulos en tramos largos con pocos puntos de apoyo y giros
+  filosos (reportado por el usuario: trazos rápidos salían con loops que no
+  estaban en el gesto original).
 - Superficies primitivas (plano/cilindro/esfera/toro/loft, botones de
   "Superficies"): solo UNA a la vez — `addSurface()` llama
   `removeActiveSurface()` antes de agregar. Antes NO se borraban nunca al
