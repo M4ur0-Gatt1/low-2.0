@@ -80,6 +80,11 @@ export class WebGLDesign3D {
   // goma (click sobre ella) o deleteGuide() borra la última.
   private guides: { id: string; mesh: THREE.Mesh; plane?: THREE.Plane }[] = [];
   private activeGuide: { id: string; mesh: THREE.Mesh; plane?: THREE.Plane } | null = null;
+  // guía elegida con la herramienta 'move' (click sobre ella, sin arrastre
+  // libre): el gizmo existente (translate/scale) se le adjunta directo, así
+  // se puede mover y deformar sin código nuevo de arrastre. Mutuamente
+  // excluyente con `selected` (elegir una cosa deselecciona la otra).
+  private selectedGuide: { id: string; mesh: THREE.Mesh } | null = null;
   private selected = new Set<StrokeRecord>();
 
   private fallbackPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
@@ -677,7 +682,9 @@ export class WebGLDesign3D {
         if (!this.selected.has(rec)) this.setSelection([rec]);
         this.beginMove();
       } else {
-        this.beginLasso(e);
+        const g = this.pickGuide();
+        if (g) this.selectGuide(g);
+        else { this.selectGuide(null); this.beginLasso(e); }
       }
     } else if (this.tool === 'select') {
       this.onSelectPointerDown(e);
@@ -738,8 +745,11 @@ export class WebGLDesign3D {
       if (this.selected.size) { e.preventDefault(); this.copySelection(); }
     } else if (ctrl && e.key.toLowerCase() === 'v') {
       if (this.clipboard.length) { e.preventDefault(); this.pasteClipboard(); }
+    } else if (ctrl && e.key.toLowerCase() === 'd') {
+      if (this.selectedGuide) { e.preventDefault(); this.duplicateGuide(this.selectedGuide); }
     } else if (e.key === 'Escape') {
       this.setSelection([]);
+      this.selectGuide(null);
       this.clearPointEdit();
     }
   };
@@ -877,6 +887,34 @@ export class WebGLDesign3D {
     const catchUp = THREE.MathUtils.lerp(1, 0.15, amt);
     this.smoothed.lerp(raw, catchUp);
     return this.smoothed;
+  }
+
+  /** Re-muestreo (Resample Curve, como lo describe Feather): si dos puntos
+   *  consecutivos quedaron muy separados (arrastre rápido del mouse: pocas
+   *  muestras en un tramo largo), inserta puntos intermedios por
+   *  interpolación lineal para pareja la densidad. CatmullRomCurve3 hace
+   *  overshoot/rulos cuando interpola tramos largos con giros filosos y
+   *  pocos puntos de apoyo — subir la densidad ANTES de armar el tubo es la
+   *  forma estándar de evitarlo (no es un ajuste de "estilo" como el
+   *  estabilizador, por eso corre siempre, sin depender del slider). */
+  private static readonly RESAMPLE_GAP = MIN_SAMPLE_DIST * 2.5;
+
+  private resamplePoints(points: THREE.Vector3[], pressures: number[]): { points: THREE.Vector3[]; pressures: number[] } {
+    if (points.length < 2) return { points, pressures };
+    const gap = WebGLDesign3D.RESAMPLE_GAP;
+    const outPts: THREE.Vector3[] = [points[0].clone()];
+    const outPrs: number[] = [pressures[0]];
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i];
+      const dist = a.distanceTo(b);
+      const steps = Math.min(40, Math.max(1, Math.ceil(dist / gap))); // tope: gaps absurdos no generan miles de puntos
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps;
+        outPts.push(a.clone().lerp(b, t));
+        outPrs.push(pressures[i - 1] + (pressures[i] - pressures[i - 1]) * t);
+      }
+    }
+    return { points: outPts, pressures: outPrs };
   }
 
   /** Segunda pasada de "Stable Strokes": al soltar el trazo, además del
@@ -1130,6 +1168,7 @@ export class WebGLDesign3D {
       if (mesh) this.setGuide(mesh);
       return;
     }
+    ({ points, pressures } = this.resamplePoints(points, pressures));
     ({ points, pressures } = this.refineStroke(points, pressures));
     const group = new THREE.Group();
     const a = this.buildTube(points, pressures);
@@ -1290,6 +1329,7 @@ export class WebGLDesign3D {
     this.surfaces = this.surfaces.filter((s) => s.id !== g.id);
     this.guides = this.guides.filter((x) => x.id !== g.id);
     if (this.activeGuide?.id === g.id) this.activeGuide = this.guides[this.guides.length - 1] ?? null;
+    if (this.selectedGuide?.id === g.id) { this.selectedGuide = null; this.gizmo?.detach(); }
   }
 
   /** Borra la ÚLTIMA guía creada (botón "Borrar guía" de la barra). */
@@ -1344,22 +1384,51 @@ export class WebGLDesign3D {
   // ---------------------------------------------------------------- selección
 
   private setSelection(recs: StrokeRecord[]): void {
+    this.selectedGuide = null;
     for (const r of this.selected) this.highlight(r, false);
     this.selected = new Set(recs);
     for (const r of this.selected) this.highlight(r, true);
     this.syncGizmo();
   }
 
-  /** El gizmo de mover solo se muestra con la herramienta 'move' y
-   *  exactamente UN trazo seleccionado (con varios, sigue funcionando el
-   *  arrastre libre de siempre — el gizmo es para posar con precisión). */
+  /** Elige una guía con la herramienta 'move' (no arrastre libre — se mueve
+   *  y deforma con el gizmo). `null` deselecciona. */
+  private selectGuide(g: { id: string; mesh: THREE.Mesh } | null): void {
+    this.selectedGuide = g;
+    for (const r of this.selected) this.highlight(r, false);
+    this.selected = new Set();
+    this.syncGizmo();
+  }
+
+  /** Copia la guía elegida (posición, orientación, tamaño) desplazada un
+   *  poco para no tapar la original — Ctrl+D con una guía seleccionada. */
+  private duplicateGuide(g: { id: string; mesh: THREE.Mesh }): void {
+    const offset = new THREE.Vector3(0.4, 0, 0.4);
+    const clone = g.mesh.clone(true);
+    clone.position.add(offset);
+    clone.traverse((o) => {
+      const withMat = o as THREE.Mesh | THREE.Line | THREE.LineSegments;
+      if (withMat.material) {
+        withMat.material = Array.isArray(withMat.material)
+          ? withMat.material.map((m) => m.clone())
+          : withMat.material.clone();
+      }
+    });
+    const plane = g.mesh.userData.guidePlane as THREE.Plane | undefined;
+    if (plane) clone.userData.guidePlane = plane.clone().translate(offset);
+    this.setGuide(clone);
+    this.selectGuide({ id: clone.userData.guideId as string, mesh: clone });
+  }
+
+  /** El gizmo de mover/escalar se adjunta a lo que esté elegido con la
+   *  herramienta 'move': un trazo (si hay exactamente uno — con varios sigue
+   *  el arrastre libre de siempre) o una guía. */
   private syncGizmo(): void {
     if (!this.gizmo) return;
-    if (this.tool === 'move' && this.selected.size === 1) {
-      this.gizmo.attach([...this.selected][0].object);
-    } else {
-      this.gizmo.detach();
-    }
+    if (this.tool !== 'move') { this.gizmo.detach(); return; }
+    if (this.selected.size === 1) { this.gizmo.attach([...this.selected][0].object); return; }
+    if (this.selectedGuide) { this.gizmo.attach(this.selectedGuide.mesh); return; }
+    this.gizmo.detach();
   }
 
   private highlight(rec: StrokeRecord, on: boolean): void {
