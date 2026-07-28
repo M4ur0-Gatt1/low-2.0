@@ -54,6 +54,10 @@ interface Command {
 }
 
 const MIN_SAMPLE_DIST = 0.012;
+// salto máximo (mundo) entre puntos consecutivos de un trazo a mano alzada. Un
+// rayo rasante sobre una superficie profunda (bóveda) puede devolver un punto
+// lejísimo → recta larga espuria; se descarta ese salto irreal.
+const MAX_DRAW_JUMP = 2.5;
 const DRAG_THRESHOLD = 6; // px para distinguir click de arrastre
 const ORTHO_SIZE = 4;
 const NS = 'http://www.w3.org/2000/svg';
@@ -611,23 +615,26 @@ export class WebGLDesign3D {
    *  usuario clickea sobre la línea, igual que la herramienta Tijera de
    *  Illustrator — que suele ser justo donde dos trazos se cruzan visualmente. */
   private pickCutPoint(): { rec: StrokeRecord; index: number } | null {
-    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
-    const meshes: THREE.Object3D[] = [];
-    this.strokesGroup.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o); });
-    const hits = this.raycaster.intersectObjects(meshes, false);
-    if (!hits.length) return null;
-    let obj: THREE.Object3D | null = hits[0].object;
-    while (obj && !obj.userData.strokeId) obj = obj.parent;
-    if (!obj) return null;
-    const rec = this.strokes.find((s) => s.id === obj!.userData.strokeId);
-    if (!rec || rec.points.length < 3) return null; // muy corto: nada que cortar en el medio
-    const localHit = hits[0].point.clone().sub(rec.object.position);
-    let best = 0, bestDist = Infinity;
-    for (let i = 0; i < rec.points.length; i++) {
-      const d = rec.points[i].distanceToSquared(localHit);
-      if (d < bestDist) { bestDist = d; best = i; }
+    // Proximidad EN PANTALLA (no raycast al tubo): el tubo es finísimo y pegarle
+    // exacto es casi imposible → antes "no hacía nada". Ahora corta en el punto
+    // de control más cercano al click dentro de un radio en px.
+    const rect = this.canvas.getBoundingClientRect();
+    const cx = ((this.pointer.x + 1) / 2) * rect.width;
+    const cy = ((1 - this.pointer.y) / 2) * rect.height;
+    const cam = this.camera as THREE.Camera;
+    let best: { rec: StrokeRecord; index: number } | null = null;
+    let bestDist = 22; // px
+    for (const rec of this.strokes) {
+      if (rec.kind !== 'stroke' || rec.points.length < 3) continue;
+      for (let i = 0; i < rec.points.length; i++) {
+        const w = rec.points[i].clone().add(rec.object.position).project(cam);
+        const sx = ((w.x + 1) / 2) * rect.width;
+        const sy = ((1 - w.y) / 2) * rect.height;
+        const d = Math.hypot(sx - cx, sy - cy);
+        if (d < bestDist) { bestDist = d; best = { rec, index: i }; }
+      }
     }
-    return { rec, index: best };
+    return best;
   }
 
   /** Divide un trazo en dos en el índice dado (ambos comparten el punto de
@@ -987,13 +994,23 @@ export class WebGLDesign3D {
     }
 
     const point = this.stabilizedPoint(hit.point).clone();
-    if (point.distanceTo(pts[pts.length - 1]) < MIN_SAMPLE_DIST) return;
+    const jump = point.distanceTo(pts[pts.length - 1]);
+    if (jump < MIN_SAMPLE_DIST) return;
+    if (pts.length >= 1 && jump > MAX_DRAW_JUMP) return; // salto irreal (rayo rasante) → descartar
     pts.push(point);
     pressures.push(this.samplePressure(e));
     this.updatePreview();
   }
 
   private endDraw(e: PointerEvent): void {
+    // Ctrl al soltar = cerrar y redondear en un círculo limpio (asistente de
+    // forma). Al ser con tecla, no se dispara en momentos indeseados.
+    if ((e.ctrlKey || e.metaKey) && this.current && this.current.kind === 'stroke'
+        && this.current.points.length >= 4) {
+      this.beautifyCircle(this.current);
+      this.commitStroke();
+      return;
+    }
     // cierre opcional: enganchar SOLO el último punto a un vértice existente
     // cercano en pantalla Y en 3D → conectar limpio con una línea previa sin
     // afectar el cuerpo del trazo.
@@ -1004,6 +1021,49 @@ export class WebGLDesign3D {
       if (v) pts[pts.length - 1] = v.clone();
     }
     this.commitStroke();
+  }
+
+  /** Reemplaza el trazo actual por un CÍRCULO limpio y cerrado, ajustado al
+   *  gesto: centro = centroide, radio = distancia media, en el plano de mejor
+   *  ajuste del trazo (normal de Newell). Une los extremos automáticamente. */
+  private beautifyCircle(cur: { points: THREE.Vector3[]; pressures: number[] }): void {
+    const pts = cur.points;
+    const C = new THREE.Vector3();
+    pts.forEach((p) => C.add(p));
+    C.multiplyScalar(1 / pts.length);
+
+    // normal del mejor plano (Newell) sobre el lazo del trazo
+    const normal = new THREE.Vector3();
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      normal.x += (a.y - b.y) * (a.z + b.z);
+      normal.y += (a.z - b.z) * (a.x + b.x);
+      normal.z += (a.x - b.x) * (a.y + b.y);
+    }
+    if (normal.lengthSq() < 1e-8) return; // degenerado (línea recta): no forzar círculo
+    normal.normalize();
+
+    let r = 0;
+    pts.forEach((p) => (r += p.distanceTo(C)));
+    r /= pts.length;
+    if (r < 1e-3) return;
+
+    // base ortonormal del plano
+    const u = new THREE.Vector3(1, 0, 0);
+    if (Math.abs(normal.dot(u)) > 0.9) u.set(0, 1, 0);
+    u.crossVectors(normal, u).normalize();
+    const v = new THREE.Vector3().crossVectors(normal, u).normalize();
+
+    const N = Math.max(48, pts.length);
+    const circle: THREE.Vector3[] = [];
+    const prs: number[] = [];
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      circle.push(C.clone().addScaledVector(u, r * Math.cos(a)).addScaledVector(v, r * Math.sin(a)));
+      prs.push(1);
+    }
+    cur.points.length = 0; cur.points.push(...circle);
+    cur.pressures.length = 0; cur.pressures.push(...prs);
   }
 
   private makePreviewLine(kind: 'stroke' | 'guide'): THREE.Line {
