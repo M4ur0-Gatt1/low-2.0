@@ -168,7 +168,34 @@ el motor como app de escritorio suelta, y quedó descartado (ver abajo).
 - `scissors` (tijera, tecla C, jul-2026): corta un trazo en dos donde se
   clickea encima (`pickCutPoint` + `cutStroke`) — no detecta el cruce con
   OTRA curva, corta donde cae el click, que en la práctica suele ser justo
-  el cruce visual entre dos líneas.
+  el cruce visual entre dos líneas. Deja un HUECO visible a cada lado del
+  corte (`GAP` en unidades de mundo) — sin esto las dos mitades quedaban
+  idénticas al trazo original y parecía que la tijera "no hacía nada"
+  (reportado dos veces por el usuario hasta encontrar la causa real).
+- Gizmo: además de translate/scale, ahora tiene modo **rotate**.
+- Guías (revisado de nuevo, jul-2026): la malla ya no es un plano recto —
+  sigue la CURVA real del trazo que la creó, barrida a lo largo del eje de
+  apoyo (bóveda/arco, no una hoja plana). Geometría en espacio LOCAL
+  (relativa al centroide) para que el gizmo mueva/rote/escale bien. Además:
+  - `resolveHit` prioriza la guía ACTIVA por sobre cualquier otra superficie
+    (antes, con varias guías, ganaba la que quedaba más cerca en
+    profundidad, no necesariamente la que se estaba usando).
+  - Imán de guía: el snap de cierre (`endDraw`, antes solo para
+    `kind==='stroke'`) ahora también aplica a `kind==='guide'` — trazar una
+    guía cerca de un trazo existente la engancha a él en el inicio Y el
+    cierre.
+  - Espacio (barra espaciadora) = mano: mientras se mantiene, el botón
+    izquierdo pasa a pan de `OrbitControls` en vez de dibujar; al soltar
+    Espacio vuelve a dibujar (`panMode`, gateado en `onPointerDown`).
+  - Ctrl al soltar el trazo = cerrar y redondear en un círculo limpio
+    (`beautifyCircle`, asistente de forma).
+- Onion-skin por profundidad en vistas ortogonales (`applyLayerStyles`,
+  corre cada frame en `animate()` cuando `view!=='persp'`): lo que está más
+  lejos del plano de referencia (`controls.target`, a lo largo del eje de
+  la cámara) se desvanece — nunca en perspectiva, ahí la profundidad ya se
+  percibe por escala/paralaje. Rango y opacidad mínima son constantes fijas
+  (`ONION_DEPTH_RANGE`/`ONION_MIN_OPACITY`) — si hace falta un slider para
+  ajustarlas a mano, es la próxima extensión natural.
 - **Limitación conocida, no corregida todavía**: `buildTube`/
   `rebuildStrokeMesh`/`cutStroke` usan `this.brush.color` (el color ACTUAL
   del pincel), no un color guardado por trazo — `StrokeRecord` no tiene
