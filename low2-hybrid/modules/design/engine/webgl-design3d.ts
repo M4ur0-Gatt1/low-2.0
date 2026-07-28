@@ -1110,37 +1110,61 @@ export class WebGLDesign3D {
     points.forEach((p) => centroid.add(p));
     centroid.multiplyScalar(1 / points.length);
 
-    // normal = (dirección del trazo) × (normal del plano de apoyo) → un
-    // plano que CONTIENE la línea trazada y es perpendicular al plano donde
-    // se apoyó (dos planos son perpendiculares cuando sus normales lo son).
-    const lineDir = points[points.length - 1].clone().sub(points[0]);
-    const base = baseNormal ?? camAxis;
-    let axis = lineDir.lengthSq() > 1e-6 ? lineDir.clone().cross(base) : base.clone();
-    if (axis.lengthSq() < 1e-6) axis = camAxis.clone(); // trazo paralelo al eje de apoyo: no hay perpendicular única
+    // Eje de EXTRUSIÓN = normal del plano donde se dibujó el trazo (o el eje de
+    // cámara). Barremos la CURVA REAL a lo largo de ese eje → la guía SIGUE la
+    // forma del trazo: un arco genera una bóveda/techo curvo, no un plano recto.
+    let axis = (baseNormal ?? camAxis).clone();
+    if (axis.lengthSq() < 1e-6) axis.copy(camAxis);
     axis.normalize();
 
-    const size = WebGLDesign3D.GUIDE_SIZE;
-    const geo = new THREE.PlaneGeometry(size, size);
+    // media-longitud del barrido en profundidad (bóveda larga para dibujar
+    // encima, proporcional al tamaño del trazo)
+    const box = new THREE.Box3().setFromPoints(points);
+    const L = THREE.MathUtils.clamp(box.getSize(new THREE.Vector3()).length() * 2, 5, 14);
+
+    // vértices en espacio LOCAL (relativo al centroide) → el gizmo mueve/rota/
+    // escala la guía alrededor de su centro, y la geometría lleva la curva.
+    const n = points.length;
+    const pos: number[] = [];
+    const idx: number[] = [];
+    const front: THREE.Vector3[] = [];
+    const back: THREE.Vector3[] = [];
+    for (let i = 0; i < n; i++) {
+      const local = points[i].clone().sub(centroid);
+      const f = local.clone().addScaledVector(axis, L);
+      const b = local.clone().addScaledVector(axis, -L);
+      front.push(f); back.push(b);
+      pos.push(f.x, f.y, f.z, b.x, b.y, b.z);
+    }
+    for (let i = 0; i < n - 1; i++) {
+      const a = 2 * i, b = 2 * i + 1, c = 2 * (i + 1), d = 2 * (i + 1) + 1;
+      idx.push(a, b, c, c, b, d);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
       color: 0x4c9bff, roughness: 1, metalness: 0, transparent: true,
-      opacity: 0.08, side: THREE.DoubleSide, depthWrite: false,
+      opacity: 0.09, side: THREE.DoubleSide, depthWrite: false,
     }));
     mesh.position.copy(centroid);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
 
-    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo),
-      new THREE.LineBasicMaterial({ color: 0x4c9bff, transparent: true, opacity: 0.25 })));
+    // grilla: bordes de adelante/atrás + secciones transversales + curva naranja
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x4c9bff, transparent: true, opacity: 0.25 });
+    mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(front), edgeMat));
+    mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(back), edgeMat.clone()));
+    const sec: THREE.Vector3[] = [];
+    const step = Math.max(1, Math.floor(n / 6));
+    for (let i = 0; i < n; i += step) sec.push(front[i], back[i]);
+    mesh.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(sec), edgeMat.clone()));
+    mesh.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points.map((p) => p.clone().sub(centroid))),
+      new THREE.LineBasicMaterial({ color: 0xffa53a }))); // naranja = trazo original
 
-    // trazo original en espacio LOCAL de la guía (queda pegado al plano
-    // aunque no defina su tamaño)
-    const invQ = mesh.quaternion.clone().invert();
-    const localPts = points.map((p) => p.clone().sub(centroid).applyQuaternion(invQ));
-    mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(localPts),
-      new THREE.LineBasicMaterial({ color: 0xffa53a })));
-
-    // plano infinito: por lejos que se dibuje del cuadrado finito, el rayo
-    // sigue proyectando sobre este plano (ver resolveHit) — nunca se "sale"
-    // de la guía.
+    // plano de respaldo (infinito) para rayos que salgan de la malla finita:
+    // el plano donde se dibujó el trazo. La malla CURVA es el objetivo primario.
     mesh.userData.guidePlane = new THREE.Plane().setFromNormalAndCoplanarPoint(axis, centroid);
     return mesh;
   }
