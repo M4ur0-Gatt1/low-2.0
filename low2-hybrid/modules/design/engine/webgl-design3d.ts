@@ -1060,8 +1060,10 @@ export class WebGLDesign3D {
     }
     // cierre opcional: enganchar SOLO el último punto a un vértice existente
     // cercano en pantalla Y en 3D → conectar limpio con una línea previa sin
-    // afectar el cuerpo del trazo.
-    if (this.current && this.current.points.length >= 2 && this.current.kind === 'stroke') {
+    // afectar el cuerpo del trazo. También para guías ("imán de guía"): si
+    // trazás una guía nueva cerca de un trazo ya hecho, se engancha a él
+    // igual que un trazo normal — antes solo aplicaba a kind==='stroke'.
+    if (this.current && this.current.points.length >= 2) {
       const pts = this.current.points;
       const last = pts[pts.length - 1];
       const v = this.findSnapVertex(e, last, 0.6);
@@ -1357,18 +1359,47 @@ export class WebGLDesign3D {
 
   /** Aplica visibilidad y opacidad de cada capa a sus trazos. Se llama en cada
    *  cambio del store (visibilidad, opacidad) y al agregar trazos. */
+  /** Onion-skin por profundidad en vistas ortogonales: lo que está más lejos
+   *  del plano de referencia (controls.target, a lo largo del eje de la
+   *  cámara) se desvanece — como el papel cebolla de animación 2D, pero
+   *  usando la profundidad real en vez de cuadros distintos. Nunca se aplica
+   *  en perspectiva (ahí ya se percibe la profundidad por escala/paralaje,
+   *  desvanecer sería confuso). */
+  private static readonly ONION_DEPTH_RANGE = 6;
+  private static readonly ONION_MIN_OPACITY = 0.15;
+
+  private strokeWorldCenter(rec: StrokeRecord): THREE.Vector3 {
+    const c = new THREE.Vector3();
+    for (const p of rec.points) c.add(p);
+    return c.divideScalar(Math.max(1, rec.points.length)).add(rec.object.position);
+  }
+
   private applyLayerStyles(): void {
     const layers = lowStore.getState().layers;
     const byId = new Map(layers.map((l) => [l.id, l]));
+    const ortho = this.view !== 'persp';
+    let camDir: THREE.Vector3 | null = null;
+    let refDepth = 0;
+    if (ortho) {
+      camDir = new THREE.Vector3();
+      (this.camera as THREE.Camera).getWorldDirection(camDir);
+      refDepth = this.controls.target.dot(camDir);
+    }
     for (const rec of this.strokes) {
       const layer = byId.get(rec.layerId);
       const visible = layer ? layer.visible : true;
       const op = layer ? layer.opacity : 1;
       rec.object.visible = visible;
+      let depthMult = 1;
+      if (ortho && camDir) {
+        const depth = this.strokeWorldCenter(rec).dot(camDir) - refDepth;
+        const t = THREE.MathUtils.clamp(Math.abs(depth) / WebGLDesign3D.ONION_DEPTH_RANGE, 0, 1);
+        depthMult = THREE.MathUtils.lerp(1, WebGLDesign3D.ONION_MIN_OPACITY, t);
+      }
       rec.object.traverse((o) => {
         const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
         if (m && 'opacity' in m) {
-          m.opacity = rec.baseOpacity * op;
+          m.opacity = rec.baseOpacity * op * depthMult;
           m.transparent = m.opacity < 1;
           m.needsUpdate = true;
         }
@@ -1865,6 +1896,7 @@ export class WebGLDesign3D {
     this.controls.update();
     this.renderer.render(this.scene, this.camera as THREE.Camera);
     if (this.showAxes) this.updateVPOverlay();
+    if (this.view !== 'persp') this.applyLayerStyles(); // onion-skin por profundidad, depende de la cámara
   };
 
   // ---------------------------------------------------------------- debug
