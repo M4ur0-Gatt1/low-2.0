@@ -260,6 +260,7 @@ export class WebGLDesign3D {
     canvas.addEventListener('pointerleave', this.onPointerLeave);
     window.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
 
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(container);
@@ -278,6 +279,7 @@ export class WebGLDesign3D {
     this.canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     window.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
     this.cursorEl?.remove();
     this.lassoEl?.remove();
     this.vpEl?.remove();
@@ -552,6 +554,20 @@ export class WebGLDesign3D {
   /** Rayo → superficie/guía si hay; si no, plano que mira a la cámara. */
   private resolveHit(): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
     this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    // PRIORIDAD: la guía ACTIVA gana sobre cualquier otra superficie. Con varias
+    // guías, el rayo agarraba la que quedaba más cerca en profundidad (aunque no
+    // fuera la que estás usando). Si el cursor está sobre la malla de la guía
+    // activa, se usa esa; así "dibujás donde tenés la guía activa".
+    if (this.tool !== 'guide' && this.activeGuide) {
+      const ah = this.raycaster.intersectObject(this.activeGuide.mesh, false);
+      if (ah.length) {
+        const h = ah[0];
+        const normal = h.face
+          ? h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize()
+          : new THREE.Vector3(0, 0, 1);
+        return { point: h.point.clone(), normal };
+      }
+    }
     const targets: THREE.Object3D[] = this.surfaces.map((s) => s.mesh);
     // Una vez que ya hay forma armada, no hace falta seguir creando guías
     // para todo: se puede dibujar directamente APOYADO en los trazos ya
@@ -641,10 +657,18 @@ export class WebGLDesign3D {
    *  corte, sin hueco visual). Deshacer restaura el trazo original entero. */
   private cutStroke(rec: StrokeRecord, index: number): void {
     if (index <= 0 || index >= rec.points.length - 1) return; // nada que cortar en una punta
-    const ptsA = rec.points.slice(0, index + 1).map((p) => p.clone());
-    const prsA = rec.pressures.slice(0, index + 1);
-    const ptsB = rec.points.slice(index).map((p) => p.clone());
-    const prsB = rec.pressures.slice(index);
+    // Dejar un HUECO visible a cada lado del corte (si no, las dos mitades
+    // quedan idénticas al trazo original y parece que "no hizo nada").
+    const P = rec.points;
+    const GAP = 0.06; // luz del corte por lado (mundo)
+    let ja = index, accA = 0;
+    while (ja > 1 && accA < GAP) { accA += P[ja].distanceTo(P[ja - 1]); ja--; }
+    let jb = index, accB = 0;
+    while (jb < P.length - 2 && accB < GAP) { accB += P[jb].distanceTo(P[jb + 1]); jb++; }
+    const ptsA = P.slice(0, ja + 1).map((p) => p.clone());
+    const prsA = rec.pressures.slice(0, ja + 1);
+    const ptsB = P.slice(jb).map((p) => p.clone());
+    const prsB = rec.pressures.slice(jb);
     if (ptsA.length < 2 || ptsB.length < 2) return;
 
     const makeHalf = (pts: THREE.Vector3[], prs: number[]): StrokeRecord => {
@@ -673,6 +697,7 @@ export class WebGLDesign3D {
 
   private onPointerDown = (e: PointerEvent): void => {
     if (e.button !== 0 || e.pointerType === 'touch') return;
+    if (this.panMode) return; // Espacio = mano: OrbitControls panea, no dibujar
     this.setPointerFromEvent(e);
     this.updateCursor(e);
     this.downScreen.set(...this.screenOf(e));
@@ -730,10 +755,24 @@ export class WebGLDesign3D {
     p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify', c: 'scissors',
   };
 
+  private panMode = false; // barra espaciadora = mano (pan de cámara)
+
   private onKeyDown = (e: KeyboardEvent): void => {
     const ctrl = e.ctrlKey || e.metaKey;
     const target = document.activeElement;
     const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+    // Barra espaciadora = MANO: mientras se mantiene, el botón izquierdo panea
+    // (mover la vista vertical/horizontal, sobre todo en vistas ortogonales).
+    if (e.code === 'Space' && !typing) {
+      e.preventDefault();
+      if (!this.panMode) {
+        this.panMode = true;
+        this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+        this.controls.enabled = true;
+        this.canvas.style.cursor = 'grab';
+      }
+      return;
+    }
     if (!ctrl && !e.altKey && !typing && WebGLDesign3D.TOOL_KEYS[e.key.toLowerCase()]) {
       e.preventDefault();
       lowStore.setCurrentTool(WebGLDesign3D.TOOL_KEYS[e.key.toLowerCase()]);
@@ -758,6 +797,14 @@ export class WebGLDesign3D {
       this.setSelection([]);
       this.selectGuide(null);
       this.clearPointEdit();
+    }
+  };
+
+  private onKeyUp = (e: KeyboardEvent): void => {
+    if (e.code === 'Space' && this.panMode) {
+      this.panMode = false;
+      this.controls.mouseButtons.LEFT = -1 as unknown as THREE.MOUSE; // vuelve a dibujar
+      this.canvas.style.cursor = 'none';
     }
   };
 
