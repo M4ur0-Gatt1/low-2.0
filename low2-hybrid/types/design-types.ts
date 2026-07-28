@@ -16,8 +16,8 @@
 export type ToolType = 'pencil' | 'guide' | 'move' | 'select' | 'eraser' | 'liquify' | 'scissors';
 
 /** Modo del gizmo de transformación de la herramienta 'move' (con un solo
- *  trazo seleccionado): mover libremente por ejes, o redimensionar. */
-export type GizmoMode = 'translate' | 'scale';
+ *  trazo seleccionado): mover libremente por ejes, redimensionar, o rotar. */
+export type GizmoMode = 'translate' | 'scale' | 'rotate';
 
 /** Superficies guía sobre las que se proyecta el trazo. */
 export type SurfaceType = 'plane' | 'cylinder' | 'sphere' | 'torus' | 'loft';
