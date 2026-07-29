@@ -196,6 +196,38 @@ el motor como app de escritorio suelta, y quedó descartado (ver abajo).
   percibe por escala/paralaje. Rango y opacidad mínima son constantes fijas
   (`ONION_DEPTH_RANGE`/`ONION_MIN_OPACITY`) — si hace falta un slider para
   ajustarlas a mano, es la próxima extensión natural.
+- Eje móvil del gizmo de rotación (v3.28.14): con `move`+`rotate` y un solo
+  trazo/guía seleccionado aparece una esferita rosa (`pivotMarker`) en el
+  origen del objeto — arrastrarla reubica DÓNDE gira, en vez de rotar
+  siempre sobre el propio origen. Implementación: mientras se arrastra el
+  marcador el objeto NO se toca (es un Vector3 libre + malla visual, sin
+  parentesco); recién al soltar (`endPivotDrag`) o al iniciar un gesto de
+  rotación, si el pivote quedó lejos del origen del objeto
+  (`applyPivotAttachment`), se lo reparenta transitoriamente bajo un
+  `Object3D` proxy ubicado en ese punto (`wrapPivot`, vía `proxy.attach()`
+  para preservar la transformación mundial) y el gizmo rota ESE proxy. Al
+  soltar el gizmo (`unwrapPivot`) se "hornea" la rotación acumulada de
+  vuelta en el `position`/`quaternion` reales del objeto y se lo devuelve a
+  su grupo original — de paso esto agregó undo/redo a la rotación (antes
+  `dragging-changed` solo trackeaba `position`, rotar no tenía deshacer).
+  Nunca se reparenta en medio de un drag activo de `TransformControls` (se
+  probó y rompe: `_positionStart`/`worldPositionStart` quedan capturados
+  del objeto viejo) — el wrap/unwrap solo ocurre ANTES de que empiece el
+  próximo gesto. Por eso `removeStrokeRecord`/`detachGuide`/
+  `deleteSelection` llaman `unwrapPivot()` como guard antes de sacar un
+  objeto de su grupo (si no, el trazo queda huérfano colgado del proxy).
+- Auto-guía desde el primer trazo (v3.28.14, como Feather): si se dibuja un
+  trazo de tinta sin NINGUNA guía/superficie/trazo real de apoyo bajo el
+  cursor (`resolveHit` cae al plano de fallback genérico de cámara —
+  marcado como `noSupport` en su retorno), al cerrar el trazo se genera
+  automáticamente una guía real a partir de esos mismos puntos
+  (`buildGuideSurface` + `setGuide`, igual que la herramienta `guide`
+  manual) — le da soporte de profundidad a los trazos siguientes en vez de
+  que todos seguían cayendo al mismo plano de cámara sin memoria entre sí
+  (la causa de que "sin guías" se sintiera errático). No se dispara si ya
+  hay una guía activa, ni si el trazo se apoyó en algo real (otra guía,
+  superficie primitiva, u otro trazo, o si el snap de inicio enganchó a un
+  vértice existente).
 - **Limitación conocida, no corregida todavía**: `buildTube`/
   `rebuildStrokeMesh`/`cutStroke` usan `this.brush.color` (el color ACTUAL
   del pincel), no un color guardado por trazo — `StrokeRecord` no tiene
