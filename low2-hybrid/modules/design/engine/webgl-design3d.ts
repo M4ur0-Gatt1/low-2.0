@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { lowStore, type LowStore } from '../../../store/low-store';
-import type { BrushSettings, SurfaceType, ToolType } from '../../../types/design-types';
+import type { BrushSettings, GizmoMode, SurfaceType, ToolType } from '../../../types/design-types';
 
 export type Theme = 'light' | 'dark';
 export type ViewName = 'persp' | 'front' | 'back' | 'top' | 'bottom' | 'left' | 'right';
@@ -97,7 +97,7 @@ export class WebGLDesign3D {
   private orthoSize = ORTHO_SIZE;
 
   // interacción
-  private mode: 'idle' | 'draw' | 'move' | 'lasso' | 'point-drag' = 'idle';
+  private mode: 'idle' | 'draw' | 'move' | 'lasso' | 'point-drag' | 'pivot-drag' = 'idle';
   private current: {
     points: THREE.Vector3[];
     pressures: number[];
@@ -108,6 +108,10 @@ export class WebGLDesign3D {
      *  que una guía nueva salga PERPENDICULAR al plano en el que se estaba
      *  dibujando (ver buildGuideSurface), no siempre de cara a la cámara. */
     baseNormal?: THREE.Vector3;
+    /** true si el primer punto se resolvió contra el plano de fallback
+     *  genérico (sin guía ni superficie real de apoyo) — dispara la
+     *  auto-creación de guía al cerrar el trazo, ver commitStroke(). */
+    noSupport?: boolean;
   } | null = null;
   private downScreen = new THREE.Vector2();
   private lastMoveWorld = new THREE.Vector3();
@@ -135,6 +139,25 @@ export class WebGLDesign3D {
   private gizmo?: TransformControls;
   private gizmoTarget: THREE.Object3D | null = null;
   private gizmoDragStart = new THREE.Vector3();
+  private gizmoDragStartQuat = new THREE.Quaternion();
+  private currentGizmoMode: GizmoMode = 'translate';
+
+  // eje móvil del gizmo de rotación: una esferita arrastrable que define
+  // DÓNDE gira el objeto, en vez de rotar siempre sobre su propio origen.
+  // Se implementa reparentando el objeto bajo un Object3D "proxy" ubicado en
+  // el pivote elegido — pero SOLO durante el gesto de rotación en sí (nunca
+  // mientras se arrastra el marcador): moverlo con el objeto ya adentro lo
+  // arrastraría rígidamente. `pivotForObj` recuerda a qué objeto pertenece
+  // el pivote actual, para resetearlo si cambia la selección.
+  private pivotWorldPos: THREE.Vector3 | null = null;
+  private pivotForObj: THREE.Object3D | null = null;
+  private pivotMarker?: THREE.Mesh;
+  private pivotProxy: THREE.Object3D | null = null;
+  private pivotOwnerObj: THREE.Object3D | null = null;
+  private pivotOwnerParent: THREE.Object3D | null = null;
+  private pivotBeforePos = new THREE.Vector3();
+  private pivotBeforeQuat = new THREE.Quaternion();
+  private static readonly PIVOT_EPS = 1e-6;
 
   // portapapeles: copiar/pegar trazos (Ctrl+C / Ctrl+V)
   private clipboard: { points: THREE.Vector3[]; pressures: number[] }[] = [];
@@ -191,6 +214,18 @@ export class WebGLDesign3D {
     this.handlesGroup = new THREE.Group();
     this.scene.add(this.surfacesGroup, this.guidesGroup, this.strokesGroup, this.handlesGroup);
 
+    // marcador del eje móvil de rotación: mismo estilo que los handles de
+    // edición de puntos, pero en un color distinto para no confundirlo con
+    // los nodos de un trazo.
+    {
+      const geo = new THREE.SphereGeometry(0.05, 16, 12);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff5ac8, depthTest: false });
+      this.pivotMarker = new THREE.Mesh(geo, mat);
+      this.pivotMarker.renderOrder = 1000;
+      this.pivotMarker.visible = false;
+      this.handlesGroup.add(this.pivotMarker);
+    }
+
     this.axesHelper = new THREE.AxesHelper(3);
     this.axesHelper.visible = false;
     this.scene.add(this.axesHelper);
@@ -207,14 +242,31 @@ export class WebGLDesign3D {
       this.controls.enabled = !ev.value;
       if (ev.value) {
         this.gizmoTarget = (this.gizmo!.object as THREE.Object3D | undefined) ?? null;
-        if (this.gizmoTarget) this.gizmoDragStart.copy(this.gizmoTarget.position);
+        if (this.gizmoTarget) {
+          this.gizmoDragStart.copy(this.gizmoTarget.position);
+          this.gizmoDragStartQuat.copy(this.gizmoTarget.quaternion);
+        }
       } else if (this.gizmoTarget) {
         const obj = this.gizmoTarget;
         const before = this.gizmoDragStart.clone();
-        const after = obj.position.clone();
+        const beforeQuat = this.gizmoDragStartQuat.clone();
         this.gizmoTarget = null;
-        if (before.distanceToSquared(after) > 1e-8) {
-          this.pushCmd({ undo: () => obj.position.copy(before), redo: () => obj.position.copy(after) });
+        if (this.pivotProxy && obj === this.pivotProxy) {
+          // se rotó alrededor del eje móvil: "hornear" la transformación
+          // acumulada en el objeto real (unwrapPivot ya arma el undo con el
+          // antes/después correctos) y dejar el pivote listo para el
+          // próximo gesto sin que el usuario tenga que reposicionarlo.
+          this.unwrapPivot();
+          if (this.pivotForObj) this.applyPivotAttachment(this.pivotForObj);
+        } else {
+          const after = obj.position.clone();
+          const afterQuat = obj.quaternion.clone();
+          if (before.distanceToSquared(after) > 1e-8 || beforeQuat.angleTo(afterQuat) > 1e-4) {
+            this.pushCmd({
+              undo: () => { obj.position.copy(before); obj.quaternion.copy(beforeQuat); },
+              redo: () => { obj.position.copy(after); obj.quaternion.copy(afterQuat); },
+            });
+          }
         }
       }
     });
@@ -523,8 +575,11 @@ export class WebGLDesign3D {
       else this.removeActiveSurface();
     }
     this.lastSurfaceKey = key;
-    if (toolChanged) this.syncGizmo();
-    this.gizmo?.setMode(s.gizmoMode || 'translate');
+    const newGizmoMode = s.gizmoMode || 'translate';
+    const gizmoModeChanged = this.currentGizmoMode !== newGizmoMode;
+    this.currentGizmoMode = newGizmoMode;
+    this.gizmo?.setMode(newGizmoMode);
+    if (toolChanged || gizmoModeChanged) this.syncGizmo();
     this.applyLayerStyles(); // visibilidad/opacidad de capas
   }
 
@@ -551,8 +606,11 @@ export class WebGLDesign3D {
     this.cursorEl.style.top = `${y}px`;
   }
 
-  /** Rayo → superficie/guía si hay; si no, plano que mira a la cámara. */
-  private resolveHit(): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
+  /** Rayo → superficie/guía si hay; si no, plano que mira a la cámara.
+   *  `noSupport` marca ese último caso — ninguna guía/superficie/trazo real
+   *  bajo el cursor, solo el plano genérico — así beginDraw() sabe cuándo
+   *  hace falta auto-generar una guía real (ver commitStroke). */
+  private resolveHit(): { point: THREE.Vector3; normal: THREE.Vector3; noSupport?: boolean } | null {
     this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
     // PRIORIDAD: la guía ACTIVA gana sobre cualquier otra superficie. Con varias
     // guías, el rayo agarraba la que quedaba más cerca en profundidad (aunque no
@@ -605,7 +663,7 @@ export class WebGLDesign3D {
     this.fallbackPlane.setFromNormalAndCoplanarPoint(camDir.clone().negate(), this.controls.target);
     const p = new THREE.Vector3();
     if (this.raycaster.ray.intersectPlane(this.fallbackPlane, p)) {
-      return { point: p.clone(), normal: this.fallbackPlane.normal.clone() };
+      return { point: p.clone(), normal: this.fallbackPlane.normal.clone(), noSupport: true };
     }
     return null;
   }
@@ -705,6 +763,13 @@ export class WebGLDesign3D {
     if (this.tool === 'pencil' || this.tool === 'guide') {
       this.beginDraw(e);
     } else if (this.tool === 'move') {
+      // el eje móvil del pivote de rotación tiene prioridad sobre los
+      // anillos del gizmo: es un blanco más chico y conviene poder
+      // agarrarlo aunque quede pegado a ellos en pantalla.
+      if (this.currentGizmoMode === 'rotate' && !this.gizmo?.axis && this.pickPivotMarker()) {
+        this.beginPivotDrag(e);
+        return;
+      }
       // el pointerdown sobre un handle del gizmo lo maneja TransformControls
       // solo (su propio listener, ya enterado por el hover del pointermove
       // anterior) — no arrancar además un lazo/mover libre encima.
@@ -735,6 +800,7 @@ export class WebGLDesign3D {
     else if (this.mode === 'move') this.moveDrag(e);
     else if (this.mode === 'lasso') this.moveLasso(e);
     else if (this.mode === 'point-drag') this.movePointDrag();
+    else if (this.mode === 'pivot-drag') this.movePivotDrag();
   };
 
   private onPointerLeave = (): void => {
@@ -746,6 +812,7 @@ export class WebGLDesign3D {
     else if (this.mode === 'move') { this.endMove(); }
     else if (this.mode === 'lasso') { this.endLasso(e); }
     else if (this.mode === 'point-drag') { this.endPointDrag(); }
+    else if (this.mode === 'pivot-drag') { this.endPivotDrag(); }
     this.mode = 'idle';
     this.controls.enabled = true;
     try { this.canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
@@ -925,6 +992,10 @@ export class WebGLDesign3D {
     this.current = {
       points: [hit.point], pressures: [this.samplePressure(e)], kind, line, mirrorLine,
       baseNormal: hit.normal.clone(),
+      // el snap a un vértice existente SÍ cuenta como soporte real (ese
+      // vértice pertenece a un trazo/guía ya apoyado), aunque `surf` haya
+      // caído en el plano de fallback antes de encontrar el snap.
+      noSupport: !snap && !!surf?.noSupport,
     };
     this.updatePreview();
   }
@@ -1292,7 +1363,7 @@ export class WebGLDesign3D {
       (l.material as THREE.Material).dispose();
     }
     let { points, pressures } = this.current;
-    const { kind, baseNormal } = this.current;
+    const { kind, baseNormal, noSupport } = this.current;
     this.current = null;
     if (points.length < 2) return;
 
@@ -1300,6 +1371,16 @@ export class WebGLDesign3D {
       const mesh = this.buildGuideSurface(points, baseNormal);
       if (mesh) this.setGuide(mesh);
       return;
+    }
+    // Como Feather: si este trazo se dibujó "en el aire" (sin ninguna guía ni
+    // superficie real de apoyo — cayó al plano genérico de cámara) se
+    // auto-genera una guía a partir de él mismo, ANTES de resamplear/afinar
+    // los puntos (con la curva cruda, igual que la herramienta 'guide'). Le
+    // da soporte de profundidad real a los trazos siguientes en vez de que
+    // todos sigan cayendo al mismo plano de cámara sin memoria entre sí.
+    if (noSupport && !this.activeGuide) {
+      const guideMesh = this.buildGuideSurface(points, baseNormal);
+      if (guideMesh) this.setGuide(guideMesh);
     }
     ({ points, pressures } = this.resamplePoints(points, pressures));
     ({ points, pressures } = this.refineStroke(points, pressures));
@@ -1344,6 +1425,10 @@ export class WebGLDesign3D {
   }
 
   private removeStrokeRecord(rec: StrokeRecord): void {
+    // si el trazo está envuelto en el proxy del pivote móvil, liberarlo
+    // primero — si no, `strokesGroup.remove` no encuentra un hijo directo y
+    // el trazo queda fantasma, colgado del proxy.
+    if (this.pivotOwnerObj === rec.object) this.unwrapPivot();
     this.strokesGroup.remove(rec.object);
     this.strokes = this.strokes.filter((s) => s !== rec);
     this.selected.delete(rec);
@@ -1487,6 +1572,7 @@ export class WebGLDesign3D {
   }
 
   private detachGuide(g: { id: string; mesh: THREE.Mesh }): void {
+    if (this.pivotOwnerObj === g.mesh) this.unwrapPivot();
     this.guidesGroup.remove(g.mesh);
     this.surfaces = this.surfaces.filter((s) => s.id !== g.id);
     this.guides = this.guides.filter((x) => x.id !== g.id);
@@ -1587,10 +1673,141 @@ export class WebGLDesign3D {
    *  el arrastre libre de siempre) o una guía. */
   private syncGizmo(): void {
     if (!this.gizmo) return;
-    if (this.tool !== 'move') { this.gizmo.detach(); return; }
-    if (this.selected.size === 1) { this.gizmo.attach([...this.selected][0].object); return; }
-    if (this.selectedGuide) { this.gizmo.attach(this.selectedGuide.mesh); return; }
-    this.gizmo.detach();
+    if (this.tool !== 'move') { this.resetPivot(); this.gizmo.detach(); return; }
+    let target: THREE.Object3D | null = null;
+    if (this.selected.size === 1) target = [...this.selected][0].object;
+    else if (this.selectedGuide) target = this.selectedGuide.mesh;
+    if (!target) { this.resetPivot(); this.gizmo.detach(); return; }
+    if (this.currentGizmoMode === 'rotate') {
+      if (this.pivotForObj !== target) {
+        this.unwrapPivot();
+        this.pivotForObj = target;
+        this.pivotWorldPos = target.getWorldPosition(new THREE.Vector3());
+      }
+      this.applyPivotAttachment(target);
+      this.showPivotMarker();
+    } else {
+      this.unwrapPivot();
+      this.hidePivotMarker();
+      this.gizmo.attach(target);
+    }
+  }
+
+  // ---------------------------------------------------------------- eje móvil de rotación
+
+  private resetPivot(): void {
+    this.unwrapPivot();
+    this.hidePivotMarker();
+    this.pivotWorldPos = null;
+    this.pivotForObj = null;
+  }
+
+  private showPivotMarker(): void {
+    if (!this.pivotMarker || !this.pivotWorldPos) return;
+    this.pivotMarker.position.copy(this.pivotWorldPos);
+    this.pivotMarker.visible = true;
+  }
+
+  private hidePivotMarker(): void {
+    if (this.pivotMarker) this.pivotMarker.visible = false;
+  }
+
+  /** ¿El pointer actual cayó sobre el marcador de pivote? Proximidad en
+   *  pantalla (como pickCutPoint), no raycast exacto: la esfera es chica y
+   *  suele quedar pegada a los anillos del gizmo de rotación. */
+  private pickPivotMarker(): boolean {
+    if (!this.pivotMarker?.visible) return false;
+    const rect = this.canvas.getBoundingClientRect();
+    const cx = ((this.pointer.x + 1) / 2) * rect.width;
+    const cy = ((1 - this.pointer.y) / 2) * rect.height;
+    const w = this.pivotMarker.getWorldPosition(new THREE.Vector3()).project(this.camera as THREE.Camera);
+    const sx = ((w.x + 1) / 2) * rect.width;
+    const sy = ((1 - w.y) / 2) * rect.height;
+    return Math.hypot(sx - cx, sy - cy) < 16;
+  }
+
+  /** Decide, según qué tan lejos está el pivote elegido del origen propio
+   *  del objeto, si hace falta el truco del proxy (pivote custom) o alcanza
+   *  con el attach directo de siempre (pivote = origen del objeto, sin
+   *  reparenting). Se llama después de mover el marcador y después de cada
+   *  gesto de rotación — nunca en medio de un drag activo del gizmo. */
+  private applyPivotAttachment(target: THREE.Object3D): void {
+    if (!this.gizmo || this.currentGizmoMode !== 'rotate' || !this.pivotWorldPos) return;
+    const wp = target.getWorldPosition(new THREE.Vector3());
+    const custom = this.pivotWorldPos.distanceToSquared(wp) > WebGLDesign3D.PIVOT_EPS;
+    if (custom) {
+      this.wrapPivot(target);
+    } else {
+      if (this.pivotProxy) this.unwrapPivot();
+      this.gizmo.attach(target);
+    }
+  }
+
+  private wrapPivot(target: THREE.Object3D): void {
+    if (!this.pivotWorldPos) return;
+    if (this.pivotProxy && this.pivotOwnerObj === target) {
+      this.pivotProxy.position.copy(this.pivotWorldPos);
+      this.gizmo?.attach(this.pivotProxy);
+      return;
+    }
+    if (this.pivotProxy) this.unwrapPivot();
+    this.pivotOwnerObj = target;
+    this.pivotOwnerParent = target.parent;
+    this.pivotBeforePos.copy(target.position);
+    this.pivotBeforeQuat.copy(target.quaternion);
+    const proxy = new THREE.Object3D();
+    proxy.position.copy(this.pivotWorldPos);
+    this.scene.add(proxy);
+    proxy.attach(target); // preserva la transformación mundial del objeto
+    this.pivotProxy = proxy;
+    this.gizmo?.attach(proxy);
+  }
+
+  /** Devuelve el objeto a su grupo original con la transformación acumulada
+   *  ya "horneada" en su position/quaternion, y empuja el undo/redo del
+   *  gesto de rotación (antes/después capturados en wrapPivot). */
+  private unwrapPivot(): void {
+    if (!this.pivotProxy || !this.pivotOwnerObj) return;
+    const obj = this.pivotOwnerObj;
+    const parent = this.pivotOwnerParent ?? this.strokesGroup;
+    parent.attach(obj);
+    this.scene.remove(this.pivotProxy);
+    const before = this.pivotBeforePos.clone();
+    const beforeQuat = this.pivotBeforeQuat.clone();
+    const after = obj.position.clone();
+    const afterQuat = obj.quaternion.clone();
+    this.pivotProxy = null;
+    this.pivotOwnerObj = null;
+    this.pivotOwnerParent = null;
+    if (before.distanceToSquared(after) > 1e-8 || beforeQuat.angleTo(afterQuat) > 1e-4) {
+      this.pushCmd({
+        undo: () => { obj.position.copy(before); obj.quaternion.copy(beforeQuat); },
+        redo: () => { obj.position.copy(after); obj.quaternion.copy(afterQuat); },
+      });
+    }
+  }
+
+  private beginPivotDrag(e: PointerEvent): void {
+    if (this.pivotProxy) this.unwrapPivot(); // soltar el objeto antes de mover el eje
+    this.canvas.setPointerCapture(e.pointerId);
+    this.mode = 'pivot-drag';
+    this.controls.enabled = false;
+  }
+
+  private movePivotDrag(): void {
+    if (!this.pivotWorldPos) return;
+    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    const camDir = new THREE.Vector3();
+    (this.camera as THREE.Camera).getWorldDirection(camDir);
+    this.fallbackPlane.setFromNormalAndCoplanarPoint(camDir.clone().negate(), this.pivotWorldPos);
+    const p = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(this.fallbackPlane, p)) return;
+    this.pivotWorldPos.copy(p);
+    this.pivotMarker?.position.copy(p);
+  }
+
+  private endPivotDrag(): void {
+    if (this.pivotForObj) this.applyPivotAttachment(this.pivotForObj);
   }
 
   private highlight(rec: StrokeRecord, on: boolean): void {
@@ -1614,6 +1831,7 @@ export class WebGLDesign3D {
     const wasGuide = new Map<string, { id: string; mesh: THREE.Mesh } | null>();
     const remove = () => {
       for (const r of recs) {
+        if (this.pivotOwnerObj === r.object) this.unwrapPivot();
         r.object.parent?.remove(r.object);
         this.strokes = this.strokes.filter((s) => s !== r);
         if (r.kind === 'guide') { this.surfaces = this.surfaces.filter((s) => s.id !== r.id); if (this.activeGuide?.id === r.id) this.activeGuide = null; }
