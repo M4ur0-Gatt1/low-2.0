@@ -206,7 +206,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
           pointerEvents: 'none',
         }}
       >
-Teclas: P lápiz · G guía · V mover (click en una guía = mover/deformar con gizmo, Ctrl+D duplica) · A puntos · E goma · C tijera · Shift recta · Alt hilo tenso (eje X/Y/Z) · Ctrl+C/V copia · Supr borra · Ctrl+Z/Ctrl+Alt+Z
+Teclas: P lápiz · G guía · F dibujo libre (sin guía, scroll = profundidad) · V mover (click en una guía = mover/deformar con gizmo, Ctrl+D duplica; con rotar, arrastrá el eje rosa) · A puntos · E goma · C tijera · Shift recta · Alt hilo tenso (eje X/Y/Z) · Ctrl+C/V copia · Supr borra · Ctrl+Z/Ctrl+Alt+Z
       </div>
     </div>
   );

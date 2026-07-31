@@ -12,8 +12,11 @@
  *  'guide' = traza líneas punteadas de referencia espacial (no tinta).
  *  'select' = selección directa de nodos: edita los puntos de control de un
  *  trazo ya hecho (arrastrar un nodo individual), no el trazo entero.
- *  'scissors' = corta un trazo en dos en el punto donde se clickea sobre él. */
-export type ToolType = 'pencil' | 'guide' | 'move' | 'select' | 'eraser' | 'liquify' | 'scissors';
+ *  'scissors' = corta un trazo en dos en el punto donde se clickea sobre él.
+ *  'pencil-free' = dibujo libre en el aire: ignora guías/superficies, la
+ *  profundidad (distancia a la cámara) se controla con el scroll en vez de
+ *  proyectarse sobre un plano de apoyo. */
+export type ToolType = 'pencil' | 'guide' | 'move' | 'select' | 'eraser' | 'liquify' | 'scissors' | 'pencil-free';
 
 /** Modo del gizmo de transformación de la herramienta 'move' (con un solo
  *  trazo seleccionado): mover libremente por ejes, redimensionar, o rotar. */
