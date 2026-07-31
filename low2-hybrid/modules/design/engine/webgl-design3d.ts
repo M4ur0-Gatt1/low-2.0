@@ -96,8 +96,29 @@ export class WebGLDesign3D {
   private view: ViewName = 'persp';
   private orthoSize = ORTHO_SIZE;
 
+  // dibujo libre ("en el aire"): en vez de proyectar sobre una guía/
+  // superficie, el punto se calcula a una distancia fija de la cámara a lo
+  // largo del rayo del cursor — esa distancia (`freeDrawDepth`) es la que se
+  // ajusta con el scroll (ver onWheel). El OrbitControls.enableZoom se
+  // desactiva mientras esta herramienta está activa para que el scroll no
+  // termine haciendo las dos cosas (zoom Y profundidad) a la vez.
+  private freeDrawDepth = 0; // 0 = todavía no inicializado, ver ensureFreeDrawDepth()
+  private freeDrawPreview?: THREE.Mesh;
+  private freeDepthEl!: HTMLDivElement;
+  private static readonly FREE_DEPTH_MIN = 0.15;
+  private static readonly FREE_DEPTH_MAX = 80;
+
+  // liquify: arrastra los puntos de control de UN trazo hacia el pincel,
+  // dentro de un radio, con caída suave — igual idea que el prototipo viejo
+  // de `ui/lienzo3d.js` (`l3dLiquifyStroke`), portada al motor actual
+  // (rebuildStrokeMesh + undo/redo). El radio de influencia reusa el slider
+  // de tamaño de pincel existente (no hace falta un control nuevo).
+  private liquifyStroke: StrokeRecord | null = null;
+  private liquifyBefore: THREE.Vector3[] = [];
+  private static readonly LIQUIFY_STRENGTH = 0.18;
+
   // interacción
-  private mode: 'idle' | 'draw' | 'move' | 'lasso' | 'point-drag' | 'pivot-drag' = 'idle';
+  private mode: 'idle' | 'draw' | 'move' | 'lasso' | 'point-drag' | 'pivot-drag' | 'liquify-drag' = 'idle';
   private current: {
     points: THREE.Vector3[];
     pressures: number[];
@@ -226,6 +247,17 @@ export class WebGLDesign3D {
       this.handlesGroup.add(this.pivotMarker);
     }
 
+    // mira de puntería del modo "dibujo libre": dónde vas a apoyar el
+    // próximo punto, a la distancia de cámara actual (`freeDrawDepth`).
+    {
+      const geo = new THREE.SphereGeometry(0.045, 16, 12);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x4cf0ff, depthTest: false, transparent: true, opacity: 0.85 });
+      this.freeDrawPreview = new THREE.Mesh(geo, mat);
+      this.freeDrawPreview.renderOrder = 1000;
+      this.freeDrawPreview.visible = false;
+      this.handlesGroup.add(this.freeDrawPreview);
+    }
+
     this.axesHelper = new THREE.AxesHelper(3);
     this.axesHelper.visible = false;
     this.scene.add(this.axesHelper);
@@ -288,6 +320,18 @@ export class WebGLDesign3D {
     } as CSSStyleDeclaration);
     container.appendChild(this.cursorEl);
 
+    // lectura numérica de profundidad del modo "dibujo libre" — sin esto el
+    // scroll cambia algo invisible; con el número puesto al lado del cursor
+    // el ajuste deja de ser "a ciegas".
+    this.freeDepthEl = document.createElement('div');
+    Object.assign(this.freeDepthEl.style, {
+      position: 'absolute', left: '0', top: '0', transform: 'translate(14px, -8px)',
+      pointerEvents: 'none', display: 'none', zIndex: '51', fontFamily: 'system-ui, sans-serif',
+      fontSize: '11px', color: '#4cf0ff', background: 'rgba(0,0,0,0.55)', padding: '1px 5px',
+      borderRadius: '4px', whiteSpace: 'nowrap',
+    } as CSSStyleDeclaration);
+    container.appendChild(this.freeDepthEl);
+
     // overlay SVG para el lazo
     this.lassoEl = document.createElementNS(NS, 'svg') as SVGSVGElement;
     Object.assign(this.lassoEl.style, {
@@ -310,6 +354,7 @@ export class WebGLDesign3D {
     canvas.addEventListener('pointerdown', this.onPointerDown);
     canvas.addEventListener('pointermove', this.onPointerMove);
     canvas.addEventListener('pointerleave', this.onPointerLeave);
+    canvas.addEventListener('wheel', this.onWheel, { passive: false });
     window.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -329,10 +374,12 @@ export class WebGLDesign3D {
     this.canvas?.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas?.removeEventListener('pointermove', this.onPointerMove);
     this.canvas?.removeEventListener('pointerleave', this.onPointerLeave);
+    this.canvas?.removeEventListener('wheel', this.onWheel);
     window.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     this.cursorEl?.remove();
+    this.freeDepthEl?.remove();
     this.lassoEl?.remove();
     this.vpEl?.remove();
     this.gizmo?.dispose();
@@ -580,6 +627,9 @@ export class WebGLDesign3D {
     this.currentGizmoMode = newGizmoMode;
     this.gizmo?.setMode(newGizmoMode);
     if (toolChanged || gizmoModeChanged) this.syncGizmo();
+    // dibujo libre: el scroll controla la profundidad, no el zoom de cámara.
+    if (this.controls) this.controls.enableZoom = this.tool !== 'pencil-free';
+    if (toolChanged && this.tool !== 'pencil-free') this.hideFreeDrawPreview();
     this.applyLayerStyles(); // visibilidad/opacidad de capas
   }
 
@@ -666,6 +716,62 @@ export class WebGLDesign3D {
       return { point: p.clone(), normal: this.fallbackPlane.normal.clone(), noSupport: true };
     }
     return null;
+  }
+
+  // ---------------------------------------------------------------- dibujo libre ("en el aire")
+
+  /** Primera vez que se entra al modo: arrancar la profundidad en la
+   *  distancia de órbita actual (donde ya está mirando la cámara), no en un
+   *  valor arbitrario — así el primer punto cae cerca de lo que se ve. */
+  private ensureFreeDrawDepth(): void {
+    if (this.freeDrawDepth > 0) return;
+    this.freeDrawDepth = THREE.MathUtils.clamp(
+      this.camera.position.distanceTo(this.controls.target),
+      WebGLDesign3D.FREE_DEPTH_MIN, WebGLDesign3D.FREE_DEPTH_MAX,
+    );
+  }
+
+  private onWheel = (e: WheelEvent): void => {
+    if (this.tool !== 'pencil-free') return;
+    e.preventDefault();
+    this.ensureFreeDrawDepth();
+    // multiplicativo (no aditivo): el mismo gesto de scroll acerca/aleja el
+    // mismo PORCENTAJE ya sea que estés a 0.5m o a 50m de la cámara.
+    const factor = Math.exp(-e.deltaY * 0.0012);
+    this.freeDrawDepth = THREE.MathUtils.clamp(this.freeDrawDepth * factor, WebGLDesign3D.FREE_DEPTH_MIN, WebGLDesign3D.FREE_DEPTH_MAX);
+    this.updateFreeDrawPreview();
+  };
+
+  /** Punto sobre el rayo de cámara a `freeDrawDepth` de distancia — nunca
+   *  proyecta sobre ninguna guía/superficie/trazo, es la esencia del modo:
+   *  dibujar en cualquier dirección del espacio, no solo sobre un plano. */
+  private resolveFreeHit(): { point: THREE.Vector3; normal: THREE.Vector3 } {
+    this.ensureFreeDrawDepth();
+    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    const point = this.raycaster.ray.origin.clone().addScaledVector(this.raycaster.ray.direction, this.freeDrawDepth);
+    const normal = this.raycaster.ray.direction.clone().negate();
+    return { point, normal };
+  }
+
+  /** Mira de puntería + lectura numérica de profundidad, actualizada en cada
+   *  pointermove (aun sin estar dibujando: sirve para "apuntar" antes de
+   *  bajar el lápiz) y en cada scroll. */
+  private updateFreeDrawPreview(): void {
+    if (this.tool !== 'pencil-free' || !this.freeDrawPreview) return;
+    const hit = this.resolveFreeHit();
+    this.freeDrawPreview.position.copy(hit.point);
+    this.freeDrawPreview.visible = true;
+    const w = hit.point.clone().project(this.camera as THREE.Camera);
+    const rect = this.canvas.getBoundingClientRect();
+    this.freeDepthEl.style.left = `${((w.x + 1) / 2) * rect.width}px`;
+    this.freeDepthEl.style.top = `${((1 - w.y) / 2) * rect.height}px`;
+    this.freeDepthEl.style.display = 'block';
+    this.freeDepthEl.textContent = `${this.freeDrawDepth.toFixed(2)} m`;
+  }
+
+  private hideFreeDrawPreview(): void {
+    if (this.freeDrawPreview) this.freeDrawPreview.visible = false;
+    if (this.freeDepthEl) this.freeDepthEl.style.display = 'none';
   }
 
   private pickStroke(): StrokeRecord | null {
@@ -760,7 +866,7 @@ export class WebGLDesign3D {
     this.updateCursor(e);
     this.downScreen.set(...this.screenOf(e));
 
-    if (this.tool === 'pencil' || this.tool === 'guide') {
+    if (this.tool === 'pencil' || this.tool === 'guide' || this.tool === 'pencil-free') {
       this.beginDraw(e);
     } else if (this.tool === 'move') {
       // el eje móvil del pivote de rotación tiene prioridad sobre los
@@ -790,6 +896,8 @@ export class WebGLDesign3D {
     } else if (this.tool === 'scissors') {
       const cut = this.pickCutPoint();
       if (cut) this.cutStroke(cut.rec, cut.index);
+    } else if (this.tool === 'liquify') {
+      this.beginLiquify(e);
     }
   };
 
@@ -801,6 +909,8 @@ export class WebGLDesign3D {
     else if (this.mode === 'lasso') this.moveLasso(e);
     else if (this.mode === 'point-drag') this.movePointDrag();
     else if (this.mode === 'pivot-drag') this.movePivotDrag();
+    else if (this.mode === 'liquify-drag') this.moveLiquify();
+    if (this.tool === 'pencil-free') this.updateFreeDrawPreview();
   };
 
   private onPointerLeave = (): void => {
@@ -813,13 +923,14 @@ export class WebGLDesign3D {
     else if (this.mode === 'lasso') { this.endLasso(e); }
     else if (this.mode === 'point-drag') { this.endPointDrag(); }
     else if (this.mode === 'pivot-drag') { this.endPivotDrag(); }
+    else if (this.mode === 'liquify-drag') { this.endLiquify(); }
     this.mode = 'idle';
     this.controls.enabled = true;
     try { this.canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
   };
 
   private static readonly TOOL_KEYS: Record<string, ToolType> = {
-    p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify', c: 'scissors',
+    p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify', c: 'scissors', f: 'pencil-free',
   };
 
   private panMode = false; // barra espaciadora = mano (pan de cámara)
@@ -970,6 +1081,31 @@ export class WebGLDesign3D {
   }
 
   private beginDraw(e: PointerEvent): void {
+    // dibujo libre: el punto sale del rayo de cámara + profundidad de
+    // scroll, nunca de una guía/superficie — es justamente lo que lo hace
+    // "libre". El snap a vértices existentes se mantiene igual (ayuda a
+    // cerrar formas), pero no cuenta como "sin soporte" ni dispara la
+    // auto-guía (ver commitStroke): esta herramienta es intencionalmente
+    // sin plano de apoyo, no un accidente que haya que corregir.
+    if (this.tool === 'pencil-free') {
+      const surf = this.resolveFreeHit();
+      const snap = this.findSnapVertex(e, surf.point, 0.8);
+      const hit = snap ? { point: snap, normal: surf.normal } : surf;
+      this.canvas.setPointerCapture(e.pointerId);
+      this.mode = 'draw';
+      this.controls.enabled = false;
+      const line = this.makePreviewLine('stroke');
+      this.strokesGroup.add(line);
+      let mirrorLine: THREE.Line | undefined;
+      if (this.mirror) { mirrorLine = this.makePreviewLine('stroke'); this.strokesGroup.add(mirrorLine); }
+      this.smoothed = hit.point.clone();
+      this.current = {
+        points: [hit.point], pressures: [this.samplePressure(e)], kind: 'stroke', line, mirrorLine,
+        baseNormal: hit.normal.clone(), noSupport: false,
+      };
+      this.updatePreview();
+      return;
+    }
     // arrancar puede engancharse a un vértice existente, pero SOLO si está cerca
     // en 3D de la superficie donde se dibuja (evita agarrar un vértice de otro
     // plano que solo cae cerca en pantalla, p. ej. en vista de lado).
@@ -1072,7 +1208,7 @@ export class WebGLDesign3D {
     // El cuerpo del trazo NO engancha a vértices (eso hacía saltar los puntos a
     // vértices de otros planos en vista de lado). El snap solo aplica al inicio
     // (beginDraw) y al cierre (endDraw).
-    const hit = this.resolveHit();
+    const hit = this.tool === 'pencil-free' ? this.resolveFreeHit() : this.resolveHit();
     if (!hit) return;
     const pts = this.current.points;
     const pressures = this.current.pressures;
@@ -1966,6 +2102,68 @@ export class WebGLDesign3D {
     this.pushCmd({
       undo: () => { rec.points[idx].copy(before); this.rebuildStrokeMesh(rec); if (this.editingStroke === rec) this.pointHandles[idx]?.position.copy(before).add(rec.object.position); },
       redo: () => { rec.points[idx].copy(after); this.rebuildStrokeMesh(rec); if (this.editingStroke === rec) this.pointHandles[idx]?.position.copy(after).add(rec.object.position); },
+    });
+  }
+
+  // ---------------------------------------------------------------- liquify
+
+  /** Radio de influencia en unidades de mundo — reusa el slider de tamaño de
+   *  pincel existente (más pincel = más área de arrastre), sin agregar un
+   *  control nuevo a la UI. */
+  private liquifyRadius(): number {
+    return THREE.MathUtils.clamp(0.15 + (this.brush.size / 100) * 1.2, 0.15, 1.4);
+  }
+
+  private beginLiquify(e: PointerEvent): void {
+    const rec = this.pickStroke();
+    if (!rec || rec.kind !== 'stroke') return;
+    this.canvas.setPointerCapture(e.pointerId);
+    this.mode = 'liquify-drag';
+    this.controls.enabled = false;
+    this.liquifyStroke = rec;
+    this.liquifyBefore = rec.points.map((p) => p.clone());
+    this.applyLiquifyAt();
+  }
+
+  private moveLiquify(): void {
+    this.applyLiquifyAt();
+  }
+
+  /** Empuja cada punto de control DENTRO del radio hacia la posición actual
+   *  del pincel, con caída lineal (más cerca del centro = más arrastre) —
+   *  mismo criterio que `l3dLiquifyStroke` del prototipo anterior, ahora
+   *  regenerando la malla real del trazo en vez de tocar triángulos sueltos. */
+  private applyLiquifyAt(): void {
+    const rec = this.liquifyStroke;
+    if (!rec) return;
+    const hit = this.resolveHit();
+    if (!hit) return;
+    const localBrush = hit.point.clone().sub(rec.object.position);
+    const radius = this.liquifyRadius();
+    let touched = false;
+    for (const p of rec.points) {
+      const dist = p.distanceTo(localBrush);
+      if (dist < radius && dist > 1e-6) {
+        const falloff = 1 - dist / radius;
+        p.addScaledVector(localBrush.clone().sub(p), WebGLDesign3D.LIQUIFY_STRENGTH * falloff);
+        touched = true;
+      }
+    }
+    if (touched) this.rebuildStrokeMesh(rec);
+  }
+
+  private endLiquify(): void {
+    const rec = this.liquifyStroke;
+    const before = this.liquifyBefore;
+    this.liquifyStroke = null;
+    this.liquifyBefore = [];
+    if (!rec) return;
+    const after = rec.points.map((p) => p.clone());
+    const changed = before.some((p, i) => p.distanceToSquared(after[i]) > 1e-10);
+    if (!changed) return;
+    this.pushCmd({
+      undo: () => { before.forEach((p, i) => rec.points[i]?.copy(p)); this.rebuildStrokeMesh(rec); },
+      redo: () => { after.forEach((p, i) => rec.points[i]?.copy(p)); this.rebuildStrokeMesh(rec); },
     });
   }
 
