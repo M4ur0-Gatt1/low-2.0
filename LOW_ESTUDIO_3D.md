@@ -228,6 +228,36 @@ el motor como app de escritorio suelta, y quedó descartado (ver abajo).
   hay una guía activa, ni si el trazo se apoyó en algo real (otra guía,
   superficie primitiva, u otro trazo, o si el snap de inicio enganchó a un
   vértice existente).
+- Dibujo libre "en el aire" (v3.28.15, tecla F, `pencil-free`): como Feather
+  necesita SIEMPRE una guía/superficie real (nunca dibuja en el vacío sin
+  crear una — ver auto-guía arriba), pero el usuario pidió además una forma
+  de dibujar sin ningún plano de apoyo, en cualquier dirección del espacio.
+  El punto sale de `resolveFreeHit()`: origen del rayo de cámara +
+  dirección × `freeDrawDepth` (distancia a cámara) — NUNCA proyecta sobre
+  guía/superficie/trazo, a propósito. `freeDrawDepth` se ajusta con la
+  rueda del mouse (`onWheel`, factor multiplicativo `exp(-deltaY*0.0012)`,
+  así el mismo gesto de scroll es el mismo % de acercamiento cerca o lejos),
+  con una mira de puntería (esfera cian `freeDrawPreview`) y un HUD
+  numérico (`freeDepthEl`, "X.XX m") que se actualiza en cada pointermove Y
+  en cada scroll — sin esto el ajuste de profundidad era "a ciegas", que es
+  la falta de precisión que el usuario había notado en intentos previos.
+  Mientras esta herramienta está activa, `OrbitControls.enableZoom = false`
+  (ver `syncFromStore`): si no, el mismo scroll haría zoom de cámara Y
+  cambiaría la profundidad a la vez, imposible de controlar. Los trazos de
+  este modo nunca disparan la auto-guía (`noSupport` se fuerza a `false` en
+  `beginDraw`) — son intencionalmente sin plano de apoyo, no un accidente a
+  corregir. El snap a vértices existentes se mantiene (ayuda a cerrar
+  formas).
+- Liquify (v3.28.15, tecla L) — **antes esta herramienta estaba en el
+  ToolType/Toolbar pero sin ningún handler de mouse, no hacía nada**.
+  Portado el concepto del prototipo viejo `ui/lienzo3d.js`
+  (`l3dLiquifyStroke`: empuja puntos de control dentro de un radio hacia el
+  pincel con caída lineal) al motor actual: click+arrastre sobre un trazo
+  (`pickStroke`) mueve sus `points` hacia la posición del pincel
+  (`resolveHit`) dentro de `liquifyRadius()` (reusa el slider de tamaño de
+  pincel existente, 0.15–1.4 unidades — no se agregó un control nuevo), con
+  `rebuildStrokeMesh` en cada frame de arrastre y undo/redo de la lista
+  completa de puntos (antes/después) al soltar.
 - **Limitación conocida, no corregida todavía**: `buildTube`/
   `rebuildStrokeMesh`/`cutStroke` usan `this.brush.color` (el color ACTUAL
   del pincel), no un color guardado por trazo — `StrokeRecord` no tiene
