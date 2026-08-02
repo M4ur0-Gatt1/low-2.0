@@ -890,6 +890,21 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 }
 .dz-canvas { position: relative; }
 .dz-canvas svg { max-width: 100%; max-height: 100%; box-shadow: 0 6px 40px rgba(0,0,0,.5); background: #fff; transform-origin: center; }
+.dz-procreate-bar {
+  position: absolute; z-index: 20; right: 18px; top: 16px; display: flex; gap: 4px;
+  padding: 6px; border: 1px solid var(--line); border-radius: 16px;
+  background: rgba(21,21,24,.94); box-shadow: 0 8px 26px rgba(0,0,0,.35); backdrop-filter: blur(12px);
+}
+.dz-procreate-bar button { width: 34px; height: 34px; padding: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--mut); }
+.dz-procreate-bar button:hover,.dz-procreate-bar button.active { color: var(--orange); background: var(--redsoft); border-color: rgba(240,69,14,.35); }
+.dz-quick-color { display:grid;place-items:center;width:34px;height:34px;border-radius:50%;cursor:pointer;background:conic-gradient(#f33,#fc3,#3c6,#3cf,#63f,#f3c,#f33);padding:4px; }
+.dz-quick-color input { width:100%;height:100%;padding:0;border:3px solid var(--panel);border-radius:50%;background:none;cursor:pointer; }
+.dz-procreate-sliders { position:absolute;z-index:20;left:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:14px;padding:10px 7px;border:1px solid var(--line);border-radius:18px;background:rgba(21,21,24,.94);box-shadow:0 8px 26px rgba(0,0,0,.35); }
+.dz-procreate-sliders label { display:flex;flex-direction:column;align-items:center;gap:5px;color:var(--mut);font-size:10px; }
+.dz-procreate-sliders input[type=range] { writing-mode:vertical-lr;direction:rtl;width:18px;height:116px;accent-color:var(--orange); }
+.dz-panel-pop { margin-left:auto;width:25px;height:23px;padding:4px;border:0;border-radius:7px;background:transparent;color:var(--mut); }
+.dz-panel-pop + .dz-op-x { margin-left:2px; }
+.dz-pop-mark { position:absolute;font-size:8px;transform:translate(-2px,-7px); }
 /* Cursor propio por herramienta. El aro representa el área de contacto y el
    pictograma central identifica lápiz, pincel, pluma, borrador, etc. */
 .dz-tool-cursor {
@@ -1127,6 +1142,8 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-tlg-col { position: relative; }
 .dz-tlg-col.mj { color: var(--txt); border-right-color: var(--line); }
 .dz-tlg-col.cur { background: var(--redsoft); color: var(--red); box-shadow: inset 0 -2px 0 var(--red); }
+.dz-tlg-col.selected { background: rgba(34,211,238,.12); color: var(--txt); }
+.dz-tlg-col.selected.cur { box-shadow: inset 0 -2px 0 var(--red), inset 0 2px 0 var(--cyan); }
 /* marcas [Clave] (clave de dibujo) y [Camara] (clave de cámara) bajo el número */
 .dz-tlg-col i { position: absolute; bottom: 1px; left: 50%; width: 5px; height: 5px; border-radius: 99px; transform: translateX(-50%); }
 .dz-tlg-col i.k { background: var(--orange); }
@@ -1169,6 +1186,8 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-tlg-cell:hover { outline: 1px solid var(--mut); outline-offset: -1px; }
 /* playhead: columna del cuadro actual resaltada en todas las filas */
 .dz-tlg-cell.cur { box-shadow: inset 1px 0 0 var(--red), inset -1px 0 0 var(--red); background-color: rgba(240,69,14,.08); }
+.dz-tlg-cell.selected { outline: 1px solid rgba(34,211,238,.42); outline-offset: -1px; }
+.dz-tlg-cell.selected:not(.start):not(.held):not(.key) { background-color: rgba(34,211,238,.08); }
 /* [Diorama] diorama: vista lateral del multiplano — compositing sin nodos */
 .dz-zpanel {
   position: absolute; left: 60px; bottom: 120px; z-index: 8; width: 340px;
@@ -1472,6 +1491,11 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
   display: flex; gap: 8px; align-items: flex-end; background: var(--panel2);
   border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 8px 14px; max-width: 900px; margin: 0 auto;
 }
+.dz-ai-sequence { width: auto; min-width: 92px; padding: 0 10px; gap: 5px; flex: none; }
+.dz-ai-sequence span { font: 600 10px 'Figtree', sans-serif; white-space: nowrap; }
+.dz-ai-seq-options { display: flex; align-items: center; gap: 18px; margin-top: 12px; color: var(--mut); font-size: 12px; }
+.dz-ai-seq-options label { display: flex; align-items: center; gap: 7px; }
+.dz-ai-seq-options input[type="number"] { width: 70px; margin: 0; }
 .dz-dock-in:focus-within { border-color: var(--mut); }
 .dz-dock-in textarea {
   flex: 1; background: transparent; border: none; outline: none; resize: none;

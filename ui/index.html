@@ -36,6 +36,8 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-step-next" viewBox="0 0 24 24"><polygon points="5 4 16 12 5 20 5 4"/><line x1="19" y1="4" x2="19" y2="20"/></symbol>
   <symbol id="i-chev-d" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
   <symbol id="i-chev-r" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
   <symbol id="i-chev-l" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
@@ -104,6 +106,7 @@
   <symbol id="i-onion" viewBox="0 0 24 24"><circle cx="9.5" cy="12" r="6.5"/><circle cx="14.5" cy="12" r="6.5" opacity=".55"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.5"/><path d="M11.5 12H21"/><path d="M18 12v3.5M14.8 12v2.5"/></symbol>
   <symbol id="i-insert" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M8.5 8.5L12 12l3.5-3.5"/><path d="M4 16v4h16v-4"/></symbol>
+  <symbol id="i-blank-frame" viewBox="0 0 24 24"><rect x="3" y="4" width="14" height="16" rx="2"/><path d="M17 11h5M19.5 8.5v5"/></symbol>
   <symbol id="i-wand" viewBox="0 0 24 24"><path d="M4 20L14 10"/><path d="M17 3l.9 2.6L20.5 6.5l-2.6.9L17 10l-.9-2.6L13.5 6.5l2.6-.9z"/><path d="M20 13l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6z"/></symbol>
   <symbol id="i-motion" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.2"/><path d="M8 12h13"/><path d="M16.5 7.5L21 12l-4.5 4.5"/></symbol>
   <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" class="fill"/></symbol>
@@ -412,6 +415,21 @@
       <button class="ibtn" id="dzPenDbgBtn" title=" Diagnóstico de tableta: panel en vivo de eventos pointer — útil para depurar tabletas Huion/Wacom. Clic para activar/desactivar." onclick="dzPenDebugToggle()"></button>
     </div>
     <div class="dz-canvas" id="dzCanvas">
+      <!-- barra rápida tipo Procreate: dibujo, mezcla, borrado, capas y color
+           conviven en un único grupo compacto sobre el lienzo -->
+      <div class="dz-procreate-bar" id="dzQuickTools">
+        <button data-qtool="select" title="Selección"><svg class="ico ico-fill"><use href="#i-cursor"/></svg></button>
+        <button data-qtool="pencil" title="Lápiz"><svg class="ico"><use href="#i-pencil"/></svg></button>
+        <button data-qtool="brush" title="Pincel"><svg class="ico"><use href="#i-brush"/></svg></button>
+        <button data-qtool="iron" title="Mezclar / suavizar"><svg class="ico"><use href="#i-iron"/></svg></button>
+        <button data-qtool="eraser" title="Borrador"><svg class="ico"><use href="#i-eraser"/></svg></button>
+        <button id="dzQuickLayers" title="Capas"><svg class="ico"><use href="#i-files"/></svg></button>
+        <label class="dz-quick-color" title="Color del trazo"><input type="color" id="dzQuickColor" value="#1a1a1a"></label>
+      </div>
+      <div class="dz-procreate-sliders" id="dzQuickSliders">
+        <label title="Tamaño del pincel"><span>●</span><input type="range" id="dzQuickSize" min="1" max="120" value="6"></label>
+        <label title="Opacidad del pincel"><span>◐</span><input type="range" id="dzQuickOpacity" min="5" max="100" value="100"></label>
+      </div>
       <!-- cursor visual de herramienta: evita que lápiz/pincel aparezcan como
            una flecha genérica y funciona igual con mouse y tableta -->
       <div class="dz-tool-cursor" id="dzToolCursor" hidden>
@@ -466,6 +484,7 @@
       <!-- X-sheet: planilla de exposición vertical (flotante) -->
       <div class="dz-xsheet" id="dzXsheet" hidden>
         <div class="dz-op-head" id="dzXsHead"><svg class="ico"><use href="#i-xsheet"/></svg> X-sheet · OpenToonz
+          <button class="dz-panel-pop" id="dzXsDetach" title="Separar X-sheet en otra ventana"><svg class="ico"><use href="#i-ext"/></svg></button>
           <span class="dz-op-x" id="dzXsClose" title="Cerrar">×</span></div>
         <div class="dz-xs-rows" id="dzXsRows"></div>
       </div>
@@ -598,8 +617,8 @@
   <div class="dz-timeline" id="dzTimeline" hidden>
     <button class="ibtn" id="tlFirst" title="Primer cuadro">⏮</button>
     <button class="ibtn" id="tlPrev" title="Cuadro anterior (,)">◀</button>
-    <button class="ibtn" id="tlPlay" title="Reproducir / parar"></button>
-    <button class="ibtn" id="tlNext" title="Cuadro siguiente (.)"></button>
+    <button class="ibtn" id="tlPlay" title="Reproducir / parar"><svg class="ico ico-fill"><use href="#i-play"/></svg></button>
+    <button class="ibtn" id="tlNext" title="Cuadro siguiente (.)"><svg class="ico ico-fill"><use href="#i-step-next"/></svg></button>
     <button class="ibtn" id="tlLast" title="Último cuadro">⏭</button>
     <label class="tl-field" title="Cuadros por segundo">fps<input type="number" id="tlFps" value="12" min="1" max="60" class="dz-win"></label>
     <button class="ibtn active" id="tlLoop" title="Loop: repetir en bucle al reproducir"><svg class="ico"><use href="#i-routine"/></svg></button>
@@ -609,9 +628,12 @@
     <button class="ibtn active" id="tlOnion" title="Papel cebolla: mostrar/ocultar (el panel flotante lo personaliza)"><svg class="ico"><use href="#i-onion"/></svg></button>
     <button class="ibtn dz-anim-mode active" id="tlLayers" title="Timeline OpenToonz: niveles en filas y fotogramas en columnas"><svg class="ico"><use href="#i-files"/></svg><span>Timeline</span></button>
     <button class="ibtn dz-anim-mode" id="tlXs" title="X-sheet: tiempo vertical, niveles en columnas"><svg class="ico"><use href="#i-xsheet"/></svg><span>X-sheet</span></button>
+    <button class="ibtn" id="tlDetach" title="Separar Timeline en una ventana para el segundo monitor"><svg class="ico"><use href="#i-ext"/></svg></button>
+    <button class="ibtn" id="tlDetachXs" title="Separar X-sheet en una ventana para el segundo monitor"><svg class="ico"><use href="#i-xsheet"/></svg><span class="dz-pop-mark">↗</span></button>
     <div class="tl-frames" id="tlFrames" title="Arrastrá sobre los cuadros para hojearlos (scrub)"></div>
     <button class="ibtn" id="tlKey" title="Marcar/desmarcar este cuadro como FOTOGRAMA CLAVE (pose principal del flujo pose-a-pose)"><svg class="ico"><use href="#i-key"/></svg></button>
     <button class="ibtn" id="tlAdd" title="Duplicar este cuadro al FINAL (flujo clásico: dibujar sobre la copia)"><svg class="ico"><use href="#i-plus"/></svg></button>
+    <button class="ibtn" id="tlBlank" title="Agregar un frame VACÍO después del actual"><svg class="ico"><use href="#i-blank-frame"/></svg></button>
     <button class="ibtn" id="tlIns" title="Insertar copia de este cuadro JUSTO DESPUÉS (renumera los siguientes) · Shift: cuadro en blanco"><svg class="ico"><use href="#i-insert"/></svg></button>
     <button class="ibtn" id="tlTween" title="Intercalar entre este cuadro y el siguiente: elegís cuántos intermedios y con qué curva (ease)"><svg class="ico"><use href="#i-wand"/></svg></button>
     <button class="ibtn" id="tlMove" title="Interpolación de movimiento: 1er clic fija el INICIO del elemento seleccionado, movelo a la posición final y 2do clic genera los cuadros del recorrido"><svg class="ico"><use href="#i-motion"/></svg></button>
@@ -639,6 +661,7 @@
     <div class="dz-dock-status" id="dzStatus" hidden></div>
     <div class="dz-dock-in">
       <textarea id="dzPrompt" rows="1" placeholder="Pedile un cambio a LOW… ej: «hacé el título más grande y centralo»" spellcheck="false"></textarea>
+      <button class="ibtn dz-ai-sequence" id="dzAiSequence" title="Crear varios fotogramas con IA e incorporarlos a la Timeline"><svg class="ico"><use href="#i-film"/></svg><span>Frames IA</span></button>
       <button class="send" id="dzSend"><svg class="ico"><use href="#i-arrow"/></svg></button>
     </div>
   </div>
