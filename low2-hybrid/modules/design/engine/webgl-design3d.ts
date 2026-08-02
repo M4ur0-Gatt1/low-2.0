@@ -53,6 +53,21 @@ interface Command {
   redo: () => void;
 }
 
+export interface Low3DProject {
+  format: 'low3d';
+  version: 1;
+  savedAt: string;
+  camera: { view: ViewName; position: number[]; target: number[]; orthoSize: number };
+  settings: { brush: BrushSettings; mirror: { x: boolean; y: boolean; z: boolean }; theme: Theme;
+    activeSurface: ReturnType<typeof lowStore.getState>['activeSurface'] };
+  layers: ReturnType<typeof lowStore.getState>['layers'];
+  activeLayerId: string | null;
+  strokes: Array<{
+    id: string; layerId: string; points: number[][]; pressures: number[]; baseOpacity: number;
+    position: number[]; quaternion: number[]; scale: number[];
+  }>;
+}
+
 const MIN_SAMPLE_DIST = 0.012;
 // salto máximo (mundo) entre puntos consecutivos de un trazo a mano alzada. Un
 // rayo rasante sobre una superficie profunda (bóveda) puede devolver un punto
@@ -202,7 +217,7 @@ export class WebGLDesign3D {
 
   private tool: ToolType = 'pencil';
   private brush: BrushSettings = { color: '#22252e', size: 12, opacity: 1, hardness: 0.8, pressureSensitivity: 0.6, stabilization: 0.35 };
-  private mirror = false;
+  private mirror = { x: false, y: false, z: false };
   private theme: Theme = 'light';
   private lastSurfaceKey = '';
 
@@ -571,12 +586,23 @@ export class WebGLDesign3D {
     this.activeSurfaceId = null;
   }
 
-  private addSurface(type: SurfaceType): void {
+  private addSurface(type: SurfaceType, params: Record<string, unknown> = {}): void {
     this.removeActiveSurface();
-    const geo = type === 'plane' ? new THREE.PlaneGeometry(4, 4) : this.surfaceGeometry(type, 1.4);
+    const radius = Math.max(0.1, Number(params.radius ?? 1.4));
+    const segments = Math.max(3, Math.floor(Number(params.segments ?? 48)));
+    const geo = type === 'plane'
+      ? new THREE.PlaneGeometry(Number(params.width ?? radius * 3), Number(params.height ?? radius * 3), 1, 1)
+      : this.surfaceGeometry(type, radius, segments, Number(params.tubeRadius ?? radius * 0.35));
     const mesh = this.makeSurfaceMesh(geo);
     mesh.position.copy(this.controls.target);
     if (type === 'plane') mesh.lookAt(this.camera.position);
+    if (Array.isArray(params.position)) mesh.position.fromArray(params.position as number[]);
+    if (Array.isArray(params.rotation)) {
+      const r = params.rotation as number[];
+      mesh.rotation.set(THREE.MathUtils.degToRad(Number(r[0] || 0)),
+        THREE.MathUtils.degToRad(Number(r[1] || 0)), THREE.MathUtils.degToRad(Number(r[2] || 0)));
+    }
+    if (Array.isArray(params.scale)) mesh.scale.fromArray(params.scale as number[]);
     const s: SurfaceObj = { id: `surf-${this.seq++}`, type, mesh };
     mesh.userData.surfaceId = s.id;
     this.surfacesGroup.add(mesh);
@@ -599,11 +625,11 @@ export class WebGLDesign3D {
     return mesh;
   }
 
-  private surfaceGeometry(type: SurfaceType, r: number): THREE.BufferGeometry {
+  private surfaceGeometry(type: SurfaceType, r: number, segments = 48, tubeRadius = r * 0.35): THREE.BufferGeometry {
     switch (type) {
-      case 'sphere': return new THREE.SphereGeometry(r, 48, 32);
-      case 'cylinder': return new THREE.CylinderGeometry(r, r, r * 2, 48, 1, true);
-      case 'torus': return new THREE.TorusGeometry(r, r * 0.35, 24, 64);
+      case 'sphere': return new THREE.SphereGeometry(r, segments, Math.max(3, Math.floor(segments * 0.66)));
+      case 'cylinder': return new THREE.CylinderGeometry(r, r, r * 2, segments, 1, true);
+      case 'torus': return new THREE.TorusGeometry(r, tubeRadius, Math.max(3, Math.floor(segments / 2)), segments);
       default: return new THREE.PlaneGeometry(r * 2, r * 2);
     }
   }
@@ -616,9 +642,9 @@ export class WebGLDesign3D {
     this.tool = s.currentTool;
     this.brush = s.brushSettings;
     this.mirror = s.mirrorMode;
-    const key = s.activeSurface ? s.activeSurface.type : '';
+    const key = s.activeSurface ? JSON.stringify(s.activeSurface) : '';
     if (key !== this.lastSurfaceKey) {
-      if (key) this.addSurface(s.activeSurface!.type);
+      if (key) this.addSurface(s.activeSurface!.type, s.activeSurface!.params);
       else this.removeActiveSurface();
     }
     this.lastSurfaceKey = key;
@@ -708,6 +734,9 @@ export class WebGLDesign3D {
         return { point: gp.clone(), normal: this.activeGuide.plane.normal.clone() };
       }
     }
+    // Un trazo artístico nunca cae sobre un plano implícito. La única operación
+    // autorizada sin soporte previo es crear la primera guía.
+    if (this.tool !== 'guide') return null;
     const camDir = new THREE.Vector3();
     (this.camera as THREE.Camera).getWorldDirection(camDir);
     this.fallbackPlane.setFromNormalAndCoplanarPoint(camDir.clone().negate(), this.controls.target);
@@ -866,7 +895,7 @@ export class WebGLDesign3D {
     this.updateCursor(e);
     this.downScreen.set(...this.screenOf(e));
 
-    if (this.tool === 'pencil' || this.tool === 'guide' || this.tool === 'pencil-free') {
+    if (this.tool === 'pencil' || this.tool === 'guide') {
       this.beginDraw(e);
     } else if (this.tool === 'move') {
       // el eje móvil del pivote de rotación tiene prioridad sobre los
@@ -930,7 +959,7 @@ export class WebGLDesign3D {
   };
 
   private static readonly TOOL_KEYS: Record<string, ToolType> = {
-    p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify', c: 'scissors', f: 'pencil-free',
+    p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify', c: 'scissors',
   };
 
   private panMode = false; // barra espaciadora = mano (pan de cámara)
@@ -1097,7 +1126,7 @@ export class WebGLDesign3D {
       const line = this.makePreviewLine('stroke');
       this.strokesGroup.add(line);
       let mirrorLine: THREE.Line | undefined;
-      if (this.mirror) { mirrorLine = this.makePreviewLine('stroke'); this.strokesGroup.add(mirrorLine); }
+      if (this.mirror.x || this.mirror.y || this.mirror.z) { mirrorLine = this.makePreviewLine('stroke'); this.strokesGroup.add(mirrorLine); }
       this.smoothed = hit.point.clone();
       this.current = {
         points: [hit.point], pressures: [this.samplePressure(e)], kind: 'stroke', line, mirrorLine,
@@ -1112,7 +1141,12 @@ export class WebGLDesign3D {
     const surf = this.resolveHit();
     const snap = this.findSnapVertex(e, surf?.point, 0.8);
     const hit = snap ? { point: snap, normal: surf?.normal ?? new THREE.Vector3(0, 0, 1) } : surf;
-    if (!hit) return;
+    if (!hit) {
+      this.canvas.title = 'Creá o activá una guía antes de dibujar';
+      this.cursorEl.style.borderColor = '#ff4d4d';
+      setTimeout(() => { this.canvas.title = ''; this.cursorEl.style.borderColor = '#333'; }, 1400);
+      return;
+    }
     this.canvas.setPointerCapture(e.pointerId);
     this.mode = 'draw';
     this.controls.enabled = false;
@@ -1120,7 +1154,7 @@ export class WebGLDesign3D {
     const line = this.makePreviewLine(kind);
     this.strokesGroup.add(line);
     let mirrorLine: THREE.Line | undefined;
-    if (this.mirror && kind === 'stroke') {
+    if ((this.mirror.x || this.mirror.y || this.mirror.z) && kind === 'stroke') {
       mirrorLine = this.makePreviewLine(kind);
       this.strokesGroup.add(mirrorLine);
     }
@@ -1334,7 +1368,7 @@ export class WebGLDesign3D {
   private updatePreview(): void {
     if (!this.current) return;
     this.current.line?.geometry.setFromPoints(this.current.points);
-    if (this.current.mirrorLine) this.current.mirrorLine.geometry.setFromPoints(this.mirrored(this.current.points));
+    if (this.current.mirrorLine) this.current.mirrorLine.geometry.setFromPoints(this.mirroredVariants(this.current.points)[0] || []);
   }
 
   private strokeRadius(): number {
@@ -1485,8 +1519,17 @@ export class WebGLDesign3D {
     return mesh;
   }
 
-  private mirrored(points: THREE.Vector3[]): THREE.Vector3[] {
-    return points.map((p) => new THREE.Vector3(-p.x, p.y, p.z));
+  private mirroredVariants(points: THREE.Vector3[]): THREE.Vector3[][] {
+    const axes = ['x', 'y', 'z'].filter((a) => this.mirror[a as 'x' | 'y' | 'z']);
+    const variants: THREE.Vector3[][] = [];
+    for (let mask = 1; mask < (1 << axes.length); mask++) {
+      variants.push(points.map((p) => {
+        const q = p.clone();
+        axes.forEach((axis, i) => { if (mask & (1 << i)) q[axis as 'x' | 'y' | 'z'] *= -1; });
+        return q;
+      }));
+    }
+    return variants;
   }
 
   private commitStroke(): void {
@@ -1523,7 +1566,7 @@ export class WebGLDesign3D {
     const group = new THREE.Group();
     const a = this.buildTube(points, pressures);
     if (a) group.add(a);
-    if (this.mirror) { const b = this.buildTube(this.mirrored(points), pressures); if (b) group.add(b); }
+    for (const variant of this.mirroredVariants(points)) { const b = this.buildTube(variant, pressures); if (b) group.add(b); }
     const rec: StrokeRecord = {
       id: `stroke-${this.seq++}`, object: group, points, pressures, kind,
       layerId: this.activeLayerId(), baseOpacity: this.brush.opacity,
@@ -1548,9 +1591,8 @@ export class WebGLDesign3D {
     }
     const a = this.buildTube(rec.points, rec.pressures);
     if (a) rec.object.add(a);
-    if (this.mirror) {
-      const b = this.buildTube(this.mirrored(rec.points), rec.pressures);
-      if (b) rec.object.add(b);
+    for (const variant of this.mirroredVariants(rec.points)) {
+      const b = this.buildTube(variant, rec.pressures); if (b) rec.object.add(b);
     }
   }
 
@@ -2282,6 +2324,67 @@ export class WebGLDesign3D {
     this.selected.clear();
     this.clearPointEdit();
     this.gizmo?.detach();
+    this.undoStack = [];
+    this.redoStack = [];
+  }
+
+  /** Serializa puntos de control en lugar de la malla derivada, para conservar
+   *  la capacidad de editar los trazos al volver a abrir el proyecto. */
+  exportProject(): Low3DProject {
+    const state = lowStore.getState();
+    return {
+      format: 'low3d', version: 1, savedAt: new Date().toISOString(),
+      camera: { view: this.view, position: this.camera.position.toArray(),
+        target: this.controls.target.toArray(), orthoSize: this.orthoSize },
+      settings: { brush: { ...this.brush }, mirror: { ...this.mirror }, theme: this.theme,
+        activeSurface: state.activeSurface ? { type: state.activeSurface.type, params: { ...state.activeSurface.params } } : null },
+      layers: state.layers.map((l) => ({ ...l })), activeLayerId: state.activeLayerId,
+      strokes: this.strokes.map((rec) => ({
+        id: rec.id, layerId: rec.layerId,
+        points: rec.points.map((p) => p.toArray()), pressures: [...rec.pressures],
+        baseOpacity: rec.baseOpacity, position: rec.object.position.toArray(),
+        quaternion: rec.object.quaternion.toArray(), scale: rec.object.scale.toArray(),
+      })),
+    };
+  }
+
+  importProject(data: unknown): void {
+    const doc = data as Partial<Low3DProject>;
+    if (!doc || doc.format !== 'low3d' || doc.version !== 1 || !Array.isArray(doc.strokes))
+      throw new Error('El archivo no es un proyecto LOW 3D compatible');
+    this.clear();
+    lowStore.restoreLayers(doc.layers || [], doc.activeLayerId);
+    if (doc.settings?.brush) lowStore.setBrushSettings({ ...doc.settings.brush });
+    if (doc.settings?.mirror) lowStore.setMirrorMode({ ...doc.settings.mirror });
+    lowStore.setActiveSurface(doc.settings?.activeSurface || null);
+    for (const item of doc.strokes) {
+      if (!Array.isArray(item.points) || item.points.length < 2) continue;
+      const points = item.points.map((p) => new THREE.Vector3(Number(p[0]), Number(p[1]), Number(p[2])));
+      const pressures = points.map((_, i) => Number(item.pressures?.[i] ?? 1));
+      const group = new THREE.Group();
+      const tube = this.buildTube(points, pressures);
+      if (tube) group.add(tube);
+      group.position.fromArray(item.position || [0, 0, 0]);
+      group.quaternion.fromArray(item.quaternion || [0, 0, 0, 1]);
+      group.scale.fromArray(item.scale || [1, 1, 1]);
+      const rec: StrokeRecord = {
+        id: item.id || `stroke-${this.seq++}`, object: group, points, pressures,
+        kind: 'stroke', layerId: item.layerId || this.activeLayerId(),
+        baseOpacity: Number(item.baseOpacity ?? 1),
+      };
+      group.userData.strokeId = rec.id;
+      this.addStrokeRecord(rec);
+    }
+    const cam = doc.camera;
+    if (cam) {
+      this.orthoSize = Number(cam.orthoSize || ORTHO_SIZE);
+      this.setView(cam.view || 'persp');
+      this.camera.position.fromArray(cam.position || [0, 1.2, 6]);
+      this.controls.target.fromArray(cam.target || [0, 0.6, 0]);
+      this.camera.lookAt(this.controls.target);
+      this.controls.update();
+    }
+    this.applyLayerStyles();
     this.undoStack = [];
     this.redoStack = [];
   }

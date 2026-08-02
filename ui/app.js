@@ -6392,6 +6392,8 @@ function dzXsToggle() {
    marcas (<i class='fas fa-key'></i> clave · <i class='fas fa-camera-movie'></i> cámara) y NOTAS editables. Las notas se guardan en la
    escena (<base>_escena.json) junto a las claves y la cámara. */
 function dzXsRender() {
+  return dzOpenToonzXsRender();
+  /* Implementación histórica conservada temporalmente para compatibilidad. */
   const box = $("#dzXsRows");
   if (!box || $("#dzXsheet").hidden || !DZ.anim) return;
   const keys = (DZ.scene && DZ.scene.keys) || [];
@@ -6430,6 +6432,69 @@ function dzXsRender() {
       dzSceneSave();
     };
     row.append(n, thumb, badge, note);
+    box.appendChild(row);
+  });
+}
+
+/** X-sheet principal estilo OpenToonz: tiempo vertical y una columna por nivel.
+ * Las celdas sólidas inician una exposición y la línea vertical indica hold. */
+async function dzOpenToonzXsRender() {
+  const box = $("#dzXsRows");
+  if (!box || $("#dzXsheet").hidden || !DZ.anim) return;
+  const keys = (DZ.scene && DZ.scene.keys) || [];
+  const cams = (DZ.scene && DZ.scene.cam) || {};
+  const notes = (DZ.scene && DZ.scene.notes) || {};
+  const svgs = await dzTlFrameSvgs();
+  if (!box.isConnected || !DZ.anim) return;
+  const perFrame = svgs.map(dzTlKeysOf);
+  const levels = [];
+  perFrame.forEach(set => set.forEach(name => { if (!levels.includes(name)) levels.push(name); }));
+  levels.reverse();
+  const shownLevels = levels.length ? levels : ['(vacío)'];
+  const cols = `42px 32px repeat(${shownLevels.length}, minmax(74px, 1fr)) minmax(150px, 1.4fr)`;
+  box.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'dz-xs-head';
+  head.style.gridTemplateColumns = cols;
+  head.innerHTML = '<span>F</span><span>CAM</span>' +
+    shownLevels.map(name => `<span title="${name}">${name.replace(/^#/, '')}</span>`).join('') +
+    '<span>Notas</span>';
+  box.appendChild(head);
+  DZ.anim.frames.forEach((f, i) => {
+    const num = dzFrameNum(f);
+    const current = perFrame[i] || new Set();
+    const previous = i > 0 ? perFrame[i - 1] : new Set();
+    const row = document.createElement('div');
+    row.className = 'dz-xs-row' + (i === DZ.anim.idx ? ' cur' : '') + (keys.includes(num) ? ' key' : '');
+    row.style.gridTemplateColumns = cols;
+    const frame = document.createElement('span');
+    frame.className = 'dz-xs-n'; frame.textContent = String(i + 1);
+    frame.onclick = () => { dzAnimStopIf(); dzGoFrame(i); };
+    const camera = document.createElement('span');
+    camera.className = 'dz-xs-cam' + (cams[num] ? ' on' : '');
+    camera.textContent = cams[num] ? '◆' : '';
+    camera.onclick = () => { dzAnimStopIf(); dzGoFrame(i); };
+    row.append(frame, camera);
+    shownLevels.forEach(level => {
+      const present = current.has(level);
+      const start = present && !previous.has(level);
+      const cell = document.createElement('button');
+      cell.className = 'dz-xs-cell' + (present ? ' exposed' : '') + (start ? ' start' : ' hold');
+      cell.textContent = start ? String(i + 1) : '';
+      cell.title = present ? `${level} · ${start ? 'inicio' : 'exposición sostenida'}` : `${level} · vacío`;
+      cell.onclick = () => { dzAnimStopIf(); dzGoFrame(i); };
+      row.appendChild(cell);
+    });
+    const note = document.createElement('input');
+    note.className = 'dz-xs-note'; note.type = 'text'; note.placeholder = 'Nota…';
+    note.value = notes[num] || '';
+    note.onchange = () => {
+      DZ.scene = DZ.scene || {}; DZ.scene.notes = DZ.scene.notes || {};
+      const value = note.value.trim();
+      if (value) DZ.scene.notes[num] = value; else delete DZ.scene.notes[num];
+      dzSceneSave();
+    };
+    row.appendChild(note);
     box.appendChild(row);
   });
 }
