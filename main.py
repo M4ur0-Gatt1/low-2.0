@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.22.17"
+LOW_VERSION = "3.28.17"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -2322,11 +2322,45 @@ class Api:
     # ── helpers de edición robusta / progreso ──────────────────────
     @staticmethod
     def _is_tool_err(res):
-        """True si el resultado de una tool NO representa avance real: errores
-        () o el aviso de llamada repetida ( Ya ejecutaste). El resto (,
-        contenido de read_file, salida de comandos, etc.) cuenta como progreso."""
-        t = str(res or "").lstrip()
-        return t.startswith("") or t.startswith(" Ya ejecutaste")
+        """Indica si una herramienta falló o no produjo avance.
+
+        Antes se comprobaba ``t.startswith("")``. Esa expresión es verdadera
+        para *cualquier* texto y hacía que LOW contara incluso una edición o una
+        lectura correcta como error; después de 20 llamadas cortaba el turno.
+        Los resultados de las tools son texto, así que reconocemos únicamente
+        señales de error explícitas y códigos de salida distintos de cero.
+        """
+        t = str(res or "").strip()
+        if not t:
+            return True
+
+        # Herramientas que devuelven un objeto JSON (por ejemplo run_code).
+        if t.startswith("{"):
+            try:
+                payload = json.loads(t)
+                if isinstance(payload, dict):
+                    if payload.get("error"):
+                        return True
+                    if payload.get("success") is False:
+                        return True
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # exec_cmd/git/ssh/scp incluyen el return code en la primera línea.
+        exit_match = re.search(r"(?:exit|returncode)\s*=\s*(-?\d+)",
+                               t.splitlines()[0], re.IGNORECASE)
+        if exit_match:
+            return int(exit_match.group(1)) != 0
+
+        low = t.casefold()
+        error_prefixes = (
+            "ya ejecutaste exactamente esta misma llamada",
+            "falta ", "falta'", "faltan ", "no existe", "no encontré",
+            "es un directorio", "old_text vacío", "ese texto aparece",
+            "el edit no cambió nada", "editor vacio", "editor vacío",
+            "error:", "error ", "falló:", "fallo:", "inválido:",
+        )
+        return low.startswith(error_prefixes)
 
     @staticmethod
     def _norm_ws(t):
@@ -3930,6 +3964,7 @@ class Api:
             tool_runs = 0     # tools que AVANZARON (resultado sin )  progreso real
             fail_streak = 0   # tools seguidas que fallaron sin ningún éxito en el medio
             edit_fails = 0    # edit_file fallidos seguidos  escalar la guía
+            recovery_attempts = 0  # recuperaciones automáticas antes de cortar el turno
             # cadena de failover: si el modelo actual se cae/agota, saltar al siguiente
             chain = s._chain()   # [(proveedor, modelo), ...]
             ci = 0
@@ -4128,7 +4163,13 @@ class Api:
                         # ya se ejecutó antes en este turno  no repetirla, avisar.
                         # exec_cmd/run_code quedan afuera: repetirlos SI puede tener
                         # sentido (ej. correr los tests de nuevo tras un fix).
-                        sig = (fn, json.dumps(args, sort_keys=True, ensure_ascii=False))
+                        # Una lectura idéntica vuelve a ser válida después de una edición:
+                        # agregamos la revisión del workspace a su firma. Sin esto el agente
+                        # no podía verificar el archivo que acababa de modificar.
+                        revision = len(s._written) if fn in (
+                            "read_file", "list_files", "search_code") else 0
+                        sig = (fn, json.dumps(args, sort_keys=True,
+                                              ensure_ascii=False), revision)
                         dedupe = fn not in ("exec_cmd", "run_code")
                         seen_calls[sig] = seen_calls.get(sig, 0) + 1
                         if dedupe and seen_calls[sig] > 1:
@@ -4169,19 +4210,47 @@ class Api:
                         if fn in ("write_file", "edit_file", "read_file") and "path" in args:
                             tool_info["file"] = args["path"]
                         s._push("tool", tool_info)
-                    # backstop de racha de fallos: si el agente encadena muchos
-                    # errores de tool sin ningún éxito, está trabado aunque cada
-                    # llamada sea distinta (el dedup no lo caza). Cortar y avisar.
-                    if fail_streak >= 10:
-                        stalled_out = True
-                        s._push("sys", " El agente encadenó varios errores de herramienta sin avanzar — corté el turno.")
-                        break
-                    # ninguna tool se ejecutó (todas repetidas/vacías)  tramo perdido
-                    stall = 0 if ran_any else stall + 1
+                    # Recuperación automática: una racha de errores ya no corta el
+                    # trabajo en el primer incidente. LOW devuelve el diagnóstico al
+                    # modelo y le exige releer/cambiar de estrategia. Solo abandona si
+                    # también fracasan las recuperaciones configuradas.
+                    max_failures = max(4, int(ag.get("max_tool_failures", 8) or 8))
+                    max_recoveries = max(1, int(ag.get("max_recovery_attempts", 2) or 2))
+                    if fail_streak >= max_failures:
+                        if recovery_attempts < max_recoveries:
+                            recovery_attempts += 1
+                            fail_streak = 0
+                            edit_fails = 0
+                            stall = 0
+                            ms.append({"role": "user", "content":
+                                       "RECUPERACIÓN AUTOMÁTICA: las últimas herramientas "
+                                       "fallaron. No termines ni repitas la misma llamada. "
+                                       "Leé el último error, inspeccioná el estado real con "
+                                       "read_file/list_files y continuá con una estrategia "
+                                       "distinta. Si la tarea ya está resuelta, respondé con "
+                                       "un resumen final."})
+                            s._push("sys", f"↻ Recuperando al agente tras errores de herramienta "
+                                           f"({recovery_attempts}/{max_recoveries})…")
+                        else:
+                            stalled_out = True
+                            s._push("sys", " El agente no pudo recuperarse de varios errores de herramienta.")
+                            break
+                    # Progreso significa éxito, no simplemente haber invocado una tool.
+                    stall = 0 if progressed else stall + 1
                     if stall >= 4:
-                        stalled_out = True
-                        s._push("sys", " El agente quedó repitiendo la misma acción sin avanzar — corté el turno.")
-                        break
+                        if recovery_attempts < max_recoveries:
+                            recovery_attempts += 1
+                            stall = 0
+                            ms.append({"role": "user", "content":
+                                       "RECUPERACIÓN AUTOMÁTICA: estás repitiendo acciones sin "
+                                       "obtener un resultado nuevo. Conservá lo ya hecho, cambiá "
+                                       "de enfoque y avanzá con el siguiente paso concreto."})
+                            s._push("sys", f"↻ Cambiando de estrategia automáticamente "
+                                           f"({recovery_attempts}/{max_recoveries})…")
+                        else:
+                            stalled_out = True
+                            s._push("sys", " El agente siguió repitiendo acciones después de recuperarse.")
+                            break
                 else:
                     # se agotaron los pasos de herramientas sin llegar a una respuesta final
                     hit_cap = True
