@@ -1,7 +1,7 @@
 {
   "name": "low2-hybrid",
   "version": "2.0.0-alpha",
-  "description": "LOW 2.0 - Arquitectura híbrida con motores nativos de alto rendimiento",
+  "description": "LOW - estudio creativo generalista y modular para dibujo, animación, composición y entornos 3D",
   "main": "electron/main.cjs",
   "scripts": {
     "build:native": "cmake -B build/native -S native && cmake --build build/native --config Release",
@@ -26,7 +26,8 @@
     "native",
     "performance"
   ],
-  "author": "LOW Team",
+  "author": "Mauro Gatti y Tropa Circa",
+  "copyright": "Copyright © 2026 Mauro Gatti y Tropa Circa",
   "license": "MIT",
   "dependencies": {
     "react": "^18.2.0",
@@ -83,6 +84,7 @@
       "dist/renderer/**/*"
     ],
     "win": {
+      "publisherName": "Mauro Gatti y Tropa Circa",
       "target": [
         {
           "target": "portable",

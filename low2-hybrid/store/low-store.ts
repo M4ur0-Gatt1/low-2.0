@@ -26,7 +26,7 @@ import type {
 interface LowState {
   currentTool: ToolType;
   activeSurface: ActiveSurface | null;
-  mirrorMode: boolean;
+  mirrorMode: { x: boolean; y: boolean; z: boolean };
   brushSettings: BrushSettings;
   selectedObject: SelectedObject | null;
   layers: Layer[];
@@ -37,7 +37,7 @@ interface LowState {
 const INITIAL: LowState = {
   currentTool: 'pencil',
   activeSurface: null,
-  mirrorMode: false,
+  mirrorMode: { x: false, y: false, z: false },
   brushSettings: { color: '#22252e', size: 12, opacity: 1, hardness: 0.8, pressureSensitivity: 0.6, stabilization: 0.35 },
   selectedObject: null,
   layers: [{ id: 'layer-0', name: 'Capa 1', visible: true, locked: false, opacity: 1 }],
@@ -54,7 +54,7 @@ let layerSeq = 1;
 const actions = {
   setCurrentTool: (currentTool: ToolType) => patch({ currentTool }),
   setActiveSurface: (activeSurface: ActiveSurface | null) => patch({ activeSurface }),
-  setMirrorMode: (mirrorMode: boolean) => patch({ mirrorMode }),
+  setMirrorMode: (mirrorMode: { x: boolean; y: boolean; z: boolean }) => patch({ mirrorMode }),
   setBrushSettings: (brushSettings: BrushSettings) => patch({ brushSettings }),
   setSelectedObject: (selectedObject: SelectedObject | null) => patch({ selectedObject }),
   setGizmoMode: (gizmoMode: GizmoMode) => patch({ gizmoMode }),
@@ -104,6 +104,18 @@ const actions = {
         l.id === id ? { ...l, opacity: Math.max(0, Math.min(1, opacity)) } : l
       ),
     }),
+
+  restoreLayers: (layers: Layer[], activeLayerId?: string | null) => {
+    const clean = (layers || []).filter((l) => l && typeof l.id === 'string').map((l) => ({
+      id: l.id, name: l.name || 'Capa', visible: l.visible !== false,
+      locked: l.locked === true, opacity: Math.max(0, Math.min(1, Number(l.opacity ?? 1))),
+    }));
+    const next = clean.length ? clean : [{ id: 'layer-0', name: 'Capa 1', visible: true, locked: false, opacity: 1 }];
+    const active = next.some((l) => l.id === activeLayerId) ? activeLayerId! : next[0].id;
+    const maxSeq = next.reduce((m, l) => Math.max(m, Number(l.id.match(/layer-(\d+)/)?.[1] || 0)), 0);
+    layerSeq = Math.max(layerSeq, maxSeq + 1);
+    patch({ layers: next, activeLayerId: active });
+  },
 };
 
 /** Snapshot combinado (estado + acciones). Referencia estable entre mutaciones. */
