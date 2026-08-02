@@ -144,6 +144,9 @@ export class WebGLDesign3D {
      *  que una guía nueva salga PERPENDICULAR al plano en el que se estaba
      *  dibujando (ver buildGuideSurface), no siempre de cara a la cámara. */
     baseNormal?: THREE.Vector3;
+    /** Plano de guía fijado al comenzar el gesto. Evita saltos de profundidad
+     *  si la punta sale de los límites visibles de la guía. */
+    drawPlane?: THREE.Plane;
     /** true si el primer punto se resolvió contra el plano de fallback
      *  genérico (sin guía ni superficie real de apoyo) — dispara la
      *  auto-creación de guía al cerrar el trazo, ver commitStroke(). */
@@ -201,6 +204,9 @@ export class WebGLDesign3D {
   // estabilizador de pulso ("Stable Strokes"): el punto que se agrega al
   // trazo persigue con retraso al punto crudo del puntero.
   private smoothed: THREE.Vector3 | null = null;
+  /** Puntero dueño del trazo; filtra mouse sintético, borrador y contactos
+   *  auxiliares que algunas tabletas emiten durante el mismo gesto. */
+  private activePointerId: number | null = null;
 
   // historia
   private undoStack: Command[] = [];
@@ -701,6 +707,15 @@ export class WebGLDesign3D {
           : new THREE.Vector3(0, 0, 1);
         return { point: h.point.clone(), normal };
       }
+      // La guía activa conserva prioridad también fuera de su malla visible.
+      // Antes se probaban otras superficies primero y Z podía cambiar a mitad
+      // del trazo, produciendo rectas largas como las de la captura.
+      if (this.activeGuide.plane) {
+        const gp = new THREE.Vector3();
+        if (this.raycaster.ray.intersectPlane(this.activeGuide.plane, gp)) {
+          return { point: gp, normal: this.activeGuide.plane.normal.clone() };
+        }
+      }
     }
     const targets: THREE.Object3D[] = this.surfaces.map((s) => s.mesh);
     // Una vez que ya hay forma armada, no hace falta seguir creando guías
@@ -889,14 +904,17 @@ export class WebGLDesign3D {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
-    if (e.button !== 0 || e.pointerType === 'touch') return;
+    if (e.button !== 0 || e.pointerType === 'touch' || !e.isPrimary) return;
+    if (this.activePointerId !== null) return;
     if (this.panMode) return; // Espacio = mano: OrbitControls panea, no dibujar
     this.setPointerFromEvent(e);
     this.updateCursor(e);
     this.downScreen.set(...this.screenOf(e));
 
-    if (this.tool === 'pencil' || this.tool === 'guide') {
+    if (this.tool === 'pencil' || this.tool === 'guide' || this.tool === 'pencil-free') {
+      this.activePointerId = e.pointerId;
       this.beginDraw(e);
+      if (this.mode !== 'draw') this.activePointerId = null;
     } else if (this.tool === 'move') {
       // el eje móvil del pivote de rotación tiene prioridad sobre los
       // anillos del gizmo: es un blanco más chico y conviene poder
@@ -931,6 +949,8 @@ export class WebGLDesign3D {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
+    if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
+    if (this.mode === 'draw' && e.pointerType === 'pen' && e.pressure === 0 && e.buttons === 0) return;
     this.updateCursor(e);
     this.setPointerFromEvent(e);
     if (this.mode === 'draw') this.moveDraw(e);
@@ -947,6 +967,7 @@ export class WebGLDesign3D {
   };
 
   private onPointerUp = (e: PointerEvent): void => {
+    if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
     if (this.mode === 'draw') { this.endDraw(e); }
     else if (this.mode === 'move') { this.endMove(); }
     else if (this.mode === 'lasso') { this.endLasso(e); }
@@ -956,10 +977,11 @@ export class WebGLDesign3D {
     this.mode = 'idle';
     this.controls.enabled = true;
     try { this.canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+    this.activePointerId = null;
   };
 
   private static readonly TOOL_KEYS: Record<string, ToolType> = {
-    p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify', c: 'scissors',
+    p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify', c: 'scissors', f: 'pencil-free',
   };
 
   private panMode = false; // barra espaciadora = mano (pan de cámara)
@@ -1162,6 +1184,9 @@ export class WebGLDesign3D {
     this.current = {
       points: [hit.point], pressures: [this.samplePressure(e)], kind, line, mirrorLine,
       baseNormal: hit.normal.clone(),
+      drawPlane: this.tool === 'pencil' && this.activeGuide?.plane
+        ? this.activeGuide.plane.clone()
+        : undefined,
       // el snap a un vértice existente SÍ cuenta como soporte real (ese
       // vértice pertenece a un trazo/guía ya apoyado), aunque `surf` haya
       // caído en el plano de fallback antes de encontrar el snap.
@@ -1242,7 +1267,18 @@ export class WebGLDesign3D {
     // El cuerpo del trazo NO engancha a vértices (eso hacía saltar los puntos a
     // vértices de otros planos en vista de lado). El snap solo aplica al inicio
     // (beginDraw) y al cierre (endDraw).
-    const hit = this.tool === 'pencil-free' ? this.resolveFreeHit() : this.resolveHit();
+    let hit: { point: THREE.Vector3; normal: THREE.Vector3 } | null;
+    if (this.tool === 'pencil-free') {
+      hit = this.resolveFreeHit();
+    } else if (this.current.drawPlane) {
+      this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+      const point = new THREE.Vector3();
+      hit = this.raycaster.ray.intersectPlane(this.current.drawPlane, point)
+        ? { point, normal: this.current.drawPlane.normal.clone() }
+        : null;
+    } else {
+      hit = this.resolveHit();
+    }
     if (!hit) return;
     const pts = this.current.points;
     const pressures = this.current.pressures;

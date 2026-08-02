@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.28.17"
+LOW_VERSION = "3.28.18"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -157,6 +157,9 @@ class Api:
     def __init__(s):
         s.cfg = Config()
         s._window = None
+        s._ui_base = None
+        s._aux_windows = {}
+        s._animation_panel_state = {}
         s.ws = None
         s.prov = None
         s.ses_dir = data_dir() / 'historial'
@@ -177,6 +180,47 @@ class Api:
     def cancel(s):
         """El usuario pidió detener la consulta en curso."""
         s._cancel = True
+
+    def animation_panel_state(s, state=None):
+        """Estado compartido entre el editor y ventanas de animación externas."""
+        if isinstance(state, dict):
+            s._animation_panel_state = state
+        return s._animation_panel_state
+
+    def animation_panel_command(s, action, payload=None):
+        """Reenvía una acción de una ventana auxiliar a la ventana principal."""
+        if not s._window:
+            return {"error": "ventana principal no disponible"}
+        message = json.dumps({"action": action, "payload": payload or {}},
+                             ensure_ascii=False)
+        try:
+            s._window.evaluate_js(f"window.lowAnimationPanelCommand({message})")
+            return {"ok": True}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def open_animation_panel(s, kind="timeline"):
+        """Abre Timeline o X-sheet como ventana nativa para otro monitor."""
+        kind = "xsheet" if kind == "xsheet" else "timeline"
+        current = s._aux_windows.get(kind)
+        if current:
+            try:
+                current.show()
+                return {"ok": True, "reused": True}
+            except Exception:
+                s._aux_windows.pop(kind, None)
+        if not s._ui_base:
+            return {"error": "interfaz no inicializada"}
+        panel = os.path.join(s._ui_base, "animation_panel.html") + f"?kind={kind}"
+        try:
+            win = webview.create_window(
+                "LOW · " + ("X-sheet" if kind == "xsheet" else "Timeline"),
+                panel, js_api=s, width=1050, height=560, min_size=(620, 320),
+                background_color="#0B0B0C")
+            s._aux_windows[kind] = win
+            return {"ok": True}
+        except Exception as e:
+            return {"error": str(e)}
 
     def _mem_limit(s):
         """Cuántos mensajes de la conversación recordar (2 por turno).
@@ -4808,6 +4852,7 @@ def main():
     api = Api()
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     ui = os.path.join(base, "ui", "index.html")
+    api._ui_base = os.path.join(base, "ui")
     window = webview.create_window(
         "LOW", ui, js_api=api,
         width=1280, height=800, min_size=(980, 600), maximized=True,

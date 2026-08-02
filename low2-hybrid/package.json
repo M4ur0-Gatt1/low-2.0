@@ -1,6 +1,6 @@
 {
   "name": "low2-hybrid",
-  "version": "2.0.0-alpha",
+  "version": "3.28.18",
   "description": "LOW - estudio creativo generalista y modular para dibujo, animación, composición y entornos 3D",
   "main": "electron/main.cjs",
   "scripts": {
@@ -30,19 +30,20 @@
   "copyright": "Copyright © 2026 Mauro Gatti y Tropa Circa",
   "license": "MIT",
   "dependencies": {
+    "axios": "^1.6.5",
+    "codemirror": "^5.65.16",
+    "electron-store": "^8.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "three": "^0.160.0",
-    "codemirror": "^5.65.16",
-    "axios": "^1.6.5",
     "simple-git": "^3.22.0",
     "ssh2": "^1.15.0",
-    "electron-store": "^8.1.0",
+    "three": "^0.160.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",
     "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
     "@types/three": "^0.160.0",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
@@ -88,7 +89,9 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
