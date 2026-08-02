@@ -24,9 +24,10 @@ const bg: Record<Theme, string> = {
 interface Props {
   projectId?: string;
   readOnly?: boolean;
+  onRequestClose?: () => void;
 }
 
-export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) => {
+export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRequestClose }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<WebGLDesign3D | null>(null);
@@ -52,9 +53,20 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
     engineRef.current?.setTheme(theme);
   }, [theme]);
 
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !onRequestClose) return;
+      event.preventDefault();
+      onRequestClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onRequestClose]);
+
   const [view, setView] = useState<ViewName>('persp');
   const [axes, setAxes] = useState(false);
   const [guideOpacity, setGuideOpacity] = useState(100);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const dark = theme === 'dark';
   const chipBg = dark ? 'rgba(20,22,28,0.6)' : 'rgba(255,255,255,0.7)';
@@ -62,6 +74,21 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
   const chipActive = '#0078d4';
 
   const eng = () => engineRef.current;
+  const saveProject = () => {
+    const project = eng()?.exportProject();
+    if (!project) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${projectId || 'proyecto'}.low3d`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+  const openProject = async (file?: File) => {
+    if (!file) return;
+    try { eng()?.importProject(JSON.parse(await file.text())); }
+    catch (error) { window.alert(error instanceof Error ? error.message : 'No se pudo abrir el proyecto'); }
+  };
   const applyView = (v: ViewName) => {
     eng()?.setView(v);
     setView(v);
@@ -89,6 +116,16 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: bg[theme], overflow: 'hidden' }} ref={containerRef}>
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} onContextMenu={(e) => e.preventDefault()} />
+      <input ref={fileInputRef} type="file" accept=".low3d,application/json" hidden
+        onChange={(e) => { void openProject(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+
+      {onRequestClose && (
+        <button onClick={onRequestClose} title="Cerrar módulo 3D (Esc)" style={{
+          position: 'absolute', top: 14, left: 14, zIndex: 110, height: 36,
+          padding: '0 12px', border: 'none', borderRadius: 8, cursor: 'pointer',
+          background: chipBg, color: chipFg, fontSize: 12,
+        }}>← Salir de 3D</button>
+      )}
 
       <Panel3D title="Herramientas" initial={{ left: 14, top: 60 }}>
         <Toolbar3D />
@@ -99,6 +136,18 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
       <Panel3D title="Capas" initial={{ left: 14, bottom: 14 }} width={240}>
         <LayerManager3D engine={engineRef} />
       </Panel3D>
+
+      <div title="Joystick de orientación" style={{
+        position: 'absolute', right: 14, bottom: 62, zIndex: 105,
+        display: 'grid', gridTemplateColumns: 'repeat(3, 34px)', gap: 3,
+        padding: 6, borderRadius: 12, background: chipBg,
+      }}>
+        <span />{barBtn('Y+', () => applyView('top'), view === 'top', 'Vista superior')}<span />
+        {barBtn('X−', () => applyView('left'), view === 'left', 'Vista izquierda')}
+        {barBtn('3D', () => applyView('persp'), view === 'persp', 'Vista perspectiva')}
+        {barBtn('X+', () => applyView('right'), view === 'right', 'Vista derecha')}
+        <span />{barBtn('Z+', () => applyView('front'), view === 'front', 'Vista frontal')}<span />
+      </div>
 
       <button
         onClick={() => setTheme(dark ? 'light' : 'dark')}
@@ -139,6 +188,9 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default' }) =>
       >
         {barBtn('⟲', () => eng()?.undo(), false, 'Deshacer (Ctrl+Z)')}
         {barBtn('⟳', () => eng()?.redo(), false, 'Rehacer (Ctrl+Alt+Z / Ctrl+Shift+Z)')}
+        <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
+        {barBtn('Abrir', () => fileInputRef.current?.click(), false, 'Abrir proyecto LOW 3D')}
+        {barBtn('Guardar', saveProject, false, 'Guardar proyecto LOW 3D')}
         <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
         {barBtn('Persp', () => applyView('persp'), view === 'persp')}
         {barBtn('Frente', () => applyView('front'), view === 'front', 'Vista ortogonal de frente (para el primer dibujo)')}

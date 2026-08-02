@@ -60,6 +60,14 @@ export const PropertiesPanel3D: React.FC = () => {
     });
   };
 
+  const updateSurfaceVector = (key: 'position' | 'rotation' | 'scale', axis: number, value: number) => {
+    if (!activeSurface) return;
+    const fallback = key === 'scale' ? [1, 1, 1] : [0, 0, 0];
+    const vector = [...((activeSurface.params[key] as number[] | undefined) ?? fallback)];
+    vector[axis] = value;
+    setActiveSurface({ ...activeSurface, params: { ...activeSurface.params, [key]: vector } });
+  };
+
   return (
     <div style={panelStyle}>
       {/* Pincel */}
@@ -160,6 +168,27 @@ export const PropertiesPanel3D: React.FC = () => {
             onChange={(e) => updateSurfaceParam('segments', Number(e.target.value))}
             style={sliderStyle}
           />
+
+          {(['position', 'rotation', 'scale'] as const).map((key) => {
+            const fallback = key === 'scale' ? [1, 1, 1] : [0, 0, 0];
+            const values = (activeSurface.params[key] as number[] | undefined) ?? fallback;
+            const label = key === 'position' ? 'Posición' : key === 'rotation' ? 'Rotación' : 'Escala';
+            return (
+              <div key={key}>
+                <div style={{ ...sectionTitle, marginTop: 8 }}>{label}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                  {(['X', 'Y', 'Z'] as const).map((axis, i) => (
+                    <label key={axis} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <span style={{ color: axis === 'X' ? '#ff6868' : axis === 'Y' ? '#67d47b' : '#65a8ff' }}>{axis}</span>
+                      <input type="number" step={key === 'rotation' ? 5 : 0.1} value={Number(values[i] ?? fallback[i])}
+                        onChange={(e) => updateSurfaceVector(key, i, Number(e.target.value))}
+                        style={{ width: '100%', minWidth: 0, background: '#1e1e1e', color: '#eee', border: '1px solid #555', borderRadius: 3 }} />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </>
       ) : (
         <div style={{ opacity: 0.6, fontStyle: 'italic' }}>

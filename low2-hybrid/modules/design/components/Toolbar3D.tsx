@@ -102,7 +102,6 @@ export const Toolbar3D: React.FC = () => {
   const draw: { id: ToolType; icon: React.FC; label: string }[] = [
     { id: 'pencil', icon: Icons.Pencil, label: 'Lápiz (P)' },
     { id: 'guide', icon: Icons.Guide, label: 'Línea guía — define un plano de dibujo (G)' },
-    { id: 'pencil-free', icon: Icons.FreeDraw, label: 'Dibujo libre — sin guía, scroll = profundidad (F)' },
     { id: 'eraser', icon: Icons.Eraser, label: 'Borrar (E)' },
     { id: 'scissors', icon: Icons.Scissors, label: 'Tijera — corta el trazo donde clickees encima (C)' },
     { id: 'liquify', icon: Icons.Liquify, label: 'Liquify — arrastrá para deformar el trazo (radio = tamaño de pincel) (L)' },
@@ -157,10 +156,13 @@ export const Toolbar3D: React.FC = () => {
             <div style={{ width: '20px', height: '20px' }}><s.icon /></div>
           </button>
         ))}
-        <button onClick={() => setMirrorMode(!mirrorMode)} title="Modo Espejo X" style={iconBtn(mirrorMode)}
-          onMouseEnter={(e) => hoverIn(e, mirrorMode)} onMouseLeave={(e) => hoverOut(e, mirrorMode)}>
-          <div style={{ width: '20px', height: '20px' }}><Icons.Mirror /></div>
-        </button>
+        {(['x', 'y', 'z'] as const).map((axis) => (
+          <button key={axis} onClick={() => setMirrorMode({ ...mirrorMode, [axis]: !mirrorMode[axis] })}
+            title={`Simetría ${axis.toUpperCase()}`} style={iconBtn(mirrorMode[axis])}
+            onMouseEnter={(e) => hoverIn(e, mirrorMode[axis])} onMouseLeave={(e) => hoverOut(e, mirrorMode[axis])}>
+            <span style={{ fontWeight: 700 }}>{axis.toUpperCase()}</span>
+          </button>
+        ))}
       </Section>
 
       <Section title="Pincel" open={open.pincel} onToggle={() => toggle('pincel')}>
