@@ -412,6 +412,12 @@
       <button class="ibtn" id="dzPenDbgBtn" title=" Diagnóstico de tableta: panel en vivo de eventos pointer — útil para depurar tabletas Huion/Wacom. Clic para activar/desactivar." onclick="dzPenDebugToggle()"></button>
     </div>
     <div class="dz-canvas" id="dzCanvas">
+      <!-- cursor visual de herramienta: evita que lápiz/pincel aparezcan como
+           una flecha genérica y funciona igual con mouse y tableta -->
+      <div class="dz-tool-cursor" id="dzToolCursor" hidden>
+        <span class="dz-tool-cursor-ring"></span>
+        <svg class="ico"><use id="dzToolCursorUse" href="#i-pencil"/></svg>
+      </div>
       <!-- cuadrícula (Ctrl+R activa reglas; la grilla y guías se prenden en la barra) -->
       <div class="dz-grid2d" id="dzGrid2d" hidden></div>
       <div class="dz-guides" id="dzGuides" hidden></div>
@@ -459,7 +465,7 @@
       </div>
       <!-- X-sheet: planilla de exposición vertical (flotante) -->
       <div class="dz-xsheet" id="dzXsheet" hidden>
-        <div class="dz-op-head" id="dzXsHead"><svg class="ico"><use href="#i-xsheet"/></svg> X-sheet
+        <div class="dz-op-head" id="dzXsHead"><svg class="ico"><use href="#i-xsheet"/></svg> X-sheet · OpenToonz
           <span class="dz-op-x" id="dzXsClose" title="Cerrar">×</span></div>
         <div class="dz-xs-rows" id="dzXsRows"></div>
       </div>
@@ -601,8 +607,8 @@
     <label class="tl-field" title="Último cuadro que se reproduce/exporta (Out) · 0 = hasta el final">Out<input type="number" id="tlOut" value="0" min="0" class="dz-win"></label>
     <div class="vsep"></div>
     <button class="ibtn active" id="tlOnion" title="Papel cebolla: mostrar/ocultar (el panel flotante lo personaliza)"><svg class="ico"><use href="#i-onion"/></svg></button>
-    <button class="ibtn" id="tlXs" title="X-sheet: planilla de exposición vertical (cuadros, claves y cámara)"><svg class="ico"><use href="#i-xsheet"/></svg></button>
-    <button class="ibtn" id="tlLayers" title="Timeline por CAPAS: filas = capas, columnas = cuadros (como Toon Boom). La profundidad Z de cada capa es la misma de la cámara multiplano."><svg class="ico"><use href="#i-files"/></svg></button>
+    <button class="ibtn dz-anim-mode active" id="tlLayers" title="Timeline OpenToonz: niveles en filas y fotogramas en columnas"><svg class="ico"><use href="#i-files"/></svg><span>Timeline</span></button>
+    <button class="ibtn dz-anim-mode" id="tlXs" title="X-sheet: tiempo vertical, niveles en columnas"><svg class="ico"><use href="#i-xsheet"/></svg><span>X-sheet</span></button>
     <div class="tl-frames" id="tlFrames" title="Arrastrá sobre los cuadros para hojearlos (scrub)"></div>
     <button class="ibtn" id="tlKey" title="Marcar/desmarcar este cuadro como FOTOGRAMA CLAVE (pose principal del flujo pose-a-pose)"><svg class="ico"><use href="#i-key"/></svg></button>
     <button class="ibtn" id="tlAdd" title="Duplicar este cuadro al FINAL (flujo clásico: dibujar sobre la copia)"><svg class="ico"><use href="#i-plus"/></svg></button>
@@ -621,8 +627,9 @@
   </div>
   <!-- timeline por CAPAS × cuadros (estilo Toon Boom): filas capa, columnas cuadro -->
   <div class="dz-tlgrid" id="dzTlGrid" hidden>
+    <div class="dz-tlg-resize" id="dzTlgResize" title="Arrastrá para cambiar la altura de la Timeline"></div>
     <div class="dz-tlg-head">
-      <span class="dz-tlg-corner">capas ↓ · cuadros </span>
+      <span class="dz-tlg-corner">Niveles ↓ · Fotogramas →</span>
       <div class="dz-tlg-cols" id="dzTlgCols"></div>
     </div>
     <div class="dz-tlg-rows" id="dzTlgRows"></div>
