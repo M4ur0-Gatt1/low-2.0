@@ -499,10 +499,12 @@ function bind() {
   // entorno de diseño
   $("#dzClose").onclick = closeDesign;
   $("#dzSave").onclick = dzSave;
-  $("#dzCanvas").addEventListener("mousedown", dzPointerDown);
-  $("#dzHandle").addEventListener("mousedown", dzHandleDown);
+  // Pointer Events sirven tanto para mouse como para lápiz/tableta. Usar
+  // mousedown acá dejaba selección, resize y rotación sin responder al stylus.
+  $("#dzCanvas").addEventListener("pointerdown", dzPointerDown);
+  $("#dzHandle").addEventListener("pointerdown", dzHandleDown);
   document.querySelectorAll("#dzSelBox .dz-sh").forEach(sh =>
-    sh.addEventListener("mousedown", e =>
+    sh.addEventListener("pointerdown", e =>
       dzBoxHandleDown(e, +sh.dataset.hx, +sh.dataset.hy)));
   $("#dzExt").onclick = () => { if (DZ.path) api.preview_html(DZ.path, $("#dzCanvas").innerHTML); };
   $("#dzZoomIn").onclick = () => dzZoom(0.15);
@@ -561,7 +563,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   // gamma de presión (OpenToonz V_BrushPressureSensitivity): <1 más sensible al inicio
   DZ.pressureGamma = +(localStorage.getItem("low.dzgamma") || 0.85);
   $("#dzPrefs").onclick = dzPrefsModal;
-  $("#dzRotate").addEventListener("mousedown", dzRotateDown);
+  $("#dzRotate").addEventListener("pointerdown", dzRotateDown);
   $("#dzGroup").onclick = (e) => dzGroupSel(e.shiftKey);
   $("#dzImg").onclick = dzImportImage;
   $("#dzColor").onclick = dzColorize;
@@ -571,6 +573,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#dzCanvas").addEventListener("pointerdown", dzDrawDown);
   $("#dzCanvas").addEventListener("pointermove", dzDrawMove);
   $("#dzCanvas").addEventListener("pointerup", dzDrawUp);
+  $("#dzCanvas").addEventListener("pointermove", dzToolCursorMove);
+  $("#dzCanvas").addEventListener("pointerenter", dzToolCursorMove);
+  $("#dzCanvas").addEventListener("pointerleave", dzToolCursorHide);
   // pointerrawupdate: eventos de alta frecuencia no coalescidos (como WinTab en OpenToonz).
   // Chrome 77+, Edge 79+. Si no existe, simplemente no se registra.
   try { $("#dzCanvas").addEventListener("pointerrawupdate", dzDrawRaw); } catch (e) { /* no soportado */ }
@@ -667,10 +672,34 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       } catch (err) { /* sin svg todavía */ }
     });
   });
-  // X-sheet: toggle, cerrar y arrastre del panel
+  // X-sheet: vista principal de animación (tiempo vertical estilo OpenToonz)
   $("#tlXs").onclick = dzXsToggle;
   $("#tlLayers").onclick = dzTlGridToggle;
-  $("#dzXsClose").onclick = () => { $("#dzXsheet").hidden = true; $("#tlXs").classList.remove("active"); };
+  const tlGrid = $("#dzTlGrid"), tlResize = $("#dzTlgResize");
+  const savedTlHeight = +(localStorage.getItem("low.timeline.height") || 230);
+  if (tlGrid) tlGrid.style.height = Math.max(120, Math.min(window.innerHeight * .48, savedTlHeight)) + "px";
+  if (tlResize) tlResize.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const pointerId = e.pointerId, startY = e.clientY;
+    const startHeight = tlGrid.getBoundingClientRect().height;
+    const move = (ev) => {
+      if (ev.pointerId !== pointerId) return;
+      const height = Math.max(120, Math.min(window.innerHeight * .48,
+        startHeight + startY - ev.clientY));
+      tlGrid.style.height = height + "px";
+    };
+    const up = (ev) => {
+      if (ev.pointerId !== pointerId) return;
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+      try { localStorage.setItem("low.timeline.height", String(Math.round(tlGrid.getBoundingClientRect().height))); } catch (err) { /* */ }
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
+  });
+  $("#dzXsClose").onclick = () => dzAnimSetView("timeline");
   $("#dzXsHead").addEventListener("mousedown", (e) => {
     if (e.target.id === "dzXsClose") return;
     e.preventDefault();
@@ -2361,6 +2390,7 @@ function dzPositionHandle() {
 function dzBoxHandleDown(e, hx, hy) {
   if (!DZ.sel) return;
   e.preventDefault(); e.stopPropagation();
+  const pointerId = e.pointerId;
   dzSnapshot();
   const el = DZ.sel;
   const start = dzToUser(e.clientX, e.clientY);
@@ -2375,6 +2405,7 @@ function dzBoxHandleDown(e, hx, hy) {
   const ayL = hy > 0 ? lb.y : hy < 0 ? lb.y + lb.height : lb.y + lb.height / 2;
   const corner = hx !== 0 && hy !== 0;
   const move = (ev) => {
+    if (ev.pointerId !== pointerId) return;
     const p = dzToUser(ev.clientX, ev.clientY);
     const dx = (p.x - start.x) * hx, dy = (p.y - start.y) * hy;
     let kx = hx ? Math.max(0.05, (w0 + dx) / w0) : 1;
@@ -2385,13 +2416,16 @@ function dzBoxHandleDown(e, hx, hy) {
     el.setAttribute("transform", (tr0 ? tr0 + " " : "") + tsc);
     dzPositionHandle();
   };
-  const up = () => {
-    document.removeEventListener("mousemove", move);
-    document.removeEventListener("mouseup", up);
+  const up = (ev) => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("pointercancel", up);
     dzBuildInspector(el); dzMarkDirty();
   };
-  document.addEventListener("mousemove", move);
-  document.addEventListener("mouseup", up);
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up);
+  document.addEventListener("pointercancel", up);
 }
 
 /* ══ rigging (pivotes ): fija el eje de rotación de un elemento/parte del
@@ -2433,6 +2467,7 @@ function dzPivotMark() {
 function dzRotateDown(e) {
   if (!DZ.sel) return;
   e.preventDefault(); e.stopPropagation();
+  const pointerId = e.pointerId;
   dzSnapshot();
   const el = DZ.sel;
   const b = el.getBoundingClientRect();
@@ -2446,6 +2481,7 @@ function dzRotateDown(e) {
   const a0 = Math.atan2(e.clientY - cy, e.clientX - cx);
   const base = el.getAttribute("transform") || "";
   const move = (ev) => {
+    if (ev.pointerId !== pointerId) return;
     let deg = (Math.atan2(ev.clientY - cy, ev.clientX - cx) - a0) * 180 / Math.PI;
     if (ev.shiftKey) deg = Math.round(deg / 15) * 15;
     deg = Math.round(deg * 10) / 10;
@@ -2453,13 +2489,16 @@ function dzRotateDown(e) {
       `rotate(${deg} ${c.x.toFixed(1)} ${c.y.toFixed(1)})`);
     dzPositionHandle();
   };
-  const up = () => {
-    document.removeEventListener("mousemove", move);
-    document.removeEventListener("mouseup", up);
+  const up = (ev) => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("pointercancel", up);
     dzMarkDirty(); dzBuildInspector(el);
   };
-  document.addEventListener("mousemove", move);
-  document.addEventListener("mouseup", up);
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up);
+  document.addEventListener("pointercancel", up);
 }
 
 /* botón "Diseño" de la barra: reabre el diseño actual, o crea un lienzo nuevo
@@ -2501,6 +2540,7 @@ function dzPointerDown(e) {
   if (e.target.id === "dzHandle" || e.target.id === "dzRotate") return;   // tiradores propios
   if (e.target.closest && e.target.closest("#dzCam")) return;             // la cámara maneja lo suyo
   if (!["select", "direct"].includes(DZ.tool || "select")) return;   // otras: pointer events
+  if (e.isPrimary === false) return;
   let el = e.target;
   if (!el || el === $("#dzCanvas") || el.tagName.toLowerCase() === "svg") { dzMarqueeStart(e); return; }
   if (el.closest && el.closest("g.dz-onion")) { dzDeselect(); return; }
@@ -2510,6 +2550,7 @@ function dzPointerDown(e) {
   const grp = el.closest && el.closest('#dzCanvas svg > g:not(.dz-onion)');
   if (grp && !e.altKey && DZ.tool !== "direct") el = grp;   // flecha blanca: pieza directa
   e.preventDefault();
+  const pointerId = e.pointerId;
   // Shift+clic: sumar/sacar de la selección múltiple (para agrupar/alinear/mover juntos)
   DZ.multi = DZ.multi || [];
   if (e.shiftKey) {
@@ -2550,6 +2591,7 @@ function dzPointerDown(e) {
     }
   }
   const move = (ev) => {
+    if (ev.pointerId !== pointerId) return;
     const p = dzToUser(ev.clientX, ev.clientY);
     const dx = p.x - start.x, dy = p.y - start.y;
     if (!moved && Math.abs(dx) + Math.abs(dy) < 1) return;
@@ -2574,9 +2616,11 @@ function dzPointerDown(e) {
     if (rec) { rec.last = [dx, dy]; rec.samples.push([dx, dy, performance.now() - rec.t0]); }
     dzPositionHandle();
   };
-  const up = () => {
-    document.removeEventListener("mousemove", move);
-    document.removeEventListener("mouseup", up);
+  const up = (ev) => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("pointercancel", up);
     if (rigDrag && DZ.perf && DZ.perf.rec) {
       DZ.perf.rec.active = null;               // la pieza vuelve al replay de su pista
     } else if (moved && rigDrag && rigDrag.pose) {
@@ -2587,8 +2631,9 @@ function dzPointerDown(e) {
     if (rec && moved) dzRecFinish(rec);
     else if (rec) { DZ.rec = { armed: true }; }        // no arrastró: sigue armada
   };
-  document.addEventListener("mousemove", move);
-  document.addEventListener("mouseup", up);
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up);
+  document.addEventListener("pointercancel", up);
 }
 function dzClearMulti() {
   (DZ.multi || []).forEach(n => n.classList && n.classList.remove("dz-msel"));
@@ -2600,6 +2645,7 @@ function dzClearMulti() {
    Shift = sumar a la selección; Alt = solo lo que quede COMPLETAMENTE adentro. */
 function dzMarqueeStart(e) {
   e.preventDefault();
+  const pointerId = e.pointerId;
   const cv = $("#dzCanvas");
   const cvRect = cv.getBoundingClientRect();
   const x0 = e.clientX, y0 = e.clientY;
@@ -2608,6 +2654,7 @@ function dzMarqueeStart(e) {
   cv.appendChild(box);
   let moved = false;
   const draw = (ev) => {
+    if (ev.pointerId !== pointerId) return;
     const l = Math.min(x0, ev.clientX), t = Math.min(y0, ev.clientY);
     const w = Math.abs(ev.clientX - x0), h = Math.abs(ev.clientY - y0);
     box.style.left = (l - cvRect.left) + "px"; box.style.top = (t - cvRect.top) + "px";
@@ -2615,16 +2662,20 @@ function dzMarqueeStart(e) {
     if (w + h > 3) moved = true;
   };
   const up = (ev) => {
-    document.removeEventListener("mousemove", draw);
-    document.removeEventListener("mouseup", up);
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", draw);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("pointercancel", up);
     box.remove();
+    if (ev.type === "pointercancel") return;
     if (!moved) { if (!ev.shiftKey) dzDeselect(); return; }   // clic simple  deseleccionar
     dzMarqueeSelect(Math.min(x0, ev.clientX), Math.min(y0, ev.clientY),
                     Math.max(x0, ev.clientX), Math.max(y0, ev.clientY),
                     ev.shiftKey, ev.altKey);
   };
-  document.addEventListener("mousemove", draw);
-  document.addEventListener("mouseup", up);
+  document.addEventListener("pointermove", draw);
+  document.addEventListener("pointerup", up);
+  document.addEventListener("pointercancel", up);
 }
 function dzMarqueeSelect(l, t, r, b, additive, contained) {
   const svg = $("#dzCanvas").querySelector("svg");
@@ -3210,8 +3261,35 @@ const DZ_CURSORS = { select: "", direct: "", nodes: "", eraser: "cell",
                      dropper: "copy", bucket: "pointer", hand: "grab",
                      pencil: DZ_DOT_CURSOR, brush: DZ_DOT_CURSOR, pen: DZ_DOT_CURSOR,
                      pivot: "crosshair", ruler: "crosshair",
-                     inflator: "cell", handler: "ew-resize", iron: "default",
-                     pliers: "crosshair", magnet: "cell" };
+                      inflator: "cell", handler: "ew-resize", iron: "default",
+                      pliers: "crosshair", magnet: "cell" };
+const DZ_TOOL_CURSOR_ICONS = {
+  pencil: "i-pencil", brush: "i-brush", pen: "i-pennib", eraser: "i-eraser",
+  dropper: "i-dropper", bucket: "i-bucket", nodes: "i-nodes", ruler: "i-ruler",
+  pivot: "i-pivot", inflator: "i-inflate", handler: "i-contour",
+  iron: "i-iron", pliers: "i-cut", magnet: "i-magnet"
+};
+function dzToolCursorHide() {
+  const cursor = $("#dzToolCursor");
+  if (cursor) cursor.hidden = true;
+}
+function dzToolCursorMove(e) {
+  const tool = DZ.tool || "select";
+  const icon = DZ_TOOL_CURSOR_ICONS[tool];
+  const cursor = $("#dzToolCursor"), cv = $("#dzCanvas");
+  if (!cursor || !cv || !icon || dzOnUiPanel(e)) { dzToolCursorHide(); return; }
+  const rect = cv.getBoundingClientRect();
+  cursor.style.left = (e.clientX - rect.left + cv.scrollLeft) + "px";
+  cursor.style.top = (e.clientY - rect.top + cv.scrollTop) + "px";
+  const pressure = e.pointerType === "pen" && e.pressure > 0 ? e.pressure : 1;
+  const brushSize = tool === "brush" ? (DZ.drawW || 6) * pressure * (DZ.zoom || 1) :
+                    tool === "pencil" ? Math.max(2, (DZ.drawW || 2) * .55 * (DZ.zoom || 1)) : 10;
+  cursor.style.setProperty("--tool-size", Math.max(20, Math.min(64, brushSize + 16)) + "px");
+  cursor.dataset.tool = tool;
+  const use = $("#dzToolCursorUse");
+  if (use) { use.setAttribute("href", "#" + icon); use.setAttribute("xlink:href", "#" + icon); }
+  cursor.hidden = false;
+}
 /* ══  Diagnóstico de tableta: registra el flujo REAL de pointer events
    (tipo · pointerId · pointerType · botones · presión · Δpx · Δms) en un panel
    en vivo, para ver qué emite la Huion de verdad en vez de suponerlo. ══ */
@@ -3294,6 +3372,8 @@ function dzSetTool(t) {
   const cv = $("#dzCanvas");
   cv.style.cursor = (t in DZ_CURSORS) ? DZ_CURSORS[t] : "crosshair";
   cv.dataset.tool = t;          // el CSS decide el cursor de los hijos del svg
+  cv.classList.toggle("tool-cursor-active", !!DZ_TOOL_CURSOR_ICONS[t]);
+  dzToolCursorHide();
   if (PEN && t !== "pen") dzPenFinish(true);
   if (t !== "nodes") dzNodesClear();
   // el gotero/balde/nodos trabajan SOBRE la selección o eligiendo elemento: no deseleccionar
@@ -4088,8 +4168,9 @@ function dzNodesShow(el) {
     const sp = dzToScreen(a.x, a.y);
     n.style.left = sp.x + "px"; n.style.top = sp.y + "px";
     n.title = "Arrastrá para mover el punto · doble clic: borrarlo";
-    n.onmousedown = (e) => {
+    n.onpointerdown = (e) => {
       e.preventDefault(); e.stopPropagation();
+      const pointerId = e.pointerId;
       dzSnapshot();
       // congelar las manijas vecinas de ESTE arrastre (para sumar el delta una sola vez)
       if (info.kind === "path") {
@@ -4099,21 +4180,26 @@ function dzNodesShow(el) {
       }
       const start = dzToUser(e.clientX, e.clientY);
       const move = (ev) => {
+        if (ev.pointerId !== pointerId) return;
         const p = dzToUser(ev.clientX, ev.clientY);
         dzNodeMove(el, info, a, p.x - start.x, p.y - start.y);
         const s2 = dzToScreen(a.x + (p.x - start.x), a.y + (p.y - start.y));
         n.style.left = s2.x + "px"; n.style.top = s2.y + "px";
       };
       const up = (ev) => {
-        document.removeEventListener("mousemove", move);
-        document.removeEventListener("mouseup", up);
+        if (ev.pointerId !== pointerId) return;
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+        document.removeEventListener("pointercancel", up);
+        if (ev.type === "pointercancel") return;
         const p = dzToUser(ev.clientX, ev.clientY);
         a.x += p.x - start.x; a.y += p.y - start.y;
         delete a.c2x; delete a.c2y; delete a.n1x; delete a.n1y;
         dzMarkDirty();
       };
-      document.addEventListener("mousemove", move);
-      document.addEventListener("mouseup", up);
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+      document.addEventListener("pointercancel", up);
     };
     n.ondblclick = (e) => { e.preventDefault(); e.stopPropagation(); dzSnapshot(); dzNodeDelete(el, info, a); };
     cv.appendChild(n);
@@ -4866,6 +4952,7 @@ async function dzAnimToggle() {
   const bar = $("#dzTimeline");
   if (!bar.hidden) {
     dzAnimStop(); bar.hidden = true; DZ.anim = null; dzOnionClear();
+    dzXsSetVisible(false);
     $("#dzOnionPanel").hidden = true;
     $("#dzTlGrid").hidden = true;   // el grid de capas vive con la timeline
     if (DZ.camMode) { DZ.camMode = false; $("#dzCamBtn").classList.remove("active"); $("#dzCam").hidden = true; $("#tlCamKey").hidden = true; }
@@ -4885,12 +4972,9 @@ async function dzAnimToggle() {
   const sc = await api.scene_get(DZ.path);
   DZ.scene = (sc && sc.scene) || {};
   bar.hidden = false;
-  // capas DENTRO de la timeline (Toon Boom): el grid capa×cuadro se muestra de
-  // una, salvo que el usuario lo haya cerrado a propósito en esta sesión
-  if (DZ.tlGridClosed !== true) {
-    $("#dzTlGrid").hidden = false;
-    const b = $("#tlLayers"); if (b) b.classList.add("active");
-  }
+  // Sala Timeline de OpenToonz: visor arriba, transporte y editor de niveles ×
+  // fotogramas acoplado abajo. La X-sheet vertical es una vista alternativa.
+  dzAnimSetView("timeline");
   await dzTimelineRefresh();
   dzOnionUpdate();
   dzCamOverlay();
@@ -6379,14 +6463,42 @@ function dzSplitWire() {
   });
 }
 /* X-sheet: planilla de exposición vertical (número · nombre · claves) */
-function dzXsToggle() {
-  const p = $("#dzXsheet");
-  p.hidden = !p.hidden;
-  const b = $("#tlXs"); if (b) b.classList.toggle("active", !p.hidden);
-  if (!p.hidden) {
-    if (!DZ.anim) dzAnimToggle();
+function dzXsSetVisible(show) {
+  const panel = $("#dzXsheet");
+  const button = $("#tlXs");
+  const timeline = $("#dzTimeline");
+  const canvas = $("#dzCanvas");
+  if (!panel) return;
+  panel.hidden = !show;
+  if (button) button.classList.toggle("active", show);
+  if (timeline) timeline.classList.toggle("xsheet-mode", show);
+  if (canvas) canvas.classList.toggle("xsheet-open", show);
+  // borrar posiciones inline de la versión flotante: la X-sheet vuelve siempre
+  // a su dock derecho y no puede quedar perdida fuera de la pantalla.
+  if (show) {
+    panel.style.left = "";
+    panel.style.top = "";
+    panel.style.right = "";
     dzXsRender();
   }
+}
+function dzAnimSetView(mode) {
+  const xsheet = mode === "xsheet";
+  const grid = $("#dzTlGrid"), timeline = $("#dzTimeline");
+  if (grid) grid.hidden = xsheet;
+  dzXsSetVisible(xsheet);
+  if (timeline) {
+    timeline.classList.toggle("grid-mode", !xsheet);
+    timeline.classList.toggle("xsheet-mode", xsheet);
+  }
+  const layers = $("#tlLayers"), xs = $("#tlXs");
+  if (layers) layers.classList.toggle("active", !xsheet);
+  if (xs) xs.classList.toggle("active", xsheet);
+  if (!xsheet) dzTlGridRender();
+}
+function dzXsToggle() {
+  if (!DZ.anim) { dzAnimToggle().then(() => dzAnimSetView("xsheet")); return; }
+  dzAnimSetView("xsheet");
 }
 /* X-sheet (planilla de exposición): una fila por cuadro con MINIATURA, número,
    marcas (<i class='fas fa-key'></i> clave · <i class='fas fa-camera-movie'></i> cámara) y NOTAS editables. Las notas se guardan en la
@@ -6525,11 +6637,8 @@ async function dzXsThumbInto(cell, f, i) {
    se marca si esa capa existe en ese cuadro. La profundidad Z de cada capa es
    la MISMA data-z que usa el diorama/multiplano (coherente). ══ */
 function dzTlGridToggle() {
-  const g = $("#dzTlGrid");
-  g.hidden = !g.hidden;
-  DZ.tlGridClosed = g.hidden;          // recordar la preferencia en la sesión
-  const b = $("#tlLayers"); if (b) b.classList.toggle("active", !g.hidden);
-  if (!g.hidden) { if (!DZ.anim) dzAnimToggle(); dzTlGridRender(); }
+  if (!DZ.anim) { dzAnimToggle(); return; }
+  dzAnimSetView("timeline");
 }
 async function dzTlFrameSvgs() {
   const out = [];
@@ -6570,10 +6679,15 @@ async function dzTlGridRender() {
   const keys = (DZ.scene && DZ.scene.keys) || [];   // fotogramas clave de dibujo
   const cams = (DZ.scene && DZ.scene.cam) || {};    // claves de cámara
   const fnum = i => dzFrameNum(DZ.anim.frames[i]);
+  // OpenToonz muestra una regla de tiempo útil aunque la escena todavía tenga
+  // pocos dibujos. Las celdas futuras se crean con doble clic.
+  const requestedOut = Math.max(0, parseInt($("#tlOut").value || "0", 10));
+  const displayCount = Math.max(48, DZ.anim.frames.length, requestedOut);
+  const displayFrames = Array.from({ length: displayCount }, (_, i) => DZ.anim.frames[i] || null);
   // ── encabezado: números de cuadro (cada 5 resaltado) + marcas <i class='fas fa-key'></i>/<i class='fas fa-camera-movie'></i> + playhead ──
-  $("#dzTlgCols").innerHTML = DZ.anim.frames.map((f, i) => {
-    const n = i + 1, mj = (n % 5 === 0), num = fnum(i);
-    const mark = (keys.includes(num) ? "<i class='k'></i>" : "") + (cams[num] ? "<i class='c'></i>" : "");
+  $("#dzTlgCols").innerHTML = displayFrames.map((f, i) => {
+    const n = i + 1, mj = (n % 5 === 0), num = f ? fnum(i) : null;
+    const mark = (num && keys.includes(num) ? "<i class='k'></i>" : "") + (num && cams[num] ? "<i class='c'></i>" : "");
     return `<span class="dz-tlg-col${i === cur ? " cur" : ""}${mj ? " mj" : ""}" data-i="${i}">` +
            `${mj || i === cur ? n : ""}${mark}</span>`;
   }).join("");
@@ -6619,13 +6733,15 @@ async function dzTlGridRender() {
     // con línea de continuación; clic navega al cuadro
     const cells = document.createElement("div");
     cells.className = "dz-tlg-cells";
-    perFrame.forEach((set, i) => {
-      const on = set.has(key), prevOn = i > 0 && perFrame[i - 1].has(key);
+    displayFrames.forEach((unused, i) => {
+      const set = perFrame[i] || new Set();
+      const on = set.has(key), prevOn = i > 0 && (perFrame[i - 1] || new Set()).has(key);
       const c = document.createElement("span");
       c.className = "dz-tlg-cell" +
         (on ? (prevOn ? " held" : " start") : "") + (i === cur ? " cur" : "");
       c.dataset.i = i;
-      c.onclick = () => { dzAnimStopIf(); dzGoFrame(i); };
+      c.onclick = () => dzTimelineCellActivate(i, false);
+      c.ondblclick = () => dzTimelineCellActivate(i, true);
       cells.appendChild(c);
     });
     row.appendChild(cells);
@@ -6638,18 +6754,35 @@ async function dzTlGridRender() {
     `<span class="dz-tlg-name">Cámara</span></div>`;
   const camCells = document.createElement("div");
   camCells.className = "dz-tlg-cells";
-  DZ.anim.frames.forEach((f, i) => {
-    const has = !!cams[fnum(i)];
+  displayFrames.forEach((f, i) => {
+    const has = !!(f && cams[fnum(i)]);
     const c = document.createElement("span");
     c.className = "dz-tlg-cell cam" + (has ? " key" : "") + (i === cur ? " cur" : "");
     c.dataset.i = i;
-    c.onclick = () => { dzAnimStopIf(); dzGoFrame(i); };
+    c.onclick = () => dzTimelineCellActivate(i, false);
+    c.ondblclick = () => dzTimelineCellActivate(i, true);
     camCells.appendChild(c);
   });
   camRow.appendChild(camCells);
   rows.appendChild(camRow);
   $("#dzTlgCols").querySelectorAll(".dz-tlg-col").forEach(c =>
-    c.onclick = () => { dzAnimStopIf(); dzGoFrame(+c.dataset.i); });
+    { c.onclick = () => dzTimelineCellActivate(+c.dataset.i, false);
+      c.ondblclick = () => dzTimelineCellActivate(+c.dataset.i, true); });
+}
+
+async function dzTimelineCellActivate(index, createFuture) {
+  if (!DZ.anim) return;
+  dzAnimStopIf();
+  if (index < DZ.anim.frames.length) { await dzGoFrame(index); return; }
+  if (!createFuture) {
+    dzSetStatus(`Fotograma ${index + 1} vacío · doble clic para extender la exposición hasta acá`);
+    return;
+  }
+  const missing = index + 1 - DZ.anim.frames.length;
+  if (missing > 120) return dzSetStatus("Extensión demasiado grande — ajustá el rango Out primero");
+  dzSetStatus(`Creando ${missing} fotograma(s) hasta ${index + 1}…`);
+  for (let i = 0; i < missing; i++) await dzFrameAdd();
+  dzSetStatus(`Timeline extendida hasta el fotograma ${index + 1}`);
 }
 
 /* ══ <i class='fas fa-sync-alt'></i> modo espejo: lápiz/pincel/pluma dibujan también reflejados sobre el

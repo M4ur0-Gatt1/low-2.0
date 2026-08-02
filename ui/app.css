@@ -890,6 +890,24 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 }
 .dz-canvas { position: relative; }
 .dz-canvas svg { max-width: 100%; max-height: 100%; box-shadow: 0 6px 40px rgba(0,0,0,.5); background: #fff; transform-origin: center; }
+/* Cursor propio por herramienta. El aro representa el área de contacto y el
+   pictograma central identifica lápiz, pincel, pluma, borrador, etc. */
+.dz-tool-cursor {
+  --tool-size: 24px; position: absolute; z-index: 30; width: var(--tool-size); height: var(--tool-size);
+  transform: translate(-50%,-50%); pointer-events: none; color: #111;
+  filter: drop-shadow(0 0 1px #fff) drop-shadow(0 1px 1px rgba(0,0,0,.45));
+}
+.dz-tool-cursor[hidden] { display: none; }
+.dz-tool-cursor-ring { position: absolute; inset: 0; border: 1.5px solid currentColor; border-radius: 50%; background: rgba(255,255,255,.08); }
+.dz-tool-cursor .ico { position: absolute; width: 13px; height: 13px; left: 50%; top: 50%; transform: translate(-50%,-50%); fill: none; stroke-width: 1.8; }
+.dz-tool-cursor[data-tool="eraser"] .dz-tool-cursor-ring,
+.dz-tool-cursor[data-tool="bucket"] .dz-tool-cursor-ring { border-radius: 4px; }
+.dz-tool-cursor[data-tool="dropper"] .dz-tool-cursor-ring,
+.dz-tool-cursor[data-tool="ruler"] .dz-tool-cursor-ring,
+.dz-tool-cursor[data-tool="pivot"] .dz-tool-cursor-ring { border-style: dashed; }
+.dz-canvas.tool-cursor-active,
+.dz-canvas.tool-cursor-active > svg,
+.dz-canvas.tool-cursor-active > svg * { cursor: none !important; }
 .dz-zoom { font: 500 11px 'JetBrains Mono', monospace; color: var(--mut); min-width: 40px; text-align: center; }
 /* tirador de redimensión (esquina inferior derecha del elemento seleccionado) */
 .dz-handle {
@@ -1024,14 +1042,17 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 /* splitter del inspector */
 .dz-split { flex: none; width: 5px; cursor: col-resize; background: transparent; }
 .dz-split:hover { background: var(--red); opacity: .5; }
-/* X-sheet flotante: planilla de exposición vertical */
+/* X-sheet principal: dock derecho estilo OpenToonz. El lienzo reserva espacio
+   para que la planilla no tape el dibujo. */
 .dz-xsheet {
-  position: absolute; left: 56px; right: 18px; bottom: 96px; top: auto; z-index: 8; max-height: 58%;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(0,0,0,.45); overflow: hidden; display: flex; flex-direction: column;
+  position: absolute; left: auto; right: 0; top: 0; bottom: 0; z-index: 8;
+  width: clamp(360px, 44%, 720px); max-height: none;
+  background: var(--panel); border: 0; border-left: 1px solid var(--line); border-radius: 0;
+  box-shadow: -8px 0 24px rgba(0,0,0,.32); overflow: hidden; display: flex; flex-direction: column;
 }
 .dz-xsheet[hidden] { display: none; }
-.dz-xs-rows { overflow: auto; padding: 0; }
+.dz-xs-rows { overflow: auto; padding: 0; flex: 1; min-height: 0; }
+.dz-canvas.xsheet-open { padding-right: clamp(384px, calc(44% + 24px), 744px); }
 .dz-xs-head {
   display: grid; grid-template-columns: 22px 46px 22px 1fr; gap: 6px; align-items: center;
   padding: 2px 8px 4px; font: 600 8.5px 'JetBrains Mono', monospace; color: var(--faint);
@@ -1079,14 +1100,19 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-xs-cell.hold.exposed::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid rgba(49, 190, 205, .5); }
 .dz-xs-note { border-radius: 0; border-left: 0; border-top: 0; border-bottom: 0; padding: 3px 7px; }
 
-/* timeline por CAPAS × cuadros (Toon Boom) */
+/* Timeline principal estilo OpenToonz: panel acoplado debajo del visor. */
 .dz-tlgrid {
-  position: absolute; left: 0; right: 0; bottom: 100%; z-index: 9;
-  max-height: 42vh; overflow: auto;
+  position: relative; flex: none; width: 100%; height: 230px; min-height: 120px;
+  max-height: 48vh; overflow: auto;
   background: var(--panel); border-top: 1px solid var(--line);
-  box-shadow: 0 -8px 24px rgba(0,0,0,.35);
+  box-shadow: 0 -5px 18px rgba(0,0,0,.22);
 }
 .dz-tlgrid[hidden] { display: none; }
+.dz-tlg-resize {
+  position: sticky; left: 0; top: 0; z-index: 6; width: 100%; height: 5px;
+  margin-bottom: -5px; cursor: ns-resize; background: transparent;
+}
+.dz-tlg-resize:hover { background: var(--cyan); opacity: .55; }
 .dz-tlg-head { display: flex; position: sticky; top: 0; z-index: 2; background: var(--panel2); }
 .dz-tlg-corner {
   width: 168px; flex: none; padding: 4px 8px; font: 600 9px 'JetBrains Mono', monospace;
@@ -1379,8 +1405,14 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-timeline {
   flex: none; display: flex; align-items: center; gap: 8px;
   border-top: 1px solid var(--line); background: var(--panel); padding: 7px 12px;
+  overflow-x: auto; scrollbar-width: thin;
 }
 .dz-timeline[hidden] { display: none; }
+.dz-timeline.xsheet-mode .tl-frames { display: none; }
+.dz-timeline.grid-mode .tl-frames { display: none; }
+.dz-timeline.xsheet-mode #tlXs { color: var(--cyan); border-color: var(--cyan); background: rgba(49,190,205,.12); }
+.dz-anim-mode { width: auto; min-width: 78px; padding: 0 9px; gap: 5px; }
+.dz-anim-mode span { font: 600 10px 'Figtree', sans-serif; }
 /* panel de estilo (relleno/trazo/opacidad) + paleta del proyecto */
 .dz-style { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 10px; }
 .dz-style-row { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
