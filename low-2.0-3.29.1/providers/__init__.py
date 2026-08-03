@@ -17,6 +17,9 @@ from providers.agnes_provider import AgnesProvider
 from providers.kimi_provider import KimiProvider
 from providers.grok_provider import GrokProvider
 from providers.perplexity_provider import PerplexityProvider
+from providers.huggingface_provider import HuggingFaceProvider
+from providers.openrouter_provider import OpenRouterProvider
+from providers.gemini_provider import GeminiProvider
 
 PROVIDERS = {
     "groq": GroqProvider, "openai": OpenAIProvider, "anthropic": AnthropicProvider,
@@ -25,6 +28,8 @@ PROVIDERS = {
     "digitalocean": DigitalOceanProvider, "ltx": LTXProvider, "fal": FALProvider,
     "aimlapi": AIMLAPIProvider, "agnes": AgnesProvider, "custom": CustomProvider,
     "kimi": KimiProvider, "grok": GrokProvider, "perplexity": PerplexityProvider,
+    "huggingface": HuggingFaceProvider, "openrouter": OpenRouterProvider,
+    "gemini": GeminiProvider,
 }
 
 def get_provider(name, api_key=None, **kwargs):

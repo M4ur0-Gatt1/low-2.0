@@ -1820,12 +1820,17 @@ class Api:
         "glm": "glm-4-flash",
         "xai": "grok-2",
         "digitalocean": "llama3.3-70b-instruct",
+        "gemini": "gemini-2.5-flash",
+        "openrouter": "google/gemini-2.5-flash-preview",
+        "huggingface": "meta-llama/Llama-3.1-8B-Instruct:fastest",
     }
     # modelo de VISIÓN rápido por proveedor (multimodal: texto+imagen)
     # usado por ask_model cuando se adjunta una imagen. Si no está listado,
     # se usa el FAST_MODEL normal (que puede o no soportar imágenes).
     VISION_MODEL = {
         "digitalocean": "nemotron-nano-12b-v2-vl",
+        "gemini": "gemini-2.5-flash",
+        "openrouter": "google/gemini-2.5-flash-preview",
     }
 
     def _chain(s):
@@ -1839,9 +1844,9 @@ class Api:
         active = s.cfg.get_active_provider()
         # Orden configurable por el usuario (); si no, el default histórico
         pref = s.cfg.data.get("failover_order") or [
-            "deepseek", "siliconflow", "nvidia", "groq", "openai",
-            "anthropic", "qwen", "glm", "xai", "digitalocean", "agnes",
-            "aimlapi", "custom"]
+            "deepseek", "siliconflow", "nvidia", "groq", "gemini", "openai",
+            "anthropic", "qwen", "glm", "xai", "openrouter", "huggingface",
+            "digitalocean", "agnes", "aimlapi", "custom"]
         rest = sorted((p for p in provs if p != active and p not in s.MEDIA_ONLY),
                       key=lambda p: pref.index(p) if p in pref else 99)
         # ¿Ollama está realmente corriendo? Si NO, no lo metemos como respaldo:

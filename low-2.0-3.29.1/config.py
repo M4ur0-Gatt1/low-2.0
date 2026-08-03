@@ -34,8 +34,9 @@ DEFAULT_CONFIG = {
     # Orden de failover: si el provider activo falla, LOW va probando estos en orden.
     # Solo se usan los que tienen API key cargada. Si no se configura, usa el orden
     # por defecto (deepseek  siliconflow  nvidia  groq  openai  ...  custom).
-    "failover_order": ["deepseek", "siliconflow", "nvidia", "groq", "openai",
-                       "anthropic", "qwen", "glm", "xai", "kimi", "perplexity",
+    "failover_order": ["deepseek", "siliconflow", "nvidia", "groq", "gemini",
+                       "openai", "anthropic", "qwen", "glm", "xai", "kimi",
+                       "perplexity", "openrouter", "huggingface",
                        "digitalocean", "agnes", "aimlapi", "custom"],
     # límites del agente — ajustables desde . La idea de LOW es NO ponerle
     # techos al trabajo salvo los que impone la API/costo. Subilos si querés
@@ -100,6 +101,15 @@ DEFAULT_CONFIG = {
                 "image_model": "fal-ai/flux/schnell",
                 "colorize_model": "fal-ai/flux-kontext/dev",
                 "base_url": ""},
+        # Google AI Studio (Gemini) — 6M tokens/día gratis en tier gratuito
+        # Key: https://aistudio.google.com/apikey
+        "gemini": {"api_key": "", "model": "gemini-2.5-flash", "base_url": ""},
+        # OpenRouter — 50+ modelos con créditos gratuitos al registrarse
+        # Key: https://openrouter.ai/keys
+        "openrouter": {"api_key": "", "model": "google/gemini-2.5-flash-preview", "base_url": ""},
+        # Hugging Face Inference Providers — API gratuita para modelos comunitarios
+        # Key: https://huggingface.co/settings/tokens (permiso "Inference Providers")
+        "huggingface": {"api_key": "", "model": "meta-llama/Llama-3.3-70B-Instruct:fastest", "base_url": ""},
     }
 }
 
