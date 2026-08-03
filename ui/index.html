@@ -418,17 +418,17 @@
       <!-- barra rápida tipo Procreate: dibujo, mezcla, borrado, capas y color
            conviven en un único grupo compacto sobre el lienzo -->
       <div class="dz-procreate-bar" id="dzQuickTools">
-        <button data-qtool="select" title="Selección"><svg class="ico ico-fill"><use href="#i-cursor"/></svg></button>
-        <button data-qtool="pencil" title="Lápiz"><svg class="ico"><use href="#i-pencil"/></svg></button>
-        <button data-qtool="brush" title="Pincel"><svg class="ico"><use href="#i-brush"/></svg></button>
-        <button data-qtool="iron" title="Mezclar / suavizar"><svg class="ico"><use href="#i-iron"/></svg></button>
-        <button data-qtool="eraser" title="Borrador"><svg class="ico"><use href="#i-eraser"/></svg></button>
-        <button id="dzQuickLayers" title="Capas"><svg class="ico"><use href="#i-files"/></svg></button>
+        <button data-qtool="select" data-name="Elegir" title="Selección"><svg class="ico ico-fill"><use href="#i-cursor"/></svg></button>
+        <button data-qtool="pencil" data-name="Lápiz" title="Lápiz"><svg class="ico"><use href="#i-pencil"/></svg></button>
+        <button data-qtool="brush" data-name="Pincel" title="Pincel"><svg class="ico"><use href="#i-brush"/></svg></button>
+        <button data-qtool="iron" data-name="Mezclar" title="Mezclar / suavizar"><svg class="ico"><use href="#i-iron"/></svg></button>
+        <button data-qtool="eraser" data-name="Borrar" title="Borrador"><svg class="ico"><use href="#i-eraser"/></svg></button>
+        <button id="dzQuickLayers" data-name="Capas" title="Capas"><svg class="ico"><use href="#i-files"/></svg></button>
         <label class="dz-quick-color" title="Color del trazo"><input type="color" id="dzQuickColor" value="#1a1a1a"></label>
       </div>
       <div class="dz-procreate-sliders" id="dzQuickSliders">
-        <label title="Tamaño del pincel"><span>●</span><input type="range" id="dzQuickSize" min="1" max="120" value="6"></label>
-        <label title="Opacidad del pincel"><span>◐</span><input type="range" id="dzQuickOpacity" min="5" max="100" value="100"></label>
+        <label title="Tamaño del pincel"><span>T</span><input type="range" id="dzQuickSize" min="1" max="120" value="6"></label>
+        <label title="Opacidad del pincel"><span>%</span><input type="range" id="dzQuickOpacity" min="5" max="100" value="100"></label>
       </div>
       <!-- cursor visual de herramienta: evita que lápiz/pincel aparezcan como
            una flecha genérica y funciona igual con mouse y tableta -->

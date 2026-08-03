@@ -2158,11 +2158,18 @@ function openL3d() {
   if (!frame.getAttribute("src")) frame.src = "estudio3d/index.html";
   $("#l3dView").hidden = false;
   $("#abL3d").classList.add("active");
+  frame.focus();
 }
 function closeL3d() {
   $("#l3dView").hidden = true;
   $("#abL3d").classList.remove("active");
 }
+
+window.addEventListener("message", (event) => {
+  const frame = $("#l3dFrame");
+  if (!frame || event.source !== frame.contentWindow) return;
+  if (event.data && event.data.type === "low:close-3d") closeL3d();
+});
 
 /* ══ Entorno de diseño: SVG vivo + inspector por elemento ══ */
 const DZ = { path: null, sel: null, zoom: 1 };
