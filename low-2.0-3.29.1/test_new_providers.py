@@ -8,7 +8,7 @@ def test_provider_imports():
     """Verificar que los nuevos proveedores se importan correctamente."""
     print("=== Test de importación de proveedores ===")
     
-    new_providers = ["kimi", "grok", "perplexity"]
+    new_providers = ["kimi", "grok", "perplexity", "huggingface", "openrouter", "gemini"]
     
     for provider_name in new_providers:
         try:
