@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.0"
+LOW_VERSION = "3.29.1"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -199,6 +199,12 @@ class Api:
         except Exception as e:
             return {"error": str(e)}
 
+    def animation_panel_closed(s, kind="timeline"):
+        """Olvida una ventana auxiliar cerrada para permitir volver a abrirla."""
+        kind = "xsheet" if kind == "xsheet" else "timeline"
+        s._aux_windows.pop(kind, None)
+        return {"ok": True}
+
     def open_animation_panel(s, kind="timeline"):
         """Abre Timeline o X-sheet como ventana nativa para otro monitor."""
         kind = "xsheet" if kind == "xsheet" else "timeline"
@@ -211,12 +217,17 @@ class Api:
                 s._aux_windows.pop(kind, None)
         if not s._ui_base:
             return {"error": "interfaz no inicializada"}
-        panel = os.path.join(s._ui_base, "animation_panel.html") + f"?kind={kind}"
+        # En Windows, agregar la query al path crea un nombre de archivo inválido.
+        # Una URL file conserva el parámetro y WebView2 carga el panel correctamente.
+        panel = Path(s._ui_base, "animation_panel.html").resolve().as_uri() + f"?kind={kind}"
         try:
             win = webview.create_window(
                 "LOW · " + ("X-sheet" if kind == "xsheet" else "Timeline"),
-                panel, js_api=s, width=1050, height=560, min_size=(620, 320),
-                background_color="#0B0B0C")
+                panel, js_api=s,
+                width=760 if kind == "xsheet" else 1180,
+                height=760 if kind == "xsheet" else 520,
+                min_size=(520, 360) if kind == "xsheet" else (720, 320),
+                background_color="#151514")
             s._aux_windows[kind] = win
             return {"ok": True}
         except Exception as e:
@@ -4856,7 +4867,7 @@ def main():
     window = webview.create_window(
         "LOW", ui, js_api=api,
         width=1280, height=800, min_size=(980, 600), maximized=True,
-        background_color="#0B0B0C",
+        background_color="#151514",
     )
     api._window = window
     try:
