@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { lowStore, type LowStore } from '../../../store/low-store';
-import type { BrushSettings, GizmoMode, SurfaceType, ToolType } from '../../../types/design-types';
+import type { BrushSettings, GizmoMode, Layer, SurfaceType, ToolType } from '../../../types/design-types';
 
 export type Theme = 'light' | 'dark';
 export type ViewName = 'persp' | 'front' | 'back' | 'top' | 'bottom' | 'left' | 'right';
@@ -46,6 +46,11 @@ interface StrokeRecord {
   /** Opacidad propia del trazo (del pincel al crearlo); la opacidad efectiva
    *  es baseOpacity × opacidad de la capa. */
   baseOpacity: number;
+  /** Snapshot del pincel con el que se creó el trazo (color, grosor, dureza,
+   *  presión…). Es el que se usa al RECONSTRUIR la malla (editar nodos,
+   *  cortar, liquify, reabrir el proyecto) — antes se reusaba `this.brush`
+   *  actual y un trazo viejo se repintaba con el pincel de ahora. */
+  brush: BrushSettings;
 }
 
 interface Command {
@@ -75,7 +80,7 @@ export interface Low3DProject {
   activeLayerId: string | null;
   strokes: Array<{
     id: string; layerId: string; points: number[][]; pressures: number[]; baseOpacity: number;
-    position: number[]; quaternion: number[]; scale: number[];
+    position: number[]; quaternion: number[]; scale: number[]; brush?: BrushSettings;
   }>;
 }
 
@@ -213,7 +218,7 @@ export class WebGLDesign3D {
   private static readonly PIVOT_EPS = 1e-6;
 
   // portapapeles: copiar/pegar trazos (Ctrl+C / Ctrl+V)
-  private clipboard: { points: THREE.Vector3[]; pressures: number[] }[] = [];
+  private clipboard: { points: THREE.Vector3[]; pressures: number[]; brush: BrushSettings }[] = [];
 
   // estabilizador de pulso ("Stable Strokes"): el punto que se agrega al
   // trazo persigue con retraso al punto crudo del puntero.
@@ -566,6 +571,7 @@ export class WebGLDesign3D {
     this.controls.target.copy(t);
     this.applyOrthoFrustum();
     if (this.gizmo) this.gizmo.camera = this.camera as THREE.Camera;
+    this.lastOnionSig = ''; // fuerza recalcular el onion-skin en la nueva vista
   }
 
   private applyOrthoFrustum(): void {
@@ -872,7 +878,10 @@ export class WebGLDesign3D {
     let obj: THREE.Object3D | null = hits[0].object;
     while (obj && !obj.userData.strokeId) obj = obj.parent;
     if (!obj) return null;
-    return this.strokes.find((s) => s.id === obj!.userData.strokeId) ?? null;
+    const rec = this.strokes.find((s) => s.id === obj!.userData.strokeId) ?? null;
+    // los trazos de una capa bloqueada son inertes: no se seleccionan ni se
+    // agarran para mover/liquify/editar.
+    return rec && this.isLayerLocked(rec.layerId) ? null : rec;
   }
 
   // ---------------------------------------------------------------- tijera (cortar trazos)
@@ -893,6 +902,7 @@ export class WebGLDesign3D {
     let bestDist = 22; // px
     for (const rec of this.strokes) {
       if (rec.kind !== 'stroke' || rec.points.length < 3) continue;
+      if (this.isLayerLocked(rec.layerId)) continue; // no se corta un trazo bloqueado
       rec.object.updateMatrixWorld(true);
       for (let i = 0; i < rec.points.length; i++) {
         const w = rec.object.localToWorld(rec.points[i].clone()).project(cam);
@@ -926,11 +936,11 @@ export class WebGLDesign3D {
     const makeHalf = (pts: THREE.Vector3[], prs: number[]): StrokeRecord => {
       const group = new THREE.Group();
       group.position.copy(rec.object.position);
-      const a = this.buildTube(pts, prs);
+      const a = this.buildTube(pts, prs, rec.brush);
       if (a) group.add(a);
       const half: StrokeRecord = {
         id: `stroke-${this.seq++}`, object: group, points: pts, pressures: prs,
-        kind: 'stroke', layerId: rec.layerId, baseOpacity: rec.baseOpacity,
+        kind: 'stroke', layerId: rec.layerId, baseOpacity: rec.baseOpacity, brush: { ...rec.brush },
       };
       group.userData.strokeId = half.id;
       return half;
@@ -1089,6 +1099,7 @@ export class WebGLDesign3D {
     this.clipboard = strokesOnly.map((r) => ({
       points: r.points.map((p) => r.object.localToWorld(p.clone())),
       pressures: [...r.pressures],
+      brush: { ...r.brush },
     }));
   }
 
@@ -1100,12 +1111,12 @@ export class WebGLDesign3D {
       const pts = c.points.map((p) => p.clone());
       const pressures = [...c.pressures];
       const group = new THREE.Group();
-      const a = this.buildTube(pts, pressures);
+      const a = this.buildTube(pts, pressures, c.brush);
       if (a) group.add(a);
       group.position.copy(offset);
       const rec: StrokeRecord = {
         id: `stroke-${this.seq++}`, object: group, points: pts, pressures, kind: 'stroke',
-        layerId: this.activeLayerId(), baseOpacity: 1,
+        layerId: this.activeLayerId(), baseOpacity: c.brush.opacity, brush: { ...c.brush },
       };
       group.userData.strokeId = rec.id;
       created.push(rec);
@@ -1197,6 +1208,16 @@ export class WebGLDesign3D {
   }
 
   private beginDraw(e: PointerEvent): void {
+    // La tinta va a la capa activa: si está bloqueada u oculta, no se dibuja
+    // (aviso con el cursor rojo). Las guías no pertenecen a una capa → no se
+    // bloquean por esto.
+    if (this.tool !== 'guide' && !this.isLayerDrawable(this.activeLayerId())) {
+      const locked = this.isLayerLocked(this.activeLayerId());
+      this.canvas.title = locked ? 'La capa activa está bloqueada' : 'La capa activa está oculta';
+      this.cursorEl.style.borderColor = '#ff4d4d';
+      setTimeout(() => { this.canvas.title = ''; this.cursorEl.style.borderColor = '#333'; }, 1400);
+      return;
+    }
     // dibujo libre: el punto sale del rayo de cámara + profundidad de
     // scroll, nunca de una guía/superficie — es justamente lo que lo hace
     // "libre". El snap a vértices existentes se mantiene igual (ayuda a
@@ -1470,17 +1491,17 @@ export class WebGLDesign3D {
     if (this.current.mirrorLine) this.current.mirrorLine.geometry.setFromPoints(this.mirroredVariants(this.current.points)[0] || []);
   }
 
-  private strokeRadius(): number {
-    return 0.01 + (this.brush.size / 100) * 0.12;
+  private strokeRadius(size: number = this.brush.size): number {
+    return 0.01 + (size / 100) * 0.12;
   }
 
   /** Radio en el punto de índice `i` (0..n-1) según su presión: con
    *  `pressureSensitivity` en 0 el ancho es constante (comportamiento de
    *  antes); en 1 llega a angostarse hasta ~15% del ancho con presión mínima.
    *  El piso evita que el trazo desaparezca del todo con presión 0. */
-  private radiusAt(pressure: number): number {
-    const base = this.strokeRadius();
-    const sens = THREE.MathUtils.clamp(this.brush.pressureSensitivity ?? 0, 0, 1);
+  private radiusAt(pressure: number, brush: BrushSettings = this.brush): number {
+    const base = this.strokeRadius(brush.size);
+    const sens = THREE.MathUtils.clamp(brush.pressureSensitivity ?? 0, 0, 1);
     const floor = THREE.MathUtils.lerp(1, 0.15, sens);
     return base * THREE.MathUtils.lerp(floor, 1, THREE.MathUtils.clamp(pressure, 0, 1));
   }
@@ -1502,7 +1523,7 @@ export class WebGLDesign3D {
    *  cada anillo según la presión interpolada en ese punto de la curva. Así
    *  se reusa el cálculo de frames (Frenet/parallel-transport) de Three.js —
    *  sin reimplementarlo a mano — y solo se toca el radio. */
-  private buildTube(points: THREE.Vector3[], pressures: number[]): THREE.Mesh | null {
+  private buildTube(points: THREE.Vector3[], pressures: number[], brush: BrushSettings = this.brush): THREE.Mesh | null {
     if (points.length < 2) return null;
     const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
     const radialSegs = 10;
@@ -1515,7 +1536,7 @@ export class WebGLDesign3D {
       const u = i / segs;
       const t = curve.getUtoTmapping(u, 0);
       const center = curve.getPoint(t);
-      const radius = this.radiusAt(this.pressureAtT(pressures, t));
+      const radius = this.radiusAt(this.pressureAtT(pressures, t), brush);
       for (let j = 0; j < vertsPerRing; j++) {
         const vi = i * vertsPerRing + j;
         const ox = pos.getX(vi) - center.x;
@@ -1526,30 +1547,46 @@ export class WebGLDesign3D {
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
-    const col = new THREE.Color(this.brush.color);
+    const col = new THREE.Color(brush.color);
     return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
       color: col, emissive: col.clone().multiplyScalar(0.06),
-      roughness: THREE.MathUtils.lerp(0.9, 0.25, this.brush.hardness ?? 0.8), metalness: 0,
-      transparent: this.brush.opacity < 1, opacity: this.brush.opacity,
+      roughness: THREE.MathUtils.lerp(0.9, 0.25, brush.hardness ?? 0.8), metalness: 0,
+      transparent: brush.opacity < 1, opacity: brush.opacity,
     }));
   }
 
-  /** Guía 3D estilo Feather: una "hoja" GRANDE (no una tira angosta con la
-   *  forma exacta del trazo) — así se puede seguir dibujando en cualquier
-   *  dirección sobre ella, lejos de la línea que la creó, con la misma
-   *  precisión. El trazo original queda marcado en naranja como referencia,
-   *  pero no define el límite de la superficie.
-   *
-   *  Orientación: la guía nueva sale PERPENDICULAR al plano sobre el que se
-   *  estaba dibujando (el "suelo", otra guía, una superficie primitiva…),
-   *  como cuando en Feather trazás un lado de la base y aparece una "hoja"
-   *  vertical parada sobre ese lado — no siempre de cara a la cámara. Si no
-   *  había ninguna superficie activa (el primer trazo del proyecto, dibujado
-   *  sobre el plano de reserva que mira a la cámara), el resultado es
-   *  equivalente a una guía de cara a la cámara, que es lo correcto en ese
-   *  caso — no es un caso especial, sale solo de la misma fórmula. */
-  private static readonly GUIDE_SIZE = 24;
+  /** ¿El trazo es esencialmente RECTO? Desviación perpendicular máxima de los
+   *  puntos respecto de la recta extremo-a-extremo, relativa a su largo. Decide
+   *  si la guía sale como PARED plana (recto) o como BÓVEDA curva (curvo). */
+  private isStrokeStraight(points: THREE.Vector3[]): boolean {
+    const a0 = points[0], a1 = points[points.length - 1];
+    const dir = a1.clone().sub(a0);
+    const len = dir.length();
+    if (len < 1e-4) return false; // casi un punto: no hay "recta" clara → bóveda
+    const d = dir.multiplyScalar(1 / len);
+    let maxDev = 0;
+    for (const p of points) {
+      const v = p.clone().sub(a0);
+      const perp = v.addScaledVector(d, -v.dot(d)).length();
+      if (perp > maxDev) maxDev = perp;
+    }
+    return maxDev <= Math.max(len * 0.06, 0.03);
+  }
 
+  /** Guía 3D estilo Feather. CONVIVEN dos formas según el trazo que la crea:
+   *
+   *  - Trazo RECTO → PARED PLANA: se extruye recta y perpendicular a la línea,
+   *    hacia adentro en profundidad. Una línea vertical dibujada de FRENTE se
+   *    ve de canto de frente (solo la línea) y, al girar la vista, aparece el
+   *    plano completo con límites arriba/abajo = largo de la línea. El
+   *    `guidePlane` usa la normal de la PARED → dibujar sobre la guía cae
+   *    siempre sobre ella, sin profundidad espuria, y los vértices coinciden
+   *    entre vistas.
+   *  - Trazo CURVO → BÓVEDA: se barre la curva REAL del trazo a lo largo de la
+   *    profundidad → una superficie curva (techo/arco) que sigue la forma. El
+   *    `guidePlane` de respaldo es el plano de dibujo.
+   *
+   *  El trazo original queda marcado en naranja como referencia. */
   private buildGuideSurface(points: THREE.Vector3[], baseNormal?: THREE.Vector3): THREE.Mesh | null {
     if (points.length < 2) return null;
     const camAxis = new THREE.Vector3();
@@ -1559,65 +1596,89 @@ export class WebGLDesign3D {
     points.forEach((p) => centroid.add(p));
     centroid.multiplyScalar(1 / points.length);
 
-    // Eje de EXTRUSIÓN = normal del plano donde se dibujó el trazo (o el eje de
-    // cámara). Barremos la CURVA REAL a lo largo de ese eje → la guía SIGUE la
-    // forma del trazo: un arco genera una bóveda/techo curvo, no un plano recto.
-    let axis = (baseNormal ?? camAxis).clone();
-    if (axis.lengthSq() < 1e-6) axis.copy(camAxis);
-    axis.normalize();
+    // n = normal del PLANO DE DIBUJO = eje de profundidad (hacia dónde se
+    // extruye la guía). De frente es el eje de cámara → entra en profundidad.
+    const n = (baseNormal ?? camAxis).clone();
+    if (n.lengthSq() < 1e-6) n.copy(camAxis);
+    n.normalize();
 
-    // media-longitud del barrido en profundidad (bóveda larga para dibujar
-    // encima, proporcional al tamaño del trazo)
     const box = new THREE.Box3().setFromPoints(points);
-    const L = THREE.MathUtils.clamp(box.getSize(new THREE.Vector3()).length() * 2, 5, 14);
-
-    // vértices en espacio LOCAL (relativo al centroide) → el gizmo mueve/rota/
-    // escala la guía alrededor de su centro, y la geometría lleva la curva.
-    const n = points.length;
-    const pos: number[] = [];
-    const idx: number[] = [];
-    const front: THREE.Vector3[] = [];
-    const back: THREE.Vector3[] = [];
-    for (let i = 0; i < n; i++) {
-      const local = points[i].clone().sub(centroid);
-      const f = local.clone().addScaledVector(axis, L);
-      const b = local.clone().addScaledVector(axis, -L);
-      front.push(f); back.push(b);
-      pos.push(f.x, f.y, f.z, b.x, b.y, b.z);
-    }
-    for (let i = 0; i < n - 1; i++) {
-      const a = 2 * i, b = 2 * i + 1, c = 2 * (i + 1), d = 2 * (i + 1) + 1;
-      idx.push(a, b, c, c, b, d);
-    }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setIndex(idx);
-    geo.computeVertexNormals();
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x4c9bff, transparent: true, opacity: 0.3 });
+    const edges: THREE.Object3D[] = [];
+    let guidePlaneNormal: THREE.Vector3;
 
+    if (this.isStrokeStraight(points)) {
+      // ---- PARED PLANA (trazo recto) ----
+      // t = dirección de la LÍNEA dentro del plano de dibujo.
+      const t = points[points.length - 1].clone().sub(points[0]);
+      t.addScaledVector(n, -t.dot(n));
+      if (t.lengthSq() < 1e-8) {
+        t.set(1, 0, 0);
+        if (Math.abs(n.dot(t)) > 0.9) t.set(0, 1, 0);
+        t.addScaledVector(n, -t.dot(n));
+      }
+      t.normalize();
+      // extensión: a lo largo de la línea = su largo real; en profundidad =
+      // pared proporcional al trazo (con un mínimo para dibujar cómodo).
+      const halfLen = Math.max(box.getSize(new THREE.Vector3()).length() * 0.5, 0.5);
+      const depth = THREE.MathUtils.clamp(halfLen * 2, 3, 14);
+      const corner = (a: number, b: number) => t.clone().multiplyScalar(a).addScaledVector(n, b);
+      const c0 = corner(-halfLen, -depth), c1 = corner(halfLen, -depth);
+      const c2 = corner(halfLen, depth), c3 = corner(-halfLen, depth);
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(
+        [c0.x, c0.y, c0.z, c1.x, c1.y, c1.z, c2.x, c2.y, c2.z, c3.x, c3.y, c3.z], 3));
+      geo.setIndex([0, 1, 2, 0, 2, 3]);
+      edges.push(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([c0, c1, c2, c3]), edgeMat));
+      // plano de la PARED (perpendicular a la línea y al plano de dibujo).
+      guidePlaneNormal = new THREE.Vector3().crossVectors(t, n).normalize();
+    } else {
+      // ---- BÓVEDA (trazo curvo) ----
+      // barre la CURVA real a lo largo de n → superficie curva que sigue la
+      // forma del trazo (arco/techo), no un plano recto.
+      const L = THREE.MathUtils.clamp(box.getSize(new THREE.Vector3()).length() * 2, 5, 14);
+      const m = points.length;
+      const pos: number[] = [];
+      const idx: number[] = [];
+      const front: THREE.Vector3[] = [];
+      const back: THREE.Vector3[] = [];
+      for (let i = 0; i < m; i++) {
+        const local = points[i].clone().sub(centroid);
+        const f = local.clone().addScaledVector(n, L);
+        const b = local.clone().addScaledVector(n, -L);
+        front.push(f); back.push(b);
+        pos.push(f.x, f.y, f.z, b.x, b.y, b.z);
+      }
+      for (let i = 0; i < m - 1; i++) {
+        const a = 2 * i, b = 2 * i + 1, c = 2 * (i + 1), d = 2 * (i + 1) + 1;
+        idx.push(a, b, c, c, b, d);
+      }
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setIndex(idx);
+      edges.push(new THREE.Line(new THREE.BufferGeometry().setFromPoints(front), edgeMat));
+      edges.push(new THREE.Line(new THREE.BufferGeometry().setFromPoints(back), edgeMat.clone()));
+      const sec: THREE.Vector3[] = [];
+      const step = Math.max(1, Math.floor(m / 6));
+      for (let i = 0; i < m; i += step) sec.push(front[i], back[i]);
+      edges.push(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(sec), edgeMat.clone()));
+      // plano de respaldo = el plano de dibujo (la malla CURVA es el objetivo primario).
+      guidePlaneNormal = n.clone();
+    }
+
+    geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
       color: 0x4c9bff, roughness: 1, metalness: 0, transparent: true,
       opacity: 0.09, side: THREE.DoubleSide, depthWrite: false,
     }));
     mesh.position.copy(centroid);
-    // Puntos locales que originaron la guía: se conservan como anclajes para
-    // iniciar la siguiente guía exactamente en el mismo vértice 3D.
+    // Puntos locales que originaron la guía: anclajes para arrancar la próxima
+    // guía en el mismo vértice 3D.
     mesh.userData.guideAnchors = points.map((p) => p.clone().sub(centroid));
-
-    // grilla: bordes de adelante/atrás + secciones transversales + curva naranja
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0x4c9bff, transparent: true, opacity: 0.25 });
-    mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(front), edgeMat));
-    mesh.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(back), edgeMat.clone()));
-    const sec: THREE.Vector3[] = [];
-    const step = Math.max(1, Math.floor(n / 6));
-    for (let i = 0; i < n; i += step) sec.push(front[i], back[i]);
-    mesh.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(sec), edgeMat.clone()));
+    for (const e of edges) mesh.add(e);
     mesh.add(new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(points.map((p) => p.clone().sub(centroid))),
       new THREE.LineBasicMaterial({ color: 0xffa53a }))); // naranja = trazo original
-
-    // plano de respaldo (infinito) para rayos que salgan de la malla finita:
-    // el plano donde se dibujó el trazo. La malla CURVA es el objetivo primario.
-    mesh.userData.guidePlane = new THREE.Plane().setFromNormalAndCoplanarPoint(axis, centroid);
+    mesh.userData.guidePlane = new THREE.Plane().setFromNormalAndCoplanarPoint(guidePlaneNormal, centroid);
     return mesh;
   }
 
@@ -1671,7 +1732,7 @@ export class WebGLDesign3D {
     for (const variant of this.mirroredVariants(points)) { const b = this.buildTube(variant, pressures); if (b) group.add(b); }
     const rec: StrokeRecord = {
       id: `stroke-${this.seq++}`, object: group, points, pressures, kind,
-      layerId: this.activeLayerId(), baseOpacity: this.brush.opacity,
+      layerId: this.activeLayerId(), baseOpacity: this.brush.opacity, brush: { ...this.brush },
     };
     group.userData.strokeId = rec.id;
     this.addStrokeRecord(rec);
@@ -1691,10 +1752,10 @@ export class WebGLDesign3D {
       child.geometry?.dispose();
       (child.material as THREE.Material)?.dispose();
     }
-    const a = this.buildTube(rec.points, rec.pressures);
+    const a = this.buildTube(rec.points, rec.pressures, rec.brush);
     if (a) rec.object.add(a);
     for (const variant of this.mirroredVariants(rec.points)) {
-      const b = this.buildTube(variant, rec.pressures); if (b) rec.object.add(b);
+      const b = this.buildTube(variant, rec.pressures, rec.brush); if (b) rec.object.add(b);
     }
   }
 
@@ -1720,6 +1781,23 @@ export class WebGLDesign3D {
 
   private activeLayerId(): string {
     return lowStore.getState().activeLayerId ?? 'layer-0';
+  }
+
+  private layerById(id: string): Layer | undefined {
+    return lowStore.getState().layers.find((l) => l.id === id);
+  }
+
+  /** Una capa bloqueada no deja seleccionar/mover/borrar/cortar/deformar sus
+   *  trazos (el candado del LayerManager antes no hacía nada). */
+  private isLayerLocked(id: string): boolean {
+    return !!this.layerById(id)?.locked;
+  }
+
+  /** Se puede dibujar sobre la capa activa solo si no está bloqueada ni oculta
+   *  (dibujar en una capa oculta hacía "desaparecer" el trazo sin aviso). */
+  private isLayerDrawable(id: string): boolean {
+    const l = this.layerById(id);
+    return !l || (!l.locked && l.visible);
   }
 
   /** Aplica visibilidad y opacidad de cada capa a sus trazos. Se llama en cada
@@ -1785,15 +1863,13 @@ export class WebGLDesign3D {
   }
 
   private getStrokeColor(rec: StrokeRecord): string {
-    let hex = '#22252e';
-    rec.object.traverse((o) => {
-      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-      if (m && m.color) hex = '#' + m.color.getHexString();
-    });
-    return hex;
+    return rec.brush.color;
   }
 
   private paintStroke(rec: StrokeRecord, hex: string): void {
+    // el color también se guarda en el pincel del trazo para que sobreviva a
+    // una reconstrucción posterior (editar nodos, cortar, reabrir).
+    rec.brush.color = hex;
     const col = new THREE.Color(hex);
     rec.object.traverse((o) => {
       const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
@@ -2362,6 +2438,7 @@ export class WebGLDesign3D {
     const cam = this.camera as THREE.Camera;
     const res: StrokeRecord[] = [];
     for (const rec of this.strokes) {
+      if (this.isLayerLocked(rec.layerId)) continue; // el lazo no toca capas bloqueadas
       const pts = rec.points;
       let hitCount = 0;
       rec.object.updateMatrixWorld(true);
@@ -2389,8 +2466,13 @@ export class WebGLDesign3D {
 
   // ---------------------------------------------------------------- historia
 
+  private static readonly MAX_UNDO = 200;
+
   private pushCmd(cmd: Command): void {
     this.undoStack.push(cmd);
+    // tope de historia: en sesiones largas el stack crecía sin límite. Se
+    // descarta el comando más viejo al pasar el tope.
+    if (this.undoStack.length > WebGLDesign3D.MAX_UNDO) this.undoStack.shift();
     this.redoStack = [];
   }
 
@@ -2453,6 +2535,7 @@ export class WebGLDesign3D {
         points: rec.points.map((p) => p.toArray()), pressures: [...rec.pressures],
         baseOpacity: rec.baseOpacity, position: rec.object.position.toArray(),
         quaternion: rec.object.quaternion.toArray(), scale: rec.object.scale.toArray(),
+        brush: { ...rec.brush },
       })),
     };
   }
@@ -2470,8 +2553,13 @@ export class WebGLDesign3D {
       if (!Array.isArray(item.points) || item.points.length < 2) continue;
       const points = item.points.map((p) => new THREE.Vector3(Number(p[0]), Number(p[1]), Number(p[2])));
       const pressures = points.map((_, i) => Number(item.pressures?.[i] ?? 1));
+      // proyectos viejos (sin `brush` por trazo) caen al pincel por defecto,
+      // conservando la opacidad guardada — así siguen abriendo sin romper.
+      const brush: BrushSettings = item.brush
+        ? { ...item.brush }
+        : { ...this.brush, opacity: Number(item.baseOpacity ?? 1) };
       const group = new THREE.Group();
-      const tube = this.buildTube(points, pressures);
+      const tube = this.buildTube(points, pressures, brush);
       if (tube) group.add(tube);
       group.position.fromArray(item.position || [0, 0, 0]);
       group.quaternion.fromArray(item.quaternion || [0, 0, 0, 1]);
@@ -2479,7 +2567,7 @@ export class WebGLDesign3D {
       const rec: StrokeRecord = {
         id: item.id || `stroke-${this.seq++}`, object: group, points, pressures,
         kind: 'stroke', layerId: item.layerId || this.activeLayerId(),
-        baseOpacity: Number(item.baseOpacity ?? 1),
+        baseOpacity: Number(item.baseOpacity ?? brush.opacity), brush,
       };
       group.userData.strokeId = rec.id;
       this.addStrokeRecord(rec);
@@ -2517,6 +2605,12 @@ export class WebGLDesign3D {
     }
   }
 
+  // firma de la última cámara con la que se recalculó el onion-skin ortogonal,
+  // para no rehacer ese barrido O(trazos × materiales) en cada frame si la
+  // cámara no se movió (los cambios de capa/trazo llaman applyLayerStyles
+  // aparte, así que no se pierden).
+  private lastOnionSig = '';
+
   private animate = (): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.animate);
@@ -2524,7 +2618,19 @@ export class WebGLDesign3D {
     this.controls.update();
     this.renderer.render(this.scene, this.camera as THREE.Camera);
     if (this.showAxes) this.updateVPOverlay();
-    if (this.view !== 'persp') this.applyLayerStyles(); // onion-skin por profundidad, depende de la cámara
+    // onion-skin por profundidad (depende de la cámara): solo si la vista es
+    // ortogonal Y la cámara/target/cantidad de trazos cambió desde el frame
+    // anterior.
+    if (this.view !== 'persp') {
+      const cam = this.camera as THREE.Camera;
+      const t = this.controls.target;
+      const f = (n: number) => n.toFixed(3);
+      const sig = `${f(cam.position.x)},${f(cam.position.y)},${f(cam.position.z)}|${f(t.x)},${f(t.y)},${f(t.z)}|${this.strokes.length}`;
+      if (sig !== this.lastOnionSig) {
+        this.lastOnionSig = sig;
+        this.applyLayerStyles();
+      }
+    }
   };
 
   // ---------------------------------------------------------------- debug
@@ -2540,7 +2646,7 @@ export class WebGLDesign3D {
     if (t) g.add(t);
     const rec: StrokeRecord = {
       id: `stroke-${this.seq++}`, object: g, points: pts, pressures, kind: 'stroke',
-      layerId: this.activeLayerId(), baseOpacity: 1,
+      layerId: this.activeLayerId(), baseOpacity: 1, brush: { ...this.brush },
     };
     g.userData.strokeId = rec.id;
     this.addStrokeRecord(rec);
