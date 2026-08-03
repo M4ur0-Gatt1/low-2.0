@@ -1783,3 +1783,243 @@ footer #ver {
   padding: 2px 8px; color: var(--mut); font: 600 10px 'JetBrains Mono', monospace;
 }
 .dz3d-depth-zero:hover { color: var(--txt); border-color: var(--mut); }
+
+/* ==========================================================================
+   LOW — sistema visual contemporáneo
+   Superficies cálidas, jerarquía silenciosa y controles inspirados en las
+   mejores interfaces creativas actuales. Mantiene el naranja propio de LOW.
+   ========================================================================== */
+body {
+  --bg: #151514;
+  --panel: #1b1a19;
+  --panel2: #232220;
+  --surface-raised: #292825;
+  --surface-hover: #302f2c;
+  --line: rgba(255, 248, 235, .075);
+  --line2: rgba(255, 248, 235, .038);
+  --txt: #eeeae2;
+  --mut: #aaa59c;
+  --faint: #716d66;
+  --red: #df6c48;
+  --redh: #eb7b57;
+  --redsoft: rgba(223, 108, 72, .14);
+  --cyan: #67aeb6;
+  --cyanh: #82c2c9;
+  --cyansoft: rgba(103, 174, 182, .13);
+  --orange: #d8a35d;
+  --orangesoft: rgba(216, 163, 93, .13);
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --shadow-float: 0 18px 50px rgba(0, 0, 0, .34), 0 2px 8px rgba(0, 0, 0, .18);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, .18);
+  font-size: 13.5px;
+  line-height: 1.45;
+  letter-spacing: -.006em;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+}
+body.light {
+  --bg: #f4f1eb;
+  --panel: #fbf9f5;
+  --panel2: #efebe4;
+  --surface-raised: #e8e3da;
+  --surface-hover: #ded8ce;
+  --line: rgba(49, 43, 36, .09);
+  --line2: rgba(49, 43, 36, .045);
+  --txt: #292621;
+  --mut: #6f6a62;
+  --faint: #a09a91;
+  --red: #c95f3e;
+  --redh: #b95032;
+  --redsoft: rgba(201, 95, 62, .11);
+}
+
+/* Iconografía más fina y consistente. */
+.ico { width: 16px; height: 16px; stroke-width: 1.65; }
+.ico-fill { stroke-width: 0; }
+button, input, textarea, select { letter-spacing: inherit; }
+
+/* Cabecera: una sola banda serena, con controles flotantes de bajo contraste. */
+header {
+  min-height: 56px; gap: 10px; padding: 9px 16px;
+  background: rgba(27, 26, 25, .96);
+  border-bottom-color: var(--line2);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .18);
+}
+.brand { gap: 10px; margin-right: 2px; }
+.wordmark { font-size: 19px; letter-spacing: .055em; }
+.wm-bolt { width: 16px; height: 24px; }
+.pill, .search {
+  min-height: 36px; background: var(--panel2); border-color: transparent;
+  border-radius: 11px; box-shadow: inset 0 0 0 1px var(--line2);
+}
+.pill { padding: 5px 11px; }
+.pill select { background: transparent; font-size: 12.5px; }
+.pill:hover, .search:hover { background: var(--surface-raised); border-color: transparent; }
+.search { min-width: 260px; padding: 6px 12px; }
+.search:focus-within { background: var(--surface-raised); border-color: transparent; box-shadow: inset 0 0 0 1px var(--mut); }
+.search kbd { background: transparent; color: var(--faint); padding: 1px 3px; }
+.ibtn {
+  width: 36px; height: 36px; border: 0; border-radius: 10px;
+  color: var(--mut); background: transparent; box-shadow: none;
+}
+.ibtn:hover { color: var(--txt); background: var(--surface-hover); border-color: transparent; }
+.ibtn.active, .dz-toolbtn.active {
+  color: var(--red); border-color: transparent; background: var(--redsoft);
+  box-shadow: inset 0 0 0 1px rgba(223, 108, 72, .18);
+}
+.run {
+  min-height: 36px; padding: 8px 15px; border-radius: 10px;
+  background: var(--red); box-shadow: 0 5px 16px rgba(223, 108, 72, .18);
+}
+.run:hover { background: var(--redh); box-shadow: 0 7px 20px rgba(223, 108, 72, .24); }
+
+/* Navegación y árbol: más aire, menos líneas divisorias. */
+.activity {
+  width: 58px; gap: 6px; padding: 12px 8px; background: var(--panel);
+  border-right-color: var(--line2);
+}
+.abtn { width: 40px; height: 40px; border-radius: 11px; }
+.abtn .ico { width: 18px; height: 18px; }
+.abtn:hover { background: var(--surface-raised); }
+.abtn.active { color: var(--txt); background: var(--surface-raised); }
+.abtn.active::before { left: -8px; width: 2px; height: 16px; }
+.act-sep { background: var(--line2); margin: 6px 0; }
+.treewrap {
+  width: 238px; padding: 16px 10px; gap: 2px; background: var(--panel);
+  border-right-color: var(--line2);
+}
+.proj {
+  padding: 0 10px 12px; color: var(--faint); font-size: 10.5px;
+  letter-spacing: .065em; text-transform: none;
+}
+.titem { gap: 9px; padding: 8px 10px; border-radius: 9px; font-size: 13px; }
+.titem:hover { background: var(--surface-raised); }
+.titem.active { background: var(--surface-hover); }
+
+/* Editor y pestañas: la selección se lee por superficie, no por marcos. */
+.editor { background: var(--bg); }
+.tabs { gap: 3px; padding: 9px 12px 0; border-bottom-color: var(--line2); background: var(--panel); }
+.tab { padding: 8px 13px; border: 0; border-radius: 10px 10px 0 0; font-size: 12.5px; }
+.tab:hover { background: var(--panel2); }
+.tab.active { background: var(--bg); border: 0; box-shadow: inset 0 1px 0 var(--line); }
+.CodeMirror { font-size: 12.75px; line-height: 1.72; }
+.CodeMirror-gutters { border-right: 1px solid var(--line2); }
+.term { border-top-color: var(--line2); }
+.term-h { padding: 10px 16px 5px; }
+.term-out { padding: 2px 16px 10px; }
+
+/* Panel de IA: conversación más parecida a un espacio de trabajo que a un chat. */
+.agent { width: 382px; background: var(--panel); border-left-color: var(--line2); }
+.ag-h { min-height: 52px; gap: 9px; padding: 12px 16px; border-bottom-color: var(--line2); }
+.ag-t { font-size: 13.5px; letter-spacing: -.01em; }
+.gbtn { min-width: 30px; min-height: 30px; border-radius: 8px; }
+.gbtn:hover { background: var(--surface-raised); }
+.chat-tabs-wrap { background: var(--panel); border-bottom-color: var(--line2); }
+.chat-tabs { gap: 4px; padding: 7px 9px 0; }
+.ctab { padding: 7px 10px; border: 0; border-radius: 9px 9px 0 0; }
+.ctab:hover { background: var(--surface-raised); }
+.ctab.active { background: var(--panel2); border: 0; }
+.ctab-nav { background: transparent; border-radius: 7px; margin: 5px 2px; }
+.msgs { padding: 18px 17px; gap: 17px; }
+.m-user {
+  max-width: 88%; padding: 10px 13px; border-radius: 14px 14px 5px 14px;
+  background: var(--surface-raised); box-shadow: inset 0 0 0 1px var(--line2);
+  font-size: 13px;
+}
+.m-agent { gap: 9px; max-width: 98%; }
+.m-head { gap: 8px; }
+.m-ava { width: 20px; height: 20px; border-radius: 7px; background: var(--redsoft); color: var(--red); }
+.m-who { color: var(--faint); font-size: 11.5px; }
+.m-txt { font-size: 13px; line-height: 1.62; }
+.m-sys { font-size: 11.5px; color: var(--faint); }
+.m-think { border-left-color: var(--line); padding-left: 12px; }
+.card { border-color: var(--line); border-radius: 13px; background: rgba(255,255,255,.012); }
+.card-h { padding: 10px 12px; background: var(--panel2); }
+.card-b { padding: 10px 12px; gap: 7px; }
+.working-on { margin: 8px 12px 0; border: 0; border-radius: 10px; background: var(--redsoft); }
+.inz { padding: 12px 14px 14px; border-top-color: var(--line2); gap: 9px; }
+.inbox {
+  gap: 9px; padding: 11px 10px 11px 14px; border: 0; border-radius: 15px;
+  background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line);
+}
+.inbox:focus-within { border-color: transparent; box-shadow: inset 0 0 0 1px var(--mut), 0 0 0 3px var(--line2); }
+.inbox textarea { font-size: 13px; line-height: 1.52; }
+.send { width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 4px 12px rgba(223,108,72,.18); }
+.chip { border-color: transparent; background: var(--panel2); padding: 4px 9px; }
+
+/* Modales y menús elevados. */
+.modal {
+  padding: 24px; border-color: var(--line); border-radius: var(--radius-xl);
+  background: var(--panel); box-shadow: var(--shadow-float);
+}
+.modal h2 { font-size: 17px; letter-spacing: -.02em; }
+.overlay { background: rgba(7, 7, 6, .62); backdrop-filter: blur(8px); }
+.ctx-menu { padding: 6px; border-radius: 11px; background: rgba(35,34,32,.97); box-shadow: var(--shadow-float); }
+.ctx-item { padding: 8px 11px; border-radius: 7px; }
+.krow input, .agrow input, .dz-field input, .dz-field select {
+  min-height: 34px; background: var(--panel2); border-color: transparent;
+  border-radius: 9px; box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+/* Estudio creativo y animación: el mismo lenguaje, sin parecer otra aplicación. */
+.dz-tools {
+  width: 98px; gap: 6px; padding: 10px 8px; background: var(--panel);
+  border-right-color: var(--line2);
+}
+.dz-tools .ibtn { width: 36px; height: 36px; border-radius: 10px; }
+.dz-tools .hsep { background: var(--line2); margin: 5px 7px; }
+.dz-menubar { background: var(--panel); border-bottom-color: var(--line2); }
+.dz-inspector {
+  width: 274px; padding: 17px 16px; background: var(--panel); border-left-color: var(--line2);
+}
+.dz-field { margin-bottom: 13px; }
+.dz-field > label { margin-bottom: 6px; font-family: Figtree, sans-serif; font-size: 10.5px; letter-spacing: .035em; }
+.dz-lay-row { padding: 6px 7px; border-radius: 8px; }
+.dz-lay-row:hover { background: var(--surface-raised); }
+.dz-lay-row.sel { background: var(--surface-hover); box-shadow: inset 2px 0 0 var(--red); }
+.dz-laytools { padding: 10px; border-color: var(--line2); border-radius: 11px; background: var(--panel2); }
+.dz-timeline { gap: 9px; padding: 9px 13px; background: var(--panel); border-top-color: var(--line2); }
+.tl-frame { border-color: transparent; border-radius: 9px; background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line2); }
+.tl-frame:hover { background: var(--surface-raised); border-color: transparent; }
+.dz-procreate-bar {
+  right: 24px; top: 20px; gap: 4px; padding: 6px; border-color: var(--line);
+  border-radius: 17px; background: rgba(27, 26, 25, .94); box-shadow: var(--shadow-float);
+}
+.dz-procreate-bar button {
+  width: 40px; height: 40px; padding: 9px; border: 0; border-radius: 11px;
+  background: transparent; color: var(--mut);
+}
+.dz-procreate-bar button .ico { width: 20px; height: 20px; stroke-width: 1.65; }
+.dz-procreate-bar button:hover { color: var(--txt); background: var(--surface-hover); border-color: transparent; transform: none; }
+.dz-procreate-bar button.active {
+  color: var(--red); background: var(--redsoft); border-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(223,108,72,.2);
+}
+.dz-procreate-sliders {
+  border-color: var(--line); border-radius: 18px; background: rgba(27,26,25,.95);
+  box-shadow: var(--shadow-float);
+}
+.dz-canvas {
+  background-color: #11110f;
+  background-image: linear-gradient(45deg,#181816 25%,transparent 25%),
+    linear-gradient(-45deg,#181816 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,#181816 75%),
+    linear-gradient(-45deg,transparent 75%,#181816 75%);
+}
+.dz-canvas svg { box-shadow: 0 20px 55px rgba(0,0,0,.42); }
+
+/* Pie y barras auxiliares casi invisibles hasta que se necesitan. */
+footer { min-height: 28px; padding: 5px 14px; background: var(--panel); border-top-color: var(--line2); color: var(--faint); }
+footer #ver { color: var(--mut); border-color: transparent; background: var(--panel2); }
+.l3d-tools { padding: 7px; gap: 4px; border-color: var(--line); border-radius: 13px; background: rgba(27,26,25,.95); box-shadow: var(--shadow-float); }
+.l3d-tools button { min-height: 32px; border: 0; border-radius: 8px; padding: 5px 10px; }
+.l3d-tools button:hover { background: var(--surface-hover); border-color: transparent; }
+.l3d-tools button.active { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(223,108,72,.2); }
+
+@media (max-width: 1180px) {
+  .treewrap { width: 210px; }
+  .agent { width: 350px; }
+  .search { min-width: 190px; }
+}

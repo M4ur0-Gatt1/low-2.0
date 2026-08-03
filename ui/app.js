@@ -2173,6 +2173,44 @@ window.addEventListener("message", (event) => {
 
 /* ══ Entorno de diseño: SVG vivo + inspector por elemento ══ */
 const DZ = { path: null, sel: null, zoom: 1 };
+// Registro central de paneles: base para guardar espacios de trabajo, acoplar
+// cualquier panel y restaurarlo en configuraciones de dos monitores.
+if (window.LOW && LOW.workspace && LOW.workspace.panels) {
+  const panels = LOW.workspace.panels;
+  panels.register("tools", { dock: "left", element: ".dz-tools" });
+  panels.register("canvas", { dock: "center", element: ".dz-canvas" });
+  panels.register("layers", { dock: "right", element: ".dz-inspector" });
+  panels.register("timeline", { dock: "bottom", element: "#dzTimeline", visible: false });
+  panels.register("xsheet", { dock: "right", element: "#dzXsheet", visible: false });
+  panels.register("camera", { dock: "overlay", element: "#dzCam", visible: false });
+  panels.subscribe(panel => {
+    const node = panel?.element && document.querySelector(panel.element); if (!node) return;
+    if (!panel.detached) node.hidden = !panel.visible;
+    if (panel.size?.width) node.style.width = panel.size.width + "px";
+    if (panel.size?.height) node.style.height = panel.size.height + "px";
+  });
+}
+if (window.LOW?.ai?.commands) {
+  const commands = LOW.ai.commands;
+  commands.define("insert_frames", { required: ["at", "count"] }, async ({ count, blank = true }) => {
+    for (let i = 0; i < Math.max(1, Math.min(120, +count || 1)); i++) await dzFrameInsert(!!blank);
+    return { frames: +count || 1 };
+  });
+  commands.define("duplicate_exposure", { required: ["level", "frame"] }, async () => dzFrameAdd());
+  commands.define("create_layer", { required: ["name"] }, async ({ name }) => {
+    dzLayerNew(); const selected = DZ.sel; if (selected && name) selected.id = String(name).replace(/[^\w-]+/g, "_");
+    dzBuildLayers(); dzMarkDirty(); return { id: selected && selected.id };
+  });
+  commands.define("apply_brush_preset", { required: ["preset"] }, async ({ preset }) => {
+    const brush = LOW.drawing.brushes.get(preset); if (!brush) throw Error("Pincel inexistente");
+    DZ.brushPreset = brush.id; DZ.drawW = brush.size || DZ.drawW; DZ.smooth = Math.round((brush.smoothing || 0) * 100);
+    if (brush.color) DZ.drawColor = brush.color; dzToolOptsRender(); return brush;
+  });
+  commands.define("modify_camera", { required: ["frame", "properties"] }, async ({ frame, properties }) => {
+    DZ.scene = DZ.scene || {}; DZ.scene.cam = DZ.scene.cam || {}; DZ.scene.cam[frame] = { ...properties };
+    dzSceneSave(); dzCamOverlay(); return DZ.scene.cam[frame];
+  });
+}
 const DZ_FONTS = ["Figtree", "Arial", "Helvetica", "Verdana", "Trebuchet MS",
   "Georgia", "Times New Roman", "Courier New", "JetBrains Mono", "Impact",
   "Comic Sans MS", "serif", "sans-serif", "monospace"];
@@ -2192,13 +2230,20 @@ async function openDesign(path) {
   // NO usar innerHTML: adentro del lienzo viven #dzHandle y #dzPin — pisarlos
   // rompía todo el editor ("Cannot set properties of null"). Solo cambiar el svg.
   cv.querySelectorAll("svg").forEach(n => n.remove());
-  const tmp = document.createElement("div"); tmp.innerHTML = r.svg;
+  let sourceSvg = r.svg;
+  const recovery = window.LOW?.workspace?.recovery?.get(path);
+  if (recovery && recovery.content !== r.svg) {
+    if (confirm("LOW encontró cambios recuperables que no llegaron a guardarse. ¿Querés restaurarlos?")) sourceSvg = recovery.content;
+    else LOW.workspace.recovery.clear(path);
+  } else if (recovery) LOW.workspace.recovery.clear(path);
+  const tmp = document.createElement("div"); tmp.innerHTML = sourceSvg;
   const svg = tmp.querySelector("svg");
   if (!svg) return sysMsg(" El archivo no tiene un <svg> válido: " + path);
   cv.insertBefore(svg, $("#dzHandle"));
   if (!svg.getAttribute("width")) svg.style.width = "min(80vw, 900px)";
   DZ.zoom = 1; DZ.panX = 0; DZ.panY = 0; dzApplyZoom();
-  DZ.undo = []; DZ.redo = [];   // pilas de deshacer por archivo
+  DZ.history = new LOW.core.HistoryManager({ limit: 180 });
+  DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
   DZ.dirty = false;             // recién cargado = limpio (no arrastrar el flag)
   DZ.multi = []; dzNodesClear();
   dzPaletteRender();
@@ -2569,6 +2614,9 @@ const DZ_UI_SEL = ".dz-onionpanel,.dz-zpanel,.dz-xsheet,.dz-tlgrid,.dz-disc," +
 function dzOnUiPanel(e) {
   return e.target && e.target.closest && e.target.closest(DZ_UI_SEL);
 }
+function dzCapturePointer(e) {
+  try { $("#dzCanvas")?.setPointerCapture?.(e.pointerId); } catch (_) { /* WebView sin captura */ }
+}
 function dzPointerDown(e) {
   if (dzOnUiPanel(e)) return;   // clic en un panel flotante: no seleccionar
   dzReleaseFocus();
@@ -2586,6 +2634,7 @@ function dzPointerDown(e) {
   const grp = el.closest && el.closest('#dzCanvas svg > g:not(.dz-onion)');
   if (grp && !e.altKey && DZ.tool !== "direct") el = grp;   // flecha blanca: pieza directa
   e.preventDefault();
+  dzCapturePointer(e);
   const pointerId = e.pointerId;
   // Shift+clic: sumar/sacar de la selección múltiple (para agrupar/alinear/mover juntos)
   DZ.multi = DZ.multi || [];
@@ -2766,6 +2815,7 @@ function dzWritePos(el, base, dx, dy) {
 function dzHandleDown(e) {
   if (!DZ.sel) return;
   e.preventDefault(); e.stopPropagation();
+  dzCapturePointer(e);
   dzSnapshot();
   const el = DZ.sel, t = el.tagName.toLowerCase();
   const start = dzToUser(e.clientX, e.clientY);
@@ -3266,7 +3316,17 @@ function dzPaletteRender() {
   pro.onclick = dzPalettePro;
   box.appendChild(pro);
 }
-function dzMarkDirty() { DZ.dirty = true; }
+let DZ_RECOVERY_TIMER = null;
+function dzMarkDirty() {
+  DZ.dirty = true;
+  clearTimeout(DZ_RECOVERY_TIMER);
+  DZ_RECOVERY_TIMER = setTimeout(() => {
+    const svg = $("#dzCanvas")?.querySelector("svg");
+    if (svg && DZ.path) window.LOW?.workspace?.recovery?.checkpoint(DZ.path, dzSerialize(svg), {
+      frame: DZ.anim ? DZ.anim.idx + 1 : null, tool: DZ.tool || "select"
+    });
+  }, 320);
+}
 
 /* duplicar el elemento seleccionado (con un pequeño corrimiento para verlo) */
 function dzDuplicate() {
@@ -3483,6 +3543,11 @@ function _otPressure(e) {
 
 function _drawAddPoint(track, x, y, pr) {
   const last = track.pts[track.pts.length - 1];
+  if (track.stabilizer) {
+    const stable = track.stabilizer.push({ x, y, pressure: pr || .03 });
+    if (!stable) return false;
+    x = stable.x; y = stable.y; pr = stable.pressure;
+  }
   const dx = x - last[0], dy = y - last[1];
   const d2 = dx * dx + dy * dy;
   // Solo descartar puntos idénticos (mismo pixel). Todo lo demás se dibuja.
@@ -3506,8 +3571,12 @@ function _drawBeginTrack(e, svg) {
   const track = {
     pts: [[p.x, p.y, pr]], mode: DZ.tool, el: null,
     pid: e.pointerId, devType: dev,
-    _pbuf: [pr, pr, pr, pr, pr]
+    _pbuf: [pr, pr, pr, pr, pr],
+    stabilizer: window.LOW?.drawing?.Stabilizer ? new LOW.drawing.Stabilizer({
+      strength: Math.min(.72, Math.max(0, (DZ.smooth || 0) / 140)), pressureStrength: .28
+    }) : null
   };
+  if (track.stabilizer) track.stabilizer.push({ x: p.x, y: p.y, pressure: pr || .03 });
   if (DZ.tool === "pencil") {
     track.el = document.createElementNS(SVGNS, "path");
     track.el.setAttribute("fill", "none");
@@ -3573,6 +3642,7 @@ function dzDrawDown(e) {
     " btn:" + e.button + " btns:" + e.buttons + " tool:" + tool, "#33B5E8");
 
   e.preventDefault(); e.stopPropagation();
+  dzCapturePointer(e);
   if (tool === "pivot") { dzPivotClick(e); return; }
   if (tool === "nodes") { dzNodesClick(e); return; }
   if (tool === "dropper") { dzDropperPick(e); return; }
@@ -5013,6 +5083,8 @@ async function dzAnimToggle() {
   // cargar la escena (claves de cámara/dibujo, easing) que vive junto a los cuadros
   const sc = await api.scene_get(DZ.path);
   DZ.scene = (sc && sc.scene) || {};
+  DZ.sceneHistory = new LOW.animation.History(180);
+  DZ.sceneModel = DZ.scene.lowModel ? new LOW.animation.SceneModel(DZ.scene.lowModel) : null;
   bar.hidden = false;
   // Sala Timeline de OpenToonz: visor arriba, transporte y editor de niveles ×
   // fotogramas acoplado abajo. La X-sheet vertical es una vista alternativa.
@@ -5025,6 +5097,19 @@ async function dzTimelineRefresh() {
   const r = await api.list_frames(DZ.path);
   DZ.anim.frames = (r && r.frames) || [];
   DZ.anim.idx = DZ.anim.frames.indexOf(DZ.path);
+  // Adaptador transitorio: los SVG históricos siguen siendo válidos, mientras el
+  // nuevo modelo representa sus exposiciones sin obligar a duplicarlos en el futuro.
+  if (window.LOW?.animation?.SceneModel && !DZ.sceneModel) {
+    DZ.sceneModel = LOW.animation.SceneModel.fromLegacy({ frames: DZ.anim.frames,
+      levels: (DZ.scene && DZ.scene.levels) || ["Dibujo"],
+      fps: Math.max(1, +($("#tlFps")?.value || 12)), scene: DZ.scene });
+  }
+  if (DZ.sceneModel?.metadata?.legacyFrames) {
+    const legacyLevel = DZ.sceneModel.levels[0];
+    if (legacyLevel) legacyLevel.exposures = DZ.anim.frames.map((path, i) => ({
+      frame: i + 1, drawingId: `0:${path}`, hold: false, path
+    }));
+  }
   const box = $("#tlFrames");
   box.innerHTML = "";
   DZ.anim.frames.forEach((f, i) => {
@@ -5384,6 +5469,7 @@ async function dzPersist() {
   try {
     await api.save_file(DZ.path, txt);
     DZ.dirty = false;
+    window.LOW?.workspace?.recovery?.clear(DZ.path);
     if (DZ.anim) DZ.anim.cache[DZ.path] = txt;   // la cache/miniatura ve lo nuevo
     setStatus(" auto-guardado");
   } catch (e) { sysMsg(" auto-guardado falló: " + (e.message || e)); }
@@ -5505,7 +5591,10 @@ function dzFrameNum(path) {
   return m ? parseInt(m[1], 10) : 1;
 }
 function dzSceneSave() {
-  if (DZ.path && DZ.scene) api.scene_save(DZ.path, DZ.scene);
+  if (DZ.path && DZ.scene) {
+    if (DZ.sceneModel) DZ.scene.lowModel = DZ.sceneModel.toJSON();
+    api.scene_save(DZ.path, DZ.scene);
+  }
 }
 function dzVB() {
   const svg = $("#dzCanvas").querySelector("svg");
@@ -6437,7 +6526,10 @@ function dzToolOptsRender() {
   const sm = DZ.smooth === undefined ? 40 : DZ.smooth;
   let html = `<span class="dz-to-name">${DZ_TOOL_NAMES[t] || t}</span>`;
   if (["pencil", "brush", "pen"].includes(t)) {
-    html += `<label>Trazo <input type="color" id="toColor" value="${dzHex(DZ.drawColor) || "#1a1a1a"}"></label>
+    const presets = window.LOW?.drawing?.brushes?.all?.() || [];
+    const presetSelect = t !== "pen" && presets.length ? `<label>Pincel <select id="toBrushPreset" class="langsel">${presets.map(p =>
+      `<option value="${p.id}"${p.id === DZ.brushPreset ? " selected" : ""}>${p.name}</option>`).join("")}</select></label>` : "";
+    html += presetSelect + `<label>Trazo <input type="color" id="toColor" value="${dzHex(DZ.drawColor) || "#1a1a1a"}"></label>
       <label>Grosor <input type="number" id="toW" min="1" max="120" value="${DZ.drawW || 6}" class="dz-win"></label>` +
       (t !== "pen" ? `<label>Suavizado <input type="range" id="toSmooth" min="0" max="100" value="${sm}"><span id="toSmoothLbl">${sm}</span></label>` : "") +
       (t === "brush" ? `<span class="dz-hint">el grosor sigue la presión de la tableta</span>` : "") +
@@ -6473,6 +6565,13 @@ function dzToolOptsRender() {
     html += `<span class="dz-hint">clic selecciona · arrastrá mueve · Shift+clic suma a la selección · Alt+clic entra al grupo</span>`;
   }
   box.innerHTML = html;
+  const preset = $("#toBrushPreset"); if (preset) preset.onchange = e => {
+    const brush = LOW.drawing.brushes.get(e.target.value); if (!brush) return;
+    DZ.brushPreset = brush.id; DZ.drawW = brush.size || DZ.drawW;
+    DZ.smooth = Math.round((brush.smoothing || 0) * 100);
+    if (brush.color) DZ.drawColor = brush.color;
+    dzToolOptsRender(); dzSetStatus("Pincel: " + brush.name);
+  };
   const oc = $("#toColor"); if (oc) oc.oninput = e => { DZ.drawColor = e.target.value; const p = $("#dzPStroke"); if (p) p.value = e.target.value; };
   const ow = $("#toW"); if (ow) ow.oninput = e => { DZ.drawW = +e.target.value || 6; const p = $("#dzDrawW"); if (p) p.value = DZ.drawW; };
   const os = $("#toSmooth"); if (os) os.oninput = e => {
@@ -6543,6 +6642,18 @@ async function dzDetachAnimationPanel(kind) {
   if (!DZ.anim) return dzSetStatus("Abrí una animación antes de separar el panel");
   await dzTlGridRender();
   const result = await api.open_animation_panel(kind);
+  if (!result || !result.error) {
+    DZ.detachedAnimationPanels = DZ.detachedAnimationPanels || new Set();
+    DZ.detachedAnimationPanels.add(kind);
+    window.LOW?.workspace?.panels?.detach(kind);
+    // Desacople real: la mesa principal recupera el espacio ocupado por el panel.
+    if (kind === "timeline") {
+      $("#dzTimeline").hidden = true;
+      $("#dzTlGrid").hidden = true;
+    } else {
+      dzXsSetVisible(false);
+    }
+  }
   if (result && result.error) return dzSetStatus("No pude abrir la ventana: " + result.error);
   dzSetStatus((kind === "xsheet" ? "X-sheet" : "Timeline") + " separada · movela al segundo monitor");
 }
@@ -6829,6 +6940,17 @@ async function dzPublishAnimationPanelState(perFrame, levels, displayCount) {
   if (!api || !DZ.anim) return;
   const cams = (DZ.scene && DZ.scene.cam) || {};
   const keys = (DZ.scene && DZ.scene.keys) || [];
+  const timelineCore = window.LOW && LOW.animation && LOW.animation.timeline;
+  if (timelineCore) {
+    const playbackIndex = DZ.anim.playing && Number.isInteger(DZ.anim.previewIdx) ? DZ.anim.previewIdx : DZ.anim.idx;
+    const state = timelineCore.buildPanelState({ frames: DZ.anim.frames, levels,
+      current: playbackIndex, playing: DZ.anim.playing,
+      fps: Math.max(1, +($("#tlFps").value || 12)), perFrame,
+      camera: cams, keys, displayCount });
+    DZ.animationPanelState = state;
+    try { await api.animation_panel_state(state); } catch (err) { /* ventana auxiliar opcional */ }
+    return;
+  }
   const frames = Array.from({ length: displayCount }, (_, i) => ({
     index: i,
     number: i + 1,
@@ -6870,6 +6992,19 @@ window.lowAnimationPanelCommand = async ({ action, payload }) => {
   else if (action === "next") await dzGoFrame(Math.min(DZ.anim.frames.length - 1, DZ.anim.idx + 1));
   else if (action === "add") await dzFrameAdd();
   else if (action === "add-blank") await dzFrameInsert(true);
+  else if (action === "dock") {
+    const kind = payload && payload.kind === "xsheet" ? "xsheet" : "timeline";
+    DZ.detachedAnimationPanels = DZ.detachedAnimationPanels || new Set();
+    DZ.detachedAnimationPanels.delete(kind);
+    window.LOW?.workspace?.panels?.dock(kind);
+    if (kind === "xsheet") {
+      if (!DZ.detachedAnimationPanels.has("timeline")) $("#dzTimeline").hidden = false;
+      dzAnimSetView("xsheet");
+    } else {
+      $("#dzTimeline").hidden = false;
+      dzAnimSetView("timeline");
+    }
+  }
   await dzTlGridRender();
   return true;
 };
@@ -8585,23 +8720,20 @@ function dzApplyCode() {
 function dzSnapshot() {
   const svg = $("#dzCanvas").querySelector("svg");
   if (!svg) return;
-  DZ.undo = DZ.undo || [];
-  DZ.undo.push(dzSerialize(svg));
-  if (DZ.undo.length > 50) DZ.undo.shift();
-  DZ.redo = [];               // un cambio nuevo invalida los "rehacer"
+  if (!DZ.history) DZ.history = new LOW.core.HistoryManager({ limit: 180 });
+  DZ.history.push({ label: "Editar dibujo", domain: "drawing", before: dzSerialize(svg), after: null,
+    capture: () => { const current = $("#dzCanvas").querySelector("svg"); return current ? dzSerialize(current) : null; },
+    apply: (_direction, value) => { if (value) dzApplySvgText(value); } });
+  DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
 }
 function dzUndo() {
-  if (!DZ.undo || !DZ.undo.length) { setStatus("(nada para deshacer)"); return; }
-  const svg = $("#dzCanvas").querySelector("svg");
-  if (svg) { DZ.redo = DZ.redo || []; DZ.redo.push(dzSerialize(svg)); }
-  dzApplySvgText(DZ.undo.pop());
+  if (!DZ.history || !DZ.history.undo()) { setStatus("(nada para deshacer)"); return; }
+  DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
   setStatus("↩ deshecho");
 }
 function dzRedo() {
-  if (!DZ.redo || !DZ.redo.length) return;
-  const svg = $("#dzCanvas").querySelector("svg");
-  if (svg) { DZ.undo = DZ.undo || []; DZ.undo.push(dzSerialize(svg)); }
-  dzApplySvgText(DZ.redo.pop());
+  if (!DZ.history || !DZ.history.redo()) return;
+  DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
   setStatus("↪ rehecho");
 }
 /* serializa el svg sin las marcas de la UI (clase de selección) */
@@ -8833,7 +8965,7 @@ async function dzSave() {
   const svg = $("#dzCanvas").querySelector("svg");
   if (!svg || !DZ.path) return;
   const r = await api.save_file(DZ.path, dzSerialize(svg));
-  if (r) { DZ.dirty = false; setStatus(" " + (r.name || "diseño guardado")); sysMsg(" Diseño guardado: " + (r.name || DZ.path)); }
+  if (r) { DZ.dirty = false; window.LOW?.workspace?.recovery?.clear(DZ.path); setStatus(" " + (r.name || "diseño guardado")); sysMsg(" Diseño guardado: " + (r.name || DZ.path)); }
 }
 
 /* ── Herramientas del agente (qué puede hacer solo) ── */
