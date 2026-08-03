@@ -891,17 +891,22 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-canvas { position: relative; }
 .dz-canvas svg { max-width: 100%; max-height: 100%; box-shadow: 0 6px 40px rgba(0,0,0,.5); background: #fff; transform-origin: center; }
 .dz-procreate-bar {
-  position: absolute; z-index: 20; right: 18px; top: 16px; display: flex; gap: 4px;
-  padding: 6px; border: 1px solid var(--line); border-radius: 16px;
-  background: rgba(21,21,24,.94); box-shadow: 0 8px 26px rgba(0,0,0,.35); backdrop-filter: blur(12px);
+  position: absolute; z-index: 20; right: 22px; top: 18px; display: flex; gap: 5px;
+  padding: 7px; border: 1px solid rgba(255,255,255,.13); border-radius: 18px;
+  background: rgba(24,24,28,.97); box-shadow: 0 10px 32px rgba(0,0,0,.5); backdrop-filter: blur(16px);
 }
-.dz-procreate-bar button { width: 34px; height: 34px; padding: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--mut); }
-.dz-procreate-bar button:hover,.dz-procreate-bar button.active { color: var(--orange); background: var(--redsoft); border-color: rgba(240,69,14,.35); }
-.dz-quick-color { display:grid;place-items:center;width:34px;height:34px;border-radius:50%;cursor:pointer;background:conic-gradient(#f33,#fc3,#3c6,#3cf,#63f,#f3c,#f33);padding:4px; }
+.dz-procreate-bar button { position:relative;display:grid;place-items:center;width:42px;height:42px;padding:9px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#202126;color:#d8dbe3;cursor:pointer; }
+.dz-procreate-bar button .ico { display:block;width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8; }
+.dz-procreate-bar button .ico-fill { fill:currentColor;stroke:currentColor; }
+.dz-procreate-bar button:hover { color:#fff;background:#30323a;border-color:rgba(255,255,255,.18);transform:translateY(-1px); }
+.dz-procreate-bar button.active { color:#fff;background:linear-gradient(145deg,#f05a22,#d83b08);border-color:#ff7542;box-shadow:0 4px 14px rgba(240,69,14,.34); }
+.dz-procreate-bar button::after { content:attr(data-name);position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);padding:3px 7px;border-radius:6px;background:#101114;color:#eef0f5;font:600 9px Figtree,sans-serif;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s; }
+.dz-procreate-bar button:hover::after { opacity:1; }
+.dz-quick-color { display:grid;place-items:center;width:42px;height:42px;border-radius:50%;cursor:pointer;background:conic-gradient(#f33,#fc3,#3c6,#3cf,#63f,#f3c,#f33);padding:4px;box-shadow:0 0 0 1px rgba(255,255,255,.15); }
 .dz-quick-color input { width:100%;height:100%;padding:0;border:3px solid var(--panel);border-radius:50%;background:none;cursor:pointer; }
-.dz-procreate-sliders { position:absolute;z-index:20;left:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:14px;padding:10px 7px;border:1px solid var(--line);border-radius:18px;background:rgba(21,21,24,.94);box-shadow:0 8px 26px rgba(0,0,0,.35); }
-.dz-procreate-sliders label { display:flex;flex-direction:column;align-items:center;gap:5px;color:var(--mut);font-size:10px; }
-.dz-procreate-sliders input[type=range] { writing-mode:vertical-lr;direction:rtl;width:18px;height:116px;accent-color:var(--orange); }
+.dz-procreate-sliders { position:absolute;z-index:20;left:20px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:12px;padding:11px 8px;border:1px solid rgba(255,255,255,.13);border-radius:20px;background:rgba(24,24,28,.97);box-shadow:0 10px 32px rgba(0,0,0,.5); }
+.dz-procreate-sliders label { display:flex;flex-direction:column;align-items:center;gap:6px;color:#e6e8ed;font:700 9px Figtree,sans-serif; }
+.dz-procreate-sliders input[type=range] { writing-mode:vertical-lr;direction:rtl;width:22px;height:104px;accent-color:var(--orange);cursor:pointer; }
 .dz-panel-pop { margin-left:auto;width:25px;height:23px;padding:4px;border:0;border-radius:7px;background:transparent;color:var(--mut); }
 .dz-panel-pop + .dz-op-x { margin-left:2px; }
 .dz-pop-mark { position:absolute;font-size:8px;transform:translate(-2px,-7px); }

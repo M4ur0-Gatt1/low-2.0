@@ -1108,6 +1108,26 @@ export class WebGLDesign3D {
         if (d < bestDist) { bestDist = d; best = world; }
       }
     }
+    // Las esquinas/puntos que originaron una guía también son anclajes 3D.
+    // Sin esto, al pasar de Frente a Derecha la segunda guía podía verse
+    // alineada en pantalla pero quedar desplazada a otra coordenada Z.
+    for (const guide of this.guides) {
+      guide.mesh.updateMatrixWorld(true);
+      const anchors = guide.mesh.userData.guideAnchors as THREE.Vector3[] | undefined;
+      if (!Array.isArray(anchors)) continue;
+      for (const local of anchors) {
+        const p = local instanceof THREE.Vector3
+          ? local.clone()
+          : new THREE.Vector3(Number((local as { x?: number }).x || 0),
+            Number((local as { y?: number }).y || 0), Number((local as { z?: number }).z || 0));
+        const world = p.applyMatrix4(guide.mesh.matrixWorld);
+        if (refPoint && world.distanceTo(refPoint) > maxWorld) continue;
+        const v = world.clone().project(cam);
+        const sx = ((v.x + 1) / 2) * rect.width, sy = ((1 - v.y) / 2) * rect.height;
+        const d = Math.hypot(sx - px, sy - py);
+        if (d < bestDist) { bestDist = d; best = world; }
+      }
+    }
     return best;
   }
 
@@ -1161,7 +1181,10 @@ export class WebGLDesign3D {
     // en 3D de la superficie donde se dibuja (evita agarrar un vértice de otro
     // plano que solo cae cerca en pantalla, p. ej. en vista de lado).
     const surf = this.resolveHit();
-    const snap = this.findSnapVertex(e, surf?.point, 0.8);
+    // Al CREAR una guía desde otra vista, la coincidencia en pantalla es la
+    // intención de compartir vértice: no se descarta por la profundidad
+    // provisional del plano de cámara. El punto devuelto conserva el XYZ real.
+    const snap = this.findSnapVertex(e, surf?.point, this.tool === 'guide' ? Infinity : 0.8);
     const hit = snap ? { point: snap, normal: surf?.normal ?? new THREE.Vector3(0, 0, 1) } : surf;
     if (!hit) {
       this.canvas.title = 'Creá o activá una guía antes de dibujar';
@@ -1536,6 +1559,9 @@ export class WebGLDesign3D {
       opacity: 0.09, side: THREE.DoubleSide, depthWrite: false,
     }));
     mesh.position.copy(centroid);
+    // Puntos locales que originaron la guía: se conservan como anclajes para
+    // iniciar la siguiente guía exactamente en el mismo vértice 3D.
+    mesh.userData.guideAnchors = points.map((p) => p.clone().sub(centroid));
 
     // grilla: bordes de adelante/atrás + secciones transversales + curva naranja
     const edgeMat = new THREE.LineBasicMaterial({ color: 0x4c9bff, transparent: true, opacity: 0.25 });
@@ -1867,6 +1893,10 @@ export class WebGLDesign3D {
   private duplicateGuide(g: { id: string; mesh: THREE.Mesh }): void {
     const offset = new THREE.Vector3(0.4, 0, 0.4);
     const clone = g.mesh.clone(true);
+    const anchors = g.mesh.userData.guideAnchors as THREE.Vector3[] | undefined;
+    if (Array.isArray(anchors)) clone.userData.guideAnchors = anchors.map((p) =>
+      p instanceof THREE.Vector3 ? p.clone() : new THREE.Vector3(Number((p as { x?: number }).x || 0),
+        Number((p as { y?: number }).y || 0), Number((p as { z?: number }).z || 0)));
     clone.position.add(offset);
     clone.traverse((o) => {
       const withMat = o as THREE.Mesh | THREE.Line | THREE.LineSegments;
