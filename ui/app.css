@@ -35,7 +35,15 @@ body {
   background: var(--bg); color: var(--txt);
   font-family: 'Figtree', 'Segoe UI', system-ui, sans-serif;
   font-size: 13px; overflow: hidden; user-select: none;
+  /* La lista desplegable de un <select> la dibuja el SISTEMA, no nuestro CSS:
+     hereda el `color` del select pero NO su fondo. Con el select en
+     `background: transparent` el popup salía con el fondo blanco por defecto de
+     Windows y el texto en --txt (#F4F4F2) → blanco sobre blanco, ilegible.
+     `color-scheme: dark` le dice al motor que dibuje TODOS los controles
+     nativos (popups de select, scrollbars, date pickers) en oscuro. */
+  color-scheme: dark;
 }
+body.light { color-scheme: light; }
 body.light {
   --bg:#F5F4F1; --panel:#FFFFFF; --panel2:#EDECE8;
   --line:rgba(0,0,0,.09); --line2:rgba(0,0,0,.05);
@@ -87,6 +95,16 @@ header {
   background: var(--panel2); color: var(--txt); border: none; outline: none;
   font: 500 12.5px 'Figtree', sans-serif; cursor: pointer; max-width: 210px;
 }
+/* Cinturón y tirantes junto al `color-scheme: dark` del body: las <option> se
+   pintan explícitas para que la lista de proveedores/modelos sea legible
+   aunque el motor decida ignorar color-scheme en el popup nativo. */
+select option {
+  background-color: var(--panel);
+  color: var(--txt);
+}
+/* El resaltado del ítem elegido lo deja el sistema: con color-scheme: dark ya
+   viene con contraste garantizado. Pintarlo a mano con --redsoft (que es
+   semitransparente) bajaba el contraste a 3.15 — debajo del mínimo AA de 4.5. */
 .dot { width: 7px; height: 7px; border-radius: 99px; background: var(--cyan); display: inline-block; flex: none; }
 .dot.off { background: var(--faint); }
 .dot.warn { background: var(--orange); animation: pulse 1.2s infinite; }
