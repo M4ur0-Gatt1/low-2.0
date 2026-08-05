@@ -143,7 +143,9 @@ class LOWApp:
     def _reg(s, w, **roles):
         s.reg.append((w, roles))
         try:
-            w.configure(**{k: s._c(v) for k, v in roles.items()})
+            # Asegurarse de que roles es un diccionario antes de llamar a .items()
+            if isinstance(roles, dict):
+                w.configure(**{k: s._c(v) for k, v in roles.items()})
         except (tk.TclError, ValueError):
             pass
         return w
@@ -154,7 +156,9 @@ class LOWApp:
                 rr.update(roles)
                 break
         try:
-            w.configure(**{k: s._c(v) for k, v in roles.items()})
+            # Asegurarse de que roles es un diccionario antes de llamar a .items()
+            if isinstance(roles, dict):
+                w.configure(**{k: s._c(v) for k, v in roles.items()})
         except (tk.TclError, ValueError):
             pass
 
@@ -172,7 +176,9 @@ class LOWApp:
             if i >= max_widgets:
                 break
             try:
-                w.configure(**{k: s._c(v) for k, v in roles.items()})
+                # Asegurarse de que roles es un diccionario antes de llamar a .items()
+                if isinstance(roles, dict):
+                    w.configure(**{k: s._c(v) for k, v in roles.items()})
             except (tk.TclError, ValueError):
                 pass
         s.sty.configure("LOW.Treeview", background=t["panel"], fieldbackground=t["panel"],
