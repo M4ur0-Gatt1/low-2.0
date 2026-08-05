@@ -1,6 +1,6 @@
 {
   "name": "low2-hybrid",
-  "version": "2.0.0-alpha",
+  "version": "3.29.6",
   "description": "LOW - estudio creativo generalista y modular para dibujo, animación, composición y entornos 3D",
   "main": "electron/main.cjs",
   "scripts": {
@@ -12,6 +12,7 @@
     "dev:native": "cmake --build build/native --config Debug --target watch",
     "dev:app": "vite",
     "test": "jest",
+    "test:guide-plane": "esbuild test/guide-plane.test.ts --bundle --platform=node --format=cjs --outfile=dist/test/guide-plane.cjs --log-level=error && node dist/test/guide-plane.cjs",
     "test:native": "ctest --test-dir build/native",
     "package": "electron-builder",
     "installer": "node scripts/create-installer.js",
@@ -48,6 +49,7 @@
     "concurrently": "^8.2.2",
     "electron": "^28.1.4",
     "electron-builder": "^24.9.1",
+    "esbuild": "^0.21.5",
     "jest": "^29.7.0",
     "node-addon-api": "^7.1.0",
     "node-gyp": "^10.0.1",

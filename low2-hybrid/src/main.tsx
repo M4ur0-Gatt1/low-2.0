@@ -10,7 +10,16 @@ if (!el) throw new Error('No se encontró #root');
 
 const App = () => {
   const [module, setModule] = useState<'home' | '3d'>('3d');
-  if (module === '3d') return <Animation3DNative projectId="demo" onRequestClose={() => setModule('home')} />;
+  const close3D = () => {
+    if (window.parent !== window) {
+      // El bundle puede cargarse desde file:// dentro de pywebview (origin
+      // opaco); el padre valida event.source contra el iframe antes de actuar.
+      window.parent.postMessage({ type: 'low:close-3d' }, '*');
+      return;
+    }
+    setModule('home');
+  };
+  if (module === '3d') return <Animation3DNative projectId="demo" onRequestClose={close3D} />;
   return (
     <main style={{ height: '100%', display: 'grid', placeItems: 'center', background: '#15171d', color: '#eef1f6', fontFamily: 'system-ui' }}>
       <section style={{ textAlign: 'center' }}>
