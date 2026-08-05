@@ -60,10 +60,24 @@ export const PropertiesPanel3D: React.FC = () => {
     });
   };
 
+  /** Valores a MOSTRAR para posición/rotación/escala. Para la rotación, si el
+   *  usuario todavía no escribió ninguna, se muestra la que el motor le dio al
+   *  encarar el plano a la vista (`autoRotation`). Antes se mostraba 0,0,0
+   *  siempre: tocar un solo campo mandaba el vector entero en cero y el plano
+   *  saltaba a una orientación que no tenía nada que ver con la que se veía. */
+  const shownVector = (key: 'position' | 'rotation' | 'scale'): number[] => {
+    const fallback = key === 'scale' ? [1, 1, 1] : [0, 0, 0];
+    const explicit = activeSurface?.params[key] as number[] | undefined;
+    if (explicit) return explicit;
+    if (key === 'rotation' && activeSurface?.params.autoRotation) return activeSurface.params.autoRotation;
+    return fallback;
+  };
+
   const updateSurfaceVector = (key: 'position' | 'rotation' | 'scale', axis: number, value: number) => {
     if (!activeSurface) return;
-    const fallback = key === 'scale' ? [1, 1, 1] : [0, 0, 0];
-    const vector = [...((activeSurface.params[key] as number[] | undefined) ?? fallback)];
+    // se parte de los valores MOSTRADOS, no de 0,0,0: así editar un eje deja
+    // los otros dos donde el usuario los está viendo.
+    const vector = [...shownVector(key)];
     vector[axis] = value;
     setActiveSurface({ ...activeSurface, params: { ...activeSurface.params, [key]: vector } });
   };
@@ -171,7 +185,7 @@ export const PropertiesPanel3D: React.FC = () => {
 
           {(['position', 'rotation', 'scale'] as const).map((key) => {
             const fallback = key === 'scale' ? [1, 1, 1] : [0, 0, 0];
-            const values = (activeSurface.params[key] as number[] | undefined) ?? fallback;
+            const values = shownVector(key);
             const label = key === 'position' ? 'Posición' : key === 'rotation' ? 'Rotación' : 'Escala';
             return (
               <div key={key}>

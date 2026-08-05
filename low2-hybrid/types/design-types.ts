@@ -55,8 +55,15 @@ export interface SurfaceParams {
   tubeRadius?: number;
   segments?: number;
   position?: [number, number, number];
+  /** Rotación EXPLÍCITA en grados. Si está definida, manda ella y el plano deja
+   *  de re-encararse solo al cambiar de vista. */
   rotation?: [number, number, number];
   scale?: [number, number, number];
+  /** Solo lectura: rotación en grados que el motor le dio al plano al encararlo
+   *  a la vista. La escribe el motor para que el panel muestre el valor REAL en
+   *  vez de 0,0,0 (si mostrara 0,0,0, tocar un campo teletransportaba el plano).
+   *  No define geometría: cambiarla no reconstruye la malla. */
+  autoRotation?: [number, number, number];
   [key: string]: unknown;
 }
 
