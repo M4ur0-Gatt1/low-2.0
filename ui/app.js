@@ -3355,6 +3355,15 @@ const SVGNS = "http://www.w3.org/2000/svg";
 let DRAW = null;   // trazo a mano alzada en curso
 let PEN = null;    // pluma vectorial en curso
 let RULER = null;  // regla/hilo: {a:{x,y}, el:SVGLineElement|null, vp:[{x,y}]} puntos de fuga
+let GUIDE_LINE = null; // Elemento SVG para la guía visual (línea punteada)
+let GUIDE_SNAP_ANGLE = null; // Ángulo al que se está snappeando
+let GUIDE_ACTIVE = false; // Si hay una guía activa
+
+// Configuración de guías: ángulos permitidos (en grados) y umbral de detección
+const GUIDE_ANGLES = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 285, 300, 315, 330, 345];
+const GUIDE_THRESHOLD = 5; // Grados de tolerancia para activar la guía
+const GUIDE_COLOR = "#FF5722"; // Color de la guía
+const GUIDE_OPACITY = 0.5; // Opacidad de la guía
 
 // select/direct  "" para que gane el CSS (flecha negra / flecha blanca);
 // nodes usa la flecha blanca también (edita puntos de vector)
@@ -3373,6 +3382,69 @@ const DZ_TOOL_CURSOR_ICONS = {
   pivot: "i-pivot", inflator: "i-inflate", handler: "i-contour",
   iron: "i-iron", pliers: "i-cut", magnet: "i-magnet"
 };
+
+// Función para calcular el ángulo entre dos puntos (en grados)
+function _calculateAngle(x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const angleRad = Math.atan2(dy, dx);
+  return (angleRad * 180 / Math.PI + 360) % 360;
+}
+
+// Función para encontrar el ángulo más cercano en GUIDE_ANGLES
+function _findClosestGuideAngle(angle) {
+  let closestAngle = null;
+  let minDiff = Infinity;
+  for (const guideAngle of GUIDE_ANGLES) {
+    const diff = Math.min(Math.abs(angle - guideAngle), 360 - Math.abs(angle - guideAngle));
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestAngle = guideAngle;
+    }
+  }
+  return { angle: closestAngle, diff: minDiff };
+}
+
+// Función para mostrar la guía visual
+function _showGuideLine(svg, x1, y1, x2, y2, angle) {
+  _hideGuideLine();
+  GUIDE_LINE = document.createElementNS(SVGNS, "line");
+  GUIDE_LINE.setAttribute("x1", x1.toFixed(1));
+  GUIDE_LINE.setAttribute("y1", y1.toFixed(1));
+  GUIDE_LINE.setAttribute("x2", x2.toFixed(1));
+  GUIDE_LINE.setAttribute("y2", y2.toFixed(1));
+  GUIDE_LINE.setAttribute("stroke", GUIDE_COLOR);
+  GUIDE_LINE.setAttribute("stroke-width", "1");
+  GUIDE_LINE.setAttribute("stroke-dasharray", "5,5");
+  GUIDE_LINE.setAttribute("opacity", GUIDE_OPACITY);
+  GUIDE_LINE.setAttribute("class", "dz-guide-line");
+  GUIDE_LINE.setAttribute("data-angle", angle);
+  svg.appendChild(GUIDE_LINE);
+  GUIDE_ACTIVE = true;
+  GUIDE_SNAP_ANGLE = angle;
+}
+
+// Función para ocultar la guía visual
+function _hideGuideLine() {
+  if (GUIDE_LINE) {
+    GUIDE_LINE.remove();
+    GUIDE_LINE = null;
+  }
+  GUIDE_ACTIVE = false;
+  GUIDE_SNAP_ANGLE = null;
+}
+
+// Función para calcular el punto final ajustado a la guía
+function _snapToGuide(startX, startY, currentX, currentY, angle) {
+  const angleRad = angle * Math.PI / 180;
+  const dx = currentX - startX;
+  const dy = currentY - startY;
+  const length = Math.hypot(dx, dy);
+  const snappedX = startX + length * Math.cos(angleRad);
+  const snappedY = startY + length * Math.sin(angleRad);
+  return { x: snappedX, y: snappedY };
+}
+
 function dzToolCursorHide() {
   const cursor = $("#dzToolCursor");
   if (cursor) cursor.hidden = true;
@@ -3561,6 +3633,24 @@ function _drawAddPoint(track, x, y, pr) {
   // Solo descartar puntos idénticos (mismo pixel). Todo lo demás se dibuja.
   if (d2 < 0.01) return false;
   const smPr = dzSmoothPressure(pr, track);
+  
+  // Detección de guías para líneas rectas (con Shift)
+  if (track.shiftPressed && track.pts.length === 1) {
+    const angle = _calculateAngle(track.startX, track.startY, x, y);
+    const { angle: closestAngle, diff } = _findClosestGuideAngle(angle);
+    if (diff <= GUIDE_THRESHOLD) {
+      const svg = track.el.parentNode;
+      if (svg) {
+        const snapped = _snapToGuide(track.startX, track.startY, x, y, closestAngle);
+        _showGuideLine(svg, track.startX, track.startY, snapped.x, snapped.y, closestAngle);
+        x = snapped.x;
+        y = snapped.y;
+      }
+    } else {
+      _hideGuideLine();
+    }
+  }
+  
   track.pts.push([x, y, smPr]);
   if (track.mode !== "pencil") {
     const seg = document.createElementNS(SVGNS, "path");
@@ -3580,6 +3670,8 @@ function _drawBeginTrack(e, svg) {
     pts: [[p.x, p.y, pr]], mode: DZ.tool, el: null,
     pid: e.pointerId, devType: dev,
     _pbuf: [pr, pr, pr, pr, pr],
+    startX: p.x, startY: p.y,
+    shiftPressed: e.shiftKey,
     stabilizer: window.LOW?.drawing?.Stabilizer ? new LOW.drawing.Stabilizer({
       strength: Math.min(.72, Math.max(0, (DZ.smooth || 0) / 140)), pressureStrength: .28
     }) : null
@@ -3621,6 +3713,7 @@ function _drawFinish() {
     else { t.el.remove(); finalEl = null; }
   }
   if (finalEl) dzMirrorClone(finalEl);
+  _hideGuideLine();
   dzMarkDirty(); dzBuildLayers();
 }
 
@@ -3641,7 +3734,7 @@ function dzDrawDown(e) {
   if (e.target.closest && e.target.closest("#dzCam")) return;
   if (tool === "select" || tool === "direct") return;
   // ═══ 3D: si el clic es sobre un plano 3D, que lo maneje el handler 3D ═══
-  if (e.target.closest && e.target.closest("#dz3dStage")) return;
+  if (DZ.d3 && e.target.closest && e.target.closest("#dz3dStage")) return;
   const svg = $("#dzCanvas").querySelector("svg");
   if (!svg) return;
 
@@ -3681,6 +3774,11 @@ function dzDrawMove(e) {
   if (DZ.tool === "handler" && HANDLER && HANDLER.el) { dzHandlerGlobalMove(e); return; }
   if (!DRAW_TRACK) return;
   if (e.pointerId !== DRAW_TRACK.pid) return;
+
+  // Actualizar el estado de Shift en el track
+  if (DRAW_TRACK) {
+    DRAW_TRACK.shiftPressed = e.shiftKey;
+  }
 
   // ═══ Si hay DRAW_TRACK activo y mismo pointerId, SIEMPRE dibujar ═══
   // (la presión solo afecta el grosor, no si se dibuja)
