@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.22.17"
+LOW_VERSION = "3.29.4"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -157,6 +157,9 @@ class Api:
     def __init__(s):
         s.cfg = Config()
         s._window = None
+        s._ui_base = None
+        s._aux_windows = {}
+        s._animation_panel_state = {}
         s.ws = None
         s.prov = None
         s.ses_dir = data_dir() / 'historial'
@@ -177,6 +180,58 @@ class Api:
     def cancel(s):
         """El usuario pidió detener la consulta en curso."""
         s._cancel = True
+
+    def animation_panel_state(s, state=None):
+        """Estado compartido entre el editor y ventanas de animación externas."""
+        if isinstance(state, dict):
+            s._animation_panel_state = state
+        return s._animation_panel_state
+
+    def animation_panel_command(s, action, payload=None):
+        """Reenvía una acción de una ventana auxiliar a la ventana principal."""
+        if not s._window:
+            return {"error": "ventana principal no disponible"}
+        message = json.dumps({"action": action, "payload": payload or {}},
+                             ensure_ascii=False)
+        try:
+            s._window.evaluate_js(f"window.lowAnimationPanelCommand({message})")
+            return {"ok": True}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def animation_panel_closed(s, kind="timeline"):
+        """Olvida una ventana auxiliar cerrada para permitir volver a abrirla."""
+        kind = "xsheet" if kind == "xsheet" else "timeline"
+        s._aux_windows.pop(kind, None)
+        return {"ok": True}
+
+    def open_animation_panel(s, kind="timeline"):
+        """Abre Timeline o X-sheet como ventana nativa para otro monitor."""
+        kind = "xsheet" if kind == "xsheet" else "timeline"
+        current = s._aux_windows.get(kind)
+        if current:
+            try:
+                current.show()
+                return {"ok": True, "reused": True}
+            except Exception:
+                s._aux_windows.pop(kind, None)
+        if not s._ui_base:
+            return {"error": "interfaz no inicializada"}
+        # En Windows, agregar la query al path crea un nombre de archivo inválido.
+        # Una URL file conserva el parámetro y WebView2 carga el panel correctamente.
+        panel = Path(s._ui_base, "animation_panel.html").resolve().as_uri() + f"?kind={kind}"
+        try:
+            win = webview.create_window(
+                "LOW · " + ("X-sheet" if kind == "xsheet" else "Timeline"),
+                panel, js_api=s,
+                width=760 if kind == "xsheet" else 1180,
+                height=760 if kind == "xsheet" else 520,
+                min_size=(520, 360) if kind == "xsheet" else (720, 320),
+                background_color="#151514")
+            s._aux_windows[kind] = win
+            return {"ok": True}
+        except Exception as e:
+            return {"error": str(e)}
 
     def _mem_limit(s):
         """Cuántos mensajes de la conversación recordar (2 por turno).
@@ -533,6 +588,7 @@ class Api:
             "apis": sum(1 for d in provs.values() if d.get("api_key")),
             "providers": [{"name": k, "has_key": bool(d.get("api_key")),
                            "key": d.get("api_key", ""), "model": d.get("model", ""),
+                           "base_url": d.get("base_url", ""),
                            "media_only": k in s.MEDIA_ONLY}
                           for k, d in provs.items()],
         }
@@ -1545,7 +1601,17 @@ class Api:
 
     def save_keys(s, keys):
         for p, v in (keys or {}).items():
-            s.cfg.set_api_key(p, v)
+            if p not in PROVIDERS:
+                log(f"save_keys ignora provider desconocido: {p!r}")
+                continue
+            if isinstance(v, dict):
+                if "api_key" in v:
+                    s.cfg.data.setdefault("providers", {}).setdefault(p, {})["api_key"] = (v.get("api_key") or "").strip()
+                if "base_url" in v:
+                    s.cfg.data.setdefault("providers", {}).setdefault(p, {})["base_url"] = (v.get("base_url") or "").strip()
+                s.cfg.save()
+            else:
+                s.cfg.set_api_key(p, v)
         s._initp()
         return s._apis_state()
 
@@ -1754,12 +1820,17 @@ class Api:
         "glm": "glm-4-flash",
         "xai": "grok-2",
         "digitalocean": "llama3.3-70b-instruct",
+        "gemini": "gemini-2.5-flash",
+        "openrouter": "google/gemini-2.5-flash-preview",
+        "huggingface": "meta-llama/Llama-3.1-8B-Instruct:fastest",
     }
     # modelo de VISIÓN rápido por proveedor (multimodal: texto+imagen)
     # usado por ask_model cuando se adjunta una imagen. Si no está listado,
     # se usa el FAST_MODEL normal (que puede o no soportar imágenes).
     VISION_MODEL = {
         "digitalocean": "nemotron-nano-12b-v2-vl",
+        "gemini": "gemini-2.5-flash",
+        "openrouter": "google/gemini-2.5-flash-preview",
     }
 
     def _chain(s):
@@ -1773,9 +1844,9 @@ class Api:
         active = s.cfg.get_active_provider()
         # Orden configurable por el usuario (); si no, el default histórico
         pref = s.cfg.data.get("failover_order") or [
-            "deepseek", "siliconflow", "nvidia", "groq", "openai",
-            "anthropic", "qwen", "glm", "xai", "digitalocean", "agnes",
-            "aimlapi", "custom"]
+            "deepseek", "siliconflow", "nvidia", "groq", "gemini", "openai",
+            "anthropic", "qwen", "glm", "xai", "openrouter", "huggingface",
+            "digitalocean", "agnes", "aimlapi", "custom"]
         rest = sorted((p for p in provs if p != active and p not in s.MEDIA_ONLY),
                       key=lambda p: pref.index(p) if p in pref else 99)
         # ¿Ollama está realmente corriendo? Si NO, no lo metemos como respaldo:
@@ -2322,11 +2393,45 @@ class Api:
     # ── helpers de edición robusta / progreso ──────────────────────
     @staticmethod
     def _is_tool_err(res):
-        """True si el resultado de una tool NO representa avance real: errores
-        () o el aviso de llamada repetida ( Ya ejecutaste). El resto (,
-        contenido de read_file, salida de comandos, etc.) cuenta como progreso."""
-        t = str(res or "").lstrip()
-        return t.startswith("") or t.startswith(" Ya ejecutaste")
+        """Indica si una herramienta falló o no produjo avance.
+
+        Antes se comprobaba ``t.startswith("")``. Esa expresión es verdadera
+        para *cualquier* texto y hacía que LOW contara incluso una edición o una
+        lectura correcta como error; después de 20 llamadas cortaba el turno.
+        Los resultados de las tools son texto, así que reconocemos únicamente
+        señales de error explícitas y códigos de salida distintos de cero.
+        """
+        t = str(res or "").strip()
+        if not t:
+            return True
+
+        # Herramientas que devuelven un objeto JSON (por ejemplo run_code).
+        if t.startswith("{"):
+            try:
+                payload = json.loads(t)
+                if isinstance(payload, dict):
+                    if payload.get("error"):
+                        return True
+                    if payload.get("success") is False:
+                        return True
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # exec_cmd/git/ssh/scp incluyen el return code en la primera línea.
+        exit_match = re.search(r"(?:exit|returncode)\s*=\s*(-?\d+)",
+                               t.splitlines()[0], re.IGNORECASE)
+        if exit_match:
+            return int(exit_match.group(1)) != 0
+
+        low = t.casefold()
+        error_prefixes = (
+            "ya ejecutaste exactamente esta misma llamada",
+            "falta ", "falta'", "faltan ", "no existe", "no encontré",
+            "es un directorio", "old_text vacío", "ese texto aparece",
+            "el edit no cambió nada", "editor vacio", "editor vacío",
+            "error:", "error ", "falló:", "fallo:", "inválido:",
+        )
+        return low.startswith(error_prefixes)
 
     @staticmethod
     def _norm_ws(t):
@@ -3930,6 +4035,7 @@ class Api:
             tool_runs = 0     # tools que AVANZARON (resultado sin )  progreso real
             fail_streak = 0   # tools seguidas que fallaron sin ningún éxito en el medio
             edit_fails = 0    # edit_file fallidos seguidos  escalar la guía
+            recovery_attempts = 0  # recuperaciones automáticas antes de cortar el turno
             # cadena de failover: si el modelo actual se cae/agota, saltar al siguiente
             chain = s._chain()   # [(proveedor, modelo), ...]
             ci = 0
@@ -4128,7 +4234,13 @@ class Api:
                         # ya se ejecutó antes en este turno  no repetirla, avisar.
                         # exec_cmd/run_code quedan afuera: repetirlos SI puede tener
                         # sentido (ej. correr los tests de nuevo tras un fix).
-                        sig = (fn, json.dumps(args, sort_keys=True, ensure_ascii=False))
+                        # Una lectura idéntica vuelve a ser válida después de una edición:
+                        # agregamos la revisión del workspace a su firma. Sin esto el agente
+                        # no podía verificar el archivo que acababa de modificar.
+                        revision = len(s._written) if fn in (
+                            "read_file", "list_files", "search_code") else 0
+                        sig = (fn, json.dumps(args, sort_keys=True,
+                                              ensure_ascii=False), revision)
                         dedupe = fn not in ("exec_cmd", "run_code")
                         seen_calls[sig] = seen_calls.get(sig, 0) + 1
                         if dedupe and seen_calls[sig] > 1:
@@ -4169,19 +4281,47 @@ class Api:
                         if fn in ("write_file", "edit_file", "read_file") and "path" in args:
                             tool_info["file"] = args["path"]
                         s._push("tool", tool_info)
-                    # backstop de racha de fallos: si el agente encadena muchos
-                    # errores de tool sin ningún éxito, está trabado aunque cada
-                    # llamada sea distinta (el dedup no lo caza). Cortar y avisar.
-                    if fail_streak >= 10:
-                        stalled_out = True
-                        s._push("sys", " El agente encadenó varios errores de herramienta sin avanzar — corté el turno.")
-                        break
-                    # ninguna tool se ejecutó (todas repetidas/vacías)  tramo perdido
-                    stall = 0 if ran_any else stall + 1
+                    # Recuperación automática: una racha de errores ya no corta el
+                    # trabajo en el primer incidente. LOW devuelve el diagnóstico al
+                    # modelo y le exige releer/cambiar de estrategia. Solo abandona si
+                    # también fracasan las recuperaciones configuradas.
+                    max_failures = max(4, int(ag.get("max_tool_failures", 8) or 8))
+                    max_recoveries = max(1, int(ag.get("max_recovery_attempts", 2) or 2))
+                    if fail_streak >= max_failures:
+                        if recovery_attempts < max_recoveries:
+                            recovery_attempts += 1
+                            fail_streak = 0
+                            edit_fails = 0
+                            stall = 0
+                            ms.append({"role": "user", "content":
+                                       "RECUPERACIÓN AUTOMÁTICA: las últimas herramientas "
+                                       "fallaron. No termines ni repitas la misma llamada. "
+                                       "Leé el último error, inspeccioná el estado real con "
+                                       "read_file/list_files y continuá con una estrategia "
+                                       "distinta. Si la tarea ya está resuelta, respondé con "
+                                       "un resumen final."})
+                            s._push("sys", f"↻ Recuperando al agente tras errores de herramienta "
+                                           f"({recovery_attempts}/{max_recoveries})…")
+                        else:
+                            stalled_out = True
+                            s._push("sys", " El agente no pudo recuperarse de varios errores de herramienta.")
+                            break
+                    # Progreso significa éxito, no simplemente haber invocado una tool.
+                    stall = 0 if progressed else stall + 1
                     if stall >= 4:
-                        stalled_out = True
-                        s._push("sys", " El agente quedó repitiendo la misma acción sin avanzar — corté el turno.")
-                        break
+                        if recovery_attempts < max_recoveries:
+                            recovery_attempts += 1
+                            stall = 0
+                            ms.append({"role": "user", "content":
+                                       "RECUPERACIÓN AUTOMÁTICA: estás repitiendo acciones sin "
+                                       "obtener un resultado nuevo. Conservá lo ya hecho, cambiá "
+                                       "de enfoque y avanzá con el siguiente paso concreto."})
+                            s._push("sys", f"↻ Cambiando de estrategia automáticamente "
+                                           f"({recovery_attempts}/{max_recoveries})…")
+                        else:
+                            stalled_out = True
+                            s._push("sys", " El agente siguió repitiendo acciones después de recuperarse.")
+                            break
                 else:
                     # se agotaron los pasos de herramientas sin llegar a una respuesta final
                     hit_cap = True
@@ -4739,10 +4879,11 @@ def main():
     api = Api()
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     ui = os.path.join(base, "ui", "index.html")
+    api._ui_base = os.path.join(base, "ui")
     window = webview.create_window(
         "LOW", ui, js_api=api,
         width=1280, height=800, min_size=(980, 600), maximized=True,
-        background_color="#0B0B0C",
+        background_color="#151514",
     )
     api._window = window
     try:
