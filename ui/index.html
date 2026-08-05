@@ -36,6 +36,8 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
   <symbol id="i-arrow" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-step-next" viewBox="0 0 24 24"><polygon points="5 4 16 12 5 20 5 4"/><line x1="19" y1="4" x2="19" y2="20"/></symbol>
   <symbol id="i-chev-d" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></symbol>
   <symbol id="i-chev-r" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
   <symbol id="i-chev-l" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
@@ -43,6 +45,15 @@
   <symbol id="i-templates" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
   <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
   <symbol id="i-artifact" viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 22V12"/><path d="M21 7l-9 5-9-5"/></symbol>
+  <!-- cohete: para Artefactos, antes usaba i-cube y se confundía con el
+       cubo boceteado de LOW Estudio (i-cube-sketch) -->
+  <symbol id="i-rocket" viewBox="0 0 24 24">
+    <path d="M12 2c2.8 2.2 4.3 5.8 4.3 9.3 0 2.1-.5 4.1-1.3 5.7l-3 2-3-2c-.8-1.6-1.3-3.6-1.3-5.7C7.7 7.8 9.2 4.2 12 2z"/>
+    <circle cx="12" cy="10" r="1.4"/>
+    <path d="M8 15l-3 1 .8 4 3.2-2"/>
+    <path d="M16 15l3 1-.8 4-3.2-2"/>
+    <path d="M10.5 19.5c.3 1 .8 2 1.5 2.5.7-.5 1.2-1.5 1.5-2.5"/>
+  </symbol>
   <symbol id="i-routine" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>
   <symbol id="i-ext" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
@@ -52,6 +63,13 @@
   <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9"/></symbol>
   <symbol id="i-cube" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></symbol>
+  <!-- cubo a mano alzada ("línea peluda"): dos pasadas de trazo levemente
+       desalineadas + puntas que se pasan un poco de cada vértice, como un
+       boceto rápido — para el botón de LOW Estudio (dibujo 3D). -->
+  <symbol id="i-cube-sketch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="1.5" d="M12 2.4 L20.6 7.2 L12.3 12.3 L3.6 7.4 Z M3.6 7.4 L3.3 15.8 L12.2 20.5 L12.3 12.3 M20.6 7.2 L20.9 15.6 L12.2 20.5"/>
+    <path stroke-width="1" opacity=".55" d="M12.6 2 L21.1 7.6 L12.8 11.9 L4.1 6.9 Z M4.1 6.9 L3.8 15.3 L12.6 20.9 L12.8 11.9 M21.1 7.6 L21.4 16 L12.6 20.9"/>
+  </symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
   <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3 0z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></symbol>
   <!-- íconos del estudio de animación (línea, coherentes con el set base) -->
@@ -88,6 +106,7 @@
   <symbol id="i-onion" viewBox="0 0 24 24"><circle cx="9.5" cy="12" r="6.5"/><circle cx="14.5" cy="12" r="6.5" opacity=".55"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.5"/><path d="M11.5 12H21"/><path d="M18 12v3.5M14.8 12v2.5"/></symbol>
   <symbol id="i-insert" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M8.5 8.5L12 12l3.5-3.5"/><path d="M4 16v4h16v-4"/></symbol>
+  <symbol id="i-blank-frame" viewBox="0 0 24 24"><rect x="3" y="4" width="14" height="16" rx="2"/><path d="M17 11h5M19.5 8.5v5"/></symbol>
   <symbol id="i-wand" viewBox="0 0 24 24"><path d="M4 20L14 10"/><path d="M17 3l.9 2.6L20.5 6.5l-2.6.9L17 10l-.9-2.6L13.5 6.5l2.6-.9z"/><path d="M20 13l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6z"/></symbol>
   <symbol id="i-motion" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.2"/><path d="M8 12h13"/><path d="M16.5 7.5L21 12l-4.5 4.5"/></symbol>
   <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" class="fill"/></symbol>
@@ -140,9 +159,9 @@
       <button class="abtn star" id="abAgent" title="Agente"><svg class="ico ico-fill"><use href="#i-star"/></svg></button>
       <div class="act-sep"></div>
       <button class="abtn" id="abDesign" title="Diseño (estudio de diseño y animación)"><svg class="ico"><use href="#i-pen"/></svg></button>
-      <button class="abtn" id="abL3d" title="Lienzo 3D (dibujo con mallas reales: tubos, luces, export GLB)"><svg class="ico"><use href="#i-cube"/></svg></button>
+      <button class="abtn" id="abL3d" title="LOW Estudio (dibujo 3D con guías estilo Feather)"><svg class="ico"><use href="#i-cube-sketch"/></svg></button>
       <button class="abtn" id="abSocial" title="Redes sociales (publicar, programar y cola de contenido)"><svg class="ico"><use href="#i-share"/></svg></button>
-      <button class="abtn" id="abArtifacts" title="Artefactos (vista previa en vivo)"><svg class="ico"><use href="#i-artifact"/></svg></button>
+      <button class="abtn" id="abArtifacts" title="Artefactos (vista previa en vivo)"><svg class="ico"><use href="#i-rocket"/></svg></button>
       <button class="abtn" id="abRoutines" title="Rutinas (órdenes guardadas)"><svg class="ico"><use href="#i-routine"/></svg></button>
       <button class="abtn" id="abTools" title="Herramientas del agente"><svg class="ico"><use href="#i-tool"/></svg></button>
       <button class="abtn" id="abServers" title="Servidores SSH"><svg class="ico"><use href="#i-server"/></svg></button>
@@ -209,18 +228,14 @@
     </aside>
   </div>
 
-  <!-- ══ Lienzo 3D (WebGL): dibujo con mallas reales ══ -->
+  <!-- ══ LOW Estudio (WebGL): dibujo 3D con guías estilo Feather — motor unificado
+       (ex low2-hybrid, embebido como bundle estático propio: sin Electron).
+       Sin barra propia: el motor ya tiene su toolbar completa adentro del
+       iframe (Persp/vistas/XYZ arriba, herramientas a la izquierda) — una
+       barra "LOW Estudio" externa se pisaba con esa toolbar interna y no se
+       podía mover. Para salir: Esc, o volver a clickear el ícono 🧊. ══ -->
   <div id="l3dView" hidden>
-    <div class="l3d-host" id="l3dCanvasHost"></div>
-    <div class="l3d-tools" id="l3dTools">
-      <span class="l3d-title"><svg class="ico"><use href="#i-cube"/></svg> Lienzo 3D</span>
-      <button data-l3dtool="brush" class="active" title="Pincel 3D: tubos con presión (Fase 2)">Pincel</button>
-      <button data-l3dtool="move" title="Mover/rotar/escalar trazos (Fase 3)">Mover</button>
-      <button data-l3dtool="erase" title="Borrador (Fase 2)">Borrar</button>
-      <span class="vsep"></span>
-      <button id="l3dExit" title="Salir (Esc)"><svg class="ico"><use href="#i-x"/></svg></button>
-    </div>
-    <div class="l3d-hint"><b>arrastrar</b> orbitar · <b>rueda</b> zoom · <b>Shift·medio</b> panear · <b>Esc</b> salir</div>
+    <iframe id="l3dFrame" class="l3d-host" sandbox="allow-scripts allow-same-origin"></iframe>
   </div>
 
   <!-- ══ Barra de estado ══ -->
@@ -395,12 +410,32 @@
       <button class="ibtn" id="dzVec" title="Vectorizar: convierte la imagen importada/generada en trazos SVG editables (calcar). No más dibujo tosco a mano."><svg class="ico"><use href="#i-vector"/></svg></button>
       <button class="ibtn" id="dzCamBtn" title="Cámara (C): mové/zoomeá/rotá el encuadre y dejá claves por cuadro — el export sale por la cámara"><svg class="ico"><use href="#i-cam"/></svg></button>
       <button class="ibtn" id="dzRigBtn" title="Rig (): claves de posición/rotación/escala por PIEZA — posá el personaje en cada cuadro clave y LOW interpola (pegs de Toon Boom)"><svg class="ico"><use href="#i-key"/></svg></button>
-      <button class="ibtn" id="dzZBtn" title="Cámara multiplano: la herramienta de animación 2D con profundidad — arrastrá cada capa cerca/lejos de la cámara (parallax), como la cámara multiplano de Disney"><svg class="ico"><use href="#i-stage"/></svg></button>
-      <button class="ibtn" id="dz3DBtn" title="Espacio 3D (estilo Blender): las capas flotan en profundidad y podés orbitar la escena, dibujar 2D sobre el plano activo y mover cada capa en los ejes X·Y·Z"><svg class="ico"><use href="#i-cube"/></svg></button>
+      <button class="ibtn" id="dzZBtn" title="Cámara multiplano: arrastrá cada capa cerca/lejos de la cámara (profundidad Z) — el paneo Y EL ZOOM producen parallax real, como la cámara multiplano de Disney/Toon Boom/OpenToonz"><svg class="ico"><use href="#i-stage"/></svg></button>
       <div class="hsep"></div>
       <button class="ibtn" id="dzPenDbgBtn" title=" Diagnóstico de tableta: panel en vivo de eventos pointer — útil para depurar tabletas Huion/Wacom. Clic para activar/desactivar." onclick="dzPenDebugToggle()"></button>
     </div>
     <div class="dz-canvas" id="dzCanvas">
+      <!-- barra rápida tipo Procreate: dibujo, mezcla, borrado, capas y color
+           conviven en un único grupo compacto sobre el lienzo -->
+      <div class="dz-procreate-bar" id="dzQuickTools">
+        <button data-qtool="select" data-name="Elegir" title="Selección"><svg class="ico ico-fill"><use href="#i-cursor"/></svg></button>
+        <button data-qtool="pencil" data-name="Lápiz" title="Lápiz"><svg class="ico"><use href="#i-pencil"/></svg></button>
+        <button data-qtool="brush" data-name="Pincel" title="Pincel"><svg class="ico"><use href="#i-brush"/></svg></button>
+        <button data-qtool="iron" data-name="Mezclar" title="Mezclar / suavizar"><svg class="ico"><use href="#i-iron"/></svg></button>
+        <button data-qtool="eraser" data-name="Borrar" title="Borrador"><svg class="ico"><use href="#i-eraser"/></svg></button>
+        <button id="dzQuickLayers" data-name="Capas" title="Capas"><svg class="ico"><use href="#i-files"/></svg></button>
+        <label class="dz-quick-color" title="Color del trazo"><input type="color" id="dzQuickColor" value="#1a1a1a"></label>
+      </div>
+      <div class="dz-procreate-sliders" id="dzQuickSliders">
+        <label title="Tamaño del pincel"><span>T</span><input type="range" id="dzQuickSize" min="1" max="120" value="6"></label>
+        <label title="Opacidad del pincel"><span>%</span><input type="range" id="dzQuickOpacity" min="5" max="100" value="100"></label>
+      </div>
+      <!-- cursor visual de herramienta: evita que lápiz/pincel aparezcan como
+           una flecha genérica y funciona igual con mouse y tableta -->
+      <div class="dz-tool-cursor" id="dzToolCursor" hidden>
+        <span class="dz-tool-cursor-ring"></span>
+        <svg class="ico"><use id="dzToolCursorUse" href="#i-pencil"/></svg>
+      </div>
       <!-- cuadrícula (Ctrl+R activa reglas; la grilla y guías se prenden en la barra) -->
       <div class="dz-grid2d" id="dzGrid2d" hidden></div>
       <div class="dz-guides" id="dzGuides" hidden></div>
@@ -448,7 +483,8 @@
       </div>
       <!-- X-sheet: planilla de exposición vertical (flotante) -->
       <div class="dz-xsheet" id="dzXsheet" hidden>
-        <div class="dz-op-head" id="dzXsHead"><svg class="ico"><use href="#i-xsheet"/></svg> X-sheet
+        <div class="dz-op-head" id="dzXsHead"><svg class="ico"><use href="#i-xsheet"/></svg> X-sheet · OpenToonz
+          <button class="dz-panel-pop" id="dzXsDetach" title="Separar X-sheet en otra ventana"><svg class="ico"><use href="#i-ext"/></svg></button>
           <span class="dz-op-x" id="dzXsClose" title="Cerrar">×</span></div>
         <div class="dz-xs-rows" id="dzXsRows"></div>
       </div>
@@ -581,8 +617,8 @@
   <div class="dz-timeline" id="dzTimeline" hidden>
     <button class="ibtn" id="tlFirst" title="Primer cuadro">⏮</button>
     <button class="ibtn" id="tlPrev" title="Cuadro anterior (,)">◀</button>
-    <button class="ibtn" id="tlPlay" title="Reproducir / parar"></button>
-    <button class="ibtn" id="tlNext" title="Cuadro siguiente (.)"></button>
+    <button class="ibtn" id="tlPlay" title="Reproducir / parar"><svg class="ico ico-fill"><use href="#i-play"/></svg></button>
+    <button class="ibtn" id="tlNext" title="Cuadro siguiente (.)"><svg class="ico ico-fill"><use href="#i-step-next"/></svg></button>
     <button class="ibtn" id="tlLast" title="Último cuadro">⏭</button>
     <label class="tl-field" title="Cuadros por segundo">fps<input type="number" id="tlFps" value="12" min="1" max="60" class="dz-win"></label>
     <button class="ibtn active" id="tlLoop" title="Loop: repetir en bucle al reproducir"><svg class="ico"><use href="#i-routine"/></svg></button>
@@ -590,11 +626,14 @@
     <label class="tl-field" title="Último cuadro que se reproduce/exporta (Out) · 0 = hasta el final">Out<input type="number" id="tlOut" value="0" min="0" class="dz-win"></label>
     <div class="vsep"></div>
     <button class="ibtn active" id="tlOnion" title="Papel cebolla: mostrar/ocultar (el panel flotante lo personaliza)"><svg class="ico"><use href="#i-onion"/></svg></button>
-    <button class="ibtn" id="tlXs" title="X-sheet: planilla de exposición vertical (cuadros, claves y cámara)"><svg class="ico"><use href="#i-xsheet"/></svg></button>
-    <button class="ibtn" id="tlLayers" title="Timeline por CAPAS: filas = capas, columnas = cuadros (como Toon Boom). La profundidad Z de cada capa es la misma de la cámara multiplano."><svg class="ico"><use href="#i-files"/></svg></button>
+    <button class="ibtn dz-anim-mode active" id="tlLayers" title="Timeline OpenToonz: niveles en filas y fotogramas en columnas"><svg class="ico"><use href="#i-files"/></svg><span>Timeline</span></button>
+    <button class="ibtn dz-anim-mode" id="tlXs" title="X-sheet: tiempo vertical, niveles en columnas"><svg class="ico"><use href="#i-xsheet"/></svg><span>X-sheet</span></button>
+    <button class="ibtn" id="tlDetach" title="Separar Timeline en una ventana para el segundo monitor"><svg class="ico"><use href="#i-ext"/></svg></button>
+    <button class="ibtn" id="tlDetachXs" title="Separar X-sheet en una ventana para el segundo monitor"><svg class="ico"><use href="#i-xsheet"/></svg><span class="dz-pop-mark">↗</span></button>
     <div class="tl-frames" id="tlFrames" title="Arrastrá sobre los cuadros para hojearlos (scrub)"></div>
     <button class="ibtn" id="tlKey" title="Marcar/desmarcar este cuadro como FOTOGRAMA CLAVE (pose principal del flujo pose-a-pose)"><svg class="ico"><use href="#i-key"/></svg></button>
     <button class="ibtn" id="tlAdd" title="Duplicar este cuadro al FINAL (flujo clásico: dibujar sobre la copia)"><svg class="ico"><use href="#i-plus"/></svg></button>
+    <button class="ibtn" id="tlBlank" title="Agregar un frame VACÍO después del actual"><svg class="ico"><use href="#i-blank-frame"/></svg></button>
     <button class="ibtn" id="tlIns" title="Insertar copia de este cuadro JUSTO DESPUÉS (renumera los siguientes) · Shift: cuadro en blanco"><svg class="ico"><use href="#i-insert"/></svg></button>
     <button class="ibtn" id="tlTween" title="Intercalar entre este cuadro y el siguiente: elegís cuántos intermedios y con qué curva (ease)"><svg class="ico"><use href="#i-wand"/></svg></button>
     <button class="ibtn" id="tlMove" title="Interpolación de movimiento: 1er clic fija el INICIO del elemento seleccionado, movelo a la posición final y 2do clic genera los cuadros del recorrido"><svg class="ico"><use href="#i-motion"/></svg></button>
@@ -610,8 +649,9 @@
   </div>
   <!-- timeline por CAPAS × cuadros (estilo Toon Boom): filas capa, columnas cuadro -->
   <div class="dz-tlgrid" id="dzTlGrid" hidden>
+    <div class="dz-tlg-resize" id="dzTlgResize" title="Arrastrá para cambiar la altura de la Timeline"></div>
     <div class="dz-tlg-head">
-      <span class="dz-tlg-corner">capas ↓ · cuadros </span>
+      <span class="dz-tlg-corner">Niveles ↓ · Fotogramas →</span>
       <div class="dz-tlg-cols" id="dzTlgCols"></div>
     </div>
     <div class="dz-tlg-rows" id="dzTlgRows"></div>
@@ -621,6 +661,7 @@
     <div class="dz-dock-status" id="dzStatus" hidden></div>
     <div class="dz-dock-in">
       <textarea id="dzPrompt" rows="1" placeholder="Pedile un cambio a LOW… ej: «hacé el título más grande y centralo»" spellcheck="false"></textarea>
+      <button class="ibtn dz-ai-sequence" id="dzAiSequence" title="Crear varios fotogramas con IA e incorporarlos a la Timeline"><svg class="ico"><use href="#i-film"/></svg><span>Frames IA</span></button>
       <button class="send" id="dzSend"><svg class="ico"><use href="#i-arrow"/></svg></button>
     </div>
   </div>
@@ -646,10 +687,26 @@
 <script src="vendor/mode-htmlmixed.min.js"></script>
 <script src="vendor/addon-closebrackets.min.js"></script>
 <script src="vendor/addon-activeline.min.js"></script>
-<script src="vendor/three.min.js"></script><!-- Three.js r147 UMD (offline) — Lienzo 3D -->
-<script src="vendor/three-orbit.js"></script>
 <script src="mock-api.js"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
+<script src="core/history.js"></script>
+<script src="animation/scene-model.js"></script>
+<script src="animation/exposures.js"></script>
+<script src="animation/timeline.js"></script>
+<script src="animation/xsheet.js"></script>
+<script src="animation/playback.js"></script>
+<script src="animation/camera.js"></script>
+<script src="drawing/stabilization.js"></script>
+<script src="drawing/pointer-input.js"></script>
+<script src="drawing/brushes.js"></script>
+<script src="drawing/stroke-engine.js"></script>
+<script src="workspace/panels.js"></script>
+<script src="workspace/windows.js"></script>
+<script src="workspace/layouts.js"></script>
+<script src="workspace/recovery.js"></script>
+<script src="ai/commands.js"></script>
+<script src="ai/task-runner.js"></script>
+<script src="ai/recovery.js"></script>
 <script src="app.js"></script>
-<script src="lienzo3d.js"></script>
 </body>
 </html>

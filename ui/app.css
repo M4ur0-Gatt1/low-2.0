@@ -499,7 +499,7 @@ footer {
 .overlay[hidden] { display: none; }
 .modal {
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-  padding: 20px; min-width: 430px; max-width: 560px; max-height: 80vh; overflow-y: auto;
+  padding: 20px; min-width: 430px; max-width: 720px; max-height: 80vh; overflow-y: auto;
 }
 .modal h2 { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
 .modal .sub { color: var(--faint); font-size: 11.5px; margin-bottom: 14px; }
@@ -509,6 +509,8 @@ footer {
   flex: 1; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
   padding: 7px 10px; color: var(--txt); font: 400 12px 'Figtree', sans-serif; outline: none;
 }
+.krow input[type="password"] { flex: 0.85; min-width: 190px; }
+.krow input[data-base-p] { flex: 1.15; min-width: 220px; }
 .krow input:focus { border-color: var(--mut); }
 .agrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .agrow label { flex: 1; font: 500 11.5px 'JetBrains Mono', monospace; color: var(--mut); }
@@ -890,6 +892,44 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 }
 .dz-canvas { position: relative; }
 .dz-canvas svg { max-width: 100%; max-height: 100%; box-shadow: 0 6px 40px rgba(0,0,0,.5); background: #fff; transform-origin: center; }
+.dz-procreate-bar {
+  position: absolute; z-index: 20; right: 22px; top: 18px; display: flex; gap: 5px;
+  padding: 7px; border: 1px solid rgba(255,255,255,.13); border-radius: 18px;
+  background: rgba(24,24,28,.97); box-shadow: 0 10px 32px rgba(0,0,0,.5); backdrop-filter: blur(16px);
+}
+.dz-procreate-bar button { position:relative;display:grid;place-items:center;width:42px;height:42px;padding:9px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#202126;color:#d8dbe3;cursor:pointer; }
+.dz-procreate-bar button .ico { display:block;width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8; }
+.dz-procreate-bar button .ico-fill { fill:currentColor;stroke:currentColor; }
+.dz-procreate-bar button:hover { color:#fff;background:#30323a;border-color:rgba(255,255,255,.18);transform:translateY(-1px); }
+.dz-procreate-bar button.active { color:#fff;background:linear-gradient(145deg,#f05a22,#d83b08);border-color:#ff7542;box-shadow:0 4px 14px rgba(240,69,14,.34); }
+.dz-procreate-bar button::after { content:attr(data-name);position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);padding:3px 7px;border-radius:6px;background:#101114;color:#eef0f5;font:600 9px Figtree,sans-serif;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s; }
+.dz-procreate-bar button:hover::after { opacity:1; }
+.dz-quick-color { display:grid;place-items:center;width:42px;height:42px;border-radius:50%;cursor:pointer;background:conic-gradient(#f33,#fc3,#3c6,#3cf,#63f,#f3c,#f33);padding:4px;box-shadow:0 0 0 1px rgba(255,255,255,.15); }
+.dz-quick-color input { width:100%;height:100%;padding:0;border:3px solid var(--panel);border-radius:50%;background:none;cursor:pointer; }
+.dz-procreate-sliders { position:absolute;z-index:20;left:20px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:12px;padding:11px 8px;border:1px solid rgba(255,255,255,.13);border-radius:20px;background:rgba(24,24,28,.97);box-shadow:0 10px 32px rgba(0,0,0,.5); }
+.dz-procreate-sliders label { display:flex;flex-direction:column;align-items:center;gap:6px;color:#e6e8ed;font:700 9px Figtree,sans-serif; }
+.dz-procreate-sliders input[type=range] { writing-mode:vertical-lr;direction:rtl;width:22px;height:104px;accent-color:var(--orange);cursor:pointer; }
+.dz-panel-pop { margin-left:auto;width:25px;height:23px;padding:4px;border:0;border-radius:7px;background:transparent;color:var(--mut); }
+.dz-panel-pop + .dz-op-x { margin-left:2px; }
+.dz-pop-mark { position:absolute;font-size:8px;transform:translate(-2px,-7px); }
+/* Cursor propio por herramienta. El aro representa el área de contacto y el
+   pictograma central identifica lápiz, pincel, pluma, borrador, etc. */
+.dz-tool-cursor {
+  --tool-size: 24px; position: absolute; z-index: 30; width: var(--tool-size); height: var(--tool-size);
+  transform: translate(-50%,-50%); pointer-events: none; color: #111;
+  filter: drop-shadow(0 0 1px #fff) drop-shadow(0 1px 1px rgba(0,0,0,.45));
+}
+.dz-tool-cursor[hidden] { display: none; }
+.dz-tool-cursor-ring { position: absolute; inset: 0; border: 1.5px solid currentColor; border-radius: 50%; background: rgba(255,255,255,.08); }
+.dz-tool-cursor .ico { position: absolute; width: 13px; height: 13px; left: 50%; top: 50%; transform: translate(-50%,-50%); fill: none; stroke-width: 1.8; }
+.dz-tool-cursor[data-tool="eraser"] .dz-tool-cursor-ring,
+.dz-tool-cursor[data-tool="bucket"] .dz-tool-cursor-ring { border-radius: 4px; }
+.dz-tool-cursor[data-tool="dropper"] .dz-tool-cursor-ring,
+.dz-tool-cursor[data-tool="ruler"] .dz-tool-cursor-ring,
+.dz-tool-cursor[data-tool="pivot"] .dz-tool-cursor-ring { border-style: dashed; }
+.dz-canvas.tool-cursor-active,
+.dz-canvas.tool-cursor-active > svg,
+.dz-canvas.tool-cursor-active > svg * { cursor: none !important; }
 .dz-zoom { font: 500 11px 'JetBrains Mono', monospace; color: var(--mut); min-width: 40px; text-align: center; }
 /* tirador de redimensión (esquina inferior derecha del elemento seleccionado) */
 .dz-handle {
@@ -1024,14 +1064,17 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 /* splitter del inspector */
 .dz-split { flex: none; width: 5px; cursor: col-resize; background: transparent; }
 .dz-split:hover { background: var(--red); opacity: .5; }
-/* X-sheet flotante: planilla de exposición vertical */
+/* X-sheet principal: dock derecho estilo OpenToonz. El lienzo reserva espacio
+   para que la planilla no tape el dibujo. */
 .dz-xsheet {
-  position: absolute; left: 56px; right: 18px; bottom: 96px; top: auto; z-index: 8; max-height: 58%;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(0,0,0,.45); overflow: hidden; display: flex; flex-direction: column;
+  position: absolute; left: auto; right: 0; top: 0; bottom: 0; z-index: 8;
+  width: clamp(360px, 44%, 720px); max-height: none;
+  background: var(--panel); border: 0; border-left: 1px solid var(--line); border-radius: 0;
+  box-shadow: -8px 0 24px rgba(0,0,0,.32); overflow: hidden; display: flex; flex-direction: column;
 }
 .dz-xsheet[hidden] { display: none; }
-.dz-xs-rows { overflow: auto; padding: 0; }
+.dz-xs-rows { overflow: auto; padding: 0; flex: 1; min-height: 0; }
+.dz-canvas.xsheet-open { padding-right: clamp(384px, calc(44% + 24px), 744px); }
 .dz-xs-head {
   display: grid; grid-template-columns: 22px 46px 22px 1fr; gap: 6px; align-items: center;
   padding: 2px 8px 4px; font: 600 8.5px 'JetBrains Mono', monospace; color: var(--faint);
@@ -1079,14 +1122,19 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-xs-cell.hold.exposed::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid rgba(49, 190, 205, .5); }
 .dz-xs-note { border-radius: 0; border-left: 0; border-top: 0; border-bottom: 0; padding: 3px 7px; }
 
-/* timeline por CAPAS × cuadros (Toon Boom) */
+/* Timeline principal estilo OpenToonz: panel acoplado debajo del visor. */
 .dz-tlgrid {
-  position: absolute; left: 0; right: 0; bottom: 100%; z-index: 9;
-  max-height: 42vh; overflow: auto;
+  position: relative; flex: none; width: 100%; height: 230px; min-height: 120px;
+  max-height: 48vh; overflow: auto;
   background: var(--panel); border-top: 1px solid var(--line);
-  box-shadow: 0 -8px 24px rgba(0,0,0,.35);
+  box-shadow: 0 -5px 18px rgba(0,0,0,.22);
 }
 .dz-tlgrid[hidden] { display: none; }
+.dz-tlg-resize {
+  position: sticky; left: 0; top: 0; z-index: 6; width: 100%; height: 5px;
+  margin-bottom: -5px; cursor: ns-resize; background: transparent;
+}
+.dz-tlg-resize:hover { background: var(--cyan); opacity: .55; }
 .dz-tlg-head { display: flex; position: sticky; top: 0; z-index: 2; background: var(--panel2); }
 .dz-tlg-corner {
   width: 168px; flex: none; padding: 4px 8px; font: 600 9px 'JetBrains Mono', monospace;
@@ -1101,6 +1149,8 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-tlg-col { position: relative; }
 .dz-tlg-col.mj { color: var(--txt); border-right-color: var(--line); }
 .dz-tlg-col.cur { background: var(--redsoft); color: var(--red); box-shadow: inset 0 -2px 0 var(--red); }
+.dz-tlg-col.selected { background: rgba(34,211,238,.12); color: var(--txt); }
+.dz-tlg-col.selected.cur { box-shadow: inset 0 -2px 0 var(--red), inset 0 2px 0 var(--cyan); }
 /* marcas [Clave] (clave de dibujo) y [Camara] (clave de cámara) bajo el número */
 .dz-tlg-col i { position: absolute; bottom: 1px; left: 50%; width: 5px; height: 5px; border-radius: 99px; transform: translateX(-50%); }
 .dz-tlg-col i.k { background: var(--orange); }
@@ -1143,6 +1193,8 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-tlg-cell:hover { outline: 1px solid var(--mut); outline-offset: -1px; }
 /* playhead: columna del cuadro actual resaltada en todas las filas */
 .dz-tlg-cell.cur { box-shadow: inset 1px 0 0 var(--red), inset -1px 0 0 var(--red); background-color: rgba(240,69,14,.08); }
+.dz-tlg-cell.selected { outline: 1px solid rgba(34,211,238,.42); outline-offset: -1px; }
+.dz-tlg-cell.selected:not(.start):not(.held):not(.key) { background-color: rgba(34,211,238,.08); }
 /* [Diorama] diorama: vista lateral del multiplano — compositing sin nodos */
 .dz-zpanel {
   position: absolute; left: 60px; bottom: 120px; z-index: 8; width: 340px;
@@ -1379,8 +1431,14 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-timeline {
   flex: none; display: flex; align-items: center; gap: 8px;
   border-top: 1px solid var(--line); background: var(--panel); padding: 7px 12px;
+  overflow-x: auto; scrollbar-width: thin;
 }
 .dz-timeline[hidden] { display: none; }
+.dz-timeline.xsheet-mode .tl-frames { display: none; }
+.dz-timeline.grid-mode .tl-frames { display: none; }
+.dz-timeline.xsheet-mode #tlXs { color: var(--cyan); border-color: var(--cyan); background: rgba(49,190,205,.12); }
+.dz-anim-mode { width: auto; min-width: 78px; padding: 0 9px; gap: 5px; }
+.dz-anim-mode span { font: 600 10px 'Figtree', sans-serif; }
 /* panel de estilo (relleno/trazo/opacidad) + paleta del proyecto */
 .dz-style { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 10px; }
 .dz-style-row { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
@@ -1440,6 +1498,11 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
   display: flex; gap: 8px; align-items: flex-end; background: var(--panel2);
   border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 8px 14px; max-width: 900px; margin: 0 auto;
 }
+.dz-ai-sequence { width: auto; min-width: 92px; padding: 0 10px; gap: 5px; flex: none; }
+.dz-ai-sequence span { font: 600 10px 'Figtree', sans-serif; white-space: nowrap; }
+.dz-ai-seq-options { display: flex; align-items: center; gap: 18px; margin-top: 12px; color: var(--mut); font-size: 12px; }
+.dz-ai-seq-options label { display: flex; align-items: center; gap: 7px; }
+.dz-ai-seq-options input[type="number"] { width: 70px; margin: 0; }
 .dz-dock-in:focus-within { border-color: var(--mut); }
 .dz-dock-in textarea {
   flex: 1; background: transparent; border: none; outline: none; resize: none;
@@ -1722,3 +1785,236 @@ footer #ver {
   padding: 2px 8px; color: var(--mut); font: 600 10px 'JetBrains Mono', monospace;
 }
 .dz3d-depth-zero:hover { color: var(--txt); border-color: var(--mut); }
+
+/* ==========================================================================
+   LOW — sistema visual contemporáneo
+   Superficies cálidas, jerarquía silenciosa y controles inspirados en las
+   mejores interfaces creativas actuales. Mantiene el naranja propio de LOW.
+   ========================================================================== */
+body {
+  --bg: #151514;
+  --panel: #1b1a19;
+  --panel2: #232220;
+  --surface-raised: #292825;
+  --surface-hover: #302f2c;
+  --line: rgba(255, 248, 235, .075);
+  --line2: rgba(255, 248, 235, .038);
+  --txt: #eeeae2;
+  --mut: #aaa59c;
+  --faint: #716d66;
+  /* Los colores de MARCA (--red/--cyan/--orange) NO se redeclaran acá: valen
+     los de arriba (negro/naranja #F0450E/cyan #33B5E8). Este bloque solo aporta
+     superficies, radios, sombras y tipografía. */
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --shadow-float: 0 18px 50px rgba(0, 0, 0, .34), 0 2px 8px rgba(0, 0, 0, .18);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, .18);
+  font-size: 13.5px;
+  line-height: 1.45;
+  letter-spacing: -.006em;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+}
+body.light {
+  --bg: #f4f1eb;
+  --panel: #fbf9f5;
+  --panel2: #efebe4;
+  --surface-raised: #e8e3da;
+  --surface-hover: #ded8ce;
+  --line: rgba(49, 43, 36, .09);
+  --line2: rgba(49, 43, 36, .045);
+  --txt: #292621;
+  --mut: #6f6a62;
+  --faint: #a09a91;
+  /* idem: el rojo/naranja de marca del tema claro vale desde arriba. */
+}
+
+/* Iconografía más fina y consistente. */
+.ico { width: 16px; height: 16px; stroke-width: 1.65; }
+.ico-fill { stroke-width: 0; }
+button, input, textarea, select { letter-spacing: inherit; }
+
+/* Cabecera: una sola banda serena, con controles flotantes de bajo contraste. */
+header {
+  min-height: 56px; gap: 10px; padding: 9px 16px;
+  background: rgba(27, 26, 25, .96);
+  border-bottom-color: var(--line2);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .18);
+}
+.brand { gap: 10px; margin-right: 2px; }
+.wordmark { font-size: 19px; letter-spacing: .055em; }
+.wm-bolt { width: 16px; height: 24px; }
+.pill, .search {
+  min-height: 36px; background: var(--panel2); border-color: transparent;
+  border-radius: 11px; box-shadow: inset 0 0 0 1px var(--line2);
+}
+.pill { padding: 5px 11px; }
+.pill select { background: transparent; font-size: 12.5px; }
+.pill:hover, .search:hover { background: var(--surface-raised); border-color: transparent; }
+.search { min-width: 260px; padding: 6px 12px; }
+.search:focus-within { background: var(--surface-raised); border-color: transparent; box-shadow: inset 0 0 0 1px var(--mut); }
+.search kbd { background: transparent; color: var(--faint); padding: 1px 3px; }
+.ibtn {
+  width: 36px; height: 36px; border: 0; border-radius: 10px;
+  color: var(--mut); background: transparent; box-shadow: none;
+}
+.ibtn:hover { color: var(--txt); background: var(--surface-hover); border-color: transparent; }
+.ibtn.active, .dz-toolbtn.active {
+  color: var(--red); border-color: transparent; background: var(--redsoft);
+  box-shadow: inset 0 0 0 1px rgba(223, 108, 72, .18);
+}
+.run {
+  min-height: 36px; padding: 8px 15px; border-radius: 10px;
+  background: var(--red); box-shadow: 0 5px 16px rgba(223, 108, 72, .18);
+}
+.run:hover { background: var(--redh); box-shadow: 0 7px 20px rgba(223, 108, 72, .24); }
+
+/* Navegación y árbol: más aire, menos líneas divisorias. */
+.activity {
+  width: 58px; gap: 6px; padding: 12px 8px; background: var(--panel);
+  border-right-color: var(--line2);
+}
+.abtn { width: 40px; height: 40px; border-radius: 11px; }
+.abtn .ico { width: 18px; height: 18px; }
+.abtn:hover { background: var(--surface-raised); }
+.abtn.active { color: var(--txt); background: var(--surface-raised); }
+.abtn.active::before { left: -8px; width: 2px; height: 16px; }
+.act-sep { background: var(--line2); margin: 6px 0; }
+.treewrap {
+  width: 238px; padding: 16px 10px; gap: 2px; background: var(--panel);
+  border-right-color: var(--line2);
+}
+.proj {
+  padding: 0 10px 12px; color: var(--faint); font-size: 10.5px;
+  letter-spacing: .065em; text-transform: none;
+}
+.titem { gap: 9px; padding: 8px 10px; border-radius: 9px; font-size: 13px; }
+.titem:hover { background: var(--surface-raised); }
+.titem.active { background: var(--surface-hover); }
+
+/* Editor y pestañas: la selección se lee por superficie, no por marcos. */
+.editor { background: var(--bg); }
+.tabs { gap: 3px; padding: 9px 12px 0; border-bottom-color: var(--line2); background: var(--panel); }
+.tab { padding: 8px 13px; border: 0; border-radius: 10px 10px 0 0; font-size: 12.5px; }
+.tab:hover { background: var(--panel2); }
+.tab.active { background: var(--bg); border: 0; box-shadow: inset 0 1px 0 var(--line); }
+.CodeMirror { font-size: 12.75px; line-height: 1.72; }
+.CodeMirror-gutters { border-right: 1px solid var(--line2); }
+.term { border-top-color: var(--line2); }
+.term-h { padding: 10px 16px 5px; }
+.term-out { padding: 2px 16px 10px; }
+
+/* Panel de IA: conversación más parecida a un espacio de trabajo que a un chat. */
+.agent { width: 382px; background: var(--panel); border-left-color: var(--line2); }
+.ag-h { min-height: 52px; gap: 9px; padding: 12px 16px; border-bottom-color: var(--line2); }
+.ag-t { font-size: 13.5px; letter-spacing: -.01em; }
+.gbtn { min-width: 30px; min-height: 30px; border-radius: 8px; }
+.gbtn:hover { background: var(--surface-raised); }
+.chat-tabs-wrap { background: var(--panel); border-bottom-color: var(--line2); }
+.chat-tabs { gap: 4px; padding: 7px 9px 0; }
+.ctab { padding: 7px 10px; border: 0; border-radius: 9px 9px 0 0; }
+.ctab:hover { background: var(--surface-raised); }
+.ctab.active { background: var(--panel2); border: 0; }
+.ctab-nav { background: transparent; border-radius: 7px; margin: 5px 2px; }
+.msgs { padding: 18px 17px; gap: 17px; }
+.m-user {
+  max-width: 88%; padding: 10px 13px; border-radius: 14px 14px 5px 14px;
+  background: var(--surface-raised); box-shadow: inset 0 0 0 1px var(--line2);
+  font-size: 13px;
+}
+.m-agent { gap: 9px; max-width: 98%; }
+.m-head { gap: 8px; }
+.m-ava { width: 20px; height: 20px; border-radius: 7px; background: var(--redsoft); color: var(--red); }
+.m-who { color: var(--faint); font-size: 11.5px; }
+.m-txt { font-size: 13px; line-height: 1.62; }
+.m-sys { font-size: 11.5px; color: var(--faint); }
+.m-think { border-left-color: var(--line); padding-left: 12px; }
+.card { border-color: var(--line); border-radius: 13px; background: rgba(255,255,255,.012); }
+.card-h { padding: 10px 12px; background: var(--panel2); }
+.card-b { padding: 10px 12px; gap: 7px; }
+.working-on { margin: 8px 12px 0; border: 0; border-radius: 10px; background: var(--redsoft); }
+.inz { padding: 12px 14px 14px; border-top-color: var(--line2); gap: 9px; }
+.inbox {
+  gap: 9px; padding: 11px 10px 11px 14px; border: 0; border-radius: 15px;
+  background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line);
+}
+.inbox:focus-within { border-color: transparent; box-shadow: inset 0 0 0 1px var(--mut), 0 0 0 3px var(--line2); }
+.inbox textarea { font-size: 13px; line-height: 1.52; }
+.send { width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 4px 12px rgba(223,108,72,.18); }
+.chip { border-color: transparent; background: var(--panel2); padding: 4px 9px; }
+
+/* Modales y menús elevados. */
+.modal {
+  padding: 24px; border-color: var(--line); border-radius: var(--radius-xl);
+  background: var(--panel); box-shadow: var(--shadow-float);
+}
+.modal h2 { font-size: 17px; letter-spacing: -.02em; }
+.overlay { background: rgba(7, 7, 6, .62); backdrop-filter: blur(8px); }
+.ctx-menu { padding: 6px; border-radius: 11px; background: rgba(35,34,32,.97); box-shadow: var(--shadow-float); }
+.ctx-item { padding: 8px 11px; border-radius: 7px; }
+.krow input, .agrow input, .dz-field input, .dz-field select {
+  min-height: 34px; background: var(--panel2); border-color: transparent;
+  border-radius: 9px; box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+/* Estudio creativo y animación: el mismo lenguaje, sin parecer otra aplicación. */
+.dz-tools {
+  width: 98px; gap: 6px; padding: 10px 8px; background: var(--panel);
+  border-right-color: var(--line2);
+}
+.dz-tools .ibtn { width: 36px; height: 36px; border-radius: 10px; }
+.dz-tools .hsep { background: var(--line2); margin: 5px 7px; }
+.dz-menubar { background: var(--panel); border-bottom-color: var(--line2); }
+.dz-inspector {
+  width: 274px; padding: 17px 16px; background: var(--panel); border-left-color: var(--line2);
+}
+.dz-field { margin-bottom: 13px; }
+.dz-field > label { margin-bottom: 6px; font-family: Figtree, sans-serif; font-size: 10.5px; letter-spacing: .035em; }
+.dz-lay-row { padding: 6px 7px; border-radius: 8px; }
+.dz-lay-row:hover { background: var(--surface-raised); }
+.dz-lay-row.sel { background: var(--surface-hover); box-shadow: inset 2px 0 0 var(--red); }
+.dz-laytools { padding: 10px; border-color: var(--line2); border-radius: 11px; background: var(--panel2); }
+.dz-timeline { gap: 9px; padding: 9px 13px; background: var(--panel); border-top-color: var(--line2); }
+.tl-frame { border-color: transparent; border-radius: 9px; background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line2); }
+.tl-frame:hover { background: var(--surface-raised); border-color: transparent; }
+.dz-procreate-bar {
+  right: 24px; top: 20px; gap: 4px; padding: 6px; border-color: var(--line);
+  border-radius: 17px; background: rgba(27, 26, 25, .94); box-shadow: var(--shadow-float);
+}
+.dz-procreate-bar button {
+  width: 40px; height: 40px; padding: 9px; border: 0; border-radius: 11px;
+  background: transparent; color: var(--mut);
+}
+.dz-procreate-bar button .ico { width: 20px; height: 20px; stroke-width: 1.65; }
+.dz-procreate-bar button:hover { color: var(--txt); background: var(--surface-hover); border-color: transparent; transform: none; }
+.dz-procreate-bar button.active {
+  color: var(--red); background: var(--redsoft); border-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(223,108,72,.2);
+}
+.dz-procreate-sliders {
+  border-color: var(--line); border-radius: 18px; background: rgba(27,26,25,.95);
+  box-shadow: var(--shadow-float);
+}
+.dz-canvas {
+  background-color: #11110f;
+  background-image: linear-gradient(45deg,#181816 25%,transparent 25%),
+    linear-gradient(-45deg,#181816 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,#181816 75%),
+    linear-gradient(-45deg,transparent 75%,#181816 75%);
+}
+.dz-canvas svg { box-shadow: 0 20px 55px rgba(0,0,0,.42); }
+
+/* Pie y barras auxiliares casi invisibles hasta que se necesitan. */
+footer { min-height: 28px; padding: 5px 14px; background: var(--panel); border-top-color: var(--line2); color: var(--faint); }
+footer #ver { color: var(--mut); border-color: transparent; background: var(--panel2); }
+.l3d-tools { padding: 7px; gap: 4px; border-color: var(--line); border-radius: 13px; background: rgba(27,26,25,.95); box-shadow: var(--shadow-float); }
+.l3d-tools button { min-height: 32px; border: 0; border-radius: 8px; padding: 5px 10px; }
+.l3d-tools button:hover { background: var(--surface-hover); border-color: transparent; }
+.l3d-tools button.active { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(223,108,72,.2); }
+
+@media (max-width: 1180px) {
+  .treewrap { width: 210px; }
+  .agent { width: 350px; }
+  .search { min-width: 190px; }
+}

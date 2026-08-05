@@ -34,9 +34,11 @@ DEFAULT_CONFIG = {
     # Orden de failover: si el provider activo falla, LOW va probando estos en orden.
     # Solo se usan los que tienen API key cargada. Si no se configura, usa el orden
     # por defecto (deepseek  siliconflow  nvidia  groq  openai  ...  custom).
-    "failover_order": ["deepseek", "siliconflow", "nvidia", "groq", "openai",
-                       "anthropic", "qwen", "glm", "xai", "digitalocean", "agnes",
-                       "aimlapi", "custom"],
+    "failover_order": ["deepseek", "siliconflow", "nvidia", "groq", "gemini",
+                       "openai", "anthropic", "qwen", "glm", "xai", "kimi",
+                       "perplexity", "openrouter", "huggingface",
+                       "mistral", "cohere", "together", "fireworks", "cerebras",
+                       "cloudflare", "digitalocean", "agnes", "aimlapi", "custom"],
     # límites del agente — ajustables desde . La idea de LOW es NO ponerle
     # techos al trabajo salvo los que impone la API/costo. Subilos si querés
     # que insista más en tareas grandes; el único freno duro es que deje de
@@ -69,7 +71,13 @@ DEFAULT_CONFIG = {
         "custom": {"api_key": "", "model": "llama3", "base_url": "http://localhost:11434/v1"},
         "qwen": {"api_key": "", "model": "qwen-plus", "base_url": ""},
         "glm": {"api_key": "", "model": "glm-4", "base_url": ""},
-        "xai": {"api_key": "", "model": "grok-2", "base_url": ""},
+        "xai": {"api_key": "", "model": "grok-4.5", "base_url": ""},
+        # Kimi (Moonshot AI) — OpenAI-compatible con 1M contexto y razonamiento
+        # Key: https://platform.kimi.ai/console/api-keys
+        "kimi": {"api_key": "", "model": "kimi-k3", "base_url": ""},
+        # Perplexity — multi-provider con búsqueda web integrada y citas
+        # Key: https://console.perplexity.ai/group/keys
+        "perplexity": {"api_key": "", "model": "sonar-medium-online", "base_url": ""},
         # Agnes AI — OpenAI-compatible (https://platform.agnes-ai.com)
         # Key: https://platform.agnes-ai.com/settings/apiKeys
         "agnes": {"api_key": "", "model": "gpt-4o", "base_url": "https://api.agnes-ai.com/api/v1"},
@@ -94,6 +102,34 @@ DEFAULT_CONFIG = {
                 "image_model": "fal-ai/flux/schnell",
                 "colorize_model": "fal-ai/flux-kontext/dev",
                 "base_url": ""},
+        # Google AI Studio (Gemini) — 6M tokens/día gratis en tier gratuito
+        # Key: https://aistudio.google.com/apikey
+        "gemini": {"api_key": "", "model": "gemini-2.5-flash", "base_url": ""},
+        # OpenRouter — 50+ modelos con créditos gratuitos al registrarse
+        # Key: https://openrouter.ai/keys
+        "openrouter": {"api_key": "", "model": "google/gemini-2.5-flash-preview", "base_url": ""},
+        # Hugging Face Inference Providers — API gratuita para modelos comunitarios
+        # Key: https://huggingface.co/settings/tokens (permiso "Inference Providers")
+        "huggingface": {"api_key": "", "model": "meta-llama/Llama-3.3-70B-Instruct:fastest", "base_url": ""},
+        # Grok (xAI) — Key: https://console.x.ai
+        "grok": {"api_key": "", "model": "grok-4.5", "base_url": ""},
+        # AIMLAPI — gateway a 1000+ modelos con una sola key
+        # Key: https://aimlapi.com/app/keys
+        "aimlapi": {"api_key": "", "model": "gpt-4o", "base_url": ""},
+        # Mistral AI — Key: https://console.mistral.ai/api-keys
+        "mistral": {"api_key": "", "model": "mistral-large-latest", "base_url": ""},
+        # Cohere (endpoint compatible OpenAI) — Key: https://dashboard.cohere.com/api-keys
+        "cohere": {"api_key": "", "model": "command-a-03-2025", "base_url": ""},
+        # Together AI — 200+ modelos abiertos. Key: https://api.together.xyz/settings/api-keys
+        "together": {"api_key": "", "model": "deepseek-ai/DeepSeek-V3", "base_url": ""},
+        # Fireworks AI — Key: https://fireworks.ai/account/api-keys
+        "fireworks": {"api_key": "", "model": "accounts/fireworks/models/deepseek-v3", "base_url": ""},
+        # Cerebras — inferencia muy rápida. Key: https://cloud.cerebras.ai
+        "cerebras": {"api_key": "", "model": "llama-3.3-70b", "base_url": ""},
+        # Cloudflare Workers AI — el base_url necesita tu account_id
+        # ({account_id} se reemplaza solo). Key: https://dash.cloudflare.com/profile/api-tokens
+        "cloudflare": {"api_key": "", "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+                       "base_url": "", "account_id": ""},
     }
 }
 
@@ -133,6 +169,10 @@ class Config:
                    "https://platform.agnes-ai.com/api/v1",
                    "https://api.agnes-ai.com/v1", ""},
                   "https://api.agnes-ai.com/api/v1"),
+        "qwen": ({"https://dashscope.aliyuncs.com/api/v1",
+                  "https://dashscope.aliyuncs.com/v1",
+                  "https://dashscope.aliyuncs.com/compatible-mode"},
+                 "https://dashscope.aliyuncs.com/compatible-mode/v1"),
     }
     # IDs de modelo que pusimos como default y NO andan en el tier base de DO
     # (formato viejo con puntos, o propietarios que dan 403 por tier). Se
@@ -151,6 +191,12 @@ class Config:
         modelo no llevan puntos). Devuelve True si cambió algo."""
         changed = False
         provs = cfg.get("providers", {})
+        # Configs viejos de la UI llegaron a guardar claves como "undefined".
+        # Si quedan, confunden el conteo de APIs y el failover.
+        for name in list(provs.keys()):
+            if name not in DEFAULT_CONFIG["providers"]:
+                provs.pop(name, None)
+                changed = True
         for name, (olds, new) in self._OBSOLETE_BASE_URLS.items():
             p = provs.get(name)
             if p is not None and p.get("base_url", "") in olds:
