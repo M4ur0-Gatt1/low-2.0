@@ -814,6 +814,13 @@ export class WebGLDesign3D {
    *  `noSupport` marca ese último caso — ninguna guía/superficie/trazo real
    *  bajo el cursor, solo el plano genérico — así beginDraw() sabe cuándo
    *  hace falta auto-generar una guía real (ver commitStroke). */
+  /** Un plano visto casi DE CANTO no sirve como soporte: el rayo es paralelo a
+   *  él, así que o no intersecta o devuelve un punto lejísimo (de ahí los saltos
+   *  erráticos y el "no dibuja" al pasar a una vista lateral). */
+  private planeIsEdgeOn(plane: THREE.Plane): boolean {
+    return Math.abs(this.raycaster.ray.direction.dot(plane.normal)) < 0.08;
+  }
+
   private resolveHit(): HitInfo | null {
     this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
     // PRIORIDAD: la guía ACTIVA gana sobre cualquier otra superficie. Con varias
@@ -832,7 +839,7 @@ export class WebGLDesign3D {
       // La guía activa conserva prioridad también fuera de su malla visible.
       // Antes se probaban otras superficies primero y Z podía cambiar a mitad
       // del trazo, produciendo rectas largas como las de la captura.
-      if (this.activeGuide.plane) {
+      if (this.activeGuide.plane && !this.planeIsEdgeOn(this.activeGuide.plane)) {
         const gp = new THREE.Vector3();
         if (this.raycaster.ray.intersectPlane(this.activeGuide.plane, gp)) {
           return { point: gp, normal: this.activeGuide.plane.normal.clone(), target: this.activeGuide.mesh, plane: this.activeGuide.plane.clone(), kind: 'guide' };
@@ -870,15 +877,19 @@ export class WebGLDesign3D {
     // no en el centro del dibujo (como esperaba el usuario en vista de lado).
     // NO al crear una guía nueva (tool 'guide'): esa se dibuja sobre el plano
     // de la cámara, no sobre la guía anterior.
-    if (this.tool !== 'guide' && this.activeGuide?.plane) {
+    if (this.tool !== 'guide' && this.activeGuide?.plane && !this.planeIsEdgeOn(this.activeGuide.plane)) {
       const gp = new THREE.Vector3();
       if (this.raycaster.ray.intersectPlane(this.activeGuide.plane, gp)) {
         return { point: gp.clone(), normal: this.activeGuide.plane.normal.clone(), target: this.activeGuide.mesh, plane: this.activeGuide.plane.clone(), kind: 'guide' };
       }
     }
-    // Un trazo artístico nunca cae sobre un plano implícito. La única operación
-    // autorizada sin soporte previo es crear la primera guía.
-    if (this.tool !== 'guide') return null;
+    // En PERSPECTIVA un trazo sin soporte es ambiguo (terminaba cayendo en el
+    // centro de la escena), así que se sigue exigiendo guía/superficie.
+    // En vista ORTOGONAL no hay ambigüedad: la vista define un plano de dibujo
+    // único y evidente (es dibujar sobre "papel" en esa vista). Ahí se permite
+    // el plano de cámara y, al soltar, `noSupport` auto-genera la guía real
+    // desde el propio trazo — el flujo de Feather.
+    if (this.tool !== 'guide' && this.view === 'persp') return null;
     const camDir = new THREE.Vector3();
     (this.camera as THREE.Camera).getWorldDirection(camDir);
     this.fallbackPlane.setFromNormalAndCoplanarPoint(camDir.clone().negate(), this.controls.target);
