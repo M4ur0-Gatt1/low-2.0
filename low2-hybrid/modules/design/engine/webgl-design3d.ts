@@ -40,6 +40,10 @@ interface StrokeRecord {
    *  trazos ('stroke'); las guías no varían de ancho. */
   pressures: number[];
   kind: 'stroke' | 'guide';
+  /** true = es un RELLENO (cara sólida de una forma cerrada), no una línea.
+   *  Comparte toda la infraestructura de trazo (capas, goma, selección,
+   *  historial) pero su malla se reconstruye como polígono, no como tubo. */
+  fill?: boolean;
   /** Capa/grupo al que pertenece el trazo (id del store). Determina
    *  visibilidad y opacidad grupal. */
   layerId: string;
@@ -1223,7 +1227,14 @@ export class WebGLDesign3D {
       if (this.gizmo?.axis) return;
       const rec = this.pickStroke();
       if (rec) {
-        if (!this.selected.has(rec)) this.setSelection([rec]);
+        if (e.shiftKey) {
+          // Shift = SUMAR/QUITAR de la selección (y volver a clickear uno ya
+          // elegido lo saca), como en cualquier editor.
+          const next = new Set(this.selected);
+          if (next.has(rec)) next.delete(rec); else next.add(rec);
+          this.setSelection([...next]);
+          if (!this.selected.size) return;
+        } else if (!this.selected.has(rec)) this.setSelection([rec]);
         this.beginMove();
       } else {
         const g = this.pickGuide();
@@ -1240,6 +1251,8 @@ export class WebGLDesign3D {
       this.onSelectPointerDown(e);
     } else if (this.tool === 'eraser') {
       this.beginLasso(e); // click corto = borrar bajo cursor; arrastre = lazo
+    } else if (this.tool === 'fill') {
+      this.fillAtPointer();
     } else if (this.tool === 'scissors') {
       const cut = this.pickCutPoint();
       if (cut) this.cutStroke(cut.rec, cut.index);
@@ -1326,6 +1339,8 @@ export class WebGLDesign3D {
 
   private static readonly TOOL_KEYS: Record<string, ToolType> = {
     p: 'pencil', g: 'guide', v: 'move', a: 'select', e: 'eraser', l: 'liquify', c: 'scissors', f: 'pencil-free',
+    b: 'fill', // balde: rellenar la forma cerrada
+
   };
 
   private panMode = false; // barra espaciadora = mano (pan de cámara)
@@ -2157,6 +2172,15 @@ export class WebGLDesign3D {
       child.geometry?.dispose();
       (child.material as THREE.Material)?.dispose();
     }
+    // un RELLENO se reconstruye como polígono sólido, no como tubo
+    if (rec.fill) {
+      const f = this.buildFillMesh(rec.points.map((p) => p.clone().add(rec.object.position)), rec.brush);
+      if (f) {
+        f.position.sub(rec.object.position); // la malla ya viene en world: pasarla a local
+        rec.object.add(f);
+      }
+      return;
+    }
     const a = this.buildTube(rec.points, rec.pressures, rec.brush);
     if (a) rec.object.add(a);
     for (const variant of this.mirroredVariants(rec.points)) {
@@ -2392,6 +2416,144 @@ export class WebGLDesign3D {
     if (this.activeSurfaceId === id) this.activeSurfaceId = null;
     if (this.selectedSurface?.id === id) { this.selectedSurface = null; this.syncGizmo(); }
     return true;
+  }
+
+  // ---------------------------------------------------------------- relleno de formas cerradas
+
+  /** Tolerancia para considerar que dos puntas de trazo son el MISMO vértice.
+   *  Los trazos se enganchan con snap al dibujar, así que suelen coincidir
+   *  bastante; esto tolera el resto. */
+  private static readonly WELD_EPS = 0.35;
+
+  /** Punto en world de una punta del trazo (respetando la posición del grupo). */
+  private strokeEnd(rec: StrokeRecord, which: 0 | 1): THREE.Vector3 {
+    const p = which === 0 ? rec.points[0] : rec.points[rec.points.length - 1];
+    return p.clone().add(rec.object.position);
+  }
+
+  /** Busca un CICLO de trazos que arranque y termine en `seed`, siguiendo
+   *  puntas que coincidan (soldadas por WELD_EPS). Devuelve la lista ordenada
+   *  de trazos del contorno, o null si la forma no está cerrada. */
+  private findClosedLoop(seed: StrokeRecord): StrokeRecord[] | null {
+    const pool = this.strokes.filter((s) => s.kind === 'stroke' && !s.fill && s.points.length >= 2);
+    const eps = WebGLDesign3D.WELD_EPS;
+    const start = this.strokeEnd(seed, 0);
+    const walk = (chain: StrokeRecord[], tip: THREE.Vector3): StrokeRecord[] | null => {
+      if (chain.length > 1 && tip.distanceTo(start) <= eps) return chain; // cerró
+      if (chain.length > 64) return null; // contorno absurdo: cortar
+      for (const cand of pool) {
+        if (chain.includes(cand)) continue;
+        const a = this.strokeEnd(cand, 0), b = this.strokeEnd(cand, 1);
+        let next: THREE.Vector3 | null = null;
+        if (tip.distanceTo(a) <= eps) next = b;
+        else if (tip.distanceTo(b) <= eps) next = a;
+        if (!next) continue;
+        const r = walk([...chain, cand], next);
+        if (r) return r;
+      }
+      return null;
+    };
+    return walk([seed], this.strokeEnd(seed, 1));
+  }
+
+  /** Contorno continuo (world) de un ciclo de trazos, orientando cada tramo
+   *  para que enganche con el anterior. */
+  private loopOutline(loop: StrokeRecord[]): THREE.Vector3[] {
+    const eps = WebGLDesign3D.WELD_EPS;
+    const pts: THREE.Vector3[] = [];
+    let tip: THREE.Vector3 | null = null;
+    for (const rec of loop) {
+      const world = rec.points.map((p) => p.clone().add(rec.object.position));
+      if (tip && world[0].distanceTo(tip) > eps && world[world.length - 1].distanceTo(tip) <= eps) world.reverse();
+      for (const p of world) if (!pts.length || p.distanceTo(pts[pts.length - 1]) > 1e-4) pts.push(p);
+      tip = pts[pts.length - 1];
+    }
+    return pts;
+  }
+
+  /** Malla sólida a partir de un contorno cerrado, proyectándolo al plano de
+   *  mejor ajuste (normal de Newell) y triangulando ahí. */
+  private buildFillMesh(outline: THREE.Vector3[], brush: BrushSettings): THREE.Mesh | null {
+    if (outline.length < 3) return null;
+    const n = new THREE.Vector3();
+    for (let i = 0; i < outline.length; i++) {
+      const a = outline[i], b = outline[(i + 1) % outline.length];
+      n.x += (a.y - b.y) * (a.z + b.z);
+      n.y += (a.z - b.z) * (a.x + b.x);
+      n.z += (a.x - b.x) * (a.y + b.y);
+    }
+    if (n.lengthSq() < 1e-10) return null; // contorno degenerado (todo en una recta)
+    n.normalize();
+    const centro = new THREE.Vector3();
+    outline.forEach((p) => centro.add(p));
+    centro.multiplyScalar(1 / outline.length);
+    const u = new THREE.Vector3(1, 0, 0);
+    if (Math.abs(n.dot(u)) > 0.9) u.set(0, 1, 0);
+    u.crossVectors(n, u).normalize();
+    const v = new THREE.Vector3().crossVectors(n, u).normalize();
+
+    const shape = new THREE.Shape(outline.map((p) => {
+      const d = p.clone().sub(centro);
+      return new THREE.Vector2(d.dot(u), d.dot(v));
+    }));
+    const geo = new THREE.ShapeGeometry(shape);
+    const col = new THREE.Color(brush.color);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      color: col, roughness: 0.85, metalness: 0, side: THREE.DoubleSide,
+      transparent: brush.opacity < 1, opacity: brush.opacity,
+    }));
+    // llevar el plano 2D de la Shape al plano real del contorno
+    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(u, v, n));
+    mesh.position.copy(centro);
+    // apenas detrás de las líneas para que el contorno siga leyéndose
+    mesh.renderOrder = -1;
+    return mesh;
+  }
+
+  /** Rellena la forma cerrada que contiene al trazo bajo el cursor. */
+  private fillAtPointer(): boolean {
+    const seed = this.pickStroke() ?? this.pickNearestStroke();
+    if (!seed || seed.fill) return false;
+    const loop = this.findClosedLoop(seed);
+    if (!loop) {
+      this.canvas.title = 'La forma no está cerrada: uní las puntas de los trazos para poder rellenarla';
+      this.cursorEl.style.borderColor = '#ff4d4d';
+      setTimeout(() => { this.canvas.title = ''; this.cursorEl.style.borderColor = '#333'; }, 1600);
+      return false;
+    }
+    const outline = this.loopOutline(loop);
+    const mesh = this.buildFillMesh(outline, this.brush);
+    if (!mesh) return false;
+    const group = new THREE.Group();
+    group.add(mesh);
+    const rec: StrokeRecord = {
+      id: `fill-${this.seq++}`, object: group, points: outline, pressures: outline.map(() => 1),
+      kind: 'stroke', fill: true, layerId: this.activeLayerId(),
+      baseOpacity: this.brush.opacity, brush: { ...this.brush },
+    };
+    group.userData.strokeId = rec.id;
+    this.addStrokeRecord(rec);
+    this.pushCmd({ undo: () => this.removeStrokeRecord(rec), redo: () => this.addStrokeRecord(rec) });
+    return true;
+  }
+
+  /** Trazo más cercano al cursor en pantalla (si el click no pegó justo en el
+   *  tubo, que es fino). */
+  private pickNearestStroke(): StrokeRecord | null {
+    const rect = this.canvas.getBoundingClientRect();
+    const cx = ((this.pointer.x + 1) / 2) * rect.width;
+    const cy = ((1 - this.pointer.y) / 2) * rect.height;
+    const cam = this.camera as THREE.Camera;
+    let best: StrokeRecord | null = null, bestD = 40;
+    for (const rec of this.strokes) {
+      if (rec.kind !== 'stroke' || rec.fill) continue;
+      for (const p of rec.points) {
+        const w = p.clone().add(rec.object.position).project(cam);
+        const d = Math.hypot(((w.x + 1) / 2) * rect.width - cx, ((1 - w.y) / 2) * rect.height - cy);
+        if (d < bestD) { bestD = d; best = rec; }
+      }
+    }
+    return best;
   }
 
   private pickGuide(): { id: string; mesh: THREE.Mesh } | null {
@@ -2885,7 +3047,8 @@ export class WebGLDesign3D {
       this.setSelection(inside);
       this.deleteSelection();
     } else {
-      this.setSelection(inside);
+      // Shift = el lazo SUMA a lo que ya estaba seleccionado.
+      this.setSelection(e.shiftKey ? [...new Set([...this.selected, ...inside])] : inside);
     }
   }
 
