@@ -17,10 +17,12 @@ const panelStyle: React.CSSProperties = {
   flexDirection: 'column',
   gap: '12px',
   padding: '14px',
-  width: '220px',
+  // el ancho lo fija el contenedor (Panel3D). Antes acá había un width:220px
+  // fijo que, sumado al padding con box-sizing content-box, daba 248px: el
+  // cuerpo del panel sobresalía de su propia barra de título.
+  width: '100%',
+  boxSizing: 'border-box',
   backgroundColor: '#2d2d2d',
-  borderRadius: '8px',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
   color: '#ccc',
   fontSize: '12px',
   fontFamily: 'system-ui, sans-serif',
