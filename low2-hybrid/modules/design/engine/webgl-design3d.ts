@@ -245,6 +245,7 @@ export class WebGLDesign3D {
   private mirror = { x: false, y: false, z: false };
   private theme: Theme = 'light';
   private lastSurfaceKey = '';
+  private lastSurfaceNonce = 0; // ver syncFromStore: distingue "pared nueva" de "editar la activa"
 
   // ---------------------------------------------------------------- ciclo de vida
 
@@ -573,7 +574,12 @@ export class WebGLDesign3D {
     this.applyOrthoFrustum();
     if (this.gizmo) this.gizmo.camera = this.camera as THREE.Camera;
     this.lastOnionSig = ''; // fuerza recalcular el onion-skin en la nueva vista
-    this.reorientAutoPlane();
+    // OJO: acá NO se reorienta el plano activo. Un plano de dibujo es una PARED
+    // FIJA en el espacio: se crea encarando la vista en la que nació y se queda
+    // ahí para siempre. Antes se re-encaraba en cada cambio de vista (incluida
+    // la perspectiva, que le metía ángulos arbitrarios tipo -145/75/146), así
+    // que era imposible armar una esquina: el plano hecho de Frente y el hecho
+    // de Izquierda nunca quedaban a 90°, era el MISMO plano girando.
   }
 
   private applyOrthoFrustum(): void {
@@ -678,8 +684,12 @@ export class WebGLDesign3D {
     this.publishAutoRotation(s.mesh);
   }
 
-  private addSurface(type: SurfaceType, params: Record<string, unknown> = {}): void {
-    this.removeActiveSurface();
+  /** `replace=true` (editar parámetros de la superficie activa) reemplaza la
+   *  malla actual; `replace=false` (botón de superficie en la barra) AGREGA una
+   *  pared nueva sin tocar las anteriores — así se pueden tener el plano de
+   *  Frente y el de Izquierda a la vez formando una esquina a 90°. */
+  private addSurface(type: SurfaceType, params: Record<string, unknown> = {}, replace = true): void {
+    if (replace) this.removeActiveSurface();
     const radius = Math.max(0.1, Number(params.radius ?? 1.4));
     const segments = Math.max(3, Math.floor(Number(params.segments ?? 48)));
     const geo = type === 'plane'
@@ -743,7 +753,7 @@ export class WebGLDesign3D {
     if (!s) return '';
     const p = s.params;
     return JSON.stringify([s.type, p.radius, p.segments, p.width, p.height,
-      p.tubeRadius, p.position, p.rotation, p.scale]);
+      p.tubeRadius, p.position, p.rotation, p.scale, p.nonce]);
   }
 
   /** Publica en el store la rotación real que el motor le dio al plano al
@@ -772,8 +782,15 @@ export class WebGLDesign3D {
     this.mirror = s.mirrorMode;
     const key = WebGLDesign3D.surfaceKey(s.activeSurface);
     if (key !== this.lastSurfaceKey) {
-      if (key) this.addSurface(s.activeSurface!.type, s.activeSurface!.params);
-      else this.removeActiveSurface();
+      if (key) {
+        // `nonce` distinto = click en el botón de superficie → pared NUEVA
+        // (no se borra la anterior). Mismo nonce = el panel editó radio/
+        // posición/rotación de la activa → se reemplaza esa malla.
+        const nonce = Number(s.activeSurface!.params.nonce ?? 0);
+        const isNew = nonce !== this.lastSurfaceNonce;
+        this.addSurface(s.activeSurface!.type, s.activeSurface!.params, !isNew);
+        this.lastSurfaceNonce = nonce;
+      } else this.removeActiveSurface();
     }
     this.lastSurfaceKey = key;
     const newGizmoMode = s.gizmoMode || 'translate';
@@ -2165,6 +2182,36 @@ export class WebGLDesign3D {
 
   /** Guía bajo el puntero actual (para borrarla individualmente con la
    *  goma), o null si no hay ninguna ahí. */
+  /** Superficie primitiva (plano/cilindro/…) bajo el cursor. La goma la usa
+   *  para poder borrar una pared concreta: el botón de la barra ya no borra
+   *  (ahora agrega), así que la eliminación vive acá. */
+  private pickSurface(): SurfaceObj | null {
+    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    const hits = this.raycaster.intersectObjects(this.surfacesGroup.children, false);
+    if (!hits.length) return null;
+    let obj: THREE.Object3D | null = hits[0].object;
+    while (obj && !obj.userData.surfaceId) obj = obj.parent;
+    if (!obj) return null;
+    const id = obj.userData.surfaceId as string;
+    return this.surfaces.find((s) => s.id === id) ?? null;
+  }
+
+  private deleteSurfaceById(id: string): boolean {
+    const s = this.surfaces.find((x) => x.id === id);
+    if (!s) return false;
+    this.surfacesGroup.remove(s.mesh);
+    s.mesh.traverse((o) => {
+      const m = o as THREE.Mesh;
+      m.geometry?.dispose();
+      const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
+      else mat?.dispose();
+    });
+    this.surfaces = this.surfaces.filter((x) => x.id !== id);
+    if (this.activeSurfaceId === id) this.activeSurfaceId = null;
+    return true;
+  }
+
   private pickGuide(): { id: string; mesh: THREE.Mesh } | null {
     this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
     const hits = this.raycaster.intersectObjects(this.guidesGroup.children, false);
@@ -2624,7 +2671,13 @@ export class WebGLDesign3D {
       const rec = this.pickStroke();
       if (this.tool === 'eraser') {
         if (rec) { this.setSelection([rec]); this.deleteSelection(); }
-        else { const g = this.pickGuide(); if (g) this.deleteGuideById(g.id); } // click en una guía: borra solo esa
+        else {
+          // click en una guía: borra solo esa. Si no hay guía, prueba con una
+          // superficie (pared/primitiva) — es la única forma de borrarlas.
+          const g = this.pickGuide();
+          if (g) this.deleteGuideById(g.id);
+          else { const su = this.pickSurface(); if (su) this.deleteSurfaceById(su.id); }
+        }
       } else {
         this.setSelection(rec ? [rec] : []);
       }
