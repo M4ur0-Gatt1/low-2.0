@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.16"
+LOW_VERSION = "3.29.17"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -1717,11 +1717,13 @@ class Api:
             return {"error": str(e)}
         return {"data": data, "mime": mime, "name": p.name}
 
-    def save_file(s, path, content):
+    def save_file(s, path, content, filename="codigo.py"):
+        # `filename` = nombre sugerido en el diálogo. Lo usa, por ejemplo, LOW
+        # Estudio para proponer "proyecto.low3d" en vez de "codigo.py".
         if not path:
             r = s._window.create_file_dialog(webview.SAVE_DIALOG,
                                             directory=s.ws or "",
-                                            save_filename="codigo.py")
+                                            save_filename=filename)
             if not r:
                 return None
             path = r[0] if isinstance(r, (list, tuple)) else str(r)

@@ -2173,10 +2173,23 @@ function closeL3d() {
   $("#abL3d").classList.remove("active");
 }
 
-window.addEventListener("message", (event) => {
+window.addEventListener("message", async (event) => {
   const frame = $("#l3dFrame");
   if (!frame || event.source !== frame.contentWindow) return;
-  if (event.data && event.data.type === "low:close-3d") closeL3d();
+  const msg = event.data || {};
+  if (msg.type === "low:close-3d") closeL3d();
+  // Guardar proyecto del estudio 3D: dentro de pywebview la descarga del
+  // navegador (blob + <a download>) no hace nada, así que el estudio nos pasa
+  // el JSON y lo escribimos con el diálogo nativo de guardar.
+  if (msg.type === "low:save-project" && typeof msg.json === "string") {
+    try {
+      const r = await api.save_file("", msg.json, msg.name || "proyecto.low3d");
+      setStatus(r && r.name ? "Proyecto 3D guardado: " + r.name : "Guardado cancelado");
+    } catch (err) {
+      setStatus("No se pudo guardar el proyecto 3D");
+      api.log_js && api.log_js("save-3d error: " + err);
+    }
+  }
 });
 
 /* ══ Entorno de diseño: SVG vivo + inspector por elemento ══ */
