@@ -15,6 +15,7 @@ import { Toolbar3D } from './components/Toolbar3D';
 import { PropertiesPanel3D } from './components/PropertiesPanel3D';
 import { LayerManager3D } from './components/LayerManager3D';
 import { Panel3D } from './components/Panel3D';
+import { LOW_ACCENT } from './theme';
 
 const bg: Record<Theme, string> = {
   light: 'radial-gradient(120% 120% at 50% 10%, #ffffff 0%, #eef1f6 70%, #e6eaf1 100%)',
@@ -71,7 +72,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   const dark = theme === 'dark';
   const chipBg = dark ? 'rgba(20,22,28,0.6)' : 'rgba(255,255,255,0.7)';
   const chipFg = dark ? '#8a93a6' : '#5b6472';
-  const chipActive = '#0078d4';
+  const chipActive = LOW_ACCENT;
 
   const eng = () => engineRef.current;
   const saveProject = () => {
@@ -119,13 +120,67 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
       <input ref={fileInputRef} type="file" accept=".low3d,application/json" hidden
         onChange={(e) => { void openProject(e.target.files?.[0]); e.currentTarget.value = ''; }} />
 
-      {onRequestClose && (
-        <button onClick={onRequestClose} title="Cerrar módulo 3D (Esc)" style={{
-          position: 'absolute', top: 14, left: 14, zIndex: 110, height: 36,
-          padding: '0 12px', border: 'none', borderRadius: 8, cursor: 'pointer',
-          background: chipBg, color: chipFg, fontSize: 12,
-        }}>← Salir de 3D</button>
-      )}
+      {/* BARRA SUPERIOR: una sola fila con tres grupos (izquierda / centro /
+          derecha). Antes cada bloque estaba posicionado por su cuenta con
+          right:250/294/356 y se superponían entre sí y con la barra central
+          apenas la ventana se achicaba. Con una fila flex no puede pasar. */}
+      <header style={{
+        position: 'absolute', top: 14, left: 14, right: 14, zIndex: 110,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 8, pointerEvents: 'none',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, pointerEvents: 'auto', flex: '0 0 auto' }}>
+          {onRequestClose && (
+            <button onClick={onRequestClose} title="Cerrar módulo 3D (Esc)" style={{
+              height: 36, padding: '0 12px', border: 'none', borderRadius: 8, cursor: 'pointer',
+              background: chipBg, color: chipFg, fontSize: 12,
+            }}>← Salir de 3D</button>
+          )}
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 2, padding: 4, borderRadius: 8,
+          background: chipBg, pointerEvents: 'auto', flex: '0 1 auto', overflowX: 'auto',
+        }}>
+          {barBtn('⟲', () => eng()?.undo(), false, 'Deshacer (Ctrl+Z)')}
+          {barBtn('⟳', () => eng()?.redo(), false, 'Rehacer (Ctrl+Alt+Z / Ctrl+Shift+Z)')}
+          <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
+          {barBtn('Nuevo', () => {
+            if (window.confirm('¿Empezar un proyecto nuevo? Se descarta el dibujo actual.')) eng()?.newProject();
+          }, false, 'Nuevo proyecto (descarta el dibujo actual)')}
+          {barBtn('Abrir', () => fileInputRef.current?.click(), false, 'Abrir proyecto LOW 3D')}
+          {barBtn('Guardar', saveProject, false, 'Guardar proyecto LOW 3D')}
+          <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
+          {/* vistas abreviadas: el nombre completo queda en el tooltip */}
+          {barBtn('Persp', () => applyView('persp'), view === 'persp', 'Perspectiva')}
+          {barBtn('Fre', () => applyView('front'), view === 'front', 'Frente (ortogonal)')}
+          {barBtn('Det', () => applyView('back'), view === 'back', 'Detrás (ortogonal)')}
+          {barBtn('Izq', () => applyView('left'), view === 'left', 'Izquierda (ortogonal)')}
+          {barBtn('Der', () => applyView('right'), view === 'right', 'Derecha (ortogonal)')}
+          {barBtn('Sup', () => applyView('top'), view === 'top', 'Arriba (ortogonal)')}
+          {barBtn('Inf', () => applyView('bottom'), view === 'bottom', 'Abajo (ortogonal)')}
+          <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
+          {barBtn('XYZ', () => setAxes(!!eng()?.toggleAxes()), axes,
+            'Ejes globales XYZ + puntos de fuga de cada eje (solo en perspectiva) — guía visual, no se dibuja ni exporta')}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, pointerEvents: 'auto', flex: '0 0 auto' }}>
+          <div title="Opacidad de las guías — bajala a 0 para dibujar 'en el aire' sin que la hoja estorbe visualmente; sigue dando soporte a los trazos aunque no se vea (truco de Feather)"
+            style={{ height: 36, padding: '0 10px', borderRadius: 8, background: chipBg, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, color: chipFg }}>👻</span>
+            <input type="range" min={0} max={100} value={guideOpacity}
+              onChange={(e) => { const v = Number(e.target.value); setGuideOpacity(v); eng()?.setGuideOpacity(v / 100); }}
+              style={{ width: 70, accentColor: LOW_ACCENT }} />
+          </div>
+          <button onClick={() => engineRef.current?.deleteGuide()}
+            title="Borrar la última guía creada (los trazos se conservan) — para borrar cualquier otra, Goma + click sobre ella"
+            style={{ height: 36, padding: '0 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: chipBg, color: chipFg, fontSize: 12, whiteSpace: 'nowrap' }}>🗑 Borrar guía</button>
+          <button onClick={() => setTheme(dark ? 'light' : 'dark')} title="Fondo claro / oscuro"
+            style={{ width: 36, height: 36, borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: chipBg, color: chipFg, fontSize: 16 }}>{dark ? '☀' : '☾'}</button>
+        </div>
+      </header>
 
       <Panel3D title="Herramientas" initial={{ left: 14, top: 60 }}>
         <Toolbar3D />
@@ -149,104 +204,6 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
         <span />{barBtn('Z+', () => applyView('front'), view === 'front', 'Vista frontal')}<span />
       </div>
 
-      <button
-        onClick={() => setTheme(dark ? 'light' : 'dark')}
-        title="Fondo claro / oscuro"
-        style={{
-          position: 'absolute',
-          top: 14,
-          right: 250,
-          zIndex: 100,
-          width: 36,
-          height: 36,
-          borderRadius: 8,
-          border: 'none',
-          cursor: 'pointer',
-          background: chipBg,
-          color: chipFg,
-          fontSize: 16,
-        }}
-      >
-        {dark ? '☀' : '☾'}
-      </button>
-
-      {/* Barra superior central: deshacer/rehacer + vistas */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 14,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 100,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          padding: 4,
-          borderRadius: 8,
-          background: chipBg,
-        }}
-      >
-        {barBtn('⟲', () => eng()?.undo(), false, 'Deshacer (Ctrl+Z)')}
-        {barBtn('⟳', () => eng()?.redo(), false, 'Rehacer (Ctrl+Alt+Z / Ctrl+Shift+Z)')}
-        <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
-        {barBtn('Nuevo', () => {
-          // descarta todo → confirmar antes (no hay forma de recuperarlo)
-          if (window.confirm('¿Empezar un proyecto nuevo? Se descarta el dibujo actual.')) {
-            eng()?.newProject();
-          }
-        }, false, 'Nuevo proyecto (descarta el dibujo actual)')}
-        {barBtn('Abrir', () => fileInputRef.current?.click(), false, 'Abrir proyecto LOW 3D')}
-        {barBtn('Guardar', saveProject, false, 'Guardar proyecto LOW 3D')}
-        <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
-        {barBtn('Persp', () => applyView('persp'), view === 'persp')}
-        {barBtn('Frente', () => applyView('front'), view === 'front', 'Vista ortogonal de frente (para el primer dibujo)')}
-        {barBtn('Detrás', () => applyView('back'), view === 'back', 'Vista ortogonal de atrás')}
-        {barBtn('Izquierda', () => applyView('left'), view === 'left', 'Vista ortogonal desde la izquierda')}
-        {barBtn('Derecha', () => applyView('right'), view === 'right', 'Vista ortogonal desde la derecha')}
-        {barBtn('Arriba', () => applyView('top'), view === 'top', 'Vista ortogonal desde arriba')}
-        {barBtn('Abajo', () => applyView('bottom'), view === 'bottom', 'Vista ortogonal desde abajo')}
-        <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
-        {barBtn('XYZ', () => setAxes(!!eng()?.toggleAxes()), axes,
-          'Ejes globales XYZ + puntos de fuga de cada eje (solo en perspectiva) — guía visual, no se dibuja ni exporta')}
-      </div>
-
-      <button
-        onClick={() => engineRef.current?.deleteGuide()}
-        title="Borrar la última guía creada (los trazos se conservan) — para borrar cualquier otra, Goma + click sobre ella"
-        style={{
-          position: 'absolute',
-          top: 14,
-          right: 294,
-          zIndex: 100,
-          height: 36,
-          padding: '0 12px',
-          borderRadius: 8,
-          border: 'none',
-          cursor: 'pointer',
-          background: chipBg,
-          color: chipFg,
-          fontSize: 12,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-        }}
-      >
-        🗑 Borrar guía
-      </button>
-
-      <div
-        title="Opacidad de las guías — bajala a 0 para dibujar 'en el aire' sin que la hoja estorbe visualmente; sigue dando soporte a los trazos aunque no se vea (truco de Feather)"
-        style={{
-          position: 'absolute', top: 14, right: 356, zIndex: 100,
-          height: 36, padding: '0 10px', borderRadius: 8, background: chipBg,
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}
-      >
-        <span style={{ fontSize: 11, color: chipFg }}>👻</span>
-        <input type="range" min={0} max={100} value={guideOpacity}
-          onChange={(e) => { const v = Number(e.target.value); setGuideOpacity(v); eng()?.setGuideOpacity(v / 100); }}
-          style={{ width: 70, accentColor: '#0078d4' }} />
-      </div>
 
       <div
         style={{

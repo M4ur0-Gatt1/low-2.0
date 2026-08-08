@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { LOW_ACCENT } from '../theme';
 
 function hexToRgb(hex: string): [number, number, number] {
   const m = hex.replace('#', '');
@@ -128,7 +129,7 @@ export const ColorWheel: React.FC<Props> = ({ value, onChange }) => {
         type="range" min={0} max={100} value={Math.round(v * 100)}
         onChange={(e) => onValueChange(Number(e.target.value))}
         title="Brillo"
-        style={{ width: SIZE, accentColor: '#0078d4' }}
+        style={{ width: SIZE, accentColor: LOW_ACCENT }}
       />
     </div>
   );

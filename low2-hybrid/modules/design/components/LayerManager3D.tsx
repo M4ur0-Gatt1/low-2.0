@@ -17,6 +17,7 @@
 import React, { useState } from 'react';
 import { useLowStore } from '../../../store/low-store';
 import type { WebGLDesign3D } from '../engine/webgl-design3d';
+import { LOW_ACCENT_DEEP } from '../theme';
 
 interface Props {
   engine: React.MutableRefObject<WebGLDesign3D | null>;
@@ -57,7 +58,7 @@ export const LayerManager3D: React.FC<Props> = ({ engine }) => {
               style={{
                 display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px',
                 cursor: 'pointer', borderBottom: '1px solid #383838',
-                backgroundColor: isActive ? '#0e5fa8' : 'transparent',
+                backgroundColor: isActive ? LOW_ACCENT_DEEP : 'transparent',
                 color: isActive ? '#fff' : '#ccc',
               }}
             >

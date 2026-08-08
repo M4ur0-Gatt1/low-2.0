@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { useLowStore } from '../../../store/low-store';
+import { LOW_ACCENT } from '../theme';
 
 const panelStyle: React.CSSProperties = {
   display: 'flex',
@@ -34,7 +35,7 @@ const labelStyle: React.CSSProperties = {
 
 const sliderStyle: React.CSSProperties = {
   width: '100%',
-  accentColor: '#0078d4',
+  accentColor: LOW_ACCENT,
 };
 
 const sectionTitle: React.CSSProperties = {

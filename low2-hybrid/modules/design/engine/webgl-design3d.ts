@@ -198,6 +198,7 @@ export class WebGLDesign3D {
   private gizmoTarget: THREE.Object3D | null = null;
   private gizmoDragStart = new THREE.Vector3();
   private gizmoDragStartQuat = new THREE.Quaternion();
+  private gizmoDragStartScale = new THREE.Vector3(1, 1, 1); // el modo escala también se deshace
   private currentGizmoMode: GizmoMode = 'translate';
 
   // eje móvil del gizmo de rotación: una esferita arrastrable que define
@@ -319,11 +320,13 @@ export class WebGLDesign3D {
         if (this.gizmoTarget) {
           this.gizmoDragStart.copy(this.gizmoTarget.position);
           this.gizmoDragStartQuat.copy(this.gizmoTarget.quaternion);
+          this.gizmoDragStartScale.copy(this.gizmoTarget.scale);
         }
       } else if (this.gizmoTarget) {
         const obj = this.gizmoTarget;
         const before = this.gizmoDragStart.clone();
         const beforeQuat = this.gizmoDragStartQuat.clone();
+        const beforeScale = this.gizmoDragStartScale.clone();
         this.gizmoTarget = null;
         if (this.pivotProxy && obj === this.pivotProxy) {
           // se rotó alrededor del eje móvil: "hornear" la transformación
@@ -335,10 +338,12 @@ export class WebGLDesign3D {
         } else {
           const after = obj.position.clone();
           const afterQuat = obj.quaternion.clone();
-          if (before.distanceToSquared(after) > 1e-8 || beforeQuat.angleTo(afterQuat) > 1e-4) {
+          const afterScale = obj.scale.clone();
+          if (before.distanceToSquared(after) > 1e-8 || beforeQuat.angleTo(afterQuat) > 1e-4
+              || beforeScale.distanceToSquared(afterScale) > 1e-8) {
             this.pushCmd({
-              undo: () => { obj.position.copy(before); obj.quaternion.copy(beforeQuat); },
-              redo: () => { obj.position.copy(after); obj.quaternion.copy(afterQuat); },
+              undo: () => { obj.position.copy(before); obj.quaternion.copy(beforeQuat); obj.scale.copy(beforeScale); },
+              redo: () => { obj.position.copy(after); obj.quaternion.copy(afterQuat); obj.scale.copy(afterScale); },
             });
           }
         }
@@ -1369,6 +1374,26 @@ export class WebGLDesign3D {
       if (this.clipboard.length) { e.preventDefault(); this.pasteClipboard(); }
     } else if (ctrl && e.key.toLowerCase() === 'd') {
       if (this.selectedGuide) { e.preventDefault(); this.duplicateGuide(this.selectedGuide); }
+    } else if (e.key.startsWith('Arrow') && !typing) {
+      // FLECHAS: ajuste fino de lo que esté seleccionado (trazos, guía o
+      // superficie). El desplazamiento va en el plano de la PANTALLA — derecha
+      // y arriba de la cámara — así "arriba" es arriba en lo que estás viendo,
+      // no un eje del mundo que en esa vista puede ir para cualquier lado.
+      const objs = this.transformTargets();
+      if (!objs.length) return;
+      e.preventDefault();
+      const step = (e.shiftKey ? 0.25 : 0.05) * (this.view === 'persp' ? 1 : this.orthoSize / ORTHO_SIZE);
+      const cam = this.camera as THREE.Camera;
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+      const delta = new THREE.Vector3();
+      if (e.key === 'ArrowRight') delta.copy(right).multiplyScalar(step);
+      else if (e.key === 'ArrowLeft') delta.copy(right).multiplyScalar(-step);
+      else if (e.key === 'ArrowUp') delta.copy(up).multiplyScalar(step);
+      else if (e.key === 'ArrowDown') delta.copy(up).multiplyScalar(-step);
+      const move = (d: THREE.Vector3) => objs.forEach((o) => o.position.add(d));
+      move(delta);
+      this.pushCmd({ undo: () => move(delta.clone().negate()), redo: () => move(delta) });
     } else if (e.key === 'Escape') {
       this.setSelection([]);
       this.selectGuide(null);
@@ -1376,6 +1401,15 @@ export class WebGLDesign3D {
       this.clearPointEdit();
     }
   };
+
+  /** Objetos que responden a una transformación (flechas / gizmo): los trazos
+   *  seleccionados, o la guía / superficie agarrada. */
+  private transformTargets(): THREE.Object3D[] {
+    if (this.selected.size) return [...this.selected].map((r) => r.object);
+    if (this.selectedGuide) return [this.selectedGuide.mesh];
+    if (this.selectedSurface) return [this.selectedSurface.mesh];
+    return [];
+  }
 
   private onKeyUp = (e: KeyboardEvent): void => {
     if (e.code === 'Space' && this.panMode) {
