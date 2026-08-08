@@ -85,7 +85,12 @@ export interface Low3DProject {
   strokes: Array<{
     id: string; layerId: string; points: number[][]; pressures: number[]; baseOpacity: number;
     position: number[]; quaternion: number[]; scale: number[]; brush?: BrushSettings;
+    /** true = cara sólida (relleno), no una línea: se reconstruye como polígono. */
+    fill?: boolean;
   }>;
+  /** Guías 3D (las "cortinas" extruidas). Se guardan por su trazo de origen +
+   *  el eje de extrusión, que es lo único que hace falta para reconstruirlas. */
+  guides?: Array<{ points: number[][]; normal: number[]; position: number[]; quaternion: number[]; scale: number[] }>;
 }
 
 const MIN_SAMPLE_DIST = 0.012;
@@ -559,6 +564,12 @@ export class WebGLDesign3D {
   }
 
   // ---------------------------------------------------------------- vistas orto / persp
+
+  /** Vista activa — la UI la consulta tras restaurar un proyecto para dejar
+   *  resaltado el botón correcto. */
+  currentView(): ViewName {
+    return this.view;
+  }
 
   setView(v: ViewName): void {
     const t = this.controls.target.clone();
@@ -2098,6 +2109,9 @@ export class WebGLDesign3D {
       new THREE.BufferGeometry().setFromPoints(points.map((p) => p.clone().sub(centroid))),
       new THREE.LineBasicMaterial({ color: 0xffa53a }))); // naranja = trazo original
     mesh.userData.guidePlane = new THREE.Plane().setFromNormalAndCoplanarPoint(guidePlaneNormal, centroid);
+    // Origen de la guía: con el trazo y el eje de extrusión alcanza para
+    // reconstruirla igual al reabrir el proyecto (ver exportProject).
+    mesh.userData.guideSource = { points: points.map((p) => p.toArray()), normal: n.toArray() };
     return mesh;
   }
 
@@ -3088,7 +3102,46 @@ export class WebGLDesign3D {
 
   private static readonly MAX_UNDO = 200;
 
+  // ---------------------------------------------------------------- autoguardado
+
+  /** Clave del último proyecto en el almacenamiento local. Es la red que hace
+   *  que cerrar y reabrir el estudio no pierda el trabajo, sin depender de que
+   *  el usuario se acuerde de Guardar. */
+  private static readonly AUTOSAVE_KEY = 'low3d:autosave';
+  private autosaveTimer?: number;
+
+  /** Guarda el proyecto (con retraso, para no serializar en cada trazo). */
+  private scheduleAutosave(): void {
+    if (this.disposed) return;
+    if (this.autosaveTimer) window.clearTimeout(this.autosaveTimer);
+    this.autosaveTimer = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(WebGLDesign3D.AUTOSAVE_KEY, JSON.stringify(this.exportProject()));
+      } catch {
+        // sin espacio o storage bloqueado: no romper el dibujo por esto
+      }
+    }, 900);
+  }
+
+  /** Restaura el último proyecto autoguardado. Devuelve true si había algo. */
+  restoreAutosave(): boolean {
+    try {
+      const raw = window.localStorage.getItem(WebGLDesign3D.AUTOSAVE_KEY);
+      if (!raw) return false;
+      this.importProject(JSON.parse(raw));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Descarta el autoguardado (proyecto nuevo). */
+  private clearAutosave(): void {
+    try { window.localStorage.removeItem(WebGLDesign3D.AUTOSAVE_KEY); } catch { /* noop */ }
+  }
+
   private pushCmd(cmd: Command): void {
+    this.scheduleAutosave(); // toda acción que entra al historial se autoguarda
     this.undoStack.push(cmd);
     // tope de historia: en sesiones largas el stack crecía sin límite. Se
     // descarta el comando más viejo al pasar el tope.
@@ -3102,6 +3155,7 @@ export class WebGLDesign3D {
     cmd.undo();
     this.redoStack.push(cmd);
     this.setSelection([]);
+    this.scheduleAutosave();
   }
 
   redo(): void {
@@ -3110,6 +3164,7 @@ export class WebGLDesign3D {
     cmd.redo();
     this.undoStack.push(cmd);
     this.setSelection([]);
+    this.scheduleAutosave();
   }
 
   canUndo(): boolean { return this.undoStack.length > 0; }
@@ -3147,6 +3202,7 @@ export class WebGLDesign3D {
   /** "Nuevo proyecto": vacía la escena y deja el store coherente (si no, el
    *  botón de superficie quedaba tildado con un plano que ya no existe). */
   newProject(): void {
+    this.clearAutosave(); // si no, al reabrir volvía el proyecto que descartaste
     this.clear();
     this.lastSurfaceKey = '';
     lowStore.setActiveSurface(null);
@@ -3169,8 +3225,18 @@ export class WebGLDesign3D {
         points: rec.points.map((p) => p.toArray()), pressures: [...rec.pressures],
         baseOpacity: rec.baseOpacity, position: rec.object.position.toArray(),
         quaternion: rec.object.quaternion.toArray(), scale: rec.object.scale.toArray(),
-        brush: { ...rec.brush },
+        brush: { ...rec.brush }, fill: rec.fill || undefined,
       })),
+      // las guías también son parte del proyecto: sin ellas, al reabrir se
+      // perdía el andamiaje sobre el que estabas dibujando.
+      guides: this.guides.map((g) => {
+        const src = g.mesh.userData.guideSource as { points: number[][]; normal: number[] } | undefined;
+        return src ? {
+          points: src.points, normal: src.normal,
+          position: g.mesh.position.toArray(), quaternion: g.mesh.quaternion.toArray(),
+          scale: g.mesh.scale.toArray(),
+        } : null;
+      }).filter(Boolean) as Low3DProject['guides'],
     };
   }
 
@@ -3193,8 +3259,15 @@ export class WebGLDesign3D {
         ? { ...item.brush }
         : { ...this.brush, opacity: Number(item.baseOpacity ?? 1) };
       const group = new THREE.Group();
-      const tube = this.buildTube(points, pressures, brush);
-      if (tube) group.add(tube);
+      if (item.fill) {
+        // relleno: se reconstruye como cara sólida, no como tubo (si no, una
+        // forma pintada volvía como un contorno grueso y deformado).
+        const face = this.buildFillMesh(points, brush);
+        if (face) { face.position.sub(new THREE.Vector3().fromArray(item.position || [0, 0, 0])); group.add(face); }
+      } else {
+        const tube = this.buildTube(points, pressures, brush);
+        if (tube) group.add(tube);
+      }
       group.position.fromArray(item.position || [0, 0, 0]);
       group.quaternion.fromArray(item.quaternion || [0, 0, 0, 1]);
       group.scale.fromArray(item.scale || [1, 1, 1]);
@@ -3204,7 +3277,20 @@ export class WebGLDesign3D {
         baseOpacity: Number(item.baseOpacity ?? brush.opacity), brush,
       };
       group.userData.strokeId = rec.id;
+      rec.fill = item.fill || undefined;
       this.addStrokeRecord(rec);
+    }
+    // guías: se reconstruyen desde su trazo de origen + eje de extrusión
+    for (const g of doc.guides || []) {
+      if (!Array.isArray(g?.points) || g.points.length < 2) continue;
+      const pts = g.points.map((p) => new THREE.Vector3(Number(p[0]), Number(p[1]), Number(p[2])));
+      const normal = new THREE.Vector3().fromArray(g.normal || [0, 0, 1]);
+      const mesh = this.buildGuideSurface(pts, normal);
+      if (!mesh) continue;
+      mesh.position.fromArray(g.position || [0, 0, 0]);
+      mesh.quaternion.fromArray(g.quaternion || [0, 0, 0, 1]);
+      mesh.scale.fromArray(g.scale || [1, 1, 1]);
+      this.setGuide(mesh);
     }
     const cam = doc.camera;
     if (cam) {

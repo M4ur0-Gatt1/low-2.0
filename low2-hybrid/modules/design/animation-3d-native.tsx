@@ -39,6 +39,10 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
     const engine = new WebGLDesign3D();
     engine.mount(canvasRef.current, containerRef.current);
     engine.setTheme(theme);
+    // Retomar donde quedaste: el estudio autoguarda y al abrirlo restaura el
+    // último proyecto (los botones Guardar/Abrir siguen siendo para archivos
+    // .low3d propios, esto es la red por si cerraste sin guardar).
+    if (engine.restoreAutosave()) setView(engine.currentView());
     engineRef.current = engine;
     (window as unknown as { __low3d?: WebGLDesign3D }).__low3d = engine;
     (window as unknown as { __lowStore?: typeof lowStore }).__lowStore = lowStore;
