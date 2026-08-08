@@ -909,7 +909,12 @@ export class WebGLDesign3D {
     this.fallbackPlane.setFromNormalAndCoplanarPoint(camDir.clone().negate(), this.controls.target);
     const p = new THREE.Vector3();
     if (this.raycaster.ray.intersectPlane(this.fallbackPlane, p)) {
-      return { point: p.clone(), normal: this.fallbackPlane.normal.clone(), noSupport: true, plane: this.fallbackPlane.clone(), kind: 'fallback' };
+      // `noSupport` dispara la auto-creación de una guía al soltar (ver
+      // commitStroke). En PERSPECTIVA eso está bien (el trazo cayó en un plano
+      // implícito y conviene fijarlo). En ORTOGONAL no: la vista YA es un plano
+      // de dibujo legítimo, y auto-generar una guía por cada trazo llenaba la
+      // escena de paredes que después secuestraban los trazos siguientes.
+      return { point: p.clone(), normal: this.fallbackPlane.normal.clone(), noSupport: this.view === 'persp', plane: this.fallbackPlane.clone(), kind: 'fallback' };
     }
     return null;
   }
@@ -1465,8 +1470,17 @@ export class WebGLDesign3D {
     this.current = {
       points: [hit.point], pressures: [this.samplePressure(e)], kind, line, mirrorLine,
       baseNormal: hit.normal.clone(),
-      drawTarget: this.tool === 'pencil' ? hit.target : undefined,
-      drawPlane: this.tool === 'pencil' ? hit.plane?.clone() : undefined,
+      // No se "engancha" a un trazo ya dibujado: si el gesto arranca encima de
+      // una línea existente, seguir su tubo torcía todo el trazo. Solo se
+      // sigue la malla de una guía/superficie real (curvas incluidas).
+      drawTarget: this.tool === 'pencil' && hit.kind !== 'stroke' ? hit.target : undefined,
+      // PLANO BLOQUEADO para todo el trazo. Si el soporte no traía plano
+      // propio (una superficie plano/pared), se arma uno infinito con la
+      // normal y el punto del primer contacto. Sin esto, al salirse del
+      // cuadrado finito el trazo se quedaba sin soporte y saltaba de
+      // profundidad a mitad de camino (líneas que "no respetan" la guía).
+      drawPlane: hit.plane?.clone()
+        ?? new THREE.Plane().setFromNormalAndCoplanarPoint(hit.normal.clone(), hit.point.clone()),
       // el snap a un vértice existente SÍ cuenta como soporte real (ese
       // vértice pertenece a un trazo/guía ya apoyado), aunque `surf` haya
       // caído en el plano de fallback antes de encontrar el snap.
