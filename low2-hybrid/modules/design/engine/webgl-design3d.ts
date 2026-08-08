@@ -524,7 +524,7 @@ export class WebGLDesign3D {
     }
     this.vpEl.style.display = 'block';
     while (this.vpEl.lastChild) this.vpEl.removeChild(this.vpEl.lastChild);
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvasBox();
     const w = rect.width || 1, h = rect.height || 1;
     const cam = this.camera as THREE.Camera;
     const camFwd = new THREE.Vector3();
@@ -880,15 +880,37 @@ export class WebGLDesign3D {
 
   // ---------------------------------------------------------------- input
 
-  private setPointerFromEvent(e: PointerEvent): void {
-    const rect = this.canvas.getBoundingClientRect();
-    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  /** Posición del puntero dentro del canvas.
+   *
+   *  VERIFICADO — NO cambiar a offsetX/clientWidth "para arreglar el zoom": con
+   *  un zoom CSS en el documento (LOW lo aplica con Ctrl +/− sobre
+   *  documentElement) el rect Y offsetX/clientX vienen los dos en píxeles
+   *  VISUALES y en la MISMA escala, así que esta cuenta ya es invariante al
+   *  zoom. Lo que descoloca el trazo es mezclarla con `clientWidth`, que está
+   *  en píxeles de LAYOUT (con zoom 1.25: rect 1280 vs clientWidth 1024). */
+  /** Caja del canvas. Única fuente para mapear puntero↔mundo: el lazo, el snap
+   *  de vértices, la tijera y el relleno proyectan mundo→pantalla con ESTA
+   *  misma caja, así nunca quedan en otra escala que el puntero. */
+  private canvasBox(): DOMRect {
+    return this.canvas.getBoundingClientRect();
   }
 
-  private screenOf(e: PointerEvent): [number, number] {
-    const rect = this.canvas.getBoundingClientRect();
+  private pointerInCanvas(e: PointerEvent): [number, number] {
+    const rect = this.canvasBox();
     return [e.clientX - rect.left, e.clientY - rect.top];
+  }
+
+  private setPointerFromEvent(e: PointerEvent): void {
+    const rect = this.canvasBox();
+    const [x, y] = this.pointerInCanvas(e);
+    this.pointer.x = (x / rect.width) * 2 - 1;
+    this.pointer.y = -(y / rect.height) * 2 + 1;
+  }
+
+  /** Igual que pointerInCanvas: el anillo del pincel, el lazo y el umbral de
+   *  arrastre viven en el mismo espacio que el canvas (inmune al zoom CSS). */
+  private screenOf(e: PointerEvent): [number, number] {
+    return this.pointerInCanvas(e);
   }
 
   private updateCursor(e: PointerEvent): void {
@@ -1110,7 +1132,7 @@ export class WebGLDesign3D {
     this.freeDrawPreview.position.copy(hit.point);
     this.freeDrawPreview.visible = true;
     const w = hit.point.clone().project(this.camera as THREE.Camera);
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvasBox();
     this.freeDepthEl.style.left = `${((w.x + 1) / 2) * rect.width}px`;
     this.freeDepthEl.style.top = `${((1 - w.y) / 2) * rect.height}px`;
     this.freeDepthEl.style.display = 'block';
@@ -1149,7 +1171,7 @@ export class WebGLDesign3D {
     // Proximidad EN PANTALLA (no raycast al tubo): el tubo es finísimo y pegarle
     // exacto es casi imposible → antes "no hacía nada". Ahora corta en el punto
     // de control más cercano al click dentro de un radio en px.
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvasBox();
     const cx = ((this.pointer.x + 1) / 2) * rect.width;
     const cy = ((1 - this.pointer.y) / 2) * rect.height;
     const cam = this.camera as THREE.Camera;
@@ -1500,7 +1522,7 @@ export class WebGLDesign3D {
    *  terminar) una línea nueva pegada a una existente sin tener que apuntar
    *  perfecto. Las guías no cuentan: no retienen sus puntos tras dibujarlas. */
   private findSnapVertex(e: PointerEvent, refPoint?: THREE.Vector3, maxWorld = Infinity): THREE.Vector3 | null {
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvasBox();
     const px = e.clientX - rect.left, py = e.clientY - rect.top;
     const cam = this.camera as THREE.Camera;
     let best: THREE.Vector3 | null = null;
@@ -2554,7 +2576,7 @@ export class WebGLDesign3D {
   /** Trazo más cercano al cursor en pantalla (si el click no pegó justo en el
    *  tubo, que es fino). */
   private pickNearestStroke(): StrokeRecord | null {
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvasBox();
     const cx = ((this.pointer.x + 1) / 2) * rect.width;
     const cy = ((1 - this.pointer.y) / 2) * rect.height;
     const cam = this.camera as THREE.Camera;
@@ -2705,7 +2727,7 @@ export class WebGLDesign3D {
    *  suele quedar pegada a los anillos del gizmo de rotación. */
   private pickPivotMarker(): boolean {
     if (!this.pivotMarker?.visible) return false;
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvasBox();
     const cx = ((this.pointer.x + 1) / 2) * rect.width;
     const cy = ((1 - this.pointer.y) / 2) * rect.height;
     const w = this.pivotMarker.getWorldPosition(new THREE.Vector3()).project(this.camera as THREE.Camera);
@@ -3068,7 +3090,7 @@ export class WebGLDesign3D {
 
   private strokesInLasso(): StrokeRecord[] {
     if (this.lassoPts.length < 3) return [];
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvasBox();
     const cam = this.camera as THREE.Camera;
     const res: StrokeRecord[] = [];
     for (const rec of this.strokes) {

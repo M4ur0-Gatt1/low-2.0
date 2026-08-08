@@ -82,10 +82,20 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   const saveProject = () => {
     const project = eng()?.exportProject();
     if (!project) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }));
+    const json = JSON.stringify(project, null, 2);
+    const name = `${projectId || 'proyecto'}.low3d`;
+    // Dentro de LOW el estudio corre en un iframe de pywebview, donde la
+    // descarga del navegador (blob + <a download>) NO hace nada: por eso el
+    // botón Guardar "no respondía". Ahí le pasamos el JSON a la app, que lo
+    // escribe con el diálogo nativo. En un navegador suelto, descarga normal.
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'low:save-project', name, json }, '*');
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${projectId || 'proyecto'}.low3d`;
+    link.download = name;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
