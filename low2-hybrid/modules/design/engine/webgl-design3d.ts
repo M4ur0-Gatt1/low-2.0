@@ -571,6 +571,15 @@ export class WebGLDesign3D {
     this.camera.lookAt(t);
     this.makeControls();
     this.controls.target.copy(t);
+    // RE-ORIENTAR DESPUÉS de crear los controles. OrbitControls arranca con su
+    // target en (0,0,0) y en su constructor apunta la cámara ahí; al copiar
+    // después el target real, la cámara quedaba mirando al origen. En una vista
+    // ortogonal eso deja el eje de vista INCLINADO (p. ej. (0,-0.099,-0.995) en
+    // Frente), y como el plano de dibujo se arma con esa dirección, cada punto
+    // de la pantalla caía en una Z distinta: el trazo salía torcido y "no
+    // respetaba el plano". Con esto el eje queda exacto (0,0,-1).
+    this.camera.lookAt(t);
+    this.camera.updateMatrixWorld(true);
     this.applyOrthoFrustum();
     if (this.gizmo) this.gizmo.camera = this.camera as THREE.Camera;
     this.lastOnionSig = ''; // fuerza recalcular el onion-skin en la nueva vista
@@ -629,6 +638,54 @@ export class WebGLDesign3D {
   ];
   /** Tolerancia del snap al eje del mundo, en grados (solo aplica en Persp). */
   private static readonly AXIS_SNAP_DEG = 12;
+
+  /** Tolerancia de las GUÍAS INTELIGENTES (estilo Illustrator): con Shift, si
+   *  la recta queda a menos de estos grados del paralelo perfecto a un eje del
+   *  mundo, se imanta a ese eje y aparece la guía de color. Más allá, la recta
+   *  queda libre — la asistencia no debe pelearse con el trazo a mano. */
+  private static readonly SMART_SNAP_DEG = 7;
+  private smartGuide?: THREE.Line;
+
+  /** Imanta `raw` al eje del mundo más parecido a la dirección del gesto, solo
+   *  si está dentro de la tolerancia. Devuelve el punto corregido y el eje (o
+   *  null si el gesto no está cerca de ningún paralelo). */
+  private snapStraightSmart(start: THREE.Vector3, raw: THREE.Vector3):
+      { point: THREE.Vector3; axis: THREE.Vector3 | null; color?: string } {
+    const drag = raw.clone().sub(start);
+    if (drag.lengthSq() < 1e-8) return { point: raw, axis: null };
+    const dir = drag.clone().normalize();
+    const cosTol = Math.cos(THREE.MathUtils.degToRad(WebGLDesign3D.SMART_SNAP_DEG));
+    let best: { axis: THREE.Vector3; color: string; c: number } | null = null;
+    for (const [ax, color] of WebGLDesign3D.VP_AXES) {
+      const c = Math.abs(dir.dot(ax)); // ±eje: da igual el sentido
+      if (c >= cosTol && (!best || c > best.c)) best = { axis: ax, color, c };
+    }
+    if (!best) return { point: raw, axis: null };
+    // proyección sobre el eje → paralelo EXACTO, conservando el largo del gesto
+    const proj = drag.dot(best.axis);
+    return { point: start.clone().addScaledVector(best.axis, proj), axis: best.axis, color: best.color };
+  }
+
+  /** Guía visual del eje al que se imantó la recta (línea larga de color que
+   *  pasa por el punto de inicio), como las guías inteligentes de Illustrator. */
+  private showSmartGuide(origin: THREE.Vector3, axis: THREE.Vector3, color: string): void {
+    if (!this.smartGuide) {
+      const mat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.9, depthTest: false });
+      this.smartGuide = new THREE.Line(new THREE.BufferGeometry(), mat);
+      this.smartGuide.renderOrder = 1001;
+      this.handlesGroup.add(this.smartGuide);
+    }
+    const L = 1000; // "infinita" a efectos prácticos
+    const a = origin.clone().addScaledVector(axis, -L);
+    const b = origin.clone().addScaledVector(axis, L);
+    this.smartGuide.geometry.setFromPoints([a, b]);
+    (this.smartGuide.material as THREE.LineBasicMaterial).color.set(color);
+    this.smartGuide.visible = true;
+  }
+
+  private hideSmartGuide(): void {
+    if (this.smartGuide) this.smartGuide.visible = false;
+  }
 
   /** Normal que tiene que tener un plano nuevo para quedar de cara a la vista.
    *
@@ -849,7 +906,7 @@ export class WebGLDesign3D {
     // guías, el rayo agarraba la que quedaba más cerca en profundidad (aunque no
     // fuera la que estás usando). Si el cursor está sobre la malla de la guía
     // activa, se usa esa; así "dibujás donde tenés la guía activa".
-    if (this.tool !== 'guide' && this.activeGuide) {
+    if (this.tool !== 'guide' && this.activeGuide && !this.activeGuideIsEdgeOn()) {
       const ah = this.raycaster.intersectObject(this.activeGuide.mesh, false);
       if (ah.length) {
         const h = ah[0];
@@ -875,7 +932,11 @@ export class WebGLDesign3D {
     // profundidad) y el dibujo "no respetaba el plano".
     if (this.tool !== 'guide' && this.activeSurfaceId) {
       const act = this.surfaces.find((x) => x.id === this.activeSurfaceId);
-      if (act) {
+      // Un plano visto DE CANTO no se usa ni por su malla: el rayo casi
+      // paralelo le pega en puntos arbitrarios a lo largo de su profundidad y
+      // devuelve una Z errática (el trazo salía deformado en vez de plano).
+      const edgeOn = act && act.type === 'plane' && this.planeIsEdgeOn(this.surfacePlane(act.mesh));
+      if (act && !edgeOn) {
         const ah = this.raycaster.intersectObject(act.mesh, false);
         if (ah.length) {
           const h = ah[0];
@@ -905,7 +966,12 @@ export class WebGLDesign3D {
     // No aplica al crear una guía nueva (tool 'guide'): ahí conviene que la
     // normal de apoyo salga de una superficie plana real, no del borde
     // curvo de un tubo de tinta.
-    if (this.tool !== 'guide') {
+    // Apoyarse en los trazos ya dibujados solo tiene sentido en PERSPECTIVA
+    // (dibujar sobre el volumen ya armado, tipo Grease Pencil). En ORTOGONAL
+    // arruina el dibujo plano: al cruzar una línea anterior el rayo pega en su
+    // TUBO y el punto se corre media caña en profundidad (un rectángulo salía
+    // con los lados a distinta Z en vez de coplanar).
+    if (this.tool !== 'guide' && this.view === 'persp') {
       this.strokesGroup.traverse((o) => { if ((o as THREE.Mesh).isMesh) targets.push(o); });
     }
     if (targets.length) {
@@ -1618,6 +1684,16 @@ export class WebGLDesign3D {
       const start = pts[0];
       const raw = this.stabilizedPoint(hit.point).clone();
       const end = this.snapToNearestAxis(start, raw);
+      // Alt siempre queda paralelo a un eje → mostrar su guía de color.
+      const dirA = end.clone().sub(start);
+      if (dirA.lengthSq() > 1e-8) {
+        dirA.normalize();
+        let bestA: [THREE.Vector3, string] | null = null;
+        for (const pair of WebGLDesign3D.VP_AXES) {
+          if (!bestA || Math.abs(dirA.dot(pair[0])) > Math.abs(dirA.dot(bestA[0]))) bestA = pair;
+        }
+        if (bestA) this.showSmartGuide(start, bestA[0], bestA[1]);
+      }
       pts.length = 1;
       pressures.length = 1;
       if (end.distanceTo(start) >= MIN_SAMPLE_DIST) {
@@ -1633,7 +1709,13 @@ export class WebGLDesign3D {
       // reemplazan los intermedios en cada movimiento (rubber-band), no se
       // "traba" en modo recto: al soltar Shift sigue a mano libre normal.
       const start = pts[0];
-      const end = this.stabilizedPoint(hit.point).clone();
+      // GUÍAS INTELIGENTES: la recta se imanta sola al eje del mundo cuando se
+      // acerca al paralelo perfecto (y aparece la guía de color), como en
+      // Illustrator. Fuera de la tolerancia queda libre.
+      const smart = this.snapStraightSmart(start, this.stabilizedPoint(hit.point).clone());
+      const end = smart.point;
+      if (smart.axis) this.showSmartGuide(start, smart.axis, smart.color!);
+      else this.hideSmartGuide();
       pts.length = 1;
       pressures.length = 1;
       if (end.distanceTo(start) >= MIN_SAMPLE_DIST) {
@@ -1644,6 +1726,7 @@ export class WebGLDesign3D {
       return;
     }
 
+    this.hideSmartGuide(); // se soltó Shift/Alt: vuelve el trazo a mano libre
     const point = this.stabilizedPoint(hit.point).clone();
     const jump = point.distanceTo(pts[pts.length - 1]);
     if (jump < MIN_SAMPLE_DIST) return;
@@ -1985,6 +2068,7 @@ export class WebGLDesign3D {
   private commitStroke(): void {
     if (!this.current) return;
     this.smoothed = null;
+    this.hideSmartGuide();
     for (const l of [this.current.line, this.current.mirrorLine]) {
       if (!l) continue;
       this.strokesGroup.remove(l);
