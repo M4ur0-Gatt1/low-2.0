@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { useLowStore } from '../../../store/low-store';
 import { ToolType, SurfaceType, GizmoMode, BrushSettings } from '../../../types/design-types';
 import { ColorWheel } from './ColorWheel';
+import { LOW_ACCENT } from '../theme';
 
 /** Presets de pincel: mismos parámetros del motor (size/hardness/presión/
  *  estabilizador), solo con distintos valores por defecto para que cada uno
@@ -71,7 +72,7 @@ const Section: React.FC<{ title: string; open: boolean; onToggle: () => void; ch
 
 const iconBtn = (active: boolean): React.CSSProperties => ({
   width: '40px', height: '40px', border: 'none', borderRadius: '6px',
-  backgroundColor: active ? '#0078d4' : 'transparent', color: active ? '#fff' : '#ccc',
+  backgroundColor: active ? LOW_ACCENT : 'transparent', color: active ? '#fff' : '#ccc',
   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
 });
 const hoverIn = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => {
@@ -180,10 +181,10 @@ export const Toolbar3D: React.FC = () => {
         ))}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', marginTop: 4 }}>
           <button ref={swatchRef} onClick={toggleWheel} title="Color del pincel (círculo cromático)"
-            style={{ width: 40, height: 40, border: showWheel ? '2px solid #0078d4' : '2px solid transparent', borderRadius: 6, cursor: 'pointer', backgroundColor: brushSettings.color }} />
+            style={{ width: 40, height: 40, border: showWheel ? `2px solid ${LOW_ACCENT}` : '2px solid transparent', borderRadius: 6, cursor: 'pointer', backgroundColor: brushSettings.color }} />
           <input type="range" min="1" max="100" value={brushSettings.size}
             onChange={(e) => setBrushSettings({ ...brushSettings, size: Number(e.target.value) })}
-            title="Tamaño del pincel" style={{ flex: 1, accentColor: '#0078d4' }} />
+            title="Tamaño del pincel" style={{ flex: 1, accentColor: LOW_ACCENT }} />
         </div>
       </Section>
 
