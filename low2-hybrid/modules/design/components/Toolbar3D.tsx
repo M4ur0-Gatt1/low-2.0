@@ -69,12 +69,6 @@ const Section: React.FC<{ title: string; open: boolean; onToggle: () => void; ch
   </div>
 );
 
-/** Contador para que cada click en una superficie genere una instancia NUEVA.
- *  El motor compara este `nonce`: distinto = pared nueva; igual = el panel
- *  editó parámetros de la activa (ver syncFromStore). */
-let surfaceNonce = 0;
-const nextSurfaceNonce = () => ++surfaceNonce;
-
 const iconBtn = (active: boolean): React.CSSProperties => ({
   width: '40px', height: '40px', border: 'none', borderRadius: '6px',
   backgroundColor: active ? '#0078d4' : 'transparent', color: active ? '#fff' : '#ccc',
@@ -156,13 +150,11 @@ export const Toolbar3D: React.FC = () => {
       <Section title="Superficies" open={open.superficies} onToggle={() => toggle('superficies')}>
         {surfaces.map((s) => (
           <button key={s.id}
-            // Cada click AGREGA una superficie nueva, orientada a la vista
-            // actual (Frente → pared XY, Izquierda → pared YZ: 90° exactos).
-            // Antes, volver a clickear el mismo tipo BORRABA la anterior, así
-            // que era imposible tener las dos paredes de una esquina a la vez.
-            // Para borrar una pared: goma (E) y click sobre ella.
-            onClick={() => setActiveSurface({ type: s.id, params: { nonce: nextSurfaceNonce() } })}
-            title={`${s.label} — agrega una superficie nueva en la vista actual (borrar: goma)`}
+            // Hay UNA superficie de apoyo a la vez: elegir otro tipo la
+            // REEMPLAZA y destildar el tipo activo la BORRA. (No acumular:
+            // en vista ortogonal se apilaban una sobre otra y no se iban.)
+            onClick={() => setActiveSurface(s.id === activeSurface?.type ? null : { type: s.id, params: {} })}
+            title={`${s.label} — reemplaza la superficie activa; volvé a tocarlo para quitarla`}
             style={iconBtn(activeSurface?.type === s.id)}
             onMouseEnter={(e) => hoverIn(e, activeSurface?.type === s.id)} onMouseLeave={(e) => hoverOut(e, activeSurface?.type === s.id)}>
             <div style={{ width: '20px', height: '20px' }}><s.icon /></div>

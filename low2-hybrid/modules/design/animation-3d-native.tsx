@@ -189,6 +189,12 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
         {barBtn('⟲', () => eng()?.undo(), false, 'Deshacer (Ctrl+Z)')}
         {barBtn('⟳', () => eng()?.redo(), false, 'Rehacer (Ctrl+Alt+Z / Ctrl+Shift+Z)')}
         <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
+        {barBtn('Nuevo', () => {
+          // descarta todo → confirmar antes (no hay forma de recuperarlo)
+          if (window.confirm('¿Empezar un proyecto nuevo? Se descarta el dibujo actual.')) {
+            eng()?.newProject();
+          }
+        }, false, 'Nuevo proyecto (descarta el dibujo actual)')}
         {barBtn('Abrir', () => fileInputRef.current?.click(), false, 'Abrir proyecto LOW 3D')}
         {barBtn('Guardar', saveProject, false, 'Guardar proyecto LOW 3D')}
         <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />

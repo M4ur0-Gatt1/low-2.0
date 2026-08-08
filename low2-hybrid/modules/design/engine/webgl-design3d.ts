@@ -245,7 +245,7 @@ export class WebGLDesign3D {
   private mirror = { x: false, y: false, z: false };
   private theme: Theme = 'light';
   private lastSurfaceKey = '';
-  private lastSurfaceNonce = 0; // ver syncFromStore: distingue "pared nueva" de "editar la activa"
+  private selectedSurface: SurfaceObj | null = null; // superficie agarrada con el gizmo
 
   // ---------------------------------------------------------------- ciclo de vida
 
@@ -615,6 +615,7 @@ export class WebGLDesign3D {
         if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
         else mat?.dispose();
       });
+      if (this.selectedSurface?.id === this.activeSurfaceId) { this.selectedSurface = null; this.syncGizmo(); }
       this.surfaces = this.surfaces.filter((x) => x.id !== this.activeSurfaceId);
     }
     this.activeSurfaceId = null;
@@ -782,15 +783,11 @@ export class WebGLDesign3D {
     this.mirror = s.mirrorMode;
     const key = WebGLDesign3D.surfaceKey(s.activeSurface);
     if (key !== this.lastSurfaceKey) {
-      if (key) {
-        // `nonce` distinto = click en el botón de superficie → pared NUEVA
-        // (no se borra la anterior). Mismo nonce = el panel editó radio/
-        // posición/rotación de la activa → se reemplaza esa malla.
-        const nonce = Number(s.activeSurface!.params.nonce ?? 0);
-        const isNew = nonce !== this.lastSurfaceNonce;
-        this.addSurface(s.activeSurface!.type, s.activeSurface!.params, !isNew);
-        this.lastSurfaceNonce = nonce;
-      } else this.removeActiveSurface();
+      // Una sola superficie de apoyo a la vez: cambiar de tipo la reemplaza,
+      // destildarla la borra. (Acumularlas dejaba planos apilados imposibles
+      // de sacar en vista ortogonal.)
+      if (key) this.addSurface(s.activeSurface!.type, s.activeSurface!.params);
+      else this.removeActiveSurface();
     }
     this.lastSurfaceKey = key;
     const newGizmoMode = s.gizmoMode || 'translate';
@@ -1118,7 +1115,13 @@ export class WebGLDesign3D {
       } else {
         const g = this.pickGuide();
         if (g) this.selectGuide(g);
-        else { this.selectGuide(null); this.beginLasso(e); }
+        else {
+          // también se pueden agarrar las superficies (plano/cilindro/…) para
+          // moverlas, escalarlas y rotarlas con el gizmo.
+          const su = this.pickSurface();
+          if (su) this.selectSurface(su);
+          else { this.selectGuide(null); this.selectSurface(null); this.beginLasso(e); }
+        }
       }
     } else if (this.tool === 'select') {
       this.onSelectPointerDown(e);
@@ -1244,6 +1247,14 @@ export class WebGLDesign3D {
       this.redo();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (this.selected.size) { e.preventDefault(); this.deleteSelection(); }
+      // Supr también borra la superficie o la guía que estén agarradas con el
+      // gizmo (antes solo borraba trazos).
+      else if (this.selectedSurface) {
+        e.preventDefault();
+        const id = this.selectedSurface.id;
+        this.deleteSurfaceById(id);
+        if (this.lastSurfaceKey) { this.lastSurfaceKey = ''; lowStore.setActiveSurface(null); }
+      } else if (this.selectedGuide) { e.preventDefault(); this.deleteGuideById(this.selectedGuide.id); }
     } else if (ctrl && e.key.toLowerCase() === 'c') {
       if (this.selected.size) { e.preventDefault(); this.copySelection(); }
     } else if (ctrl && e.key.toLowerCase() === 'v') {
@@ -1253,6 +1264,7 @@ export class WebGLDesign3D {
     } else if (e.key === 'Escape') {
       this.setSelection([]);
       this.selectGuide(null);
+      this.selectSurface(null);
       this.clearPointEdit();
     }
   };
@@ -2209,6 +2221,7 @@ export class WebGLDesign3D {
     });
     this.surfaces = this.surfaces.filter((x) => x.id !== id);
     if (this.activeSurfaceId === id) this.activeSurfaceId = null;
+    if (this.selectedSurface?.id === id) { this.selectedSurface = null; this.syncGizmo(); }
     return true;
   }
 
@@ -2254,8 +2267,22 @@ export class WebGLDesign3D {
    *  y deforma con el gizmo). `null` deselecciona. */
   private selectGuide(g: { id: string; mesh: THREE.Mesh } | null): void {
     this.selectedGuide = g;
+    if (g) this.selectedSurface = null;
     for (const r of this.selected) this.highlight(r, false);
     this.selected = new Set();
+    this.syncGizmo();
+  }
+
+  /** Selecciona una superficie (plano/cilindro/…) para transformarla con el
+   *  gizmo: mover, escalar y rotar, igual que un trazo o una guía. */
+  private selectSurface(s: SurfaceObj | null): void {
+    this.selectedSurface = s;
+    if (s) {
+      this.selectedGuide = null;
+      this.activeSurfaceId = s.id;
+      for (const r of this.selected) this.highlight(r, false);
+      this.selected = new Set();
+    }
     this.syncGizmo();
   }
 
@@ -2292,6 +2319,7 @@ export class WebGLDesign3D {
     let target: THREE.Object3D | null = null;
     if (this.selected.size === 1) target = [...this.selected][0].object;
     else if (this.selectedGuide) target = this.selectedGuide.mesh;
+    else if (this.selectedSurface) target = this.selectedSurface.mesh;
     if (!target) { this.resetPivot(); this.gizmo.detach(); return; }
     if (this.currentGizmoMode === 'rotate') {
       if (this.pivotForObj !== target) {
@@ -2771,12 +2799,26 @@ export class WebGLDesign3D {
     for (const rec of this.strokes) { rec.object.parent?.remove(rec.object); }
     this.strokes = [];
     for (const g of [...this.guides]) this.detachGuide(g);
+    // borra TODAS las superficies, no solo la activa (si quedaba alguna suelta
+    // se veía un plano fantasma en el proyecto nuevo).
+    for (const s of [...this.surfaces]) this.deleteSurfaceById(s.id);
     this.removeActiveSurface();
     this.selected.clear();
+    this.selectedSurface = null;
+    this.selectedGuide = null;
     this.clearPointEdit();
     this.gizmo?.detach();
     this.undoStack = [];
     this.redoStack = [];
+  }
+
+  /** "Nuevo proyecto": vacía la escena y deja el store coherente (si no, el
+   *  botón de superficie quedaba tildado con un plano que ya no existe). */
+  newProject(): void {
+    this.clear();
+    this.lastSurfaceKey = '';
+    lowStore.setActiveSurface(null);
+    this.setView('persp');
   }
 
   /** Serializa puntos de control en lugar de la malla derivada, para conservar
