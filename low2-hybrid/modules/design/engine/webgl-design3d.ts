@@ -831,6 +831,14 @@ export class WebGLDesign3D {
   /** Un plano visto casi DE CANTO no sirve como soporte: el rayo es paralelo a
    *  él, así que o no intersecta o devuelve un punto lejísimo (de ahí los saltos
    *  erráticos y el "no dibuja" al pasar a una vista lateral). */
+  /** Plano infinito que contiene a una superficie plana: su normal local +Z
+   *  llevada a mundo, pasando por su posición. */
+  private surfacePlane(mesh: THREE.Object3D): THREE.Plane {
+    mesh.updateMatrixWorld();
+    const n = new THREE.Vector3(0, 0, 1).applyQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion())).normalize();
+    return new THREE.Plane().setFromNormalAndCoplanarPoint(n, mesh.getWorldPosition(new THREE.Vector3()));
+  }
+
   private planeIsEdgeOn(plane: THREE.Plane): boolean {
     return Math.abs(this.raycaster.ray.direction.dot(plane.normal)) < 0.08;
   }
@@ -857,6 +865,35 @@ export class WebGLDesign3D {
         const gp = new THREE.Vector3();
         if (this.raycaster.ray.intersectPlane(this.activeGuide.plane, gp)) {
           return { point: gp, normal: this.activeGuide.plane.normal.clone(), target: this.activeGuide.mesh, plane: this.activeGuide.plane.clone(), kind: 'guide' };
+        }
+      }
+    }
+    // PRIORIDAD de la SUPERFICIE ACTIVA (el plano que elegiste en la barra).
+    // Igual que la guía activa: si está elegida, es EL soporte del trazo. Antes
+    // solo se la intersectaba como una malla más, así que apenas el cursor
+    // salía de su cuadrado finito el punto caía en el plano de la vista (otra
+    // profundidad) y el dibujo "no respetaba el plano".
+    if (this.tool !== 'guide' && this.activeSurfaceId) {
+      const act = this.surfaces.find((x) => x.id === this.activeSurfaceId);
+      if (act) {
+        const ah = this.raycaster.intersectObject(act.mesh, false);
+        if (ah.length) {
+          const h = ah[0];
+          const normal = h.face
+            ? h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize()
+            : new THREE.Vector3(0, 0, 1);
+          return { point: h.point.clone(), normal, target: act.mesh, kind: 'surface' };
+        }
+        // Fuera del cuadrado visible: para un PLANO se sigue usando su plano
+        // infinito (misma profundidad). Para superficies curvas no aplica.
+        if (act.type === 'plane') {
+          const pl = this.surfacePlane(act.mesh);
+          if (!this.planeIsEdgeOn(pl)) {
+            const p = new THREE.Vector3();
+            if (this.raycaster.ray.intersectPlane(pl, p)) {
+              return { point: p, normal: pl.normal.clone(), target: act.mesh, plane: pl.clone(), kind: 'surface' };
+            }
+          }
         }
       }
     }
