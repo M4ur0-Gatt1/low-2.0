@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.18"
+LOW_VERSION = "3.29.19"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -161,6 +161,12 @@ class Api:
         s._aux_windows = {}
         s._animation_panel_state = {}
         s.ws = None
+        # Auto-reabrir el último workspace abierto (si sigue existiendo).
+        # Así el agente lee la carpeta correcta desde el arranque y no trabaja
+        # "a ciegas" ni sobre un directorio viejo de otra sesión.
+        _lw = (s.cfg.data.get("last_workspace") or "").strip()
+        if _lw and Path(_lw).is_dir():
+            s.ws = _lw
         s.prov = None
         s.ses_dir = data_dir() / 'historial'
         s.ses_dir.mkdir(parents=True, exist_ok=True)
@@ -243,6 +249,10 @@ class Api:
 
     # ── Reflexion: aprende de sus errores y los recuerda ──────
     def _lessons_path(s):
+        # Por WORKSPACE: cada proyecto tiene sus propias lecciones aprendidas.
+        # Así dos sesiones/workspaces en paralelo no se mezclan los aprendizajes.
+        if s.ws:
+            return Path(s.ws) / ".low" / "lecciones.json"
         return data_dir() / 'lecciones.json'
 
     def _load_lessons(s):
@@ -296,6 +306,10 @@ class Api:
     # ── Habilidades: aprende de lo que le sale BIEN y lo reutiliza ──
     # (complemento positivo de Reflexion; patrón "skill library" tipo Nous/Voyager)
     def _skills_path(s):
+        # Por WORKSPACE: biblioteca de habilidades aislada por proyecto (no se
+        # comparte entre sesiones en paralelo).
+        if s.ws:
+            return Path(s.ws) / ".low" / "habilidades.json"
         return data_dir() / 'habilidades.json'
 
     def _load_skills(s):
@@ -647,7 +661,7 @@ class Api:
             except (TypeError, ValueError):
                 return d
         a["max_steps"] = _int(steps, 40)
-        a["max_continuations"] = _int(conts, 25)
+        a["max_continuations"] = _int(conts, 0)
         a["memory_turns"] = _int(mem, 24)
         if verify_runtime is not None:
             a["verify_runtime"] = bool(verify_runtime)
@@ -1675,6 +1689,9 @@ class Api:
         if not r:
             return None
         s.ws = r[0] if isinstance(r, (list, tuple)) else str(r)
+        # recordar el workspace para reabrirlo en el próximo arranque
+        s.cfg.data["last_workspace"] = s.ws
+        s.cfg.save()
         return {"ws": s.ws, "tree": s._tree(), "branch": s._git_branch()}
 
     def _file_payload(s, path):
@@ -1993,7 +2010,13 @@ class Api:
                 api.add_keyframe(actor, int(params.get("frame", 0)),
                                  x=_f("x"), y=_f("y"), rotation=_f("rotation"),
                                  scale_x=_f("scale_x"), scale_y=_f("scale_y"),
-                                 opacity=_f("opacity"))
+                                 skew_x=_f("skew_x"), skew_y=_f("skew_y"),
+                                 opacity=_f("opacity"),
+                                 label=str(params.get("label", "") or ""),
+                                 hold=bool(params.get("hold", False)),
+                                 ease_in=_f("ease_in") or 0.0,
+                                 ease_out=_f("ease_out") or 0.0)
+                _save()
                 return f" Keyframe en frame {params.get('frame', 0)} para '{actor}'."
             if action == "walk_cycle":
                 actor = params.get("actor", "")
@@ -2003,43 +2026,35 @@ class Api:
                 return f" Ciclo de caminata generado para '{actor}'."
             if action == "set_frame":
                 f = api.set_frame(int(params.get("frame", 0)))
-                return f" Frame actual: {f} (tiempo {f / api.current_scene.fps:.2f}s)."
-            if action in ("frame", "status", "info"):
-                f = params.get("frame")
-                info = api.get_frame_info(None if f is None else int(f))
-                return " Estado del frame:\n" + json.dumps(info, ensure_ascii=False, indent=2)
-            if action in ("keyframes", "list_keyframes"):
-                actor = params.get("actor") or None
-                kfs = api.list_keyframes(actor)
-                if not kfs:
-                    return " No hay keyframes" + (f" para '{actor}'" if actor else "") + "."
-                return " Keyframes:\n" + json.dumps(kfs, ensure_ascii=False, indent=2)[:4000]
+                return f" Playhead en frame {f}."
+            if action == "get_frame_info":
+                return json.dumps(api.get_frame_info(int(params.get("frame", 0))),
+                                  ensure_ascii=False)
+            if action == "list_actors":
+                return json.dumps(api.list_actors(), ensure_ascii=False)
+            if action == "list_keyframes":
+                kfs = api.list_keyframes(params.get("actor", ""))
+                return f" Keyframes de '{params.get('actor', '')}': {kfs}"
             if action == "copy_frame":
-                src = int(params.get("src", params.get("src_frame", 0)))
-                dst = int(params.get("dst", params.get("dst_frame", 0)))
-                n = api.copy_frame(src, dst)
+                n = api.copy_frame(int(params.get("src", 0)), int(params.get("dst", 0)),
+                                   params.get("actor") or None)
                 _save()
-                return f" Pose del frame {src} copiada al frame {dst} ({n} actor/es)."
+                return f" Copiado el frame {params.get('src')} → {params.get('dst')} ({n} actor/es)."
             if action == "delete_keyframe":
-                actor = params.get("actor", "")
-                frame = int(params.get("frame", 0))
-                n = api.delete_keyframe(actor, frame)
+                ok = api.delete_keyframe(params.get("actor", ""), int(params.get("frame", 0)))
                 _save()
-                return f" {n} keyframe(s) de '{actor}' en frame {frame} eliminados."
-            if action in ("interpolate", "inbetween"):
-                actor = params.get("actor", "")
-                n = api.interpolate(actor, int(params.get("start", 0)),
-                                    int(params.get("end", 0)),
-                                    int(params.get("steps", 0)),
-                                    params.get("ease", "linear"))
+                return f" Keyframe {'eliminado' if ok else 'no encontrado'}."
+            if action == "interpolate":
+                n = api.interpolate(params.get("actor", ""),
+                                    int(params.get("from", 0)), int(params.get("to", 0)))
                 _save()
-                return f" {n} keyframe(s) intermedios generados para '{actor}'."
-            if action == "marker":
-                label = api.add_marker(int(params.get("frame", 0)), params.get("label", ""))
+                return f" Interpolación bakeada: {n} keyframe(s) intermedio(s)."
+            if action == "add_marker":
+                m = api.add_marker(int(params.get("frame", 0)), str(params.get("label", "") or ""))
                 _save()
-                return f" Marcador en frame {params.get('frame', 0)}: '{label}'."
-            if action == "timeline":
-                return " Timeline:\n" + json.dumps(api.timeline_summary(), ensure_ascii=False, indent=2)
+                return f" Marcador: {m}"
+            if action == "timeline_summary":
+                return json.dumps(api.timeline_summary(), ensure_ascii=False)
             if action in ("render", "export"):
                 fmt = params.get("format", "mp4")
                 rel = params.get("output") or f"anim/{(api.current_scene.name or 'anim')}.{fmt}"
@@ -2054,8 +2069,9 @@ class Api:
                 return (f"[Storyboard] Storyboard: {len(scenes)} escena(s).\n"
                         + json.dumps(scenes, ensure_ascii=False)[:1800])
             return (" Acción desconocida. Usá: new, add_actor, keyframe, walk_cycle, "
-                    "set_frame, frame/status, keyframes, copy_frame, delete_keyframe, "
-                    "interpolate, marker, timeline, render, storyboard.")
+                    "render, storyboard, set_frame, get_frame_info, list_actors, "
+                    "list_keyframes, copy_frame, delete_keyframe, interpolate, "
+                    "add_marker, timeline_summary.")
         except Exception as e:
             return f" anim {action}: {e}"
 
@@ -2403,7 +2419,7 @@ class Api:
             {"type": "function", "function": {"name": "ask_model", "description": "Delega una SUBTAREA a OTRO modelo para AHORRAR recursos: mandá lo simple/mecánico a uno barato o rápido y reservá el modelo actual (caro) para lo complejo. Devuelve la respuesta de ese modelo como texto para que la uses. 'provider' = uno de los configurados con key (ej. groq, digitalocean, siliconflow, deepseek, glm, qwen, nvidia, custom). 'model' opcional (default: el rápido del proveedor). 'image' (opcional) = ruta a una imagen en el workspace para análisis multimodal (el modelo debe soportar visión). Ideal para: resumir, traducir, reformatear, generar texto trivial, clasificar, listar ideas, boilerplate, y analizar imágenes. NO delegues tareas que necesiten tus otras herramientas (archivos, git, imágenes). Podés hacer varias ask_model en paralelo mental para comparar respuestas.", "parameters": {"type": "object", "properties": {"provider": {"type": "string", "description": "proveedor destino (con key configurada)"}, "prompt": {"type": "string", "description": "la subtarea, autocontenida (incluí todo el contexto que el otro modelo necesita)"}, "model": {"type": "string", "description": "modelo especifico del proveedor (opcional)"}, "image": {"type": "string", "description": "ruta a imagen (png/jpg) en el workspace para análisis multimodal (opcional)"}}, "required": ["provider", "prompt"]}}},
             {"type": "function", "function": {"name": "vectorize", "description": "Convierte una imagen raster del workspace (PNG/JPG) en un SVG VECTORIAL EDITABLE (la 'calca'). Usalo para NO escribir coordenadas SVG a mano (eso sale tosco): parti de una foto, boceto o imagen generada y obtene vectores limpios y editables. 'detail': low|medium|high (mas detalle = mas trazos). Guarda el .svg en el workspace y lo abre en el editor de vectores.", "parameters": {"type": "object", "properties": {"image": {"type": "string", "description": "ruta a la imagen PNG/JPG en el workspace"}, "out": {"type": "string", "description": "ruta .svg destino (opcional)"}, "detail": {"type": "string"}, "mode": {"type": "string", "description": "color (formas por color, default) | lineas (calca SOLO el trazo/tinta — ideal para line-art y bocetos) | contorno (trazos LARGOS y unificados sin puntitos — el mejor para ANIMACION, limpia los fragmentos de vector)"}, "remove_bg": {"type": "boolean", "description": "true: quita el fondo detectado por las esquinas antes de trazar (como la varita de Photoshop)"}, "bg_tol": {"type": "integer", "description": "tolerancia del fondo 4-96 (default 32)"}}, "required": ["image"]}}},
             {"type": "function", "function": {"name": "illustrate", "description": "LA MEJOR forma de crear una ILUSTRACION sofisticada como VECTOR editable: genera un raster de alta calidad con IA (diffusion) desde tu descripcion y lo VECTORIZA a SVG. Evita el SVG tosco escrito a mano — usalo en vez de dibujar paths cuando quieras algo pulido (personajes, escenas, logos con detalle). 'prompt' detallado (estilo, colores, composicion, fondo). 'detail': low|medium|high. Guarda y abre el .svg editable en el editor [Diseno].", "parameters": {"type": "object", "properties": {"prompt": {"type": "string"}, "out": {"type": "string", "description": "ruta .svg destino (opcional)"}, "detail": {"type": "string"}, "size": {"type": "string", "description": "ej 1024x1024"}}, "required": ["prompt"]}}},
-            {"type": "function", "function": {"name": "anim", "description": "Estudio de ANIMACION 2D profesional (motor propio de LOW: timeline, rigging con huesos/IK, compositor de nodos, export MP4/GIF/Lottie). Ideal para ANIMAR los SVG que diseñás. Acciones (campo 'action') con sus 'params': 'new' {name,width,height,fps,duration} crea proyecto; 'add_actor' {layer,name,svg_path (ruta a .svg del workspace) o svg (inline),x,y}; 'keyframe' {actor,frame,x,y,rotation,scale_x,scale_y,opacity} cuadro clave; 'walk_cycle' {actor,start,duration} ciclo de caminata; 'set_frame' {frame} mueve el playhead al frame de trabajo; 'frame'/'status' {frame?} devuelve el estado de TODOS los actores en un frame (pose, capa, transform); 'keyframes' {actor?} lista los keyframes de la timeline (de un actor o de todos); 'copy_frame' {src,dst} copia la pose de un frame a otro (pose-to-pose); 'delete_keyframe' {actor,frame} borra keyframes; 'interpolate' {actor,start,end,steps?,ease?} genera keyframes intermedios (linear/ease_in/ease_out/ease_in_out); 'marker' {frame,label} agrega marcador; 'timeline' {} resumen de duración, keyframes y marcadores; 'render' {output,format(mp4/gif/png),preset(hd/web/4k/gif)} exporta; 'storyboard' {script} arma storyboard. Flujo tipico: diseñá el personaje (generate_image/save_character), guardalo como SVG, luego anim new -> add_actor -> keyframe/copy_frame/interpolate -> render.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "new | add_actor | keyframe | walk_cycle | set_frame | frame | keyframes | copy_frame | delete_keyframe | interpolate | marker | timeline | render | storyboard"}, "params": {"type": "object", "description": "campos segun la accion (ver descripcion)"}}, "required": ["action"]}}},
+            {"type": "function", "function": {"name": "anim", "description": "Estudio de ANIMACION 2D profesional (motor propio de LOW: timeline por tracks, rigging con huesos/IK, compositor de nodos, export MP4/GIF/Lottie). Ideal para ANIMAR los SVG que diseñás. Acciones (campo 'action') con sus 'params': 'new' {name,width,height,fps,duration} crea el proyecto; 'add_actor' {layer,name,svg_path o svg (inline),x,y}; 'keyframe' {actor,frame,x,y,rotation,scale_x,scale_y,skew_x,skew_y,opacity,label,hold,ease_in,ease_out} pone/actualiza un cuadro clave; 'walk_cycle' {actor,start,duration} ciclo de caminata automatico; 'render' {output,format(mp4/gif/png),preset(hd/web/4k/gif)} exporta el video; 'storyboard' {script}; 'set_frame' {frame} mueve el playhead; 'get_frame_info' {frame} estado resuelto de todos los actores en un frame; 'list_actors' {}; 'list_keyframes' {actor}; 'copy_frame' {src,dst,actor?} copia el estado de un frame a otro; 'delete_keyframe' {actor,frame}; 'interpolate' {actor,from,to} bakea keyframes intermedios; 'add_marker' {frame,label}; 'timeline_summary' {} resumen de tracks. Flujo tipico: diseñá el personaje (generate_image/save_character), guardalo como SVG, luego anim new -> add_actor -> keyframe -> render.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "new | add_actor | keyframe | walk_cycle | render | storyboard | set_frame | get_frame_info | list_actors | list_keyframes | copy_frame | delete_keyframe | interpolate | add_marker | timeline_summary"}, "params": {"type": "object", "description": "campos segun la accion (ver descripcion)"}}, "required": ["action"]}}},
         ]
 
     # tools de imagen/video: peso muerto en tareas de código (~1.4k tokens). El
@@ -4113,13 +4129,19 @@ class Api:
             # el piso asegura suficientes intentos para agotar la cadena de failover
             max_attempts = max(cfg_steps, len(chain) * 3 + 4)
             continuations = 0
-            MAX_AUTO_CONTINUATIONS = int(ag.get("max_continuations", 25) or 25)
+            # 0 = el agente NUNCA se auto-continúa: termina el turno y ESPERA la
+            # respuesta del usuario (evita los loops de "sigo trabajando").
+            MAX_AUTO_CONTINUATIONS = int(ag.get("max_continuations", 0) or 0)
             no_progress = 0            # tramos seguidos sin ningún avance  ahí sí paramos
-            last_progress = (0, 0)     # (archivos escritos, herramientas ejecutadas)
+            STALL_LIMIT = max(3, int(ag.get("max_stall", 6) or 6))  # margen anti-corte prematuro
             verified_ok = False        # el turno terminó limpio (sin errores)  aprender habilidad
             turn_tools = s._session_tools(msg)   # tool gating por sesión (cache estable)
             while True:
                 hit_cap = False
+                # estado al inicio del tramo: el progreso se mide POR TRAMO (no
+                # acumulado global), así un bucle que ejecuta tools "exitosas" en
+                # círculo ya no se disfraza de avance y el turno vuelve al usuario.
+                marker_start = (len(dict.fromkeys(s._written)), tool_runs)
                 for attempt in range(max_attempts):
                     if s._cancel:
                         return {"text": " Detenido.", "status": "Detenido"}
@@ -4333,8 +4355,8 @@ class Api:
                     # trabajo en el primer incidente. LOW devuelve el diagnóstico al
                     # modelo y le exige releer/cambiar de estrategia. Solo abandona si
                     # también fracasan las recuperaciones configuradas.
-                    max_failures = max(4, int(ag.get("max_tool_failures", 8) or 8))
-                    max_recoveries = max(1, int(ag.get("max_recovery_attempts", 2) or 2))
+                    max_failures = max(4, int(ag.get("max_tool_failures", 12) or 12))
+                    max_recoveries = max(1, int(ag.get("max_recovery_attempts", 3) or 3))
                     if fail_streak >= max_failures:
                         if recovery_attempts < max_recoveries:
                             recovery_attempts += 1
@@ -4356,7 +4378,7 @@ class Api:
                             break
                     # Progreso significa éxito, no simplemente haber invocado una tool.
                     stall = 0 if progressed else stall + 1
-                    if stall >= 4:
+                    if stall >= STALL_LIMIT:
                         if recovery_attempts < max_recoveries:
                             recovery_attempts += 1
                             stall = 0
@@ -4375,15 +4397,14 @@ class Api:
                     hit_cap = True
                 # ¿hubo avance real en este tramo? (archivos nuevos o tools ejecutadas)
                 marker = (len(dict.fromkeys(s._written)), tool_runs)
-                if marker != last_progress:
+                if marker != marker_start:
                     no_progress = 0
-                    last_progress = marker
                 else:
                     no_progress += 1
                 # Seguimos solos mientras el agente PROGRESE: solo paramos si se traba
                 # (4 tramos sin ningún avance) o si tocamos el techo de seguridad
                 # configurable (evita quemar tokens en un bucle infinito).
-                if (hit_cap and not stalled_out and no_progress < 4
+                if (hit_cap and not stalled_out and no_progress < STALL_LIMIT
                         and continuations < MAX_AUTO_CONTINUATIONS):
                     continuations += 1
                     s._push("sys", f"↻ Sigo trabajando en la tarea (tramo {continuations})…")
@@ -4417,7 +4438,7 @@ class Api:
             elif not text and hit_cap:
                 n_esc = len(dict.fromkeys(s._written))
                 toque = f" (toqué {n_esc} archivo(s))" if n_esc else ""
-                if no_progress >= 4:
+                if no_progress >= STALL_LIMIT:
                     text = ("⏸ Paré porque el agente dejó de avanzar (repetía sin progreso)"
                             + toque + ". Escribí «segui» para reintentar, cambiá de modelo, "
                             "o dividí un poco el pedido.")

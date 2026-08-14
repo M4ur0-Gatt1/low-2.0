@@ -169,6 +169,22 @@ class Morph:
         parts.append("Z")
         return " ".join(parts)
 
+    @staticmethod
+    def interpolate_pair(m1: Optional["Morph"], m2: Optional["Morph"],
+                         t: float) -> Optional["Morph"]:
+        """Interpola entre dos morphs (de keyframes consecutivos). Devuelve un
+        Morph cuyo path ya está resuelto para el tiempo t (source==target)."""
+        if m1 is None and m2 is None:
+            return None
+        if m1 is None:
+            return m2
+        if m2 is None:
+            return m1
+        d1 = m1.interpolate(1.0)
+        d2 = m2.interpolate(0.0)
+        d = Morph(source_d=d1, target_d=d2).interpolate(t)
+        return Morph(source_d=d, target_d=d)
+
 
 @dataclass
 class Keyframe:
@@ -295,22 +311,45 @@ class Actor:
                 t = (frame - k1.frame) / max(1, k2.frame - k1.frame)
                 # Aplicar easing simple (ease-in-out blend)
                 t = self._ease_blend(t, k1.ease_out, k2.ease_in)
-                return k1.transform.lerp(k2.transform, t), None
+                morph = Morph.interpolate_pair(k1.morph, k2.morph, t)
+                return k1.transform.lerp(k2.transform, t), morph
         return self.keyframes[-1].transform, self.keyframes[-1].morph
+
+    def keyframe_at(self, frame: int) -> Optional[Keyframe]:
+        """Devuelve el keyframe exacto en 'frame', o None."""
+        for k in self.keyframes:
+            if k.frame == frame:
+                return k
+        return None
+
+    def remove_keyframe(self, frame: int) -> bool:
+        """Elimina el keyframe exacto en 'frame'. Devuelve True si lo borró."""
+        before = len(self.keyframes)
+        self.keyframes = [k for k in self.keyframes if k.frame != frame]
+        return len(self.keyframes) != before
 
     @staticmethod
     def _ease_blend(t: float, ease_out: float, ease_in: float) -> float:
-        """Curva de easing blend entre ease_out (salida) e ease_in (entrada)."""
-        # Bézier cúbico simple: 0, ease_out, 1-ease_in, 1
-        p0, p1, p2, p3 = 0, ease_out, 1 - ease_in, 1
-        # Aproximación iterativa de bezier cúbico en y para x=t
+        """Easing blend entre la salida del keyframe anterior y la entrada del
+        siguiente. Si ambos son 0 → lineal. Usa bezier cúbico (Newton-Raphson)
+        para interpolar el tiempo con control points suavizados en x."""
+        if ease_out == 0.0 and ease_in == 0.0:
+            return t
+        cp1x = max(0.0, min(1.0, ease_out))
+        cp2x = max(0.0, min(1.0, 1.0 - ease_in))
+        u = t
         for _ in range(8):
-            mid = (p0 + p3) / 2
-            if mid < t:
-                p0 = mid
-            else:
-                p3 = mid
-        return max(0.0, min(1.0, (p0 + p3) / 2))
+            x = (3 * (1 - u) ** 2 * u * cp1x +
+                 3 * (1 - u) * u ** 2 * cp2x + u ** 3)
+            dx = (3 * (1 - u) ** 2 * cp1x +
+                  6 * (1 - u) * u * (cp2x - cp1x) +
+                  3 * u ** 2 * (1 - cp2x))
+            if abs(dx) < 1e-6:
+                break
+            u -= (x - t) / dx
+        u = max(0.0, min(1.0, u))
+        # y(u) con cp1y=0, cp2y=1 → curva ease-in-out estándar
+        return 3 * (1 - u) * u * u + u ** 3
 
     def to_dict(self) -> dict:
         return {
