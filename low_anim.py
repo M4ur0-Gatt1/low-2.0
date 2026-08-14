@@ -422,6 +422,177 @@ class AnimationAPI:
                     return actor
         return None
 
+    # ── Trabajo por frames (línea de tiempo) ──
+
+    def set_frame(self, frame: int) -> int:
+        """Mueve el playhead al frame indicado (frame actual de trabajo)."""
+        frame = max(0, int(frame))
+        if self.current_engine:
+            self.current_engine.current_frame = frame
+        if self.current_timeline:
+            self.current_timeline.current_frame = frame
+        return frame
+
+    def get_frame_info(self, frame: Optional[int] = None) -> dict:
+        """Estado completo de la escena en un frame: actores, capas, transforms.
+        Si no se pasa frame, usa el frame actual."""
+        if not self.current_scene:
+            return {}
+        if frame is None:
+            frame = self.current_engine.current_frame if self.current_engine else 0
+        frame = int(frame)
+        info = {
+            "frame": frame,
+            "time": round(frame / self.current_scene.fps, 3),
+            "fps": self.current_scene.fps,
+            "duration": self.current_scene.duration,
+            "marker": self.current_scene.markers.get(frame, ""),
+            "actors": [],
+        }
+        for layer in self.current_scene.layers:
+            for actor in layer.actors:
+                tr, _morph = actor.get_state_at(frame)
+                info["actors"].append({
+                    "name": actor.name,
+                    "layer": layer.name,
+                    "x": round(tr.x, 2),
+                    "y": round(tr.y, 2),
+                    "rotation": round(tr.rotation, 2),
+                    "scale_x": round(tr.scale_x, 3),
+                    "scale_y": round(tr.scale_y, 3),
+                    "opacity": round(tr.opacity, 3),
+                    "visible": tr.visible,
+                    "has_svg": bool(actor.svg_source),
+                })
+        return info
+
+    def list_keyframes(self, actor_name: Optional[str] = None) -> list:
+        """Lista los keyframes de un actor (o de todos si actor_name es None).
+        Ordenados por actor y frame."""
+        result = []
+        if not self.current_scene:
+            return result
+        for layer in self.current_scene.layers:
+            for actor in layer.actors:
+                if actor_name and actor.name != actor_name:
+                    continue
+                for kf in actor.keyframes:
+                    result.append({
+                        "actor": actor.name,
+                        "layer": layer.name,
+                        "frame": kf.frame,
+                        "x": kf.transform.x,
+                        "y": kf.transform.y,
+                        "rotation": kf.transform.rotation,
+                        "scale_x": kf.transform.scale_x,
+                        "scale_y": kf.transform.scale_y,
+                        "opacity": kf.transform.opacity,
+                        "label": kf.label,
+                        "hold": kf.hold,
+                    })
+        result.sort(key=lambda k: (k["actor"], k["frame"]))
+        return result
+
+    def copy_frame(self, src_frame: int, dst_frame: int) -> int:
+        """Copia la pose/estado de un frame a otro (pose-to-pose) en TODOS los actores."""
+        if not self.current_scene:
+            return 0
+        src_frame, dst_frame = int(src_frame), int(dst_frame)
+        count = 0
+        for layer in self.current_scene.layers:
+            for actor in layer.actors:
+                tr, morph = actor.get_state_at(src_frame)
+                kf = Keyframe(
+                    frame=dst_frame,
+                    transform=Transform(
+                        x=tr.x, y=tr.y, rotation=tr.rotation,
+                        scale_x=tr.scale_x, scale_y=tr.scale_y,
+                        opacity=tr.opacity,
+                    ),
+                    morph=morph,
+                )
+                actor.add_keyframe(kf)
+                count += 1
+        return count
+
+    def delete_keyframe(self, actor_name: str, frame: int) -> int:
+        """Elimina los keyframes de un actor en el frame indicado."""
+        actor = self._find_actor(actor_name)
+        if not actor:
+            return 0
+        frame = int(frame)
+        before = len(actor.keyframes)
+        actor.keyframes = [k for k in actor.keyframes if k.frame != frame]
+        return before - len(actor.keyframes)
+
+    def interpolate(self, actor_name: str, start_frame: int, end_frame: int,
+                    steps: int = 0, ease: str = "linear") -> int:
+        """Genera keyframes intermedios entre dos frames existentes de un actor.
+        steps=0: genera un keyframe por cada frame intermedio.
+        steps>0: genera 'steps' keyframes equiespaciados.
+        ease: linear | ease_in | ease_out | ease_in_out."""
+        actor = self._find_actor(actor_name)
+        if not actor:
+            return 0
+        start_frame, end_frame = int(start_frame), int(end_frame)
+        if end_frame <= start_frame:
+            return 0
+        tr_a = actor.get_state_at(start_frame)[0]
+        tr_b = actor.get_state_at(end_frame)[0]
+
+        if steps <= 0:
+            frames = list(range(start_frame + 1, end_frame))
+        else:
+            frames = [
+                start_frame + round((end_frame - start_frame) * (i + 1) / (steps + 1))
+                for i in range(steps)
+            ]
+
+        def _ease(t):
+            if ease == "ease_in":
+                return t * t
+            if ease == "ease_out":
+                return 1 - (1 - t) ** 2
+            if ease == "ease_in_out":
+                return t * t * (3 - 2 * t)
+            return t
+
+        count = 0
+        for f in frames:
+            t = (f - start_frame) / (end_frame - start_frame)
+            kf = Keyframe(frame=f, transform=tr_a.lerp(tr_b, _ease(t)))
+            actor.add_keyframe(kf)
+            count += 1
+        return count
+
+    def add_marker(self, frame: int, label: str) -> str:
+        """Agrega un marcador (etiqueta) a un frame de la línea de tiempo."""
+        frame = max(0, int(frame))
+        label = (label or "").strip()
+        if self.current_scene:
+            self.current_scene.markers[frame] = label
+        if self.current_timeline:
+            self.current_timeline.markers[frame] = label
+        return label
+
+    def timeline_summary(self) -> dict:
+        """Resumen de la línea de tiempo: duración, actores, keyframes, marcadores."""
+        if not self.current_scene:
+            return {}
+        actors = self.current_scene.get_all_actors()
+        total_kf = sum(len(a.keyframes) for a in actors)
+        frames_with_kf = sorted({k.frame for a in actors for k in a.keyframes})
+        return {
+            "name": self.current_scene.name,
+            "duration": self.current_scene.duration,
+            "fps": self.current_scene.fps,
+            "actors": len(actors),
+            "total_keyframes": total_kf,
+            "frames_with_keyframes": frames_with_kf,
+            "markers": self.current_scene.markers,
+            "current_frame": self.current_engine.current_frame if self.current_engine else 0,
+        }
+
     # ── IA Pipeline ──
     def load_ai_pipeline(self, agent=None):
         """Inicializa el pipeline IA."""
