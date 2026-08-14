@@ -165,8 +165,21 @@ class Track:
         self.color_key = "fill"  # para PROP_COLOR: fill | stroke
 
     def add_point(self, point: TrackPoint):
+        # Reemplazar si ya existe un punto en el mismo frame (evita duplicados)
+        self.points = [p for p in self.points if p.frame != point.frame]
         self.points.append(point)
         self.points.sort(key=lambda p: p.frame)
+
+    def point_at(self, frame: int) -> Optional[TrackPoint]:
+        for p in self.points:
+            if p.frame == frame:
+                return p
+        return None
+
+    def remove_point(self, frame: int) -> bool:
+        before = len(self.points)
+        self.points = [p for p in self.points if p.frame != frame]
+        return len(self.points) != before
 
     def get_value(self, frame: int) -> float:
         """interpola el valor al frame dado."""
@@ -315,6 +328,24 @@ class Timeline:
         keys = [k for k in self.tracks if k.startswith(f"{actor_id}.")]
         for k in keys:
             del self.tracks[k]
+
+    def remove_keyframe(self, actor_id: str, prop: str, frame: int) -> bool:
+        """Elimina el keyframe de una propiedad en un frame."""
+        key = f"{actor_id}.{prop}"
+        if key not in self.tracks:
+            return False
+        return self.tracks[key].remove_point(frame)
+
+    def get_actor_keyframes(self, actor_id: str) -> Dict[int, dict]:
+        """Devuelve {frame: {prop: value}} para todas las tracks de un actor."""
+        result: Dict[int, dict] = {}
+        prefix = f"{actor_id}."
+        for key, track in self.tracks.items():
+            if key.startswith(prefix):
+                prop = key[len(prefix):]
+                for p in track.points:
+                    result.setdefault(p.frame, {})[prop] = p.value
+        return result
 
     def to_dict(self) -> dict:
         return {
