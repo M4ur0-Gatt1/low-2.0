@@ -20,6 +20,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import { lowStore, type LowStore } from '../../../store/low-store';
 import type { BrushSettings, GizmoMode, Layer, SurfaceType, ToolType } from '../../../types/design-types';
 
@@ -44,6 +45,15 @@ interface StrokeRecord {
    *  Comparte toda la infraestructura de trazo (capas, goma, selección,
    *  historial) pero su malla se reconstruye como polígono, no como tubo. */
   fill?: boolean;
+  /** Id del GRUPO al que pertenece (Ctrl+G). No cambia la jerarquía de la
+   *  escena: los objetos siguen colgando de `strokesGroup`. Solo dice que
+   *  elegir uno elige a todos, para poder moverlos y deformarlos en bloque.
+   *  Mantenerlo así evita romper capas, goma, exportación e historial. */
+  groupId?: string;
+  /** true = es un VOLUMEN generado a partir de otros trazos (Ctrl+E). Como
+   *  `fill`, comparte toda la infraestructura de trazo, pero su malla se
+   *  reconstruye como cuerpo cerrado y no como tubo ni como cara plana. */
+  solid?: boolean;
   /** Capa/grupo al que pertenece el trazo (id del store). Determina
    *  visibilidad y opacidad grupal. */
   layerId: string;
@@ -87,6 +97,9 @@ export interface Low3DProject {
     position: number[]; quaternion: number[]; scale: number[]; brush?: BrushSettings;
     /** true = cara sólida (relleno), no una línea: se reconstruye como polígono. */
     fill?: boolean;
+    groupId?: string;
+    /** true = volumen: se reconstruye con buildSolidMesh a partir de `points`. */
+    solid?: boolean;
   }>;
   /** Guías 3D (las "cortinas" extruidas). Se guardan por su trazo de origen +
    *  el eje de extrusión, que es lo único que hace falta para reconstruirlas. */
@@ -130,6 +143,17 @@ export class WebGLDesign3D {
   // excluyente con `selected` (elegir una cosa deselecciona la otra).
   private selectedGuide: { id: string; mesh: THREE.Mesh } | null = null;
   private selected = new Set<StrokeRecord>();
+  // ── rig temporal para transformar VARIOS objetos con un solo gizmo ──
+  // Three no sabe transformar una selección: el gizmo se adjunta a UN objeto.
+  // El truco es un Group vacío en el centro de la selección al que se le
+  // `attach()` (preserva la matriz mundial) todo lo elegido mientras dura la
+  // transformación, y devolverlo a su padre al terminar. Sirve igual para una
+  // selección suelta y para un grupo de Ctrl+G.
+  private rig: THREE.Group | null = null;
+  private rigMembers: {
+    obj: THREE.Object3D; parent: THREE.Object3D;
+    pos: THREE.Vector3; quat: THREE.Quaternion; scale: THREE.Vector3;
+  }[] = [];
 
   private fallbackPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 
@@ -344,6 +368,12 @@ export class WebGLDesign3D {
           // próximo gesto sin que el usuario tenga que reposicionarlo.
           this.unwrapPivot();
           if (this.pivotForObj) this.applyPivotAttachment(this.pivotForObj);
+        } else if (obj === this.rig) {
+          // gesto sobre VARIOS objetos: se "hornea" al terminar el arrastre.
+          // detachRig deja a cada objeto con su transformación real y anota UN
+          // comando por gesto; después se rearma centrado en la nueva posición.
+          this.detachRig();
+          this.syncGizmo();
         } else {
           const after = obj.position.clone();
           const afterQuat = obj.quaternion.clone();
@@ -1420,6 +1450,12 @@ export class WebGLDesign3D {
       if (this.selected.size) { e.preventDefault(); this.copySelection(); }
     } else if (ctrl && e.key.toLowerCase() === 'v') {
       if (this.clipboard.length) { e.preventDefault(); this.pasteClipboard(); }
+    } else if (ctrl && e.key.toLowerCase() === 'e') {
+      if (this.selected.size) { e.preventDefault(); this.solidifySelection(); }
+    } else if (ctrl && e.key.toLowerCase() === 'g') {
+      // Ctrl+G agrupa, Ctrl+Shift+G desagrupa (como en cualquier editor).
+      e.preventDefault();
+      if (e.shiftKey) this.ungroupSelection(); else this.groupSelection();
     } else if (ctrl && e.key.toLowerCase() === 'd') {
       if (this.selectedGuide) { e.preventDefault(); this.duplicateGuide(this.selectedGuide); }
     } else if (e.key.startsWith('Arrow') && !typing) {
@@ -2208,6 +2244,12 @@ export class WebGLDesign3D {
       child.geometry?.dispose();
       (child.material as THREE.Material)?.dispose();
     }
+    // un VOLUMEN se reconstruye como cuerpo cerrado
+    if (rec.solid) {
+      const m = this.buildSolidMesh(rec.points.map((p) => p.clone().add(rec.object.position)), rec.brush);
+      if (m) { m.position.sub(rec.object.position); rec.object.add(m); }
+      return;
+    }
     // un RELLENO se reconstruye como polígono sólido, no como tubo
     if (rec.fill) {
       const f = this.buildFillMesh(rec.points.map((p) => p.clone().add(rec.object.position)), rec.brush);
@@ -2471,7 +2513,7 @@ export class WebGLDesign3D {
    *  puntas que coincidan (soldadas por WELD_EPS). Devuelve la lista ordenada
    *  de trazos del contorno, o null si la forma no está cerrada. */
   private findClosedLoop(seed: StrokeRecord): StrokeRecord[] | null {
-    const pool = this.strokes.filter((s) => s.kind === 'stroke' && !s.fill && s.points.length >= 2);
+    const pool = this.strokes.filter((s) => s.kind === 'stroke' && !s.fill && !s.solid && s.points.length >= 2);
     const eps = WebGLDesign3D.WELD_EPS;
     const start = this.strokeEnd(seed, 0);
     const walk = (chain: StrokeRecord[], tip: THREE.Vector3): StrokeRecord[] | null => {
@@ -2544,6 +2586,158 @@ export class WebGLDesign3D {
     // apenas detrás de las líneas para que el contorno siga leyéndose
     mesh.renderOrder = -1;
     return mesh;
+  }
+
+  /** VOLUMEN a partir de una nube de puntos. Dos casos, porque un dibujo
+   *  produce dos cosas muy distintas:
+   *   - puntos CO­PLANARES (una silueta dibujada en un plano): no hay volumen
+   *     que deducir, así que se EXTRUYE la silueta a lo largo de su normal y
+   *     queda un cuerpo con espesor — el equivalente 3D de "inflar" el dibujo.
+   *   - puntos en el ESPACIO (trazos en varias guías): se cierra el cuerpo con
+   *     su casco convexo, que es el volumen mínimo que contiene todo lo hecho.
+   *  Devuelve la malla en coordenadas MUNDIALES (el llamador la centra). */
+  private buildSolidMesh(cloud: THREE.Vector3[], brush: BrushSettings): THREE.Mesh | null {
+    if (cloud.length < 4) return null;
+    const box = new THREE.Box3().setFromPoints(cloud);
+    const size = box.getSize(new THREE.Vector3());
+    const diag = size.length();
+    if (diag < 1e-6) return null;
+
+    // plano de mejor ajuste: centroide + normal por covarianza (el autovector
+    // de menor varianza). Newell no sirve acá: la nube no está ordenada.
+    const c = new THREE.Vector3();
+    cloud.forEach((p) => c.add(p));
+    c.multiplyScalar(1 / cloud.length);
+    let xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+    for (const p of cloud) {
+      const d = p.clone().sub(c);
+      xx += d.x * d.x; xy += d.x * d.y; xz += d.x * d.z;
+      yy += d.y * d.y; yz += d.y * d.z; zz += d.z * d.z;
+    }
+    // el determinante de cada eje dice cuál es el mejor plano (three no trae
+    // solver de autovectores; con 3×3 esta forma cerrada alcanza y sobra)
+    const dx = yy * zz - yz * yz, dy = xx * zz - xz * xz, dz = xx * yy - xy * xy;
+    const n = new THREE.Vector3();
+    if (dx >= dy && dx >= dz && dx > 1e-12) n.set(dx, xz * yz - xy * zz, xy * yz - xz * yy);
+    else if (dy >= dz && dy > 1e-12) n.set(xz * yz - xy * zz, dy, xy * xz - yz * xx);
+    else if (dz > 1e-12) n.set(xy * yz - xz * yy, xy * xz - yz * xx, dz);
+    const plano = n.lengthSq() > 1e-12;
+    if (plano) n.normalize();
+    const desvio = plano ? Math.max(...cloud.map((p) => Math.abs(p.clone().sub(c).dot(n)))) : Infinity;
+
+    const col = new THREE.Color(brush.color);
+    // flatShading: cada cara recibe su propia luz y el cuerpo se LEE como
+    // volumen. Sin esto, un cuerpo del color del pincel (casi negro, lo
+    // habitual al dibujar) sale como una mancha plana y no se entiende nada.
+    const mat = new THREE.MeshStandardMaterial({
+      color: col, roughness: 0.8, metalness: 0, side: THREE.DoubleSide,
+      transparent: brush.opacity < 1, opacity: brush.opacity, flatShading: true,
+      // las aristas caen EXACTAMENTE sobre el borde de las caras: sin correr
+      // el relleno hacia atrás, el z-fighting se las come y el cuerpo vuelve a
+      // leerse como una mancha (verificado: las líneas existían y no se veían).
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+    });
+
+    // COPLANAR (dentro del 2% del tamaño): extruir la silueta
+    if (plano && desvio < diag * 0.02) {
+      const u = new THREE.Vector3(1, 0, 0);
+      if (Math.abs(n.dot(u)) > 0.9) u.set(0, 1, 0);
+      u.crossVectors(n, u).normalize();
+      const v = new THREE.Vector3().crossVectors(n, u).normalize();
+      const plana = cloud.map((p) => {
+        const d = p.clone().sub(c);
+        return new THREE.Vector2(d.dot(u), d.dot(v));
+      });
+      // La silueta se toma del casco convexo 2D: un contorno dibujado a mano
+      // se cruza consigo mismo y ExtrudeGeometry con un polígono auto-secante
+      // devuelve basura. Con el casco siempre sale un cuerpo válido.
+      const hull = WebGLDesign3D.hull2D(plana);
+      if (hull.length < 3) return null;
+      const espesor = Math.max(diag * 0.12, 0.05);
+      const geo = new THREE.ExtrudeGeometry(new THREE.Shape(hull), {
+        depth: espesor, bevelEnabled: false, curveSegments: 4,
+      });
+      geo.translate(0, 0, -espesor / 2);   // centrado en la silueta, no colgando de ella
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(u, v, n));
+      mesh.position.copy(c);
+      WebGLDesign3D.addBodyEdges(mesh, col);
+      return mesh;
+    }
+
+    // VOLUMEN en el espacio: casco convexo de todo lo elegido
+    try {
+      const geo = new ConvexGeometry(cloud.map((p) => p.clone()));
+      if (!geo.getAttribute('position')?.count) return null;
+      const mesh = new THREE.Mesh(geo, mat);
+      WebGLDesign3D.addBodyEdges(mesh, col);
+      return mesh;
+    } catch {
+      return null;   // nube degenerada (todo alineado): no hay cuerpo posible
+    }
+  }
+
+  /** Dibuja las aristas del cuerpo. Es lo que termina de darle forma legible:
+   *  claras si el cuerpo es oscuro y viceversa, para que se entienda tanto
+   *  sobre fondo claro como oscuro. */
+  private static addBodyEdges(mesh: THREE.Mesh, col: THREE.Color): void {
+    const lum = 0.2126 * col.r + 0.7152 * col.g + 0.0722 * col.b;
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(mesh.geometry, 18),
+      new THREE.LineBasicMaterial({
+        color: lum < 0.5 ? 0xffffff : 0x000000, transparent: true, opacity: 0.35,
+      }));
+    edges.renderOrder = 1;
+    mesh.add(edges);
+  }
+
+  /** Casco convexo 2D (monotone chain). Devuelve el contorno en sentido
+   *  antihorario, sin el punto de cierre repetido. */
+  private static hull2D(pts: THREE.Vector2[]): THREE.Vector2[] {
+    const p = pts.slice().sort((a, b) => (a.x - b.x) || (a.y - b.y));
+    if (p.length < 3) return p;
+    const cruz = (o: THREE.Vector2, a: THREE.Vector2, b: THREE.Vector2) =>
+      (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const media = (src: THREE.Vector2[]): THREE.Vector2[] => {
+      const out: THREE.Vector2[] = [];
+      for (const q of src) {
+        while (out.length >= 2 && cruz(out[out.length - 2], out[out.length - 1], q) <= 0) out.pop();
+        out.push(q);
+      }
+      out.pop();
+      return out;
+    };
+    return [...media(p), ...media(p.slice().reverse())];
+  }
+
+  /** Ctrl+E: convierte lo seleccionado en un VOLUMEN. Los trazos de origen se
+   *  conservan (son el "andamio"): borrarlos es una decisión del dibujante. */
+  solidifySelection(): boolean {
+    const recs = [...this.selected].filter((r) => r.kind === 'stroke' && r.points.length >= 2);
+    if (!recs.length) return false;
+    const cloud: THREE.Vector3[] = [];
+    for (const r of recs) {
+      r.object.updateMatrixWorld(true);
+      for (const p of r.points) cloud.push(r.object.localToWorld(p.clone()));
+    }
+    const brush = { ...recs[0].brush };
+    const mesh = this.buildSolidMesh(cloud, brush);
+    if (!mesh) return false;
+    const group = new THREE.Group();
+    group.add(mesh);
+    const rec: StrokeRecord = {
+      id: `solid-${this.seq++}`, object: group, points: cloud,
+      pressures: cloud.map(() => 1), kind: 'stroke', solid: true,
+      layerId: this.activeLayerId(), baseOpacity: brush.opacity, brush,
+    };
+    group.userData.strokeId = rec.id;
+    this.addStrokeRecord(rec);
+    this.setSelection([rec]);
+    this.pushCmd({
+      undo: () => { this.removeStrokeRecord(rec); this.setSelection([]); },
+      redo: () => { this.addStrokeRecord(rec); this.setSelection([rec]); },
+    });
+    return true;
   }
 
   /** Rellena la forma cerrada que contiene al trazo bajo el cursor. */
@@ -2622,7 +2816,18 @@ export class WebGLDesign3D {
 
   // ---------------------------------------------------------------- selección
 
+  /** Completa la selección con los hermanos de grupo: tocar una parte de un
+   *  grupo agarra el grupo entero. Sin esto, Ctrl+G no se notaría al usar. */
+  private withGroupMates(recs: StrokeRecord[]): StrokeRecord[] {
+    const ids = new Set(recs.map((r) => r.groupId).filter(Boolean) as string[]);
+    if (!ids.size) return recs;
+    const out = new Set(recs);
+    for (const r of this.strokes) if (r.groupId && ids.has(r.groupId)) out.add(r);
+    return [...out];
+  }
+
   private setSelection(recs: StrokeRecord[]): void {
+    recs = this.withGroupMates(recs);
     this.selectedGuide = null;
     for (const r of this.selected) this.highlight(r, false);
     this.selected = new Set(recs);
@@ -2682,7 +2887,16 @@ export class WebGLDesign3D {
    *  el arrastre libre de siempre) o una guía. */
   private syncGizmo(): void {
     if (!this.gizmo) return;
-    if (this.tool !== 'move') { this.resetPivot(); this.gizmo.detach(); return; }
+    if (this.tool !== 'move') { this.detachRig(); this.resetPivot(); this.gizmo.detach(); return; }
+    // VARIOS objetos elegidos (o un grupo de Ctrl+G): se transforman juntos
+    // colgándolos de un rig temporal. Antes, con más de uno, el gizmo
+    // simplemente no aparecía y no había forma de moverlos en bloque.
+    if (this.selected.size > 1) {
+      const objs = [...this.selected].map((r) => r.object);
+      if (!this.rigMatches(objs)) { this.detachRig(); this.attachRig(objs); }
+      if (this.rig) { this.resetPivot(); this.gizmo.attach(this.rig); return; }
+    }
+    this.detachRig();
     let target: THREE.Object3D | null = null;
     if (this.selected.size === 1) target = [...this.selected][0].object;
     else if (this.selectedGuide) target = this.selectedGuide.mesh;
@@ -2701,6 +2915,93 @@ export class WebGLDesign3D {
       this.hidePivotMarker();
       this.gizmo.attach(target);
     }
+  }
+
+  // ---------------------------------------------------------------- grupos
+
+  /** Ctrl+G: une lo seleccionado en un grupo. A partir de acá se elige,
+   *  se mueve, se deforma y se borra como una sola cosa. */
+  groupSelection(): boolean {
+    const recs = [...this.selected];
+    if (recs.length < 2) return false;
+    const id = `grp-${this.seq++}`;
+    const before = recs.map((r) => r.groupId);
+    const apply = (ids: (string | undefined)[]) => {
+      recs.forEach((r, i) => { r.groupId = ids[i]; });
+      this.setSelection(recs);
+    };
+    apply(recs.map(() => id));
+    this.pushCmd({ undo: () => apply(before), redo: () => apply(recs.map(() => id)) });
+    return true;
+  }
+
+  /** Ctrl+Shift+G: desarma el grupo (los objetos quedan donde están). */
+  ungroupSelection(): boolean {
+    const recs = [...this.selected].filter((r) => r.groupId);
+    if (!recs.length) return false;
+    const before = recs.map((r) => r.groupId);
+    const apply = (ids: (string | undefined)[]) => {
+      recs.forEach((r, i) => { r.groupId = ids[i]; });
+      this.setSelection(recs);
+    };
+    this.detachRig();
+    apply(recs.map(() => undefined));
+    this.pushCmd({ undo: () => apply(before), redo: () => apply(recs.map(() => undefined)) });
+    return true;
+  }
+
+  // ---------------------------------------------------------------- rig de selección múltiple
+
+  /** ¿El rig actual es exactamente el de estos objetos? Evita rearmarlo (y
+   *  perder la transformación en curso) en cada syncGizmo. */
+  private rigMatches(objs: THREE.Object3D[]): boolean {
+    if (!this.rig || this.rigMembers.length !== objs.length) return false;
+    return objs.every((o) => this.rigMembers.some((m) => m.obj === o));
+  }
+
+  /** Cuelga los objetos de un rig centrado en la selección y le da el gizmo.
+   *  `attach()` conserva la posición mundial, así que nada se mueve al armarlo. */
+  private attachRig(objs: THREE.Object3D[]): void {
+    if (objs.length < 2) return;
+    const box = new THREE.Box3();
+    for (const o of objs) box.expandByObject(o);
+    if (box.isEmpty()) return;
+    const rig = new THREE.Group();
+    rig.position.copy(box.getCenter(new THREE.Vector3()));
+    this.scene.add(rig);
+    this.rigMembers = objs.map((o) => ({
+      obj: o, parent: o.parent ?? this.strokesGroup,
+      pos: o.position.clone(), quat: o.quaternion.clone(), scale: o.scale.clone(),
+    }));
+    for (const o of objs) rig.attach(o);
+    this.rig = rig;
+  }
+
+  /** Devuelve los objetos a su padre y anota UN solo comando de historial con
+   *  el cambio de todos: deshacer un movimiento de grupo tiene que ser un
+   *  Ctrl+Z, no uno por objeto. */
+  private detachRig(): void {
+    if (!this.rig) return;
+    const members = this.rigMembers;
+    this.rigMembers = [];
+    for (const m of members) m.parent.attach(m.obj);
+    this.scene.remove(this.rig);
+    this.rig = null;
+    const after = members.map((m) => ({
+      pos: m.obj.position.clone(), quat: m.obj.quaternion.clone(), scale: m.obj.scale.clone(),
+    }));
+    const changed = members.some((m, i) =>
+      m.pos.distanceToSquared(after[i].pos) > 1e-8
+      || m.quat.angleTo(after[i].quat) > 1e-4
+      || m.scale.distanceToSquared(after[i].scale) > 1e-8);
+    if (!changed) return;
+    const before = members.map((m) => ({ pos: m.pos, quat: m.quat, scale: m.scale }));
+    const objs = members.map((m) => m.obj);
+    const apply = (st: { pos: THREE.Vector3; quat: THREE.Quaternion; scale: THREE.Vector3 }[]) =>
+      objs.forEach((o, i) => {
+        o.position.copy(st[i].pos); o.quaternion.copy(st[i].quat); o.scale.copy(st[i].scale);
+      });
+    this.pushCmd({ undo: () => apply(before), redo: () => apply(after) });
   }
 
   // ---------------------------------------------------------------- eje móvil de rotación
@@ -2836,6 +3137,7 @@ export class WebGLDesign3D {
   }
 
   deleteSelection(): void {
+    this.detachRig();   // si cuelgan del rig, su parent no es strokesGroup
     const recs = [...this.selected];
     if (!recs.length) return;
     const wasGuide = new Map<string, { id: string; mesh: THREE.Mesh } | null>();
@@ -2951,6 +3253,10 @@ export class WebGLDesign3D {
     }
     // click fuera de un handle: elegir otro trazo (o deseleccionar)
     const rec = this.pickStroke();
+    // un VOLUMEN no se edita por nodos: sus "puntos" son la nube de trazos que
+    // le dio origen, no un contorno. Mostrar cien handles y dejar arrastrarlos
+    // solo produce un cuerpo roto — se transforma con el gizmo (Mover).
+    if (rec?.solid) { this.clearPointEdit(); this.setSelection([rec]); return; }
     if (rec && rec.kind === 'stroke') this.showPointHandles(rec);
     else this.clearPointEdit();
   }
@@ -3172,6 +3478,7 @@ export class WebGLDesign3D {
   }
 
   undo(): void {
+    this.detachRig();   // ver detachRig: registra su propio comando si movió algo
     const cmd = this.undoStack.pop();
     if (!cmd) return;
     cmd.undo();
@@ -3181,6 +3488,7 @@ export class WebGLDesign3D {
   }
 
   redo(): void {
+    this.detachRig();
     const cmd = this.redoStack.pop();
     if (!cmd) return;
     cmd.redo();
@@ -3205,6 +3513,7 @@ export class WebGLDesign3D {
   }
 
   clear(): void {
+    this.detachRig();
     for (const rec of this.strokes) { rec.object.parent?.remove(rec.object); }
     this.strokes = [];
     for (const g of [...this.guides]) this.detachGuide(g);
@@ -3248,6 +3557,7 @@ export class WebGLDesign3D {
         baseOpacity: rec.baseOpacity, position: rec.object.position.toArray(),
         quaternion: rec.object.quaternion.toArray(), scale: rec.object.scale.toArray(),
         brush: { ...rec.brush }, fill: rec.fill || undefined,
+        groupId: rec.groupId || undefined, solid: rec.solid || undefined,
       })),
       // las guías también son parte del proyecto: sin ellas, al reabrir se
       // perdía el andamiaje sobre el que estabas dibujando.
@@ -3281,7 +3591,12 @@ export class WebGLDesign3D {
         ? { ...item.brush }
         : { ...this.brush, opacity: Number(item.baseOpacity ?? 1) };
       const group = new THREE.Group();
-      if (item.fill) {
+      if (item.solid) {
+        // volumen: se regenera con la misma lógica que al crearlo (los puntos
+        // guardados son la nube de origen), no como tubo ni como cara plana.
+        const body = this.buildSolidMesh(points, brush);
+        if (body) { body.position.sub(new THREE.Vector3().fromArray(item.position || [0, 0, 0])); group.add(body); }
+      } else if (item.fill) {
         // relleno: se reconstruye como cara sólida, no como tubo (si no, una
         // forma pintada volvía como un contorno grueso y deformado).
         const face = this.buildFillMesh(points, brush);
@@ -3300,6 +3615,8 @@ export class WebGLDesign3D {
       };
       group.userData.strokeId = rec.id;
       rec.fill = item.fill || undefined;
+      rec.solid = item.solid || undefined;
+      rec.groupId = item.groupId || undefined;
       this.addStrokeRecord(rec);
     }
     // guías: se reconstruyen desde su trazo de origen + eje de extrusión
