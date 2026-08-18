@@ -1333,6 +1333,11 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
   background-repeat: repeat;
 }
 .dz-grid2d[hidden] { display: none; }
+/* guías de alineación dinámicas: solo viven durante el arrastre (estilo
+   Illustrator). Van por encima de las guías fijas para que se distingan. */
+.dz-alignlines { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
+.dz-alignlines i { position: absolute; height: 1px; transform-origin: 0 0;
+  background: #ff36c8; box-shadow: 0 0 0 .5px rgba(255,54,200,.35); }
 .dz-guides { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .dz-guides[hidden] { display: none; }
 .dz-guide { position: absolute; pointer-events: auto; }

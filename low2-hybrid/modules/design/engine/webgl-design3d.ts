@@ -1634,6 +1634,96 @@ export class WebGLDesign3D {
     return true;
   }
 
+  // ---------------------------------------------------------------- guías de alineación
+
+  /** Tolerancia (px de pantalla) para alinear con el extremo de otra línea. */
+  private static readonly ALIGN_PX = 7;
+  private alignEl?: SVGSVGElement;
+
+  /** Extremos de los trazos ya hechos: son las referencias de alineación. En
+   *  un dibujo lo que uno quiere hacer coincidir son las PUNTAS, igual que en
+   *  Illustrator se alinean los bordes de los objetos. */
+  private alignAnchors(): { world: THREE.Vector3; sx: number; sy: number }[] {
+    const rect = this.canvasBox();
+    const cam = this.camera as THREE.Camera;
+    const out: { world: THREE.Vector3; sx: number; sy: number }[] = [];
+    for (const rec of this.strokes) {
+      if (rec.kind !== 'stroke' || rec.points.length < 2) continue;
+      rec.object.updateMatrixWorld(true);
+      for (const idx of [0, rec.points.length - 1]) {
+        const w = rec.object.localToWorld(rec.points[idx].clone());
+        const v = w.clone().project(cam);
+        if (!isFinite(v.x) || !isFinite(v.y)) continue;
+        out.push({ world: w, sx: ((v.x + 1) / 2) * rect.width, sy: ((1 - v.y) / 2) * rect.height });
+      }
+    }
+    return out;
+  }
+
+  /** Ajusta el punto de pantalla para que quede alineado con la punta de otra
+   *  línea (misma vertical u horizontal) y devuelve las guías a dibujar.
+   *  Devuelve coordenadas de PANTALLA: el punto se reproyecta después sobre el
+   *  plano de dibujo, así en ortogonal nunca aparece una Z que no sea la suya. */
+  private alignAdjust(px: number, py: number):
+      { px: number; py: number; lines: { x1: number; y1: number; x2: number; y2: number }[] } {
+    const tol = WebGLDesign3D.ALIGN_PX;
+    const anchors = this.alignAnchors();
+    let bx: { a: typeof anchors[0]; d: number } | null = null;
+    let by: { a: typeof anchors[0]; d: number } | null = null;
+    for (const a of anchors) {
+      const dx = Math.abs(a.sx - px), dy = Math.abs(a.sy - py);
+      if (dx < tol && (!bx || dx < bx.d)) bx = { a, d: dx };
+      if (dy < tol && (!by || dy < by.d)) by = { a, d: dy };
+    }
+    const nx = bx ? bx.a.sx : px;
+    const ny = by ? by.a.sy : py;
+    const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    if (bx) lines.push({ x1: bx.a.sx, y1: bx.a.sy, x2: nx, y2: ny });
+    if (by) lines.push({ x1: by.a.sx, y1: by.a.sy, x2: nx, y2: ny });
+    return { px: nx, py: ny, lines };
+  }
+
+  /** Dibuja las guías de alineación (líneas punteadas en pantalla). */
+  private showAlignLines(lines: { x1: number; y1: number; x2: number; y2: number }[]): void {
+    if (!this.alignEl) {
+      this.alignEl = document.createElementNS(NS, 'svg') as SVGSVGElement;
+      Object.assign(this.alignEl.style, {
+        position: 'absolute', left: '0', top: '0', width: '100%', height: '100%',
+        pointerEvents: 'none', zIndex: '40',
+      } as CSSStyleDeclaration);
+      this.container?.appendChild(this.alignEl);
+    }
+    while (this.alignEl.lastChild) this.alignEl.removeChild(this.alignEl.lastChild);
+    if (!lines.length) { this.alignEl.style.display = 'none'; return; }
+    this.alignEl.style.display = 'block';
+    for (const L of lines) {
+      const el = document.createElementNS(NS, 'line');
+      el.setAttribute('x1', String(L.x1)); el.setAttribute('y1', String(L.y1));
+      el.setAttribute('x2', String(L.x2)); el.setAttribute('y2', String(L.y2));
+      el.setAttribute('stroke', '#ff36c8');
+      el.setAttribute('stroke-width', '1');
+      el.setAttribute('stroke-dasharray', '4 3');
+      this.alignEl.appendChild(el);
+    }
+  }
+
+  private hideAlignLines(): void {
+    if (this.alignEl) { this.alignEl.style.display = 'none'; }
+  }
+
+  /** Punto del plano de dibujo actual bajo unas coordenadas de PANTALLA. */
+  private pointFromScreen(px: number, py: number): THREE.Vector3 | null {
+    const rect = this.canvasBox();
+    const antes = this.pointer.clone();
+    this.pointer.x = (px / rect.width) * 2 - 1;
+    this.pointer.y = -(py / rect.height) * 2 + 1;
+    const hit = (this.current?.drawTarget || this.current?.drawPlane)
+      ? this.intersectLockedDrawContext()
+      : (this.tool === 'pencil-free' ? this.resolveFreeHit() : this.resolveHit());
+    this.pointer.copy(antes);
+    return hit ? hit.point.clone() : null;
+  }
+
   /** Punto más cercano en PANTALLA a lo que el trazo puede engancharse:
    *  vértices y cuerpo de las líneas ya hechas, y bordes de guías/planos.
    *  Devuelve también QUÉ enganchó, para poder avisarlo con color. */
@@ -1949,6 +2039,15 @@ export class WebGLDesign3D {
     // puntos entre planos): el enganche se aplica al soltar, en endDraw.
     const cerca = this.findSnapTarget(e, hit.point, 0.8);
     if (cerca) this.showSnapMark(cerca.point, cerca.kind); else this.hideSnapMark();
+    // GUÍAS DE ALINEACIÓN: si la punta va quedando a la misma altura (o en la
+    // misma vertical) que el extremo de otra línea, se muestra la guía. El
+    // enganche manda: si ya hay algo que imantar, no se dibujan las dos cosas.
+    if (cerca) this.hideAlignLines();
+    else {
+      const rectA = this.canvasBox();
+      const al = this.alignAdjust(e.clientX - rectA.left, e.clientY - rectA.top);
+      this.showAlignLines(al.lines);
+    }
 
     if (e.altKey && pts.length >= 1) {
       // "Hilo tenso": recta pegada al eje X/Y/Z más parecido al gesto —
@@ -2035,11 +2134,22 @@ export class WebGLDesign3D {
         ? this.intersectLockedDrawContext()
         : (this.tool === 'pencil-free' ? this.resolveFreeHit() : this.resolveHit());
       if (real) pts[pts.length - 1] = real.point.clone();
+      // ALINEACIÓN con la punta de otra línea: se corrige en PANTALLA y se
+      // reproyecta sobre el mismo plano de dibujo, así en ortogonal la Z sigue
+      // siendo la del plano base (nunca una inventada).
+      const rectE = this.canvasBox();
+      const al = this.alignAdjust(e.clientX - rectE.left, e.clientY - rectE.top);
+      if (al.lines.length) {
+        const p = this.pointFromScreen(al.px, al.py);
+        if (p) pts[pts.length - 1] = p;
+      }
       const last = pts[pts.length - 1];
+      // el enganche tiene la última palabra: tocar la línea gana a alinearse
       const v = this.findSnapVertex(e, last, 0.6);
       if (v) pts[pts.length - 1] = v.clone();
     }
     this.hideSnapMark();
+    this.hideAlignLines();
     this.commitStroke();
   }
 

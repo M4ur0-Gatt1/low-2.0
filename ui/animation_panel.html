@@ -34,7 +34,7 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;
   <span class="brand">LOW</span><span class="mode" id="mode"></span>
   <button id="prev" title="Anterior">◀</button><button id="play" title="Reproducir">▶</button><button id="next" title="Siguiente">▶|</button><button id="add" title="Duplicar frame">＋</button><button id="blank" title="Agregar frame vacío">□＋</button>
   <span class="spacer"></span><span class="fps" id="fps"></span>
-  <button class="primary" id="dock" title="Volver a acoplar este panel en LOW">Acoplar</button>
+  <button class="primary" id="dock" title="Volver a acoplar este panel en LOW — o arrastrá esta ventana encima de LOW, como en Photoshop">Acoplar</button>
 </div>
 <div class="viewport"><div id="content" class="timeline"><div class="empty">Conectando con el editor…</div></div></div>
 <script>
@@ -57,7 +57,14 @@ document.getElementById('next').onclick=()=>command('next');
 document.getElementById('add').onclick=()=>command('add');
 document.getElementById('blank').onclick=()=>command('add-blank');
 document.getElementById('dock').onclick=async()=>{
- if(api){await command('dock',{kind});await (api.panel_closed?api.panel_closed(kind):api.animation_panel_closed(kind))}
+ // window.close() NO cierra una ventana de pywebview: por eso "Acoplar" no
+ // hacía nada. La cierra Python con close_panel(); el window.close() queda
+ // como respaldo para cuando el panel se abre en un navegador de pruebas.
+ if(api){
+  await command('dock',{kind});
+  if(api.close_panel){await api.close_panel(kind)}
+  else{await (api.panel_closed?api.panel_closed(kind):api.animation_panel_closed(kind))}
+ }
  window.close();
 };
 function cell(frame,classes='',text=''){
