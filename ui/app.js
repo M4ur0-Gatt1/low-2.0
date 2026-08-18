@@ -66,7 +66,12 @@ window.addEventListener("unhandledrejection", e => {
 });
 
 /* ── eventos que empuja Python ── */
-window.LOW = {
+/* OJO: los módulos (core/, animation/, drawing/, workspace/, ai/) se cargan
+   ANTES que app.js y registran sus namespaces en window.LOW. Acá hay que
+   FUSIONAR, no asignar: un `window.LOW = {...}` los borraba a todos y dejaba
+   LOW.core.HistoryManager en undefined, así que openDesign() explotaba y el
+   estudio 2D no abría ni dibujaba. */
+Object.assign((window.LOW = window.LOW || {}), {
   onPy(m) {
     try {
       if (m.event === "propose") propose(m.data.code);
@@ -112,7 +117,7 @@ window.LOW = {
       }
     } catch (e) { reportErr("onPy(" + m.event + "): " + e.message); }
   },
-};
+});
 
 /* ── rasterizar SVG  PNG dataURL (para que el modelo "vea" lo que dibujó) ──
    Lo llama Python por evaluate_js y sondea window.__raster hasta que esté listo.
