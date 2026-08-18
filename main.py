@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.25"
+LOW_VERSION = "3.29.26"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -160,6 +160,8 @@ class Api:
         s._ui_base = None
         s._aux_windows = {}
         s._panel_states = {}
+        s._dock_armed = set()   # paneles que ya salieron de la ventana principal
+        s._dock_check = {}      # último control de acople por arrastre, por panel
         s._animation_panel_state = {}
         s.ws = None
         # Auto-reabrir el último workspace abierto (si sigue existiendo).
@@ -239,6 +241,23 @@ class Api:
     def animation_panel_command(s, action, payload=None):
         return s.panel_command("timeline", action, payload)
 
+    def close_panel(s, kind="timeline"):
+        """Cierra la ventana de un panel DESDE Python. Hace falta porque
+        `window.close()` del lado web no cierra una ventana de pywebview: por
+        eso el botón "Acoplar" parecía no hacer nada."""
+        kind = s._panel_kind(kind)
+        win = s._aux_windows.pop(kind, None)
+        if not win:
+            return {"ok": True}
+
+        def cerrar():
+            try:
+                win.destroy()
+            except Exception:
+                pass
+        threading.Thread(target=cerrar, daemon=True).start()
+        return {"ok": True}
+
     def panel_closed(s, kind="timeline"):
         """Olvida una ventana auxiliar cerrada para poder reabrirla."""
         s._aux_windows.pop(s._panel_kind(kind), None)
@@ -287,10 +306,45 @@ class Api:
                 min_size=spec["min"],
                 background_color="#151514")
             s._aux_windows[kind] = win
+            s._dock_armed.discard(kind)   # recién abierto: todavía no "salió"
             s._track_geometry(win, kind, on_close=lambda: s._panel_forget(kind))
             return {"ok": True}
         except Exception as e:
             return {"error": str(e)}
+
+    def _maybe_dock_by_drag(s, kind, x, y):
+        """Acople por arrastre, como en Photoshop: si el panel se lleva encima
+        de la ventana principal, vuelve solo a su lugar.
+
+        Dos recaudos aprendidos a la mala:
+        - El panel tiene que haber estado AFUERA al menos una vez. Si no, uno
+          que se abre sobre la ventana principal (su posición recordada) se
+          acoplaría solo en el primer movimiento, cerrándose al instante.
+        - `moved` dispara en cada píxel del arrastre: consultar la geometría de
+          la otra ventana cada vez cruza al hilo de la GUI y arrastra la app.
+          Se consulta como mucho cada 200 ms."""
+        if kind not in s.PANELS or not s._window:
+            return
+        ahora = time.monotonic()
+        if ahora - s._dock_check.get(kind, 0) < 0.2:
+            return
+        s._dock_check[kind] = ahora
+        try:
+            mx, my = int(s._window.x), int(s._window.y)
+            mw, mh = int(s._window.width), int(s._window.height)
+        except Exception:
+            return
+        # margen adentro: rozar el borde no alcanza, hay que entrar de verdad
+        m = 40
+        dentro = (mx + m) <= x <= (mx + mw - m) and (my + m) <= y <= (my + mh - m)
+        if not dentro:
+            s._dock_armed.add(kind)     # estuvo afuera: a partir de acá, vale
+            return
+        if kind not in s._dock_armed:
+            return                      # nunca salió: no acoplar
+        s._dock_armed.discard(kind)
+        s.close_panel(kind)
+        s._panel_forget(kind)
 
     def _panel_forget(s, kind):
         """Cerrar la ventana con la X tiene que valer lo mismo que "Acoplar":
@@ -319,6 +373,11 @@ class Api:
 
         def moved(x, y):
             live["x"], live["y"] = int(x), int(y)
+            # ACOPLE POR ARRASTRE (estilo Photoshop): si el panel se suelta
+            # encima de la ventana principal, vuelve solo a su lugar. Es más
+            # natural que buscar el botón "Acoplar".
+            if store_name == "aux_windows":
+                s._maybe_dock_by_drag(key, int(x), int(y))
 
         def resized(w, h):
             live["w"], live["h"] = int(w), int(h)

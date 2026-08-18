@@ -2277,7 +2277,10 @@ async function openDesign(path) {
   const cv = $("#dzCanvas");
   // NO usar innerHTML: adentro del lienzo viven #dzHandle y #dzPin — pisarlos
   // rompía todo el editor ("Cannot set properties of null"). Solo cambiar el svg.
-  cv.querySelectorAll("svg").forEach(n => n.remove());
+  // Y OJO: solo el svg del DISEÑO, que es hijo DIRECTO. Un querySelectorAll("svg")
+  // se llevaba puestos los iconos de la barra flotante (#dzQuickTools vive dentro
+  // del lienzo), y sus botones quedaban vacíos apenas abrías un diseño.
+  [...cv.children].filter(n => n.tagName.toLowerCase() === "svg").forEach(n => n.remove());
   let sourceSvg = r.svg;
   const recovery = window.LOW?.workspace?.recovery?.get(path);
   if (recovery && recovery.content !== r.svg) {
@@ -2652,6 +2655,18 @@ function dzToUser(clientX, clientY) {
   return pt.matrixTransform(svg.getScreenCTM().inverse());
 }
 
+/* la inversa: de coordenadas del dibujo a píxeles de pantalla. Usa la misma
+   matriz del SVG, así respeta zoom, paneo y rotación de la vista sin repetir
+   esas cuentas a mano (que es donde siempre se descalibra). */
+function dzFromUser(x, y) {
+  const svg = $("#dzCanvas") && $("#dzCanvas").querySelector("svg");
+  if (!svg) return null;
+  const m = svg.getScreenCTM();
+  if (!m) return null;
+  const pt = svg.createSVGPoint(); pt.x = x; pt.y = y;
+  return pt.matrixTransform(m);
+}
+
 /* mousedown en el lienzo: selecciona el elemento y prepara arrastre para mover */
 /* paneles/UI flotante DENTRO de #dzCanvas: sus clics NO deben iniciar dibujo ni
    selección (antes el lienzo hacía preventDefault y se comía los inputs  "los
@@ -2702,6 +2717,14 @@ function dzPointerDown(e) {
   const pack = (DZ.multi.length > 1 && DZ.multi.includes(el)) ? DZ.multi : [el];
   const bases = pack.map(n => ({ n, base: dzReadPos(n) }));
   let moved = false;
+  // referencias de alineación: se calculan UNA vez al empezar el gesto (leer
+  // getBoundingClientRect de todo el dibujo en cada pointermove arrastraría)
+  const alignRefs = dzAlignRefs(pack);
+  const alignBase = (() => {
+    const bs = dzSelBounds(pack);
+    return { x1: Math.min(...bs.map(b => b.x1)), y1: Math.min(...bs.map(b => b.y1)),
+             x2: Math.max(...bs.map(b => b.x2)), y2: Math.max(...bs.map(b => b.y2)) };
+  })();
   //  modo rig + pieza con nombre: el arrastre POSA (clave), no toca el dibujo.
   // Grabando (🎥): el arrastre ES la actuación — se muestrea con su tiempo real.
   let rigDrag = null;
@@ -2744,13 +2767,23 @@ function dzPointerDown(e) {
       if (rec) rec.take[rigDrag.id].push({ t: (performance.now() - rec.t0) / 1000,
                                            x: pose.x, y: pose.y, r: pose.r || 0, s: pose.s });
     } else {
-      bases.forEach(b => dzWritePos(b.n, b.base, dx, dy));
+      // GUÍAS DE ALINEACIÓN: si un borde o el centro de lo que arrastrás queda
+      // casi a la altura del de otro objeto (o del lienzo), se imanta y se
+      // dibuja la línea. Con Alt se ignora, para poder colocar algo libre.
+      let ax = 0, ay = 0;
+      if (!ev.altKey && alignRefs) {
+        const r = dzAlignAdjust(alignBase, alignRefs, dx, dy);
+        ax = r.ax; ay = r.ay;
+        dzAlignRender(r.lineas);
+      } else dzAlignRender(null);
+      bases.forEach(b => dzWritePos(b.n, b.base, dx + ax, dy + ay));
     }
     if (rec) { rec.last = [dx, dy]; rec.samples.push([dx, dy, performance.now() - rec.t0]); }
     dzPositionHandle();
   };
   const up = (ev) => {
     if (ev.pointerId !== pointerId) return;
+    dzAlignClear();   // las guías de alineación viven solo durante el gesto
     document.removeEventListener("pointermove", move);
     document.removeEventListener("pointerup", up);
     document.removeEventListener("pointercancel", up);
@@ -8850,6 +8883,115 @@ function dzLayersToggle() {
 }
 
 /* ── alinear el elemento seleccionado respecto del lienzo (viewBox) ── */
+/* ══ GUÍAS DE ALINEACIÓN DINÁMICAS (estilo Illustrator) ══════════════════
+   Mientras arrastrás, si un borde o el centro de lo que movés queda casi a la
+   altura del de otro objeto, se imanta y aparece la línea de alineación. Es
+   distinto de las guías fijas (las que se tiran de la regla): estas viven solo
+   durante el gesto y salen de los objetos mismos. */
+const DZ_ALIGN_PX = 6;          // tolerancia EN PANTALLA: no cambia con el zoom
+DZ.alignLines = [];
+
+/** Referencias de alineación de todo lo que NO se está moviendo: bordes y
+ *  centro de cada objeto, más los bordes y el centro del lienzo. */
+function dzAlignRefs(excluir) {
+  const svg = $("#dzCanvas") && $("#dzCanvas").querySelector("svg");
+  if (!svg) return { xs: [], ys: [] };
+  const fuera = new Set(excluir || []);
+  const xs = [], ys = [];
+  const vb = (svg.getAttribute("viewBox") || "0 0 1080 1080").split(/\s+/).map(Number);
+  // el lienzo también alinea (bordes y centro), como la mesa de trabajo de Illustrator
+  xs.push({ v: vb[0], tipo: "lienzo" }, { v: vb[0] + vb[2] / 2, tipo: "lienzo" },
+          { v: vb[0] + vb[2], tipo: "lienzo" });
+  ys.push({ v: vb[1], tipo: "lienzo" }, { v: vb[1] + vb[3] / 2, tipo: "lienzo" },
+          { v: vb[1] + vb[3], tipo: "lienzo" });
+  for (const n of svg.children) {
+    if (fuera.has(n) || DZ_SKIP_TAGS.includes(n.tagName.toLowerCase())) continue;
+    if (n.classList && (n.classList.contains("dz-onion") || n.classList.contains("dz-penui"))) continue;
+    if (n.getAttribute("display") === "none") continue;
+    const b = n.getBoundingClientRect();
+    if (!b.width && !b.height) continue;
+    const p1 = dzToUser(b.left, b.top), p2 = dzToUser(b.right, b.bottom);
+    xs.push({ v: p1.x, tipo: "obj", y1: p1.y, y2: p2.y },
+            { v: (p1.x + p2.x) / 2, tipo: "obj", y1: p1.y, y2: p2.y },
+            { v: p2.x, tipo: "obj", y1: p1.y, y2: p2.y });
+    ys.push({ v: p1.y, tipo: "obj", x1: p1.x, x2: p2.x },
+            { v: (p1.y + p2.y) / 2, tipo: "obj", x1: p1.x, x2: p2.x },
+            { v: p2.y, tipo: "obj", x1: p1.x, x2: p2.x });
+  }
+  return { xs, ys };
+}
+
+/** Corrige (dx,dy) para que la selección quede alineada con algo. Devuelve el
+ *  ajuste y las líneas a dibujar. La tolerancia se mide en PÍXELES de pantalla
+ *  para que imantar cueste lo mismo con cualquier zoom. */
+function dzAlignAdjust(bounds, refs, dx, dy) {
+  const tol = DZ_ALIGN_PX / (DZ.zoom || 1);
+  const lineas = [];
+  let ax = 0, ay = 0, mejorX = tol, mejorY = tol;
+  const bordesX = [bounds.x1 + dx, (bounds.x1 + bounds.x2) / 2 + dx, bounds.x2 + dx];
+  const bordesY = [bounds.y1 + dy, (bounds.y1 + bounds.y2) / 2 + dy, bounds.y2 + dy];
+  for (const b of bordesX) for (const r of refs.xs) {
+    const d = Math.abs(r.v - b);
+    if (d < mejorX) { mejorX = d; ax = r.v - b; }
+  }
+  for (const b of bordesY) for (const r of refs.ys) {
+    const d = Math.abs(r.v - b);
+    if (d < mejorY) { mejorY = d; ay = r.v - b; }
+  }
+  // recalcular con el ajuste puesto, para dibujar solo las que quedaron exactas
+  for (const b of bordesX) for (const r of refs.xs) {
+    if (Math.abs(r.v - (b + ax)) < 0.01) {
+      const y1 = Math.min(r.y1 ?? bounds.y1 + dy + ay, bounds.y1 + dy + ay);
+      const y2 = Math.max(r.y2 ?? bounds.y2 + dy + ay, bounds.y2 + dy + ay);
+      lineas.push({ axis: "v", v: r.v, a: y1, b: y2 });
+    }
+  }
+  for (const b of bordesY) for (const r of refs.ys) {
+    if (Math.abs(r.v - (b + ay)) < 0.01) {
+      const x1 = Math.min(r.x1 ?? bounds.x1 + dx + ax, bounds.x1 + dx + ax);
+      const x2 = Math.max(r.x2 ?? bounds.x2 + dx + ax, bounds.x2 + dx + ax);
+      lineas.push({ axis: "h", v: r.v, a: x1, b: x2 });
+    }
+  }
+  return { ax, ay, lineas };
+}
+
+/** Dibuja las líneas de alineación del gesto en curso. */
+function dzAlignRender(lineas) {
+  let box = $("#dzAlignLayer");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "dzAlignLayer";
+    box.className = "dz-alignlines";
+    $("#dzCanvas").appendChild(box);
+  }
+  if (!lineas || !lineas.length) { box.innerHTML = ""; return; }
+  const svg = $("#dzCanvas").querySelector("svg");
+  const cv = $("#dzCanvas").getBoundingClientRect();
+  const vistos = new Set();
+  box.innerHTML = lineas.map(L => {
+    const clave = L.axis + ":" + Math.round(L.v * 10);
+    if (vistos.has(clave)) return "";
+    vistos.add(clave);
+    // de coordenadas de usuario a píxeles de pantalla, con el mismo camino que
+    // usa el resto del editor (respeta zoom, paneo y rotación de vista)
+    const p1 = dzFromUser(L.axis === "v" ? L.v : L.a, L.axis === "v" ? L.a : L.v);
+    const p2 = dzFromUser(L.axis === "v" ? L.v : L.b, L.axis === "v" ? L.b : L.v);
+    if (!p1 || !p2) return "";
+    const x1 = p1.x - cv.left, y1 = p1.y - cv.top, x2 = p2.x - cv.left, y2 = p2.y - cv.top;
+    const largo = Math.hypot(x2 - x1, y2 - y1);
+    const ang = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+    return `<i style="left:${x1}px;top:${y1}px;width:${largo}px;transform:rotate(${ang}deg)"></i>`;
+  }).join("");
+  void svg;
+}
+
+function dzAlignClear() {
+  const box = $("#dzAlignLayer");
+  if (box) box.innerHTML = "";
+  DZ.alignLines = [];
+}
+
 function dzAlign(mode) {
   const el = DZ.sel;
   const svg = $("#dzCanvas").querySelector("svg");
