@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.20"
+LOW_VERSION = "3.29.21"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -226,18 +226,57 @@ class Api:
         # En Windows, agregar la query al path crea un nombre de archivo inválido.
         # Una URL file conserva el parámetro y WebView2 carga el panel correctamente.
         panel = Path(s._ui_base, "animation_panel.html").resolve().as_uri() + f"?kind={kind}"
+        # Geometría recordada: en un setup de dos monitores la gracia es que el
+        # panel vuelva SOLO al monitor donde lo dejaste. Sin esto, cada vez se
+        # abría centrado en la pantalla principal y había que arrastrarlo.
+        geo = (s.cfg.data.get("aux_windows") or {}).get(kind) or {}
         try:
             win = webview.create_window(
                 "LOW · " + ("X-sheet" if kind == "xsheet" else "Timeline"),
                 panel, js_api=s,
-                width=760 if kind == "xsheet" else 1180,
-                height=760 if kind == "xsheet" else 520,
+                width=int(geo.get("w") or (760 if kind == "xsheet" else 1180)),
+                height=int(geo.get("h") or (760 if kind == "xsheet" else 520)),
+                x=geo.get("x"), y=geo.get("y"),
                 min_size=(520, 360) if kind == "xsheet" else (720, 320),
                 background_color="#151514")
             s._aux_windows[kind] = win
+            s._track_geometry(win, kind, on_close=lambda: s._aux_windows.pop(kind, None))
             return {"ok": True}
         except Exception as e:
             return {"error": str(e)}
+
+    def _track_geometry(s, win, key, store_name="aux_windows", on_close=None):
+        """Recuerda dónde y de qué tamaño quedó una ventana, para reabrirla en
+        el MISMO monitor (setup de dos pantallas). `moved`/`resized` disparan
+        muy seguido: solo se anota en memoria y el disco se toca al cerrar."""
+        live = {}
+
+        def moved(x, y):
+            live["x"], live["y"] = int(x), int(y)
+
+        def resized(w, h):
+            live["w"], live["h"] = int(w), int(h)
+
+        def closing():
+            if on_close:
+                on_close()
+            if not live:
+                return
+            store = s.cfg.data.setdefault(store_name, {})
+            store[key] = {**(store.get(key) or {}), **live}
+            try:
+                s.cfg.save()
+            except OSError:
+                pass
+
+        try:
+            win.events.moved += moved
+            win.events.resized += resized
+            win.events.closing += closing
+        except Exception:
+            # backend sin estos eventos: la ventana anda igual, sin memoria.
+            pass
+
 
     def _mem_limit(s):
         """Cuántos mensajes de la conversación recordar (2 por turno).
@@ -4949,12 +4988,19 @@ def main():
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     ui = os.path.join(base, "ui", "index.html")
     api._ui_base = os.path.join(base, "ui")
+    # Dos pantallas: reabrir LOW en el monitor y el tamaño donde se cerró.
+    # Antes salía siempre maximizada en la pantalla principal.
+    mg = (api.cfg.data.get("windows") or {}).get("main") or {}
     window = webview.create_window(
         "LOW", ui, js_api=api,
-        width=1280, height=800, min_size=(980, 600), maximized=True,
+        width=int(mg.get("w") or 1280), height=int(mg.get("h") or 800),
+        x=mg.get("x"), y=mg.get("y"),
+        min_size=(980, 600),
+        maximized=bool(mg.get("maximized", True)) if mg else True,
         background_color="#151514",
     )
     api._window = window
+    api._track_geometry(window, "main", store_name="windows")
     try:
         webview.start(debug="--debug" in sys.argv)
     except Exception:
