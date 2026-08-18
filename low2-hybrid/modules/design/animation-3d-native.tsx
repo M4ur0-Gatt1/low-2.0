@@ -174,6 +174,11 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
           {barBtn('Sup', () => applyView('top'), view === 'top', 'Arriba (ortogonal)')}
           {barBtn('Inf', () => applyView('bottom'), view === 'bottom', 'Abajo (ortogonal)')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
+          {barBtn('Unir', () => { eng()?.groupSelection(); }, false,
+            'Agrupar lo seleccionado (Ctrl+G) — se elige, se mueve y se deforma como una sola pieza. Ctrl+Shift+G lo desarma')}
+          {barBtn('Volumen', () => { eng()?.solidifySelection(); }, false,
+            'Convertir lo seleccionado en un cuerpo con volumen (Ctrl+E): una silueta plana se extruye; trazos repartidos en el espacio se cierran por su casco. Los trazos de origen se conservan')}
+          <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
           {barBtn('XYZ', () => setAxes(!!eng()?.toggleAxes()), axes,
             'Ejes globales XYZ + puntos de fuga de cada eje (solo en perspectiva) — guía visual, no se dibuja ni exporta')}
         </div>
