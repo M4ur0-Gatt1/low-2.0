@@ -16,7 +16,12 @@
  *  'pencil-free' = dibujo libre en el aire: ignora guías/superficies, la
  *  profundidad (distancia a la cámara) se controla con el scroll en vez de
  *  proyectarse sobre un plano de apoyo. */
-export type ToolType = 'pencil' | 'guide' | 'move' | 'select' | 'eraser' | 'liquify' | 'scissors' | 'pencil-free' | 'fill';
+export type ToolType = 'pencil' | 'guide' | 'move' | 'select' | 'eraser' | 'liquify'
+  | 'scissors' | 'pencil-free' | 'fill'
+  // figuras planas: nacen sobre el plano de dibujo activo y quedan como
+  // un trazo CERRADO (su perímetro), así se pueden rellenar, agrupar,
+  // convertir en volumen y editar igual que una línea a mano
+  | 'rect' | 'circle' | 'poly';
 
 /** Modo del gizmo de transformación de la herramienta 'move' (con un solo
  *  trazo seleccionado): mover libremente por ejes, redimensionar, o rotar. */

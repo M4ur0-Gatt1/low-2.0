@@ -14,6 +14,7 @@ import { lowStore } from '../../store/low-store';
 import { Toolbar3D } from './components/Toolbar3D';
 import { PropertiesPanel3D } from './components/PropertiesPanel3D';
 import { LayerManager3D } from './components/LayerManager3D';
+import { ObjectList3D } from './components/ObjectList3D';
 import { Panel3D } from './components/Panel3D';
 import { LOW_ACCENT } from './theme';
 
@@ -253,11 +254,15 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
       </header>
 
       <Panel3D title="Herramientas" initial={{ left: 14, top: 60 }}>
-        <Toolbar3D />
+        <Toolbar3D engine={engineRef} />
       </Panel3D>
       <Panel3D title="Pincel / Superficie" initial={{ right: 14, top: 60 }} width={220}>
         <PropertiesPanel3D />
       </Panel3D>
+      <Panel3D title="Objetos" initial={{ right: 14, bottom: 14 }} width={230}>
+        <ObjectList3D engine={engineRef} />
+      </Panel3D>
+
       <Panel3D title="Capas" initial={{ left: 14, bottom: 14 }} width={240}>
         <LayerManager3D engine={engineRef} />
       </Panel3D>
