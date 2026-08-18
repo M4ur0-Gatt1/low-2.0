@@ -1320,12 +1320,16 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 }
 .dz-grid2d {
   position: absolute; inset: 0; z-index: 2; pointer-events: none;
-  /* orden: minoritarias (tenues, paso = celda) y mayoritarias (paso = 5·celda) */
+  /* orden: minoritarias (tenues, paso = celda) y mayoritarias (paso = 5·celda).
+     OJO con el color: --line2 es blanco al 4%, pensado para el fondo oscuro del
+     área de trabajo. Sobre el PAPEL blanco desaparecía por completo y la
+     cuadrícula parecía quedar "por detrás de la mesa de trabajo". Un gris
+     neutro con algo de alfa se lee sobre los dos fondos. */
   background-image:
-    linear-gradient(to right, var(--line2) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--line2) 1px, transparent 1px),
-    linear-gradient(to right, var(--cyansoft) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--cyansoft) 1px, transparent 1px);
+    linear-gradient(to right, rgba(124,132,148,.20) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(124,132,148,.20) 1px, transparent 1px),
+    linear-gradient(to right, rgba(22,166,217,.38) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(22,166,217,.38) 1px, transparent 1px);
   background-repeat: repeat;
 }
 .dz-grid2d[hidden] { display: none; }
