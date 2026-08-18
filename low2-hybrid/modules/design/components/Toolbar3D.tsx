@@ -12,6 +12,7 @@
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLowStore } from '../../../store/low-store';
+import type { WebGLDesign3D } from '../engine/webgl-design3d';
 import { ToolType, SurfaceType, GizmoMode, BrushSettings } from '../../../types/design-types';
 import { ColorWheel } from './ColorWheel';
 import { LOW_ACCENT } from '../theme';
@@ -39,6 +40,9 @@ const Icons = {
   Scissors: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>,
   FreeDraw: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="6" strokeDasharray="2 3"/><circle cx="12" cy="12" r="10.5" strokeDasharray="2 4"/></svg>,
   Fill: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M4 12.5 11 5.5l7.5 7.5-7 7z" fill="currentColor" fillOpacity="0.25"/><path d="M9 3.5 11 5.5"/><path d="M20.5 15.5c1 1.4 1.5 2.4 1.5 3a1.5 1.5 0 0 1-3 0c0-.6.5-1.6 1.5-3z" fill="currentColor"/></svg>,
+  Rect: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3.5" y="5.5" width="17" height="13" rx="1"/></svg>,
+  Circle: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="8.5"/></svg>,
+  Poly: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M12 3.2 20 8v8l-8 4.8L4 16V8z"/></svg>,
   Plane: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="3"/></svg>,
   Cylinder: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/></svg>,
   Sphere: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="9" ry="3"/><path d="M12 3v18"/></svg>,
@@ -83,7 +87,13 @@ const hoverOut = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => {
   if (!active) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#ccc'; }
 };
 
-export const Toolbar3D: React.FC = () => {
+interface Toolbar3DProps {
+  /** El motor: hace falta para opciones de herramienta que viven en él (p. ej.
+   *  la cantidad de lados del polígono), no en el store. */
+  engine?: React.MutableRefObject<WebGLDesign3D | null>;
+}
+
+export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
   const {
     currentTool, setCurrentTool, activeSurface, setActiveSurface,
     mirrorMode, setMirrorMode, brushSettings, setBrushSettings, gizmoMode, setGizmoMode,
@@ -98,7 +108,7 @@ export const Toolbar3D: React.FC = () => {
     }
     setShowWheel((v) => !v);
   };
-  const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, seleccion: false, superficies: false, pincel: true });
+  const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, figuras: true, seleccion: false, superficies: false, pincel: true });
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   const draw: { id: ToolType; icon: React.FC; label: string }[] = [
@@ -108,6 +118,11 @@ export const Toolbar3D: React.FC = () => {
     { id: 'scissors', icon: Icons.Scissors, label: 'Tijera — corta el trazo donde clickees encima (C)' },
     { id: 'fill', icon: Icons.Fill, label: 'Relleno — click sobre el contorno de una forma CERRADA y la pinta sólida (B)' },
     { id: 'liquify', icon: Icons.Liquify, label: 'Liquify — arrastrá para deformar el trazo (radio = tamaño de pincel) (L)' },
+  ];
+  const figuras: { id: ToolType; icon: React.FC; label: string }[] = [
+    { id: 'rect', icon: Icons.Rect, label: 'Rectángulo — arrastrá sobre el plano activo. Shift: cuadrado' },
+    { id: 'circle', icon: Icons.Circle, label: 'Círculo / elipse — arrastrá sobre el plano activo. Shift: círculo perfecto' },
+    { id: 'poly', icon: Icons.Poly, label: 'Polígono regular — la cantidad de lados se elige abajo. Shift: proporcionado' },
   ];
   const sel: { id: ToolType; icon: React.FC; label: string }[] = [
     { id: 'move', icon: Icons.Move, label: 'Seleccionar / Mover (click o lazo) (V)' },
@@ -135,6 +150,19 @@ export const Toolbar3D: React.FC = () => {
     }}>
       <Section title="Dibujo" open={open.dibujo} onToggle={() => toggle('dibujo')}>
         {draw.map(toolBtn)}
+      </Section>
+
+      <Section title="Figuras" open={open.figuras} onToggle={() => toggle('figuras')}>
+        {figuras.map(toolBtn)}
+        {currentTool === 'poly' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 2px', width: '100%' }}>
+            <span style={{ opacity: 0.7 }}>Lados</span>
+            <input
+              type="number" min={3} max={24} defaultValue={engine?.current?.getPolySides() ?? 6}
+              onChange={(e) => engine?.current?.setPolySides(Number(e.target.value))}
+              style={{ width: 46, fontSize: 11, padding: '1px 4px' }} />
+          </label>
+        )}
       </Section>
 
       <Section title="Selección" open={open.seleccion} onToggle={() => toggle('seleccion')}>

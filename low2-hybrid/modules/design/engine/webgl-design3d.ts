@@ -23,6 +23,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { lowStore, type LowStore } from '../../../store/low-store';
+import { LOW_CYAN } from '../theme';
 import type { BrushSettings, GizmoMode, Layer, SurfaceType, ToolType } from '../../../types/design-types';
 
 export type Theme = 'light' | 'dark';
@@ -46,6 +47,10 @@ interface StrokeRecord {
    *  Comparte toda la infraestructura de trazo (capas, goma, selección,
    *  historial) pero su malla se reconstruye como polígono, no como tubo. */
   fill?: boolean;
+  /** Figura de la que salió el trazo ('rect' | 'circle' | 'poly'), si vino de
+   *  las herramientas de figuras. Solo sirve para nombrarla en la lista de
+   *  objetos: por dentro es un trazo cerrado más. */
+  shape?: 'rect' | 'circle' | 'poly';
   /** Id del GRUPO al que pertenece (Ctrl+G). No cambia la jerarquía de la
    *  escena: los objetos siguen colgando de `strokesGroup`. Solo dice que
    *  elegir uno elige a todos, para poder moverlos y deformarlos en bloque.
@@ -101,7 +106,11 @@ export interface Low3DProject {
     groupId?: string;
     /** true = volumen: se reconstruye con buildSolidMesh a partir de `points`. */
     solid?: boolean;
+    shape?: 'rect' | 'circle' | 'poly';
   }>;
+  /** Nombre de cada grupo (Ctrl+G), por id. Sin esto, al reabrir el proyecto
+   *  los objetos perdían su nombre y volvían a ser "Objeto 1, 2, 3…". */
+  groupNames?: Record<string, string>;
   /** Guías 3D (las "cortinas" extruidas). Se guardan por su trazo de origen +
    *  el eje de extrusión, que es lo único que hace falta para reconstruirlas. */
   guides?: Array<{ points: number[][]; normal: number[]; position: number[]; quaternion: number[]; scale: number[] }>;
@@ -1026,7 +1035,7 @@ export class WebGLDesign3D {
           return { point: h.point.clone(), normal, target: act.mesh, kind: 'surface' };
         }
         // Fuera del cuadrado visible: para un PLANO se sigue usando su plano
-        // infinito (misma profundidad). Para superficies curvas no aplica.
+        // infinito (misma profundidad).
         if (act.type === 'plane') {
           const pl = this.surfacePlane(act.mesh);
           if (!this.planeIsEdgeOn(pl)) {
@@ -1034,6 +1043,21 @@ export class WebGLDesign3D {
             if (this.raycaster.ray.intersectPlane(pl, p)) {
               return { point: p, normal: pl.normal.clone(), target: act.mesh, plane: pl.clone(), kind: 'surface' };
             }
+          }
+        } else {
+          // CURVAS (esfera, cilindro, toro): fuera de la malla no había ningún
+          // respaldo, así que el trazo que empezaba al lado de la esfera no se
+          // dibujaba, o se enganchaba a otro plano y ya nunca se pegaba a ella.
+          // Se usa el plano que pasa por su centro, de frente a la cámara: el
+          // trazo sigue teniendo profundidad coherente y, apenas entra en la
+          // superficie, se apoya en ella (ver el respaldo de moveDraw).
+          const centro = act.mesh.getWorldPosition(new THREE.Vector3());
+          const haciaCam = new THREE.Vector3();
+          (this.camera as THREE.Camera).getWorldDirection(haciaCam);
+          const pl = new THREE.Plane().setFromNormalAndCoplanarPoint(haciaCam.negate(), centro);
+          const p = new THREE.Vector3();
+          if (this.raycaster.ray.intersectPlane(pl, p)) {
+            return { point: p, normal: pl.normal.clone(), target: act.mesh, plane: pl.clone(), kind: 'surface' };
           }
         }
       }
@@ -1322,6 +1346,8 @@ export class WebGLDesign3D {
       this.onSelectPointerDown(e);
     } else if (this.tool === 'eraser') {
       this.beginLasso(e); // click corto = borrar bajo cursor; arrastre = lazo
+    } else if (this.tool === 'rect' || this.tool === 'circle' || this.tool === 'poly') {
+      this.beginShape(e);
     } else if (this.tool === 'fill') {
       this.fillAtPointer();
     } else if (this.tool === 'scissors') {
@@ -1337,7 +1363,7 @@ export class WebGLDesign3D {
     if (this.mode === 'draw' && e.pointerType === 'pen' && e.pressure === 0 && e.buttons === 0) return;
     this.updateCursor(e);
     this.setPointerFromEvent(e);
-    if (this.mode === 'draw') this.moveDraw(e);
+    if (this.mode === 'draw') { if (this.shape) this.moveShape(e); else this.moveDraw(e); }
     else if (this.mode === 'move') this.moveDrag(e);
     else if (this.mode === 'lasso') this.moveLasso(e);
     else if (this.mode === 'point-drag') this.movePointDrag();
@@ -1352,7 +1378,7 @@ export class WebGLDesign3D {
 
   private onPointerUp = (e: PointerEvent): void => {
     if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
-    if (this.mode === 'draw') { this.endDraw(e); }
+    if (this.mode === 'draw') { if (this.shape) this.endShape(e); else this.endDraw(e); }
     else if (this.mode === 'move') { this.endMove(); }
     else if (this.mode === 'lasso') { this.endLasso(e); }
     else if (this.mode === 'point-drag') { this.endPointDrag(); }
@@ -2026,6 +2052,25 @@ export class WebGLDesign3D {
       hit = this.resolveFreeHit();
     } else if (this.current.drawTarget || this.current.drawPlane) {
       hit = this.intersectLockedDrawContext();
+      // La SUPERFICIE ACTIVA manda sobre el plano bloqueado: si el rayo la
+      // toca, el trazo se apoya en ella aunque haya arrancado en otro lado.
+      // Sin esto, empezar la línea al costado de una esfera dejaba el trazo
+      // pegado a un plano y ya nunca se subía a la superficie.
+      const act = this.activeSurfaceId
+        ? this.surfaces.find((x) => x.id === this.activeSurfaceId)
+        : undefined;
+      if (act && act.type !== 'plane') {
+        const sh = this.raycaster.intersectObject(act.mesh, false);
+        if (sh.length) {
+          const h = sh[0];
+          hit = {
+            point: h.point.clone(),
+            normal: h.face
+              ? h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize()
+              : (hit?.normal.clone() ?? new THREE.Vector3(0, 0, 1)),
+          };
+        }
+      }
     } else {
       hit = this.resolveHit();
     }
@@ -2243,11 +2288,24 @@ export class WebGLDesign3D {
    *  cada anillo según la presión interpolada en ese punto de la curva. Así
    *  se reusa el cálculo de frames (Frenet/parallel-transport) de Three.js —
    *  sin reimplementarlo a mano — y solo se toca el radio. */
-  private buildTube(points: THREE.Vector3[], pressures: number[], brush: BrushSettings = this.brush): THREE.Mesh | null {
+  private buildTube(points: THREE.Vector3[], pressures: number[], brush: BrushSettings = this.brush,
+                    recto = false): THREE.Mesh | null {
     if (points.length < 2) return null;
-    const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+    // `recto` = FIGURA geométrica: la polilínea se sigue tal cual, con segmentos
+    // rectos. Catmull-Rom suaviza y redondea: un rectángulo salía con las
+    // esquinas comidas y el contorno desbordando su propio relleno.
+    const curve: THREE.Curve<THREE.Vector3> = recto
+      ? (() => {
+        const path = new THREE.CurvePath<THREE.Vector3>();
+        for (let i = 0; i + 1 < points.length; i++) {
+          if (points[i].distanceTo(points[i + 1]) < 1e-6) continue;
+          path.add(new THREE.LineCurve3(points[i].clone(), points[i + 1].clone()));
+        }
+        return path;
+      })()
+      : new THREE.CatmullRomCurve3(points, false, 'centripetal');
     const radialSegs = 10;
-    const segs = Math.min(Math.max(points.length * 6, 8), 1400);
+    const segs = Math.min(Math.max(points.length * (recto ? 3 : 6), 8), 1400);
     const geo = new THREE.TubeGeometry(curve, segs, 1, radialSegs, false);
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     const vertsPerRing = radialSegs + 1;
@@ -2273,6 +2331,7 @@ export class WebGLDesign3D {
     // que tiene el trazo en esa punta, la línea se lee maciza y las uniones
     // cierran redondeadas, como una punta de pincel de verdad.
     const cuerpo = this.cappedTube(geo, curve, points, pressures, brush);
+    void recto;
     const col = new THREE.Color(brush.color);
     return new THREE.Mesh(cuerpo, new THREE.MeshStandardMaterial({
       color: col, emissive: col.clone().multiplyScalar(0.06),
@@ -2284,7 +2343,7 @@ export class WebGLDesign3D {
   /** Fusiona el tubo con una esfera en cada punta (una sola geometría: así el
    *  trazo sigue siendo UNA malla y todo lo demás —goma, capas, historial,
    *  descarte de memoria— sigue funcionando igual). */
-  private cappedTube(tube: THREE.BufferGeometry, curve: THREE.CatmullRomCurve3,
+  private cappedTube(tube: THREE.BufferGeometry, curve: THREE.Curve<THREE.Vector3>,
                      points: THREE.Vector3[], pressures: number[],
                      brush: BrushSettings): THREE.BufferGeometry {
     const partes: THREE.BufferGeometry[] = [tube];
@@ -2491,6 +2550,128 @@ export class WebGLDesign3D {
     return variants;
   }
 
+  // ---------------------------------------------------------------- figuras planas
+
+  /** Lados del polígono regular (herramienta 'poly'). */
+  private polySides = 6;
+  setPolySides(n: number): void { this.polySides = Math.max(3, Math.min(24, Math.round(n))); }
+  getPolySides(): number { return this.polySides; }
+
+  /** Estado del arrastre de una figura: punto de inicio, plano y ejes locales. */
+  private shape: {
+    start: THREE.Vector3; normal: THREE.Vector3; u: THREE.Vector3; v: THREE.Vector3;
+    plane: THREE.Plane; preview?: THREE.Line;
+  } | null = null;
+
+  /** Perímetro de la figura, EN EL PLANO donde se está dibujando. Se arma con
+   *  los ejes locales del plano (u, v), así en una vista ortogonal la figura
+   *  queda exactamente sobre el plano base y no toma una Z inventada. */
+  private shapeOutline(a: THREE.Vector3, b: THREE.Vector3, kind: 'rect' | 'circle' | 'poly',
+                       igual: boolean): THREE.Vector3[] {
+    const s = this.shape;
+    if (!s) return [];
+    const d = b.clone().sub(a);
+    let du = d.dot(s.u), dv = d.dot(s.v);
+    if (igual) {                       // Shift: cuadrado / círculo perfecto
+      const m = Math.max(Math.abs(du), Math.abs(dv));
+      du = Math.sign(du || 1) * m; dv = Math.sign(dv || 1) * m;
+    }
+    const pts: THREE.Vector3[] = [];
+    const P = (cu: number, cv: number) =>
+      a.clone().addScaledVector(s.u, cu).addScaledVector(s.v, cv);
+    if (kind === 'rect') {
+      pts.push(P(0, 0), P(du, 0), P(du, dv), P(0, dv), P(0, 0));
+      return pts;
+    }
+    // círculo y polígono: se dibujan desde la ESQUINA, como el rectángulo, para
+    // que el gesto sea el mismo en las tres herramientas
+    const cu = du / 2, cv = dv / 2;
+    const ru = Math.abs(cu), rv = Math.abs(cv);
+    const N = kind === 'circle' ? 48 : this.polySides;
+    // el polígono arranca con un vértice arriba: es lo que uno espera al ver
+    // un hexágono o un triángulo, y no una figura girada a medias
+    const off = kind === 'circle' ? 0 : Math.PI / 2;
+    for (let i = 0; i <= N; i++) {
+      const ang = off + (i / N) * Math.PI * 2;
+      pts.push(P(cu + Math.cos(ang) * ru, cv + Math.sin(ang) * rv));
+    }
+    return pts;
+  }
+
+  private beginShape(e: PointerEvent): void {
+    const hit = this.resolveHit();
+    if (!hit) { this.canvas.title = 'Elegí una vista o una superficie para apoyar la figura'; return; }
+    const n = hit.normal.clone().normalize();
+    const u = new THREE.Vector3(1, 0, 0);
+    if (Math.abs(n.dot(u)) > 0.9) u.set(0, 1, 0);
+    u.crossVectors(n, u).normalize();
+    const v = new THREE.Vector3().crossVectors(n, u).normalize();
+    this.shape = {
+      start: hit.point.clone(), normal: n, u, v,
+      plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n, hit.point),
+    };
+    this.capturePointer(e);
+    this.mode = 'draw';
+    this.controls.enabled = false;
+    const line = this.makePreviewLine('stroke');
+    this.strokesGroup.add(line);
+    this.shape.preview = line;
+  }
+
+  private moveShape(e: PointerEvent): void {
+    if (!this.shape?.preview) return;
+    this.setPointerFromEvent(e);
+    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    const p = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(this.shape.plane, p)) return;
+    const kind = this.tool === 'rect' ? 'rect' : this.tool === 'circle' ? 'circle' : 'poly';
+    const pts = this.shapeOutline(this.shape.start, p, kind, e.shiftKey);
+    if (pts.length > 1) this.shape.preview.geometry.setFromPoints(pts);
+  }
+
+  private endShape(e: PointerEvent): void {
+    const s = this.shape;
+    this.shape = null;
+    if (!s) return;
+    if (s.preview) {
+      this.strokesGroup.remove(s.preview);
+      s.preview.geometry.dispose();
+      (s.preview.material as THREE.Material).dispose();
+    }
+    this.setPointerFromEvent(e);
+    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    const p = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(s.plane, p)) return;
+    this.shape = s;   // shapeOutline necesita los ejes del gesto
+    const kind = this.tool === 'rect' ? 'rect' : this.tool === 'circle' ? 'circle' : 'poly';
+    const pts = this.shapeOutline(s.start, p, kind, e.shiftKey);
+    this.shape = null;
+    if (pts.length < 4) return;
+    // figura degenerada (un clic sin arrastre): no dejar basura en la escena
+    const box = new THREE.Box3().setFromPoints(pts);
+    if (box.getSize(new THREE.Vector3()).length() < 0.02) return;
+
+    const pressures = pts.map(() => 1);
+    const group = new THREE.Group();
+    const tube = this.buildTube(pts, pressures, this.brush, true);
+    if (tube) group.add(tube);
+    for (const variant of this.mirroredVariants(pts)) {
+      const b = this.buildTube(variant, pressures, this.brush, true); if (b) group.add(b);
+    }
+    const rec: StrokeRecord = {
+      id: `stroke-${this.seq++}`, object: group, points: pts, pressures, kind: 'stroke',
+      shape: kind,
+      layerId: this.activeLayerId(), baseOpacity: this.brush.opacity, brush: { ...this.brush },
+    };
+    group.userData.strokeId = rec.id;
+    this.addStrokeRecord(rec);
+    this.pushCmd({
+      undo: () => this.removeStrokeRecord(rec),
+      redo: () => this.addStrokeRecord(rec),
+    });
+    this.setSelection([rec]);
+  }
+
   private commitStroke(): void {
     if (!this.current) return;
     this.smoothed = null;
@@ -2551,23 +2732,20 @@ export class WebGLDesign3D {
     }
     // un VOLUMEN se reconstruye como cuerpo cerrado
     if (rec.solid) {
-      const m = this.buildSolidMesh(rec.points.map((p) => p.clone().add(rec.object.position)), rec.brush);
-      if (m) { m.position.sub(rec.object.position); rec.object.add(m); }
+      const m = this.buildSolidMesh(rec.points, rec.brush);
+      if (m) rec.object.add(m);
       return;
     }
     // un RELLENO se reconstruye como polígono sólido, no como tubo
     if (rec.fill) {
-      const f = this.buildFillMesh(rec.points.map((p) => p.clone().add(rec.object.position)), rec.brush);
-      if (f) {
-        f.position.sub(rec.object.position); // la malla ya viene en world: pasarla a local
-        rec.object.add(f);
-      }
+      const f = this.buildFillMesh(rec.points, rec.brush);
+      if (f) rec.object.add(f);
       return;
     }
-    const a = this.buildTube(rec.points, rec.pressures, rec.brush);
+    const a = this.buildTube(rec.points, rec.pressures, rec.brush, !!rec.shape);
     if (a) rec.object.add(a);
     for (const variant of this.mirroredVariants(rec.points)) {
-      const b = this.buildTube(variant, rec.pressures, rec.brush); if (b) rec.object.add(b);
+      const b = this.buildTube(variant, rec.pressures, rec.brush, !!rec.shape); if (b) rec.object.add(b);
     }
   }
 
@@ -2575,6 +2753,7 @@ export class WebGLDesign3D {
     this.strokesGroup.add(rec.object);
     if (!this.strokes.includes(rec)) this.strokes.push(rec);
     this.applyLayerStyles();
+    this.publishObjects();
   }
 
   private removeStrokeRecord(rec: StrokeRecord): void {
@@ -2585,6 +2764,7 @@ export class WebGLDesign3D {
     this.strokesGroup.remove(rec.object);
     this.strokes = this.strokes.filter((s) => s !== rec);
     this.selected.delete(rec);
+    this.publishObjects();
     if (this.editingStroke === rec) this.clearPointEdit();
     if (this.gizmo?.object === rec.object) this.gizmo.detach();
   }
@@ -3047,8 +3227,19 @@ export class WebGLDesign3D {
 
   /** Rellena la forma cerrada que contiene al trazo bajo el cursor. */
   private fillAtPointer(): boolean {
-    const seed = this.pickStroke() ?? this.pickNearestStroke();
-    if (!seed || seed.fill) return false;
+    // orden: lo que está bajo el cursor, la forma que lo CONTIENE, o la línea
+    // más cercana. El caso del medio es el que faltaba (clic dentro de una figura).
+    const seed = this.pickStroke() ?? this.pickEnclosingStroke() ?? this.pickNearestStroke();
+    if (!seed || seed.fill || seed.solid) return false;
+    // Un trazo que YA se cierra sobre sí mismo (una figura, o un círculo hecho
+    // con Ctrl) se rellena directo: findClosedLoop busca ciclos ENTRE trazos
+    // distintos y nunca encontraba este caso — el balde no hacía nada sobre un
+    // rectángulo perfectamente cerrado, que es lo más obvio para rellenar.
+    if (seed.points.length >= 3
+        && seed.points[0].distanceTo(seed.points[seed.points.length - 1]) <= WebGLDesign3D.WELD_EPS) {
+      const propio = seed.points.map((q) => seed.object.localToWorld(q.clone()));
+      return this.makeFill(propio);
+    }
     const loop = this.findClosedLoop(seed);
     if (!loop) {
       this.canvas.title = 'La forma no está cerrada: uní las puntas de los trazos para poder rellenarla';
@@ -3056,7 +3247,11 @@ export class WebGLDesign3D {
       setTimeout(() => { this.canvas.title = ''; this.cursorEl.style.borderColor = '#333'; }, 1600);
       return false;
     }
-    const outline = this.loopOutline(loop);
+    return this.makeFill(this.loopOutline(loop));
+  }
+
+  /** Crea la cara sólida de un contorno cerrado (en coordenadas de mundo). */
+  private makeFill(outline: THREE.Vector3[]): boolean {
     const mesh = this.buildFillMesh(outline, this.brush);
     if (!mesh) return false;
     const group = new THREE.Group();
@@ -3074,6 +3269,37 @@ export class WebGLDesign3D {
 
   /** Trazo más cercano al cursor en pantalla (si el click no pegó justo en el
    *  tubo, que es fino). */
+  /** Trazo CERRADO que contiene al cursor (en pantalla). Es lo que hace que el
+   *  balde funcione clickeando en el MEDIO de una forma, que es como se usa un
+   *  balde: `pickNearestStroke` solo llega a 40 px de la línea, así que dentro
+   *  de un rectángulo grande no encontraba nada y el balde no hacía nada.
+   *  Si hay varias formas encimadas, gana la más chica (la de adentro). */
+  private pickEnclosingStroke(): StrokeRecord | null {
+    const rect = this.canvasBox();
+    const px = ((this.pointer.x + 1) / 2) * rect.width;
+    const py = ((1 - this.pointer.y) / 2) * rect.height;
+    const cam = this.camera as THREE.Camera;
+    let best: StrokeRecord | null = null, bestArea = Infinity;
+    for (const rec of this.strokes) {
+      if (rec.kind !== 'stroke' || rec.fill || rec.solid || rec.points.length < 3) continue;
+      if (rec.points[0].distanceTo(rec.points[rec.points.length - 1]) > WebGLDesign3D.WELD_EPS) continue;
+      rec.object.updateMatrixWorld(true);
+      const poly = rec.points.map((q) => {
+        const w = rec.object.localToWorld(q.clone()).project(cam);
+        return [((w.x + 1) / 2) * rect.width, ((1 - w.y) / 2) * rect.height] as [number, number];
+      });
+      let dentro = false, area = 0;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const [xi, yi] = poly[i], [xj, yj] = poly[j];
+        if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) dentro = !dentro;
+        area += xi * yj - xj * yi;
+      }
+      area = Math.abs(area) / 2;
+      if (dentro && area < bestArea) { bestArea = area; best = rec; }
+    }
+    return best;
+  }
+
   private pickNearestStroke(): StrokeRecord | null {
     const rect = this.canvasBox();
     const cx = ((this.pointer.x + 1) / 2) * rect.width;
@@ -3138,6 +3364,8 @@ export class WebGLDesign3D {
     this.selected = new Set(recs);
     for (const r of this.selected) this.highlight(r, true);
     this.syncGizmo();
+    this.showSelectionBox();
+    this.publishObjects();
   }
 
   /** Elige una guía con la herramienta 'move' (no arrastre libre — se mueve
@@ -3224,6 +3452,80 @@ export class WebGLDesign3D {
 
   // ---------------------------------------------------------------- grupos
 
+  /** Caja del objeto seleccionado. Es lo que hace que un grupo se LEA como una
+   *  sola pieza: sin ella, agrupar no se notaba en ninguna parte de la pantalla. */
+  private selBox?: THREE.Box3Helper;
+
+  private showSelectionBox(): void {
+    if (this.selBox) { this.scene.remove(this.selBox); this.selBox.geometry.dispose(); this.selBox = undefined; }
+    if (this.selected.size < 2) return;   // con una sola pieza ya está el gizmo
+    const box = new THREE.Box3();
+    for (const r of this.selected) { r.object.updateMatrixWorld(true); box.expandByObject(r.object); }
+    if (box.isEmpty()) return;
+    // un poco de aire para que la caja no corte el trazo
+    const aire = box.getSize(new THREE.Vector3()).length() * 0.02;
+    box.expandByScalar(Math.max(aire, 0.02));
+    this.selBox = new THREE.Box3Helper(box, new THREE.Color(LOW_CYAN));
+    (this.selBox.material as THREE.LineBasicMaterial).depthTest = false;
+    (this.selBox.material as THREE.LineBasicMaterial).transparent = true;
+    (this.selBox.material as THREE.LineBasicMaterial).opacity = 0.75;
+    this.selBox.renderOrder = 999;
+    this.scene.add(this.selBox);
+  }
+
+  /** Nombre visible de cada grupo. Un objeto sin nombre no es un objeto: hay
+   *  que poder encontrarlo en la lista y renombrarlo. */
+  private groupNames = new Map<string, string>();
+
+  /** Publica al store la lista de OBJETOS tal como los ve el usuario: cada
+   *  grupo cuenta como uno solo, y los trazos sueltos van aparte. */
+  private publishObjects(): void {
+    const vistos = new Map<string, { id: string; name: string; kind: 'group' | 'stroke' | 'fill' | 'solid'; count: number; selected: boolean }>();
+    const sueltos: typeof vistos extends Map<string, infer V> ? V[] : never[] = [];
+    for (const rec of this.strokes) {
+      if (rec.kind === 'guide') continue;
+      const sel = this.selected.has(rec);
+      if (rec.groupId) {
+        const g = vistos.get(rec.groupId);
+        if (g) { g.count++; g.selected = g.selected || sel; }
+        else vistos.set(rec.groupId, {
+          id: rec.groupId, name: this.groupNames.get(rec.groupId) || `Objeto ${vistos.size + 1}`,
+          kind: 'group', count: 1, selected: sel,
+        });
+      } else {
+        const nombreFigura = { rect: 'Rectángulo', circle: 'Círculo', poly: 'Polígono' };
+        sueltos.push({
+          id: rec.id,
+          name: rec.solid ? 'Volumen' : rec.fill ? 'Relleno'
+            : rec.shape ? nombreFigura[rec.shape] : 'Línea',
+          kind: rec.solid ? 'solid' : rec.fill ? 'fill' : 'stroke', count: 1, selected: sel,
+        });
+      }
+    }
+    lowStore.setObjects([...vistos.values(), ...sueltos]);
+  }
+
+  /** Selecciona un objeto de la lista (un grupo entero o un trazo suelto). */
+  selectObjectById(id: string): void {
+    const recs = this.strokes.filter((r) => r.groupId === id || r.id === id);
+    if (recs.length) this.setSelection(recs);
+  }
+
+  /** Renombra un grupo. */
+  renameObject(id: string, name: string): void {
+    if (!name.trim()) return;
+    this.groupNames.set(id, name.trim());
+    this.publishObjects();
+  }
+
+  /** Desagrupa por id (desde el panel, sin tener que seleccionarlo antes). */
+  ungroupById(id: string): void {
+    const recs = this.strokes.filter((r) => r.groupId === id);
+    if (!recs.length) return;
+    this.setSelection(recs);
+    this.ungroupSelection();
+  }
+
   /** Ctrl+G: une lo seleccionado en un grupo. A partir de acá se elige,
    *  se mueve, se deforma y se borra como una sola cosa. */
   groupSelection(): boolean {
@@ -3236,7 +3538,11 @@ export class WebGLDesign3D {
       this.setSelection(recs);
     };
     apply(recs.map(() => id));
-    this.pushCmd({ undo: () => apply(before), redo: () => apply(recs.map(() => id)) });
+    this.publishObjects();
+    this.pushCmd({
+      undo: () => { apply(before); this.publishObjects(); },
+      redo: () => { apply(recs.map(() => id)); this.publishObjects(); },
+    });
     return true;
   }
 
@@ -3251,7 +3557,11 @@ export class WebGLDesign3D {
     };
     this.detachRig();
     apply(recs.map(() => undefined));
-    this.pushCmd({ undo: () => apply(before), redo: () => apply(recs.map(() => undefined)) });
+    this.publishObjects();
+    this.pushCmd({
+      undo: () => { apply(before); this.publishObjects(); },
+      redo: () => { apply(recs.map(() => undefined)); this.publishObjects(); },
+    });
     return true;
   }
 
@@ -3819,6 +4129,7 @@ export class WebGLDesign3D {
 
   clear(): void {
     this.detachRig();
+    this.groupNames.clear();
     for (const rec of this.strokes) { rec.object.parent?.remove(rec.object); }
     this.strokes = [];
     for (const g of [...this.guides]) this.detachGuide(g);
@@ -3848,6 +4159,10 @@ export class WebGLDesign3D {
   /** Serializa puntos de control en lugar de la malla derivada, para conservar
    *  la capacidad de editar los trazos al volver a abrir el proyecto. */
   exportProject(): Low3DProject {
+    // Con varias piezas elegidas, sus objetos cuelgan del RIG temporal y su
+    // `position` es relativa a ese rig, no al mundo: guardar así hacía que el
+    // dibujo reapareciera corrido al abrirlo. Se desarma antes de serializar.
+    this.detachRig();
     const state = lowStore.getState();
     return {
       format: 'low3d', version: 1, savedAt: new Date().toISOString(),
@@ -3863,6 +4178,7 @@ export class WebGLDesign3D {
         quaternion: rec.object.quaternion.toArray(), scale: rec.object.scale.toArray(),
         brush: { ...rec.brush }, fill: rec.fill || undefined,
         groupId: rec.groupId || undefined, solid: rec.solid || undefined,
+        shape: rec.shape || undefined,
       })),
       // las guías también son parte del proyecto: sin ellas, al reabrir se
       // perdía el andamiaje sobre el que estabas dibujando.
@@ -3874,6 +4190,7 @@ export class WebGLDesign3D {
           scale: g.mesh.scale.toArray(),
         } : null;
       }).filter(Boolean) as Low3DProject['guides'],
+      groupNames: Object.fromEntries(this.groupNames),
     };
   }
 
@@ -3886,6 +4203,10 @@ export class WebGLDesign3D {
     if (doc.settings?.brush) lowStore.setBrushSettings({ ...doc.settings.brush });
     if (doc.settings?.mirror) lowStore.setMirrorMode({ ...doc.settings.mirror });
     lowStore.setActiveSurface(doc.settings?.activeSurface || null);
+    this.groupNames.clear();
+    for (const [k, v] of Object.entries(doc.groupNames || {})) {
+      if (typeof v === 'string') this.groupNames.set(k, v);
+    }
     for (const item of doc.strokes) {
       if (!Array.isArray(item.points) || item.points.length < 2) continue;
       const points = item.points.map((p) => new THREE.Vector3(Number(p[0]), Number(p[1]), Number(p[2])));
@@ -3900,14 +4221,18 @@ export class WebGLDesign3D {
         // volumen: se regenera con la misma lógica que al crearlo (los puntos
         // guardados son la nube de origen), no como tubo ni como cara plana.
         const body = this.buildSolidMesh(points, brush);
-        if (body) { body.position.sub(new THREE.Vector3().fromArray(item.position || [0, 0, 0])); group.add(body); }
+        if (body) group.add(body);
       } else if (item.fill) {
         // relleno: se reconstruye como cara sólida, no como tubo (si no, una
         // forma pintada volvía como un contorno grueso y deformado).
+        // Los puntos guardados son LOCALES al objeto, igual que los de un trazo:
+        // restarles la posición del grupo (como se hacía antes) corría el relleno
+        // justo esa distancia en cuanto la forma se había movido o agrupado, y
+        // quedaba separado de su propio contorno.
         const face = this.buildFillMesh(points, brush);
-        if (face) { face.position.sub(new THREE.Vector3().fromArray(item.position || [0, 0, 0])); group.add(face); }
+        if (face) group.add(face);
       } else {
-        const tube = this.buildTube(points, pressures, brush);
+        const tube = this.buildTube(points, pressures, brush, !!item.shape);
         if (tube) group.add(tube);
       }
       group.position.fromArray(item.position || [0, 0, 0]);
@@ -3921,6 +4246,7 @@ export class WebGLDesign3D {
       group.userData.strokeId = rec.id;
       rec.fill = item.fill || undefined;
       rec.solid = item.solid || undefined;
+      rec.shape = item.shape || undefined;
       rec.groupId = item.groupId || undefined;
       this.addStrokeRecord(rec);
     }

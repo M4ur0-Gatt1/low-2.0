@@ -32,6 +32,20 @@ interface LowState {
   layers: Layer[];
   activeLayerId: string | null;
   gizmoMode: GizmoMode;
+  /** Objetos del dibujo tal como los ve el usuario: cada grupo de Ctrl+G y
+   *  cada trazo suelto. El motor lo publica al cambiar; el panel lo lista.
+   *  Sin esto, agrupar no se notaba en ningún lado. */
+  objects: SceneObject[];
+}
+
+export interface SceneObject {
+  /** id del grupo (`grp-N`) o del trazo suelto. */
+  id: string;
+  name: string;
+  kind: 'group' | 'stroke' | 'fill' | 'solid';
+  /** cuántas piezas tiene (1 si es suelto). */
+  count: number;
+  selected: boolean;
 }
 
 const INITIAL: LowState = {
@@ -43,6 +57,7 @@ const INITIAL: LowState = {
   layers: [{ id: 'layer-0', name: 'Capa 1', visible: true, locked: false, opacity: 1 }],
   activeLayerId: 'layer-0',
   gizmoMode: 'translate',
+  objects: [],
 };
 
 let state: LowState = INITIAL;
@@ -58,6 +73,7 @@ const actions = {
   setBrushSettings: (brushSettings: BrushSettings) => patch({ brushSettings }),
   setSelectedObject: (selectedObject: SelectedObject | null) => patch({ selectedObject }),
   setGizmoMode: (gizmoMode: GizmoMode) => patch({ gizmoMode }),
+  setObjects: (objects: SceneObject[]) => patch({ objects }),
 
   addLayer: () => {
     const id = `layer-${layerSeq++}`;
