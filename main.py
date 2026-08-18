@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.24"
+LOW_VERSION = "3.29.25"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -215,11 +215,15 @@ class Api:
             return {"error": "ventana principal no disponible"}
         message = json.dumps({"kind": s._panel_kind(kind), "action": action,
                               "payload": payload or {}}, ensure_ascii=False)
-        try:
-            s._window.evaluate_js(f"window.lowPanelCommand({message})")
-            return {"ok": True}
-        except Exception as e:
-            return {"error": str(e)}
+        # Igual que en _panel_forget: la llamada llega desde la ventana AUXILIAR
+        # y evaluar JS en la principal de forma sincrónica traba las dos.
+        def enviar():
+            try:
+                s._window.evaluate_js(f"window.lowPanelCommand({message})")
+            except Exception:
+                pass
+        threading.Thread(target=enviar, daemon=True).start()
+        return {"ok": True}
 
     # ── alias de compatibilidad (la UI vieja llama a estos) ──
     def animation_panel_state(s, state=None):
@@ -262,9 +266,13 @@ class Api:
                 s._aux_windows.pop(kind, None)
         if not s._ui_base:
             return {"error": "interfaz no inicializada"}
-        # En Windows, agregar la query al path crea un nombre de archivo inválido.
-        # Una URL file conserva el parámetro y WebView2 carga el panel correctamente.
-        panel = Path(s._ui_base, "animation_panel.html").resolve().as_uri() + f"?kind={kind}"
+        # El parámetro va como FRAGMENTO (#), no como query (?): sobre una URL
+        # file:// WebView2 se come la query como parte del NOMBRE del archivo y
+        # la ventana abría en "No se encuentra el archivo" (ERR_FILE_NOT_FOUND).
+        archivo = Path(s._ui_base, "animation_panel.html").resolve()
+        if not archivo.exists():
+            return {"error": f"falta {archivo.name} en la instalación"}
+        panel = archivo.as_uri() + f"#kind={kind}"
         spec = s.PANELS[kind]
         # Geometría recordada: en un setup de dos monitores la gracia es que el
         # panel vuelva SOLO al monitor donde lo dejaste. Sin esto, cada vez se
@@ -289,12 +297,19 @@ class Api:
         si no, la ventana principal sigue creyendo que el panel está afuera y
         publica su estado a un buzón que ya nadie lee."""
         s._aux_windows.pop(kind, None)
-        if s._window:
+        if not s._window:
+            return
+        # OJO: esto corre en el hilo de la ventana que se está cerrando. Llamar
+        # evaluate_js sobre la ventana principal desde acá TRABA la aplicación
+        # entera ("LOW.exe no responde"). Se manda desde un hilo aparte.
+        def avisar():
             try:
                 s._window.evaluate_js(
-                    'window.lowPanelCommand({"kind":"%s","action":"dock","payload":{}})' % kind)
+                    'window.lowPanelCommand && window.lowPanelCommand('
+                    '{"kind":"%s","action":"dock","payload":{}})' % kind)
             except Exception:
                 pass
+        threading.Thread(target=avisar, daemon=True).start()
 
     def _track_geometry(s, win, key, store_name="aux_windows", on_close=None):
         """Recuerda dónde y de qué tamaño quedó una ventana, para reabrirla en

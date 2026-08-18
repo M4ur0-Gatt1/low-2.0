@@ -253,9 +253,9 @@ async function init() {
   restorePanelSizes();
   initSplitters();
   sysMsg("LOW v" + (S.version || "?") + " — listo.\n" +
-         " API keys ·  proyecto · <i class='fas fa-search'></i> junto al modelo: buscador entre todos los modelos de la API.\n" +
-         "barra izquierda: <i class='fas fa-pen-fancy'></i> Diseño (editor de vectores SVG), <i class='fas fa-cube'></i> Artefactos (vista previa en vivo), " +
-         " Rutinas,  Herramientas, <i class='fas fa-network-wired'></i> Servidores SSH,  Historial, <i class='fas fa-th'></i> Ranking.\n" +
+         " API keys ·  proyecto · 🔍 junto al modelo: buscador entre todos los modelos de la API.\n" +
+         "barra izquierda: 🖋 Diseño (editor de vectores SVG), 🧊 Artefactos (vista previa en vivo), " +
+         " Rutinas,  Herramientas, 🕸 Servidores SSH,  Historial, ▦ Ranking.\n" +
          "El agente sabe git, ssh y scp: pedile «subí esto a github» o «entrá al server X y…».\n" +
          "Aprende solo: /habilidades y /lecciones (global) y /memoria (de este proyecto).\n" +
          "Comandos: /commit /push /git /ssh /compare /ranking /undo /history /resume /run /files /search /preview /habilidades /lecciones /memoria · Zoom Ctrl +/−/0");
@@ -266,7 +266,7 @@ async function init() {
   api.ollama_models().then(ms => {
     if (ms && ms.length) {
       S.ollama = ms;
-      sysMsg("<i class='fas fa-robot'></i> Ollama detectado (" + ms.length + " modelos locales, sin límites ni filtros): " +
+      sysMsg("🤖 Ollama detectado (" + ms.length + " modelos locales, sin límites ni filtros): " +
              "elegí el proveedor «custom» para usarlos — " + ms.slice(0, 4).join(", "));
     }
   }).catch(() => {});
@@ -667,7 +667,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     $("#dzOnionPanel").hidden = !DZ.anim.onion;
     dzOnionUpdate();
   };
-  // panel <i class='fas fa-layer-group'></i> flotante: configuración en vivo + arrastrable por el encabezado
+  // panel 🗂 flotante: configuración en vivo + arrastrable por el encabezado
   const opCfg = dzOnionCfg();
   $("#opBefore").value = opCfg.before; $("#opAfter").value = opCfg.after;
   $("#opAlpha").value = opCfg.alpha;
@@ -747,7 +747,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   });
-  // <i class='fas fa-masks-theater'></i> diorama: toggle, cerrar y arrastre del panel
+  // 🎭 diorama: toggle, cerrar y arrastre del panel
   $("#dzZBtn").onclick = dzZPanelToggle;
   // "Espacio 3D" (dz3d*, ~1100 líneas más abajo) quedó retirado del toolbar:
   // el dibujo/orbit 3D real ahora vive en LOW Estudio (ui/estudio3d/). El
@@ -1692,7 +1692,7 @@ function initSplitters() {
 async function showLeaderboard() {
   const r = await api.leaderboard();
   if (!r.n_desafios) return sysMsg("Todavía no hay desafíos guardados — corré uno con ⚖");
-  let txt = `<i class='fas fa-trophy'></i> Tabla de posiciones (${r.n_desafios} desafíos)\n`;
+  let txt = `🏆 Tabla de posiciones (${r.n_desafios} desafíos)\n`;
   r.tabla.slice(0, 10).forEach((d, i) => {
     txt += `${i + 1}. ${d.model} — ${d.wins} victorias · ${d.tasa}% funciona · ${d.lat_prom}ms prom\n`;
   });
@@ -2475,7 +2475,7 @@ function dzSelect(el) {
   dzLayerToolsSync(el);
   dzPivotMark();
   // modo comentario: el dock ahora apunta SOLO a este elemento
-  $("#dzPrompt").placeholder = `<i class='fas fa-comment-dots'></i> Comentario sobre <${el.tagName.toLowerCase()}> — LOW edita SOLO ese elemento`;
+  $("#dzPrompt").placeholder = `💬 Comentario sobre <${el.tagName.toLowerCase()}> — LOW edita SOLO ese elemento`;
 }
 function dzDeselect() {
   if (DZ.sel) { DZ.sel.classList.remove("dz-sel"); DZ.sel = null; }
@@ -2676,7 +2676,7 @@ function dzPointerDown(e) {
   let el = e.target;
   if (!el || el === $("#dzCanvas") || el.tagName.toLowerCase() === "svg") { dzMarqueeStart(e); return; }
   if (el.closest && el.closest("g.dz-onion")) { dzDeselect(); return; }
-  if (el.closest && el.closest("[data-locked]")) { dzDeselect(); return; }   // capa bloqueada <i class='fas fa-lock'></i>
+  if (el.closest && el.closest("[data-locked]")) { dzDeselect(); return; }   // capa bloqueada 🔒
   // clic dentro de un grupo real (<g> guardado): seleccionar el GRUPO (como
   // Illustrator); doble clic entraría al hijo — acá con Shift+clic alcanza
   const grp = el.closest && el.closest('#dzCanvas svg > g:not(.dz-onion)');
@@ -2703,7 +2703,7 @@ function dzPointerDown(e) {
   const bases = pack.map(n => ({ n, base: dzReadPos(n) }));
   let moved = false;
   //  modo rig + pieza con nombre: el arrastre POSA (clave), no toca el dibujo.
-  // Grabando (<i class='fas fa-video'></i>): el arrastre ES la actuación — se muestrea con su tiempo real.
+  // Grabando (🎥): el arrastre ES la actuación — se muestrea con su tiempo real.
   let rigDrag = null;
   if (DZ.rigMode && pack.length === 1 && el.id) {
     const recNow = DZ.perf && DZ.perf.rec;
@@ -2714,13 +2714,13 @@ function dzPointerDown(e) {
                 a0: Math.atan2(start.y - pv.y, start.x - pv.x) };
     if (recNow) { recNow.active = el.id; recNow.take[el.id] = recNow.take[el.id] || []; }
   }
-  // <i class='fas fa-stop-circle'></i> grabación armada: este arrastre ES la actuación — muestrear el gesto
+  // ⏹ grabación armada: este arrastre ES la actuación — muestrear el gesto
   let rec = null;
   if (DZ.rec && DZ.rec.armed) {
     const path = dzElPath(el);
     if (path) {
       rec = { el, path, samples: [[0, 0, 0]], t0: performance.now(), last: [0, 0] };
-      dzSetStatus("<i class='fas fa-stop-circle'></i> GRABANDO el movimiento… soltá para terminar");
+      dzSetStatus("⏹ GRABANDO el movimiento… soltá para terminar");
     }
   }
   const move = (ev) => {
@@ -3157,8 +3157,8 @@ async function dzVectorize() {
     const keep = $("#vzKeep").checked;
     closeModal();
     dzSetStatus(mode === "lineas"
-      ? "<i class='fas fa-pen-fancy'></i> Calcando las líneas del dibujo…"
-      : "<i class='fas fa-pen-fancy'></i> Calcando la imagen a formas de color…");
+      ? "🖋 Calcando las líneas del dibujo…"
+      : "🖋 Calcando la imagen a formas de color…");
     const r = await api.vectorize_image(href, detail, mode, rmBg, tol);
     if (!r || r.error) return dzSetStatus(" " + ((r && r.error) || "no se pudo vectorizar"));
     let traced;
@@ -3197,7 +3197,7 @@ async function dzVectorize() {
     }
     dzSelect(g); dzMarkDirty(); dzBuildLayers();
     const n = g.querySelectorAll("path").length;
-    dzSetStatus(`<i class='fas fa-pen-fancy'></i> Calco listo: ${n} trazo${n === 1 ? "" : "s"} editable${n === 1 ? "" : "s"}` +
+    dzSetStatus(`🖋 Calco listo: ${n} trazo${n === 1 ? "" : "s"} editable${n === 1 ? "" : "s"}` +
       (keep ? " — la imagen quedó debajo como referencia" : " (reemplazó la imagen)"));
   };
 }
@@ -3388,7 +3388,7 @@ function dzDuplicate() {
   dzSelect(c); dzMarkDirty();
 }
 
-/* ══ herramientas de dibujo: lápiz , pincel <i class='fas fa-paint-brush'></i> (presión de tableta), pluma <i class='fas fa-pen-fancy'></i> ══
+/* ══ herramientas de dibujo: lápiz , pincel 🖌 (presión de tableta), pluma 🖋 ══
    Usan Pointer Events: una tableta Huion (Windows Ink) manda pointerType "pen"
    con e.pressure real  el pincel modula el grosor con la presión. */
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -3597,7 +3597,7 @@ function dzSetTool(t) {
   // el gotero/balde/nodos trabajan SOBRE la selección o eligiendo elemento: no deseleccionar
   if (!["select", "direct", "nodes", "dropper", "bucket", "iron", "magnet"].includes(t)) dzDeselect();
   dzSbTool(); dzToolOptsRender();
-  dz3dApplyToolClass();         // <i class='fas fa-lock'></i> solo el plano activo recibe eventos en modo dibujo
+  dz3dApplyToolClass();         // 🔒 solo el plano activo recibe eventos en modo dibujo
 }
 /* los clics del lienzo hacen preventDefault (para dibujar/arrastrar), y eso
    BLOQUEA el cambio de foco: si venías de escribir en el chat del dock, el
@@ -3975,7 +3975,7 @@ function dzPenDown(p) {
     PEN.guide.setAttribute("pointer-events", "none");
     svg.appendChild(PEN.el);
     svg.appendChild(PEN.guide);
-    dzSetStatus("<i class='fas fa-pen-fancy'></i> Pluma: clic = esquina · arrastrar = curva · clic en el 1er punto cierra · Backspace borra el último · Enter termina · Esc cancela");
+    dzSetStatus("🖋 Pluma: clic = esquina · arrastrar = curva · clic en el 1er punto cierra · Backspace borra el último · Enter termina · Esc cancela");
   }
   PEN.anchors.push({ x: p.x, y: p.y, hx: p.x, hy: p.y });
   PEN.dragging = true;
@@ -4062,10 +4062,10 @@ function dzPenFinish(cancel) {
   } else {
     PEN.el.setAttribute("d", dzPenPathD(PEN.anchors, PEN.closed));
     if (PEN.closed && DZ.fillColor) PEN.el.setAttribute("fill", DZ.fillColor);
-    dzMirrorClone(PEN.el);                             // <i class='fas fa-sync-alt'></i> modo espejo
+    dzMirrorClone(PEN.el);                             // 🔄 modo espejo
     dzMarkDirty(); dzBuildLayers();
-    dzSetStatus(PEN.closed ? "<i class='fas fa-pen-fancy'></i> Trazado cerrado (relleno con el color actual) — editalo con nodos (A)" :
-                             "<i class='fas fa-pen-fancy'></i> Trazado listo — editalo con nodos (A)");
+    dzSetStatus(PEN.closed ? "🖋 Trazado cerrado (relleno con el color actual) — editalo con nodos (A)" :
+                             "🖋 Trazado listo — editalo con nodos (A)");
     PEN = null;
     return;
   }
@@ -4486,7 +4486,7 @@ function dzEraseStart(e) {
   const eraseAt = (x, y) => {
     const el = document.elementFromPoint(x, y);
     if (!el || !el.closest || el.closest("g.dz-onion")) return;
-    if (el.closest("[data-locked]")) return;           // capa bloqueada <i class='fas fa-lock'></i>
+    if (el.closest("[data-locked]")) return;           // capa bloqueada 🔒
     const inSvg = el.closest("#dzCanvas svg");
     if (!inSvg || el === svg) return;
     const t = el.tagName.toLowerCase();
@@ -5222,7 +5222,7 @@ async function dzAnimToggle() {
     if (DZ.camMode) { DZ.camMode = false; $("#dzCamBtn").classList.remove("active"); $("#dzCam").hidden = true; $("#tlCamKey").hidden = true; }
     return;
   }
-  if (!DZ.path) return sysMsg("Abrí un diseño primero (<i class='fas fa-pen-fancy'></i> o un .svg del árbol).");
+  if (!DZ.path) return sysMsg("Abrí un diseño primero (🖋 o un .svg del árbol).");
   await dzPersist();
   let r = await api.make_frame(DZ.path);
   if (r && r.error) return sysMsg(" " + r.error);
@@ -5231,7 +5231,7 @@ async function dzAnimToggle() {
     await openDesign(r.path);
   }
   DZ.anim = { frames: [], idx: 0, playing: false, onion: true, cache: {} };
-  $("#dzOnionPanel").hidden = false;   // el panel <i class='fas fa-layer-group'></i> aparece con la timeline
+  $("#dzOnionPanel").hidden = false;   // el panel 🗂 aparece con la timeline
   // cargar la escena (claves de cámara/dibujo, easing) que vive junto a los cuadros
   const sc = await api.scene_get(DZ.path);
   DZ.scene = (sc && sc.scene) || {};
@@ -5582,7 +5582,7 @@ async function dzDoExport(kind) {
     if (throughCam) txt = dzCamView(txt, dzCamAt(dzFrameNum(frames[i])));
     const du = await dzSvgToPng(txt, kind === "sheet" ? 512 : 1080);
     if (du) pngs.push(du);
-    dzSetStatus(` Rasterizando${throughCam ? " por cámara <i class='fas fa-camera-movie'></i>" : ""}… ${i + 1}/${frames.length}`);
+    dzSetStatus(` Rasterizando${throughCam ? " por cámara 🎬" : ""}… ${i + 1}/${frames.length}`);
   }
   if (!pngs.length) return dzSetStatus(" No pude rasterizar ningún cuadro");
   if (kind === "sheet") {
@@ -5683,7 +5683,7 @@ function dzOnionGhost(svgText, tintId, rgb, opacity) {
   g.appendChild(inner);
   return g;
 }
-/* configuración del papel cebolla (panel <i class='fas fa-layer-group'></i> flotante): cuadros antes/después,
+/* configuración del papel cebolla (panel 🗂 flotante): cuadros antes/después,
    colores de tinte y opacidad — persistente entre sesiones */
 function dzOnionCfg() {
   if (!DZ.onionCfg) {
@@ -5826,7 +5826,7 @@ function dzCamToggle() {
   if (DZ.camMode && !DZ.anim) { dzAnimToggle(); }   // la cámara vive en la timeline
   dzCamOverlay();
   dzSetStatus(DZ.camMode ?
-    "<i class='fas fa-camera-movie'></i> Cámara: arrastrá el encuadre (mover), la esquina (zoom),  (rotar) — cada cambio deja CLAVE en este cuadro. El play y el export salen por acá." : "");
+    "🎬 Cámara: arrastrá el encuadre (mover), la esquina (zoom),  (rotar) — cada cambio deja CLAVE en este cuadro. El play y el export salen por acá." : "");
 }
 function dzCamCur() { return DZ.camDrag || dzCamAt(dzFrameNum(DZ.path)); }
 function dzCamOverlay() {
@@ -5843,8 +5843,8 @@ function dzCamOverlay() {
   box.style.left = (c.x - pw / 2) + "px"; box.style.top = (c.y - ph / 2) + "px";
   box.style.transform = `rotate(${cam.rot || 0}deg)`;
   const num = dzFrameNum(DZ.path);
-  $("#dzCamTag").textContent = "<i class='fas fa-camera-movie'></i> cámara · cuadro " + num +
-    (DZ.scene && DZ.scene.cam && DZ.scene.cam[num] ? " <i class='fas fa-key'></i>" : " (interpolada)");
+  $("#dzCamTag").textContent = "🎬 cámara · cuadro " + num +
+    (DZ.scene && DZ.scene.cam && DZ.scene.cam[num] ? " 🔑" : " (interpolada)");
   box.hidden = false;
 }
 function dzCamSetKey(cam) {
@@ -5861,10 +5861,10 @@ function dzCamKeyToggle() {
   const num = dzFrameNum(DZ.path);
   if (DZ.scene.cam[num]) {
     delete DZ.scene.cam[num];
-    dzSetStatus("<i class='fas fa-camera-movie'></i> Clave de cámara del cuadro " + num + " borrada");
+    dzSetStatus("🎬 Clave de cámara del cuadro " + num + " borrada");
   } else {
     DZ.scene.cam[num] = dzCamCur();
-    dzSetStatus("<i class='fas fa-camera-movie'></i><i class='fas fa-key'></i> Clave de cámara en el cuadro " + num);
+    dzSetStatus("🎬🔑 Clave de cámara en el cuadro " + num);
   }
   dzSceneSave(); dzCamOverlay(); dzTimelineBadges();
 }
@@ -5904,7 +5904,7 @@ function dzCamResize(e) {
     DZ.camDrag = { ...cam0, w };
     dzCamOverlay();
     const vb = dzVB();
-    dzSetStatus("<i class='fas fa-camera-movie'></i> zoom " + Math.round(vb[2] / w * 100) + "% del encuadre");
+    dzSetStatus("🎬 zoom " + Math.round(vb[2] / w * 100) + "% del encuadre");
   };
   const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); dzCamCommit(); dzSetStatus(""); };
   document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
@@ -5920,13 +5920,13 @@ function dzCamRotate(e) {
     if (ev.shiftKey) deg = Math.round(deg / 15) * 15;
     DZ.camDrag = { ...cam0, rot: Math.round(deg * 10) / 10 };
     dzCamOverlay();
-    dzSetStatus("<i class='fas fa-camera-movie'></i> rotación " + Math.round(DZ.camDrag.rot) + "°");
+    dzSetStatus("🎬 rotación " + Math.round(DZ.camDrag.rot) + "°");
   };
   const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); dzCamCommit(); dzSetStatus(""); };
   document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
 }
 
-/* ── fotogramas clave de dibujo (<i class='fas fa-key'></i>) + badges del X-sheet ── */
+/* ── fotogramas clave de dibujo (🔑) + badges del X-sheet ── */
 function dzKeyToggle() {
   if (!DZ.anim) return;
   DZ.scene = DZ.scene || {};
@@ -5934,7 +5934,7 @@ function dzKeyToggle() {
   const num = dzFrameNum(DZ.path);
   const i = keys.indexOf(num);
   if (i >= 0) { keys.splice(i, 1); dzSetStatus("Cuadro " + num + " ya no es clave"); }
-  else { keys.push(num); keys.sort((a, b) => a - b); dzSetStatus("<i class='fas fa-key'></i> Cuadro " + num + " marcado como FOTOGRAMA CLAVE"); }
+  else { keys.push(num); keys.sort((a, b) => a - b); dzSetStatus("🔑 Cuadro " + num + " marcado como FOTOGRAMA CLAVE"); }
   dzSceneSave(); dzTimelineBadges();
 }
 function dzTimelineBadges() {
@@ -5946,7 +5946,7 @@ function dzTimelineBadges() {
     const num = dzFrameNum(DZ.anim.frames[i]);
     const rig = (DZ.scene && DZ.scene.rig) || {};
     const hasRig = Object.keys(rig).some(id => rig[id] && rig[id][num]);
-    let badge = (keys.includes(num) ? "<i class='fas fa-key'></i>" : "") + (cams[num] ? "<i class='fas fa-camera-movie'></i>" : "") + (hasRig ? "" : "");
+    let badge = (keys.includes(num) ? "🔑" : "") + (cams[num] ? "🎬" : "") + (hasRig ? "" : "");
     if (badge) {
       const b = document.createElement("span");
       b.className = "tl-key"; b.textContent = badge;
@@ -6102,8 +6102,8 @@ function dzRigToggle() {
 }
 
 
-/* ══ <i class='fas fa-video'></i> ACTUACIÓN — titiritero digital (Momo/motion-sketch) ═══════════════
-   Marcás el lapso, <i class='fas fa-stop-circle'></i>, y ACTUÁS el movimiento arrastrando la pieza en vivo
+/* ══ 🎥 ACTUACIÓN — titiritero digital (Momo/motion-sketch) ═══════════════
+   Marcás el lapso, ⏹, y ACTUÁS el movimiento arrastrando la pieza en vivo
    (Shift = rotarla desde su pivote, como el bastón del títere). Las pasadas
    anteriores SE REPRODUCEN mientras grabás la nueva — animación por capas,
    una pieza por toma. Al cortar, la actuación se vuelve claves de rig. */
@@ -6112,14 +6112,14 @@ function dzPerfDur() { return Math.max(0.5, Math.min(30, +($("#perfDur") && $("#
 
 function dzPerfRec() {
   if (DZ.perf && DZ.perf.rec) { dzPerfRecEnd(true); return; }   // cortar antes
-  if (!DZ.rigMode) return dzSetStatus("<i class='fas fa-video'></i> Activá el modo rig () primero");
+  if (!DZ.rigMode) return dzSetStatus("🎥 Activá el modo rig () primero");
   if (!DZ.scene) DZ.scene = {};
   let n = 3;
   $("#perfRec").classList.add("rec");
-  dzSetStatus("<i class='fas fa-video'></i> " + n + "…");
+  dzSetStatus("🎥 " + n + "…");
   const cd = setInterval(() => {
     n--;
-    if (n > 0) { dzSetStatus("<i class='fas fa-video'></i> " + n + "…"); return; }
+    if (n > 0) { dzSetStatus("🎥 " + n + "…"); return; }
     clearInterval(cd);
     const dur = dzPerfDur(), fps = dzPerfFps();
     DZ.perf = { rec: { t0: performance.now(), dur, fps, take: {}, active: null } };
@@ -6137,7 +6137,7 @@ function dzPerfRec() {
         const k = el2 && dzRigAt(id, num);
         if (k) dzRigApplyTo(el2, k);
       }
-      dzSetStatus("<i class='fas fa-stop-circle'></i> " + t.toFixed(1) + " / " + dur + "s — ¡actuá! (arrastrá la pieza · Shift rota)");
+      dzSetStatus("⏹ " + t.toFixed(1) + " / " + dur + "s — ¡actuá! (arrastrá la pieza · Shift rota)");
       DZ.perf.rec.raf = requestAnimationFrame(loop);
     };
     DZ.perf.rec.raf = requestAnimationFrame(loop);
@@ -6150,7 +6150,7 @@ function dzPerfRecEnd(early) {
   DZ.perf = null;
   $("#perfRec").classList.remove("rec");
   const ids = Object.keys(rec.take).filter(id => rec.take[id].length > 1);
-  if (!ids.length) { dzSetStatus("<i class='fas fa-video'></i> Toma vacía — no moviste ninguna pieza. <i class='fas fa-stop-circle'></i> y arrastrá durante la cuenta."); return; }
+  if (!ids.length) { dzSetStatus("🎥 Toma vacía — no moviste ninguna pieza. ⏹ y arrastrá durante la cuenta."); return; }
   // remuestrear la actuación a una clave por cuadro del lapso
   const N = Math.max(2, Math.round(rec.dur * rec.fps));
   for (const id of ids) {
@@ -6174,7 +6174,7 @@ function dzPerfRecEnd(early) {
     }
   }
   dzSceneSave(); dzTimelineBadges(); dzRigPanelSync();
-  dzSetStatus("<i class='fas fa-video'></i> Toma lista: " + ids.join(", ") + " (" + N + " claves). Otra <i class='fas fa-stop-circle'></i> suma la próxima pieza.  para verla.");
+  dzSetStatus("🎥 Toma lista: " + ids.join(", ") + " (" + N + " claves). Otra ⏹ suma la próxima pieza.  para verla.");
   dzPerfPlay();
 }
 /* reproducir la actuación completa (reloj virtual, claves fraccionales) */
@@ -6186,7 +6186,7 @@ function dzPerfPlay() {
   const loop = () => {
     if (!DZ.perfPlaying) { dzRigApplyLive(dzRigCur()); return; }
     const t = (performance.now() - t0) / 1000;
-    if (t >= dur) { DZ.perfPlaying = false; dzRigApplyLive(dzRigCur()); dzSetStatus("<i class='fas fa-video'></i> fin de la actuación"); return; }
+    if (t >= dur) { DZ.perfPlaying = false; dzRigApplyLive(dzRigCur()); dzSetStatus("🎥 fin de la actuación"); return; }
     dzRigApplyLive(1 + t * fps);
     requestAnimationFrame(loop);
   };
@@ -6235,9 +6235,9 @@ async function dzPerfBake() {
 }
 
 /* ══ animación de ELEMENTOS (pegs de Toon Boom, versión LOW) ═══════════
-   <i class='fas fa-running'></i> interpolación de movimiento: fijás inicio, movés el elemento al final
+   🏃 interpolación de movimiento: fijás inicio, movés el elemento al final
    y LOW genera los cuadros del recorrido con la curva elegida.
-   <i class='fas fa-stop-circle'></i> grabación en vivo: arrastrás el elemento y el recorrido REAL de tu mano
+   ⏹ grabación en vivo: arrastrás el elemento y el recorrido REAL de tu mano
    (con sus tiempos) se convierte en cuadros — actuación en vivo. ══ */
 function dzElPath(el) {
   // ruta de índices desde el svg raíz (las capas de UI van siempre al final,
@@ -6289,22 +6289,22 @@ async function dzTweenFrames(baseSvgText, elPath, offsets) {
   return null;
 }
 async function dzMoveTween() {
-  if (!DZ.anim) return sysMsg("<i class='fas fa-running'></i> Abrí la animación (🎞) primero");
+  if (!DZ.anim) return sysMsg("🏃 Abrí la animación (🎞) primero");
   if (!DZ.moveT) {
-    if (!DZ.sel) return dzSetStatus("<i class='fas fa-running'></i> Seleccioná el elemento a animar y tocá <i class='fas fa-running'></i> para fijar el INICIO");
+    if (!DZ.sel) return dzSetStatus("🏃 Seleccioná el elemento a animar y tocá 🏃 para fijar el INICIO");
     const path = dzElPath(DZ.sel);
-    if (!path) return dzSetStatus("<i class='fas fa-running'></i> Ese elemento no se puede animar (no cuelga del lienzo)");
+    if (!path) return dzSetStatus("🏃 Ese elemento no se puede animar (no cuelga del lienzo)");
     DZ.moveT = { el: DZ.sel, path, start: dzReadPos(DZ.sel) };
     $("#tlMove").classList.add("rec");
-    dzSetStatus("<i class='fas fa-running'></i> INICIO fijado. Arrastrá el elemento a su posición FINAL y tocá <i class='fas fa-running'></i> otra vez.");
+    dzSetStatus("🏃 INICIO fijado. Arrastrá el elemento a su posición FINAL y tocá 🏃 otra vez.");
     return;
   }
   const t = DZ.moveT; DZ.moveT = null; $("#tlMove").classList.remove("rec");
-  if (!t.el.isConnected) return dzSetStatus("<i class='fas fa-running'></i> El elemento ya no está — cancelo");
+  if (!t.el.isConnected) return dzSetStatus("🏃 El elemento ya no está — cancelo");
   const [dx, dy] = dzPosDelta(t.start, dzReadPos(t.el));
   if (Math.abs(dx) + Math.abs(dy) < 2)
-    return dzSetStatus("<i class='fas fa-running'></i> No lo moviste de lugar — cancelo. Fijá inicio, arrastrá y volvé a tocar <i class='fas fa-running'></i>.");
-  openModal(`<h2><i class='fas fa-running'></i> Interpolación de movimiento</h2>
+    return dzSetStatus("🏃 No lo moviste de lugar — cancelo. Fijá inicio, arrastrá y volvé a tocar 🏃.");
+  openModal(`<h2>🏃 Interpolación de movimiento</h2>
     <div class="sub">Recorrido: ${Math.round(Math.hypot(dx, dy))} unidades. El elemento vuelve al inicio
     y se generan los cuadros del viaje (el último queda en la posición final).</div>
     <div class="dz-style-row">
@@ -6320,7 +6320,7 @@ async function dzMoveTween() {
     </div>
     <div class="m-actions">
       <button class="ghost" id="mCancel">Cancelar</button>
-      <button class="primary" id="mtGo"><i class='fas fa-running'></i> Generar</button>
+      <button class="primary" id="mtGo">🏃 Generar</button>
     </div>`);
   $("#mCancel").onclick = () => { closeModal(); };
   $("#mtGo").onclick = async () => {
@@ -6332,7 +6332,7 @@ async function dzMoveTween() {
     dzMarkDirty();
     await dzPersist();
     const base = dzSerialize($("#dzCanvas").querySelector("svg"));
-    dzSetStatus("<i class='fas fa-running'></i> Generando " + n + " cuadros del recorrido…");
+    dzSetStatus("🏃 Generando " + n + " cuadros del recorrido…");
     const offs = [];
     for (let k = 1; k <= n; k++) offs.push([dx * fn(k / n), dy * fn(k / n)]);
     const err = await dzTweenFrames(base, t.path, offs);
@@ -6340,17 +6340,17 @@ async function dzMoveTween() {
     DZ.anim.cache = {};
     try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
     await dzTimelineRefresh(); dzOnionUpdate(); dzTimelineBadges();
-    dzSetStatus("<i class='fas fa-running'></i> " + n + " cuadros generados — reproducí () para ver el movimiento.");
+    dzSetStatus("🏃 " + n + " cuadros generados — reproducí () para ver el movimiento.");
   };
 }
-/* <i class='fas fa-stop-circle'></i> grabación en vivo: armás la grabación, arrastrás el elemento y el
+/* ⏹ grabación en vivo: armás la grabación, arrastrás el elemento y el
    recorrido con SUS TIEMPOS reales se muestrea al fps de la timeline */
 function dzRecToggle() {
-  if (!DZ.anim) return sysMsg("<i class='fas fa-stop-circle'></i> Abrí la animación (🎞) primero");
-  if (DZ.rec) { DZ.rec = null; $("#tlRec").classList.remove("rec"); dzSetStatus("<i class='fas fa-stop-circle'></i> Grabación desarmada"); return; }
+  if (!DZ.anim) return sysMsg("⏹ Abrí la animación (🎞) primero");
+  if (DZ.rec) { DZ.rec = null; $("#tlRec").classList.remove("rec"); dzSetStatus("⏹ Grabación desarmada"); return; }
   DZ.rec = { armed: true };
   $("#tlRec").classList.add("rec");
-  dzSetStatus("<i class='fas fa-stop-circle'></i> Grabación ARMADA: agarrá un elemento y arrastralo actuando el movimiento — al soltar, cada instante se vuelve un cuadro.");
+  dzSetStatus("⏹ Grabación ARMADA: agarrá un elemento y arrastralo actuando el movimiento — al soltar, cada instante se vuelve un cuadro.");
 }
 async function dzRecFinish(rec) {
   $("#tlRec").classList.remove("rec");
@@ -6359,7 +6359,7 @@ async function dzRecFinish(rec) {
   const dur = rec.samples.length ? rec.samples[rec.samples.length - 1][2] : 0;
   let nFrames = Math.min(48, Math.max(2, Math.round(dur / 1000 * fps)));
   if (rec.samples.length < 2 || dur < 120)
-    return dzSetStatus("<i class='fas fa-stop-circle'></i> Muy corto — arrastrá el recorrido completo con el mouse apretado.");
+    return dzSetStatus("⏹ Muy corto — arrastrá el recorrido completo con el mouse apretado.");
   // remuestrear el gesto al fps de la timeline (interpolando entre muestras)
   const at = (ms) => {
     let i = rec.samples.findIndex(s => s[2] >= ms);
@@ -6376,16 +6376,16 @@ async function dzRecFinish(rec) {
   dzMarkDirty();
   await dzPersist();
   const base = dzSerialize($("#dzCanvas").querySelector("svg"));
-  dzSetStatus("<i class='fas fa-stop-circle'></i> Convirtiendo tu actuación en " + nFrames + " cuadros…");
+  dzSetStatus("⏹ Convirtiendo tu actuación en " + nFrames + " cuadros…");
   const err = await dzTweenFrames(base, rec.path, offs);
   if (err) return dzSetStatus(" " + err);
   DZ.anim.cache = {};
   try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
   await dzTimelineRefresh(); dzOnionUpdate(); dzTimelineBadges();
-  dzSetStatus("<i class='fas fa-stop-circle'></i> Actuación grabada: " + nFrames + " cuadros a " + fps + " fps — dale .");
+  dzSetStatus("⏹ Actuación grabada: " + nFrames + " cuadros a " + fps + " fps — dale .");
 }
 
-/* ══ <i class='fas fa-film'></i> TITIRITERO (marioneta digital) ═══════════════════════════════════
+/* ══ 🎞 TITIRITERO (marioneta digital) ═══════════════════════════════════
    Grabación en vivo de performance: apretás REC, manipulás el muñeco en
    tiempo real (arrastrás/rotás cabeza, brazos, piezas del rig) y LOW captura
    la escena entera cada 1/fps segundos como cuadros — hasta que parás. Es el
@@ -6396,7 +6396,7 @@ function dzPuppetToggle() {
   if (DZ.pup && DZ.pup.recording) { dzPuppetStop(); return; }
   if (DZ.pup && DZ.pup.counting) { return; }        // en cuenta regresiva
   if (!DZ.anim) { dzAnimToggle(); }                 // el titiritero vive en la timeline
-  if (!DZ.path) return sysMsg("<i class='fas fa-film'></i> Abrí un diseño primero (<i class='fas fa-pen-fancy'></i>).");
+  if (!DZ.path) return sysMsg("🎞 Abrí un diseño primero (🖋).");
   // cuenta regresiva 3·2·1 para que agarres el muñeco listo
   DZ.pup = { counting: true, recording: false, snaps: [] };
   dzPuppetHUD("preparate…");
@@ -6421,24 +6421,24 @@ function dzPuppetStart() {
     const secs = ((performance.now() - DZ.pup.t0) / 1000).toFixed(1);
     dzPuppetHUD(" REC  " + secs + "s · " + DZ.pup.snaps.length + " cuadros");
   }, 1000 / fps);
-  dzSetStatus("<i class='fas fa-film'></i> GRABANDO — movés el muñeco con la mano; cada instante es un cuadro. Apretá <i class='fas fa-film'></i> (o Esc) para cortar.");
+  dzSetStatus("🎞 GRABANDO — movés el muñeco con la mano; cada instante es un cuadro. Apretá 🎞 (o Esc) para cortar.");
 }
 async function dzPuppetStop() {
   const pup = DZ.pup; DZ.pup = null;
   if (pup && pup.timer) clearInterval(pup.timer);
   $("#tlPuppet").classList.remove("rec");
   dzPuppetHUD(null);
-  if (!pup || !pup.recording) { dzSetStatus("<i class='fas fa-film'></i> Titiritero cancelado"); return; }
+  if (!pup || !pup.recording) { dzSetStatus("🎞 Titiritero cancelado"); return; }
   const snaps = pup.snaps || [];
-  if (snaps.length < 2) return dzSetStatus("<i class='fas fa-film'></i> Toma muy corta — apretá REC y movés el muñeco un rato antes de cortar.");
-  dzSetStatus("<i class='fas fa-film'></i> Guardando la actuación (" + snaps.length + " cuadros)…");
+  if (snaps.length < 2) return dzSetStatus("🎞 Toma muy corta — apretá REC y movés el muñeco un rato antes de cortar.");
+  dzSetStatus("🎞 Guardando la actuación (" + snaps.length + " cuadros)…");
   const r = await api.record_take(DZ.path, snaps);
   if (r && r.error) return dzSetStatus(" " + r.error);
   DZ.anim.cache = {};
   try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
   await dzTimelineRefresh(); dzTimelineBadges();
   if (r && r.path) { await dzGoFrame(DZ.anim.frames.indexOf(r.path)); }
-  dzSetStatus("<i class='fas fa-film'></i> ¡Actuación grabada! " + (r.n || snaps.length) + " cuadros a " + pup.fps + " fps — dale  para verla.");
+  dzSetStatus("🎞 ¡Actuación grabada! " + (r.n || snaps.length) + " cuadros a " + pup.fps + " fps — dale  para verla.");
 }
 /* HUD grande de grabación sobre el lienzo (texto o null para ocultar) */
 function dzPuppetHUD(txt) {
@@ -6512,7 +6512,7 @@ async function dzWalkCycleRun(steps, fpb, bounce, sway) {
   dzSetStatus("🚶 ¡Ciclo de caminata listo! " + totalFrames + " cuadros — dale  para verlo. Probá distintos bounce/sway para ajustar.");
 }
 
-/* ══ <i class='fas fa-masks-theater'></i> DIORAMA: compositing sin nodos ═══════════════════════════════════
+/* ══ 🎭 DIORAMA: compositing sin nodos ═══════════════════════════════════
    En vez del mapa de nodos de Harmony/OpenToonz, una vista LATERAL física
    del multiplano (el diorama de la cámara multiplano de Disney): la cámara
    a la izquierda, el plano de acción en el medio, el fondo a la derecha, y
@@ -6568,8 +6568,8 @@ function dzZPanelRender() {
         document.removeEventListener("mouseup", up);
         dzMarkDirty();
         if (DZ.sel === el) dzBuildInspector(el);        // sincronizar el campo Z
-        dzSetStatus("<i class='fas fa-masks-theater'></i> «" + name.slice(0, 20) + "» a z=" + (el.getAttribute("data-z") || 0) +
-                    " — mové la cámara (<i class='fas fa-camera-movie'></i>) y mirá el parallax en ");
+        dzSetStatus("🎭 «" + name.slice(0, 20) + "» a z=" + (el.getAttribute("data-z") || 0) +
+                    " — mové la cámara (🎬) y mirá el parallax en ");
       };
       document.addEventListener("mousemove", move);
       document.addEventListener("mouseup", up);
@@ -6687,7 +6687,7 @@ function dzToolOptsRender() {
       <label>Grosor <input type="number" id="toW" min="1" max="120" value="${DZ.drawW || 6}" class="dz-win"></label>` +
       (t !== "pen" ? `<label>Suavizado <input type="range" id="toSmooth" min="0" max="100" value="${sm}"><span id="toSmoothLbl">${sm}</span></label>` : "") +
       (t === "brush" ? `<span class="dz-hint">el grosor sigue la presión de la tableta</span>` : "") +
-      (DZ.mirror ? `<span class="dz-hint"><i class='fas fa-sync-alt'></i> espejo activo</span>` : "");
+      (DZ.mirror ? `<span class="dz-hint">🔄 espejo activo</span>` : "");
   } else if (t === "bucket") {
     html += `<label>Relleno <input type="color" id="toFill" value="${dzHex(DZ.fillColor) || "#F0450E"}"></label>
       <span class="dz-hint">clic pinta el relleno · Shift+clic pinta el trazo</span>`;
@@ -6816,7 +6816,7 @@ function dzXsToggle() {
   dzAnimSetView("xsheet");
 }
 /* X-sheet (planilla de exposición): una fila por cuadro con MINIATURA, número,
-   marcas (<i class='fas fa-key'></i> clave · <i class='fas fa-camera-movie'></i> cámara) y NOTAS editables. Las notas se guardan en la
+   marcas (🔑 clave · 🎬 cámara) y NOTAS editables. Las notas se guardan en la
    escena (<base>_escena.json) junto a las claves y la cámara. */
 function dzXsRender() {
   return dzOpenToonzXsRender();
@@ -6846,7 +6846,7 @@ function dzXsRender() {
     // marcas
     const badge = document.createElement("span");
     badge.className = "dz-xs-b";
-    badge.textContent = (keys.includes(num) ? "<i class='fas fa-key'></i>" : "") + (cams[num] ? "<i class='fas fa-camera-movie'></i>" : "");
+    badge.textContent = (keys.includes(num) ? "🔑" : "") + (cams[num] ? "🎬" : "");
     // nota editable
     const note = document.createElement("input");
     note.className = "dz-xs-note"; note.type = "text";
@@ -7001,7 +7001,7 @@ async function dzTlGridRender() {
   const requestedOut = Math.max(0, parseInt($("#tlOut").value || "0", 10));
   const displayCount = Math.max(48, DZ.anim.frames.length, requestedOut);
   const displayFrames = Array.from({ length: displayCount }, (_, i) => DZ.anim.frames[i] || null);
-  // ── encabezado: números de cuadro (cada 5 resaltado) + marcas <i class='fas fa-key'></i>/<i class='fas fa-camera-movie'></i> + playhead ──
+  // ── encabezado: números de cuadro (cada 5 resaltado) + marcas 🔑/🎬 + playhead ──
   $("#dzTlgCols").innerHTML = displayFrames.map((f, i) => {
     const n = i + 1, mj = (n % 5 === 0), num = f ? fnum(i) : null;
     const mark = (num && keys.includes(num) ? "<i class='k'></i>" : "") + (num && cams[num] ? "<i class='c'></i>" : "");
@@ -7019,12 +7019,12 @@ async function dzTlGridRender() {
     const z = liveEl ? (parseFloat(liveEl.getAttribute("data-z")) || 0) : 0;
     const hidden = liveEl && liveEl.getAttribute("display") === "none";
     const locked = liveEl && liveEl.hasAttribute("data-locked");
-    // panel izquierdo de la capa (columna, como OpenToonz):  · <i class='fas fa-lock'></i> · nombre · Z
+    // panel izquierdo de la capa (columna, como OpenToonz):  · 🔒 · nombre · Z
     const head = document.createElement("div");
     head.className = "dz-tlg-lhead";
     head.innerHTML =
       `<span class="dz-eye eye" title="${hidden ? "Mostrar" : "Ocultar"}">${hidden ? "◌" : ""}</span>` +
-      `<span class="dz-eye lock" title="${locked ? "Desbloquear" : "Bloquear"}" style="opacity:${locked ? 1 : .4}">${locked ? "<i class='fas fa-lock'></i>" : "🔓"}</span>` +
+      `<span class="dz-eye lock" title="${locked ? "Desbloquear" : "Bloquear"}" style="opacity:${locked ? 1 : .4}">${locked ? "🔒" : "🔓"}</span>` +
       `<span class="dz-tlg-name" title="${key}">${key}</span>` +
       `<input class="dz-tlg-z" type="number" step="10" value="${z}" title="Profundidad Z — la misma de la cámara multiplano"${liveEl ? "" : " disabled"}>`;
     head.querySelector(".eye").onclick = () => {
@@ -7068,7 +7068,7 @@ async function dzTlGridRender() {
   // ── fila de CÁMARA (track propio, como OpenToonz) ──
   const camRow = document.createElement("div");
   camRow.className = "dz-tlg-row cam";
-  camRow.innerHTML = `<div class="dz-tlg-lhead"><span class="dz-eye"><i class='fas fa-camera-movie'></i></span>` +
+  camRow.innerHTML = `<div class="dz-tlg-lhead"><span class="dz-eye">🎬</span>` +
     `<span class="dz-tlg-name">Cámara</span></div>`;
   const camCells = document.createElement("div");
   camCells.className = "dz-tlg-cells";
@@ -7189,25 +7189,37 @@ function dzPanelSnapshot(kind) {
 /** Publica el estado de los paneles separados (solo esos: si no hay ninguno
  *  abierto no se toca nada). Se llama en bucle liviano, igual que el panel de
  *  animación, para no tener que enganchar cada mutación del editor. */
+let dzPublishing = false;
 async function dzPanelsPublish() {
-  if (!api || !DZ.detached.size) return;
-  for (const kind of DZ.detached) {
-    if (kind === "timeline" || kind === "xsheet") continue;   // ya se publican solos
-    const state = dzPanelSnapshot(kind);
-    const key = JSON.stringify(state);
-    if (DZ["panelLast_" + kind] === key) continue;            // sin cambios: no molestar
-    DZ["panelLast_" + kind] = key;
-    try { await api.panel_state(kind, state); } catch (err) { /* panel opcional */ }
-  }
+  if (!api || !DZ.detached.size || dzPublishing) return;
+  // Cada api.* es un viaje al puente de pywebview: si el anterior todavía no
+  // volvió y se encima otro, la app se arrastra y termina sin responder.
+  dzPublishing = true;
+  try {
+    for (const kind of DZ.detached) {
+      if (kind === "timeline" || kind === "xsheet") continue;  // ya se publican solos
+      const state = dzPanelSnapshot(kind);
+      const key = JSON.stringify(state);
+      if (DZ["panelLast_" + kind] === key) continue;           // sin cambios: no molestar
+      DZ["panelLast_" + kind] = key;
+      try { await api.panel_state(kind, state); }
+      catch (err) { DZ.detached.delete(kind); }                // panel muerto: dejar de publicar
+    }
+  } finally { dzPublishing = false; }
 }
-setInterval(() => { dzPanelsPublish(); }, 400);
+setInterval(() => { dzPanelsPublish(); }, 900);
 
 /** Separar un panel a su propia ventana. */
 async function dzDetachPanel(kind) {
   if (!api || !DZ_PANELS.includes(kind)) return;
   const call = api.open_panel ? api.open_panel(kind) : api.open_animation_panel(kind);
   const r = await call;
-  if (r && r.error) { dzSetStatus(" No se pudo separar el panel: " + r.error); return; }
+  // sin confirmación no se marca como separado: si no, la ventana principal
+  // queda publicando estado para siempre a un panel que nunca abrió
+  if (!r || r.error) {
+    dzSetStatus(" No se pudo separar el panel" + (r && r.error ? ": " + r.error : ""));
+    return;
+  }
   DZ.detached.add(kind);
   DZ["panelLast_" + kind] = "";        // forzar una primera publicación
   dzPanelsPublish();
@@ -7327,14 +7339,14 @@ async function dzDeleteFrameSelection() {
   dzSetStatus(`${paths.length} fotograma(s) eliminados`);
 }
 
-/* ══ <i class='fas fa-sync-alt'></i> modo espejo: lápiz/pincel/pluma dibujan también reflejados sobre el
+/* ══ 🔄 modo espejo: lápiz/pincel/pluma dibujan también reflejados sobre el
    eje vertical del lienzo — para personajes y diseños simétricos ══ */
 function dzMirrorToggle() {
   DZ.mirror = !DZ.mirror;
   const b = $("#dzMirror"); if (b) b.classList.toggle("active", DZ.mirror);
   dzSetStatus(DZ.mirror ?
-    "<i class='fas fa-sync-alt'></i> Modo espejo ACTIVADO: cada trazo se duplica reflejado (eje vertical del lienzo)" :
-    "<i class='fas fa-sync-alt'></i> Modo espejo desactivado");
+    "🔄 Modo espejo ACTIVADO: cada trazo se duplica reflejado (eje vertical del lienzo)" :
+    "🔄 Modo espejo desactivado");
 }
 function dzMirrorClone(el) {
   if (!DZ.mirror || !el || !el.parentNode) return null;
@@ -8315,7 +8327,7 @@ function dz3dActivate(i) {
   if (rh) rh.hidden = false;
   dz3dZHandlePlace();
   dz3dAxisBadge();
-  dz3dApplyToolClass();         // <i class='fas fa-lock'></i> refresca pointer-events según tool y plano activo
+  dz3dApplyToolClass();         // 🔒 refresca pointer-events según tool y plano activo
 }
 
 /* mueve el plano activo en el eje Z (slider, manejador y teclado comparten esto) */
@@ -8638,7 +8650,7 @@ function dzBuildLayers() {
   if (!kids.length) { box.innerHTML = ""; return; }
   box.innerHTML =
     '<div class="dz-layers-h">CAPAS <span class="dz-hint">arrastrá: reordena · Alt+soltar: emparenta · doble clic: renombra</span></div>' +
-    '<div class="dz-lay-head"><span title="Visible"></span><span title="Bloquear"><i class="fas fa-lock"></i></span>' +
+    '<div class="dz-lay-head"><span title="Visible"></span><span title="Bloquear">🔒</span>' +
     '<span></span><span class="dz-lh-name">Nombre</span>' +
     '<span class="dz-lh-op" title="Opacidad %">OP</span>' +
     '<span class="dz-lh-z" title="Profundidad Z (superposición/multiplano)">Z</span></div>';
@@ -8669,17 +8681,17 @@ function dzLayerRow(el, depth) {
   eye.onclick = (e) => { e.stopPropagation(); dzSnapshot();
     hidden ? el.removeAttribute("display") : el.setAttribute("display", "none");
     dzMarkDirty(); dzBuildLayers(); };
-  // <i class='fas fa-lock'></i> candado
+  // 🔒 candado
   const locked = el.hasAttribute("data-locked");
   const lock = document.createElement("span");
-  lock.className = "dz-eye"; lock.textContent = locked ? "<i class='fas fa-lock'></i>" : "🔓";
+  lock.className = "dz-eye"; lock.textContent = locked ? "🔒" : "🔓";
   lock.title = locked ? "Desbloquear" : "Bloquear";
   lock.style.opacity = locked ? "1" : "0.4";
   lock.onclick = (e) => { e.stopPropagation(); dzSnapshot();
     if (locked) el.removeAttribute("data-locked"); else el.setAttribute("data-locked", "1");
     if (!locked && el === DZ.sel) dzDeselect();
     dzMarkDirty(); dzBuildLayers(); };
-  // <i class='fas fa-th'></i> color / disclosure de grupo
+  // ▦ color / disclosure de grupo
   const chip = document.createElement("span");
   if (isGroup) {
     chip.className = "dz-lay-disc";
@@ -8918,12 +8930,12 @@ function dzFlip(axis) {
   dzPositionHandle(); dzMarkDirty();
 }
 
-/* ── <i class='fas fa-dna'></i> Variaciones: el agente evoluciona el diseño y elegís con un clic.
+/* ── 🧬 Variaciones: el agente evoluciona el diseño y elegís con un clic.
    Cría selectiva de diseños — elegí una y volvé a evolucionar desde ella. ── */
 async function dzVariations() {
   if (!DZ.path || DZ.busy) return;
   DZ.busy = true;
-  dzSetStatus("<i class='fas fa-dna'></i> Generando variaciones del diseño (4 direcciones en paralelo)…");
+  dzSetStatus("🧬 Generando variaciones del diseño (4 direcciones en paralelo)…");
   try {
     // mandar el estado ACTUAL del lienzo (con tus últimos toques, aún sin guardar)
     const svg = $("#dzCanvas").querySelector("svg");
@@ -8931,8 +8943,8 @@ async function dzVariations() {
     const vs = (r && r.variants) || [];
     if (r && r.error) { dzSetStatus(" " + r.error); return; }
     if (!vs.length) { dzSetStatus(" No salieron variaciones válidas — probá de nuevo (o cambiá de modelo)."); return; }
-    openModal(`<h2><i class='fas fa-dna'></i> Variaciones</h2>
-      <div class="sub">Clic en una para reemplazar el diseño — después podés volver a <i class='fas fa-dna'></i> y evolucionar desde ella. (Nada se guarda hasta que toques .)</div>
+    openModal(`<h2>🧬 Variaciones</h2>
+      <div class="sub">Clic en una para reemplazar el diseño — después podés volver a 🧬 y evolucionar desde ella. (Nada se guarda hasta que toques .)</div>
       <div class="var-grid">` +
       vs.map((v, i) => `<div class="var-cell" data-i="${i}"><div class="var-tag">${v.dir}</div>${v.svg}</div>`).join("") +
       `</div><div class="m-actions"><button class="ghost" id="mCancel">Cerrar</button></div>`);
@@ -8941,7 +8953,7 @@ async function dzVariations() {
       $("#dzCodeArea").value = v.svg;
       dzApplyCode();
       closeModal();
-      dzSetStatus("<i class='fas fa-dna'></i> Aplicada la variación «" + v.dir + "» —  para guardarla, o <i class='fas fa-dna'></i> para seguir evolucionando.");
+      dzSetStatus("🧬 Aplicada la variación «" + v.dir + "» —  para guardarla, o 🧬 para seguir evolucionando.");
     });
     $("#mCancel").onclick = closeModal;
     dzSetStatus("");
@@ -9129,7 +9141,7 @@ function dzBuildInspector(el) {
   // multiplano: profundidad respecto de la cámara (0 = plano de acción,
   // positivo = fondo lejano se mueve menos, negativo = primer plano más rápido)
   html += `<div class="dz-row">` +
-    dzField("Profundidad Z <i class='fas fa-camera-movie'></i>", "dzZ", el.getAttribute("data-z") || "", "number") +
+    dzField("Profundidad Z 🎬", "dzZ", el.getAttribute("data-z") || "", "number") +
     `<div class="dz-field"><label>&nbsp;</label><div class="dz-hint">0=acción · +lejos · −cerca</div></div></div>`;
   if (isText) {
     html += `<div class="dz-field"><label>Texto</label><input id="dzText" type="text" value="${(el.textContent || "").replace(/"/g, "&quot;")}"></div>`;
