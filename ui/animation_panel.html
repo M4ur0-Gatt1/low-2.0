@@ -13,6 +13,20 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;
 .label{position:sticky;left:0;z-index:3;width:190px;flex:none;padding:6px 10px;background:var(--panel);border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.head .label{z-index:6;background:var(--panel2);font-weight:700}
 .cell{width:var(--cell);height:var(--cell);flex:none;border-right:1px solid #24242a;border-bottom:1px solid #24242a;position:relative;text-align:center;font:10px/26px Consolas,monospace;color:var(--mut);cursor:pointer}.cell:hover{background:#26262c}.cell.current{box-shadow:inset 1px 0 var(--orange),inset -1px 0 var(--orange);background:#311911;color:#fff}.cell.start{background:var(--cyan);color:#071014}.cell.hold::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:2px solid rgba(51,181,232,.55)}.cell.future{opacity:.42}.cell.key::before{content:"◆";color:#ffad32;font-size:7px}.cell.camera::after{content:"●";color:var(--cyan);font-size:7px;position:absolute;bottom:-7px;left:10px}
 .xsheet .row{min-height:30px}.xsheet .cell{width:92px;height:30px;line-height:30px}.xsheet .label{width:64px;text-align:right;font-family:Consolas,monospace}.empty{padding:30px;color:var(--mut)}
+.lst{display:flex;flex-direction:column}
+.lpc{font-size:10px;opacity:.55;min-width:32px;text-align:right}
+.lrow{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+.lrow:hover{background:var(--hover)}.lrow.sel{background:rgba(223,108,72,.16)}
+.lname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini{height:22px;min-width:22px;font-size:12px}
+.lrow input[type=range]{width:84px;accent-color:var(--orange)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;padding:10px}
+.tool{height:34px;padding:0 10px;border-radius:8px;background:var(--panel2);color:var(--txt);text-align:left;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tool.on{background:rgba(223,108,72,.18);color:var(--orange)}
+.pad{padding:14px;display:flex;flex-direction:column;gap:12px}
+.frow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.frow label{color:var(--mut)}.frow input[type=color]{width:60px;height:30px;border:0;background:none}
+.frow input[type=number]{width:80px;height:30px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:0 8px}
 </style>
 </head>
 <body>
@@ -24,17 +38,21 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;
 </div>
 <div class="viewport"><div id="content" class="timeline"><div class="empty">Conectando con el editor…</div></div></div>
 <script>
-const kind=new URLSearchParams(location.search).get('kind')==='xsheet'?'xsheet':'timeline';
-document.getElementById('mode').textContent=kind==='xsheet'?'X-SHEET':'TIMELINE';
+const KINDS={timeline:'TIMELINE',xsheet:'X-SHEET',layers:'CAPAS',tools:'HERRAMIENTAS',color:'COLOR'};
+const kind=KINDS[new URLSearchParams(location.search).get('kind')]?new URLSearchParams(location.search).get('kind'):'timeline';
+document.getElementById('mode').textContent=KINDS[kind];
+const isAnim=kind==='timeline'||kind==='xsheet';
+// los controles de reproducción solo tienen sentido en timeline/x-sheet
+if(!isAnim)['prev','play','next','add','blank'].forEach(id=>document.getElementById(id).style.display='none');
 let api=null,last='';
-const command=(action,payload={})=>api&&api.animation_panel_command(action,payload);
+const command=(action,payload={})=>api&&(api.panel_command?api.panel_command(kind,action,payload):api.animation_panel_command(action,payload));
 document.getElementById('prev').onclick=()=>command('previous');
 document.getElementById('play').onclick=()=>command('play');
 document.getElementById('next').onclick=()=>command('next');
 document.getElementById('add').onclick=()=>command('add');
 document.getElementById('blank').onclick=()=>command('add-blank');
 document.getElementById('dock').onclick=async()=>{
- if(api){await command('dock',{kind});await api.animation_panel_closed(kind)}
+ if(api){await command('dock',{kind});await (api.panel_closed?api.panel_closed(kind):api.animation_panel_closed(kind))}
  window.close();
 };
 function cell(frame,classes='',text=''){
@@ -52,7 +70,52 @@ function renderXsheet(s){
  const root=document.createElement('div');root.className='timeline xsheet';const head=document.createElement('div');head.className='head';head.innerHTML='<div class="label">F</div>'+(s.levels||[]).map(x=>'<div class="cell">'+x.replace(/^#/,'')+'</div>').join('');root.appendChild(head);
  s.frames.filter(f=>f.exists).forEach((f,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('div');label.className='label';label.textContent=f.number;row.appendChild(label);(s.levels||[]).forEach((level,li)=>{const on=s.exposures[li]&&s.exposures[li][i],prev=i&&s.exposures[li]&&s.exposures[li][i-1];row.appendChild(cell(f,(i===s.current?'current ':'')+(on?(prev?'hold':'start'):''),on&&!prev?f.number:''))});root.appendChild(row)});return root;
 }
-async function refresh(){if(!api)return;try{const s=await api.animation_panel_state();const key=JSON.stringify(s);if(key===last)return;last=key;document.getElementById('fps').textContent=(s.fps||12)+' FPS · '+(s.frames?s.frames.filter(f=>f.exists).length:0)+' frames';document.getElementById('play').textContent=s.playing?'Ⅱ':'▶';const content=document.getElementById('content');content.replaceWith(kind==='xsheet'?renderXsheet(s):renderTimeline(s));(kind==='xsheet'?document.querySelector('.xsheet'):document.querySelector('.timeline')).id='content'}catch(e){}}
+function renderLayers(s){
+ const root=document.createElement('div');root.className='timeline lst';
+ (s.layers||[]).forEach(l=>{
+  const row=document.createElement('div');row.className='lrow'+(l.selected?' sel':'');
+  const eye=document.createElement('button');eye.className='mini';eye.textContent=l.hidden?'◌':'◉';
+  eye.title=l.hidden?'Mostrar':'Ocultar';if(l.hidden)eye.style.opacity='.4';
+  eye.onclick=e=>{e.stopPropagation();command('visible',{id:l.id})};
+  const lock=document.createElement('button');lock.className='mini';lock.textContent=l.locked?'◼':'◻';
+  lock.title=l.locked?'Desbloquear':'Bloquear';if(!l.locked)lock.style.opacity='.35';
+  lock.onclick=e=>{e.stopPropagation();command('lock',{id:l.id})};
+  const name=document.createElement('span');name.className='lname';name.textContent=l.name;
+  const op=document.createElement('input');op.type='range';op.min=0;op.max=100;op.value=l.opacity;
+  op.title='Opacidad '+l.opacity+'%';op.oninput=e=>{e.stopPropagation();command('opacity',{id:l.id,value:+e.target.value})};
+  const pc=document.createElement('span');pc.className='lpc';pc.textContent=l.opacity+'%';
+  row.append(eye,lock,name,op,pc);row.onclick=()=>command('select',{id:l.id});root.appendChild(row)});
+ if(!(s.layers||[]).length)root.innerHTML='<div class="empty">Sin capas todavía</div>';
+ return root;
+}
+function renderTools(s){
+ const root=document.createElement('div');root.className='timeline grid';
+ (s.tools||[]).forEach(t=>{const b=document.createElement('button');
+  b.className='tool'+(t.active?' on':'');b.textContent=t.label;b.title=t.label;
+  b.onclick=()=>command('tool',{id:t.id});root.appendChild(b)});
+ if(!(s.tools||[]).length)root.innerHTML='<div class="empty">Abrí un diseño en LOW</div>';
+ return root;
+}
+function renderColor(s){
+ const root=document.createElement('div');root.className='timeline pad';
+ if(!s.hasSelection){root.innerHTML='<div class="empty">Elegí un elemento en el lienzo</div>';return root}
+ const fila=(txt,inp)=>{const d=document.createElement('div');d.className='frow';
+  const l=document.createElement('label');l.textContent=txt;d.append(l,inp);return d};
+ const f=document.createElement('input');f.type='color';f.value=s.fill||'#000000';
+ f.oninput=e=>command('fill',{value:e.target.value});
+ const st=document.createElement('input');st.type='color';st.value=s.stroke||'#000000';
+ st.oninput=e=>command('stroke',{value:e.target.value});
+ const w=document.createElement('input');w.type='number';w.min=0;w.step=0.5;w.value=s.width||1;
+ w.oninput=e=>command('width',{value:e.target.value});
+ root.append(fila('Relleno',f),fila('Trazo',st),fila('Grosor',w));return root;
+}
+function renderFor(s){
+ if(kind==='layers')return renderLayers(s);
+ if(kind==='tools')return renderTools(s);
+ if(kind==='color')return renderColor(s);
+ return kind==='xsheet'?renderXsheet(s):renderTimeline(s);
+}
+async function refresh(){if(!api)return;try{const s=await (api.panel_state?api.panel_state(kind):api.animation_panel_state());const key=JSON.stringify(s);if(key===last)return;last=key;if(isAnim){document.getElementById('fps').textContent=(s.fps||12)+' FPS · '+(s.frames?s.frames.filter(f=>f.exists).length:0)+' frames';document.getElementById('play').textContent=s.playing?'Ⅱ':'▶';}const content=document.getElementById('content');const next=renderFor(s);next.id='content';content.replaceWith(next)}catch(e){}}
 window.addEventListener('pywebviewready',()=>{api=window.pywebview.api;refresh();setInterval(refresh,350)});
 </script>
 </body>

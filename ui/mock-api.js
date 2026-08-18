@@ -33,6 +33,15 @@
 
   const impl = {
     log_js: m => console.log("[js→py]", m),
+    // paneles separados: el mock guarda el buzón en memoria y deja ver los
+    // comandos, para poder probar el flujo sin ventanas nativas
+    __panels: {},
+    panel_state: async (kind, state) => { const M = impl.__panels;
+      if (state) { M[kind] = state; return state; } return M[kind] || {}; },
+    panel_command: async (kind, action, payload) => {
+      window.lowPanelCommand && window.lowPanelCommand({ kind, action, payload }); return { ok: true }; },
+    open_panel: async kind => { (window.__opened = window.__opened || []).push(kind); return { ok: true, mock: true }; },
+    panel_closed: async () => ({ ok: true }),
     get_state: async () => STATE,
     history: async () => [],
     ollama_models: async () => [],

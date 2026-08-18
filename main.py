@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.21"
+LOW_VERSION = "3.29.22"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -159,6 +159,7 @@ class Api:
         s._window = None
         s._ui_base = None
         s._aux_windows = {}
+        s._panel_states = {}
         s._animation_panel_state = {}
         s.ws = None
         # Auto-reabrir el último workspace abierto (si sigue existiendo).
@@ -187,23 +188,57 @@ class Api:
         """El usuario pidió detener la consulta en curso."""
         s._cancel = True
 
-    def animation_panel_state(s, state=None):
-        """Estado compartido entre el editor y ventanas de animación externas."""
-        if isinstance(state, dict):
-            s._animation_panel_state = state
-        return s._animation_panel_state
+    # Paneles que se pueden separar a otra ventana (pensado para dos monitores).
+    # El lienzo NO está: separarlo no tiene sentido, es el centro del trabajo.
+    PANELS = {
+        "timeline": {"title": "Timeline", "w": 1180, "h": 520, "min": (720, 320)},
+        "xsheet":   {"title": "X-sheet",  "w": 760,  "h": 760, "min": (520, 360)},
+        "layers":   {"title": "Capas",    "w": 340,  "h": 720, "min": (260, 320)},
+        "tools":    {"title": "Herramientas", "w": 300, "h": 640, "min": (220, 320)},
+        "color":    {"title": "Color",    "w": 340,  "h": 420, "min": (260, 260)},
+    }
 
-    def animation_panel_command(s, action, payload=None):
+    @classmethod
+    def _panel_kind(cls, kind):
+        return kind if kind in cls.PANELS else "timeline"
+
+    def panel_state(s, kind="timeline", state=None):
+        """Buzón por panel: la ventana principal escribe, la auxiliar lee."""
+        kind = s._panel_kind(kind)
+        if isinstance(state, dict):
+            s._panel_states[kind] = state
+        return s._panel_states.get(kind, {})
+
+    def panel_command(s, kind, action, payload=None):
         """Reenvía una acción de una ventana auxiliar a la ventana principal."""
         if not s._window:
             return {"error": "ventana principal no disponible"}
-        message = json.dumps({"action": action, "payload": payload or {}},
-                             ensure_ascii=False)
+        message = json.dumps({"kind": s._panel_kind(kind), "action": action,
+                              "payload": payload or {}}, ensure_ascii=False)
         try:
-            s._window.evaluate_js(f"window.lowAnimationPanelCommand({message})")
+            s._window.evaluate_js(f"window.lowPanelCommand({message})")
             return {"ok": True}
         except Exception as e:
             return {"error": str(e)}
+
+    # ── alias de compatibilidad (la UI vieja llama a estos) ──
+    def animation_panel_state(s, state=None):
+        if isinstance(state, dict):
+            kind = s._panel_kind(state.get("kind") or "timeline")
+            s._panel_states[kind] = state
+            # el panel de animación comparte un mismo estado para timeline y
+            # x-sheet: son dos vistas de lo mismo.
+            s._panel_states["xsheet" if kind == "timeline" else "timeline"] = state
+            return state
+        return s._panel_states.get("timeline", {})
+
+    def animation_panel_command(s, action, payload=None):
+        return s.panel_command("timeline", action, payload)
+
+    def panel_closed(s, kind="timeline"):
+        """Olvida una ventana auxiliar cerrada para poder reabrirla."""
+        s._aux_windows.pop(s._panel_kind(kind), None)
+        return {"ok": True}
 
     def animation_panel_closed(s, kind="timeline"):
         """Olvida una ventana auxiliar cerrada para permitir volver a abrirla."""
@@ -212,8 +247,12 @@ class Api:
         return {"ok": True}
 
     def open_animation_panel(s, kind="timeline"):
-        """Abre Timeline o X-sheet como ventana nativa para otro monitor."""
-        kind = "xsheet" if kind == "xsheet" else "timeline"
+        """Alias histórico: antes solo se separaban Timeline y X-sheet."""
+        return s.open_panel(kind)
+
+    def open_panel(s, kind="timeline"):
+        """Abre un panel como ventana nativa, para mandarlo al otro monitor."""
+        kind = s._panel_kind(kind)
         current = s._aux_windows.get(kind)
         if current:
             try:
@@ -226,24 +265,36 @@ class Api:
         # En Windows, agregar la query al path crea un nombre de archivo inválido.
         # Una URL file conserva el parámetro y WebView2 carga el panel correctamente.
         panel = Path(s._ui_base, "animation_panel.html").resolve().as_uri() + f"?kind={kind}"
+        spec = s.PANELS[kind]
         # Geometría recordada: en un setup de dos monitores la gracia es que el
         # panel vuelva SOLO al monitor donde lo dejaste. Sin esto, cada vez se
         # abría centrado en la pantalla principal y había que arrastrarlo.
         geo = (s.cfg.data.get("aux_windows") or {}).get(kind) or {}
         try:
             win = webview.create_window(
-                "LOW · " + ("X-sheet" if kind == "xsheet" else "Timeline"),
-                panel, js_api=s,
-                width=int(geo.get("w") or (760 if kind == "xsheet" else 1180)),
-                height=int(geo.get("h") or (760 if kind == "xsheet" else 520)),
+                "LOW · " + spec["title"], panel, js_api=s,
+                width=int(geo.get("w") or spec["w"]),
+                height=int(geo.get("h") or spec["h"]),
                 x=geo.get("x"), y=geo.get("y"),
-                min_size=(520, 360) if kind == "xsheet" else (720, 320),
+                min_size=spec["min"],
                 background_color="#151514")
             s._aux_windows[kind] = win
-            s._track_geometry(win, kind, on_close=lambda: s._aux_windows.pop(kind, None))
+            s._track_geometry(win, kind, on_close=lambda: s._panel_forget(kind))
             return {"ok": True}
         except Exception as e:
             return {"error": str(e)}
+
+    def _panel_forget(s, kind):
+        """Cerrar la ventana con la X tiene que valer lo mismo que "Acoplar":
+        si no, la ventana principal sigue creyendo que el panel está afuera y
+        publica su estado a un buzón que ya nadie lee."""
+        s._aux_windows.pop(kind, None)
+        if s._window:
+            try:
+                s._window.evaluate_js(
+                    'window.lowPanelCommand({"kind":"%s","action":"dock","payload":{}})' % kind)
+            except Exception:
+                pass
 
     def _track_geometry(s, win, key, store_name="aux_windows", on_close=None):
         """Recuerda dónde y de qué tamaño quedó una ventana, para reabrirla en

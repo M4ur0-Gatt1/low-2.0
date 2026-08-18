@@ -4089,6 +4089,12 @@ function dzRunAction(act) {
   if (["rect", "ellipse", "text", "line"].includes(act)) return dzAddShape(act);
   if (act === "zoomin") return dzZoom(0.15);
   if (act === "zoomout") return dzZoom(-0.15);
+  // Ventana: separar un panel a su propia ventana (segundo monitor)
+  if (act && act.startsWith("win-")) {
+    const kind = act.slice(4);
+    if (kind === "info") return dzSetStatus(" Cada panel separado recuerda en qué monitor y con qué tamaño quedó");
+    return dzDetachPanel(kind);
+  }
   if (act === "zoom100") { DZ.zoom = 1; DZ.panX = DZ.panY = 0; DZ.viewRot = 0; return dzApplyZoom(); }
   if (act === "zoomfit") return dzFitView();
   if (act === "rotl") return dzRotView(-15);
@@ -6558,6 +6564,8 @@ const DZ_TOOL_NAMES = { select: "seleccionar", hand: "mano", nodes: "nodos",
   dropper: "cuentagotas", bucket: "balde", pivot: "pivote de rig", ruler: "regla",
   inflator: "inflador", handler: "manejador", iron: "plancha", pliers: "pinza", magnet: "imán" };
 function dzMenuAction(act) {
+  // menú Ventana: comparte implementación con dzRunAction (atajos de teclado)
+  if (act && act.startsWith("win-")) return dzRunAction(act);
   const A = {
     nuevo: () => api.new_design().then(r => { if (r && r.path) openDesign(r.path); }),
     documento: dzDocModal, guardar: () => dzSave(), importar: dzImportImage,
@@ -7103,6 +7111,124 @@ function dzPushAnimationPanelPlayback(index, playing) {
   DZ.animationPanelState = state;
   api.animation_panel_state(state).catch(() => {});
 }
+
+/* ══ PANELES SEPARADOS (segundo monitor) ═════════════════════════════════
+   El lienzo se queda en la ventana principal; lo que se puede mandar al otro
+   monitor son los paneles de apoyo. Python hace de buzón: acá publicamos una
+   FOTO chica del panel y ejecutamos los comandos que llegan de vuelta.
+   El lienzo no está en la lista a propósito: es el centro del trabajo. */
+const DZ_PANELS = ["timeline", "xsheet", "layers", "tools", "color"];
+DZ.detached = DZ.detached || new Set();
+
+/** Id estable para una capa: el panel remoto no puede mandar un nodo del DOM. */
+function dzPanelElId(el) {
+  if (!el.id) el.id = "dz-l-" + (DZ.panelSeq = (DZ.panelSeq || 0) + 1);
+  return el.id;
+}
+
+/** Foto chica del panel pedido (lo mínimo para dibujarlo del otro lado). */
+function dzPanelSnapshot(kind) {
+  if (kind === "layers") {
+    // mismo filtro y mismo nombre que dzBuildLayers: si no, el panel separado
+    // lista cosas que el panel de adentro no muestra (cebolla, UI de la pluma).
+    const svg = $("#dzCanvas") && $("#dzCanvas").querySelector("svg");
+    const kids = svg ? [...svg.children].filter(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase())
+      && !(n.classList && (n.classList.contains("dz-onion") || n.classList.contains("dz-penui")))) : [];
+    return { kind, layers: kids.slice().reverse().map(el => ({
+      id: dzPanelElId(el),
+      name: el.id ? el.id : dzLayerLabel(el),
+      hidden: el.getAttribute("display") === "none",
+      locked: el.hasAttribute("data-locked"),
+      opacity: Math.round((el.getAttribute("opacity") == null ? 1 : +el.getAttribute("opacity")) * 100),
+      selected: el === DZ.sel,
+    })) };
+  }
+  if (kind === "tools") {
+    // DZ.tool arranca sin definir: en todo el editor "sin definir" es "select".
+    const cur = DZ.tool || "select";
+    return { kind, tools: [...document.querySelectorAll(".dz-toolbtn")].map(b => ({
+      id: b.dataset.tool, label: (b.title || b.dataset.tool || "").split(/[·(:]/)[0].trim(),
+      active: b.dataset.tool === cur,
+    })).filter(t => t.id) };
+  }
+  if (kind === "color") {
+    // se lee del elemento seleccionado, no de inputs del panel: esos se crean
+    // dinámicamente y sus ids cambian según lo que haya elegido.
+    const el = DZ.sel || (DZ.multi || [])[0] || null;
+    const at = (a, d) => (el && el.getAttribute(a)) || d;
+    return { kind, hasSelection: !!el,
+             fill: dzHex(at("fill", "#000000")),
+             stroke: dzHex(at("stroke", "#000000")),
+             width: at("stroke-width", "1") };
+  }
+  return DZ.animationPanelState || null;   // timeline / xsheet
+}
+
+/** Publica el estado de los paneles separados (solo esos: si no hay ninguno
+ *  abierto no se toca nada). Se llama en bucle liviano, igual que el panel de
+ *  animación, para no tener que enganchar cada mutación del editor. */
+async function dzPanelsPublish() {
+  if (!api || !DZ.detached.size) return;
+  for (const kind of DZ.detached) {
+    if (kind === "timeline" || kind === "xsheet") continue;   // ya se publican solos
+    const state = dzPanelSnapshot(kind);
+    const key = JSON.stringify(state);
+    if (DZ["panelLast_" + kind] === key) continue;            // sin cambios: no molestar
+    DZ["panelLast_" + kind] = key;
+    try { await api.panel_state(kind, state); } catch (err) { /* panel opcional */ }
+  }
+}
+setInterval(() => { dzPanelsPublish(); }, 400);
+
+/** Separar un panel a su propia ventana. */
+async function dzDetachPanel(kind) {
+  if (!api || !DZ_PANELS.includes(kind)) return;
+  const call = api.open_panel ? api.open_panel(kind) : api.open_animation_panel(kind);
+  const r = await call;
+  if (r && r.error) { dzSetStatus(" No se pudo separar el panel: " + r.error); return; }
+  DZ.detached.add(kind);
+  DZ["panelLast_" + kind] = "";        // forzar una primera publicación
+  dzPanelsPublish();
+  dzSetStatus(" Panel separado: arrastralo al otro monitor (vuelve solo la próxima vez)");
+}
+
+/** Comandos que llegan desde una ventana separada. */
+window.lowPanelCommand = async ({ kind, action, payload }) => {
+  payload = payload || {};
+  if (kind === "timeline" || kind === "xsheet") return window.lowAnimationPanelCommand({ action, payload });
+  if (action === "dock") { DZ.detached.delete(kind); return true; }
+
+  if (kind === "tools" && action === "tool") { dzSetTool(payload.id); return true; }
+
+  if (kind === "layers") {
+    const el = payload.id && document.getElementById(payload.id);
+    if (!el) return false;
+    if (action === "select") { dzSelect(el); }
+    else if (action === "visible") {
+      dzSnapshot();
+      if (el.getAttribute("display") === "none") el.removeAttribute("display");
+      else el.setAttribute("display", "none");
+      dzMarkDirty(); dzBuildLayers();
+    } else if (action === "lock") {
+      dzSnapshot();
+      if (el.hasAttribute("data-locked")) el.removeAttribute("data-locked");
+      else { el.setAttribute("data-locked", "1"); if (el === DZ.sel) dzDeselect(); }
+      dzMarkDirty(); dzBuildLayers();
+    } else if (action === "opacity") {
+      dzSnapshot();
+      el.setAttribute("opacity", Math.max(0, Math.min(100, +payload.value || 0)) / 100);
+      dzMarkDirty(); dzBuildLayers();
+    }
+    return true;
+  }
+
+  if (kind === "color") {
+    if (action === "fill" || action === "stroke") dzStyleApply(action, payload.value);
+    else if (action === "width") dzStyleApply("stroke-width", payload.value);
+    return true;
+  }
+  return false;
+};
 
 window.lowAnimationPanelCommand = async ({ action, payload }) => {
   if (!DZ.anim && action !== "open") await dzAnimToggle();
