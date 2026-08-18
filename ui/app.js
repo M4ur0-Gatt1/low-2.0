@@ -694,7 +694,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     requestAnimationFrame(() => {
       DZ.sbTick = false;
       const sb = $("#sbPos");
-      if (!sb || !$("#dzCanvas").querySelector("svg")) return;
+      if (!sb || !$("#dzCanvas").querySelector(":scope > svg")) return;
       try {
         const p = dzToUser(e.clientX, e.clientY);
         sb.textContent = Math.round(p.x) + ", " + Math.round(p.y);
@@ -2309,7 +2309,7 @@ function closeDesign() { dzPersist(); if (DZ.d3) dz3dExit(true); $("#designView"
 
 /* zoom del lienzo (no altera el SVG, solo la vista) */
 function dzApplyZoom() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (svg) svg.style.transform =
     `translate(${DZ.panX || 0}px, ${DZ.panY || 0}px) rotate(${DZ.viewRot || 0}deg) scale(${DZ.zoom})`;
   const lbl = $("#dzZoomLbl"); if (lbl) lbl.textContent = Math.round(DZ.zoom * 100) + "%";
@@ -2348,7 +2348,7 @@ function dzRotView(delta) {
 /* ajustar a pantalla DE VERDAD: calcula el zoom para que el lienzo entre
    completo en la mesa de trabajo (antes solo reseteaba a 100%) */
 function dzFitView() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   const cont = $("#dzCanvas");
   if (!svg || !cont) return;
   DZ.viewRot = 0; DZ.panX = 0; DZ.panY = 0;
@@ -2369,7 +2369,7 @@ const DZ_DOC_PRESETS = [
   ["Carta 2550×3300", 2550, 3300],
 ];
 function dzDocModal() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   const vb = dzVB();
   // el fondo es el rect que cubre (casi) todo el lienzo, si existe
@@ -2451,7 +2451,7 @@ function dzZoom(delta) { DZ.zoom = Math.min(4, Math.max(0.2, Math.round((DZ.zoom
    mientras el lienzo crece/achica — comportamiento pro (OpenToonz/Blender).
    Compensa el pan para que el ancla no se corra. factor >1 acerca, <1 aleja. */
 function dzZoomAt(factor, clientX, clientY) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) { dzZoom(factor > 1 ? 0.15 : -0.15); return; }
   const z0 = DZ.zoom;
   const z1 = Math.min(6, Math.max(0.1, Math.round(z0 * factor * 100) / 100));
@@ -2586,7 +2586,7 @@ function dzPivotMark() {
   const m = $("#dzPivot");
   if (!m) return;
   const pv = DZ.sel && DZ.sel.getAttribute && DZ.sel.getAttribute("data-pivot");
-  if (!pv || !$("#dzCanvas").querySelector("svg")) { m.hidden = true; return; }
+  if (!pv || !$("#dzCanvas").querySelector(":scope > svg")) { m.hidden = true; return; }
   const [px, py] = pv.split(/[\s,]+/).map(Number);
   const sp = dzToScreen(px, py);
   m.style.left = sp.x + "px"; m.style.top = sp.y + "px";
@@ -2650,7 +2650,7 @@ async function designEntry() {
 /* convierte coordenadas de pantalla a unidades de usuario del SVG (respeta
    viewBox y el zoom CSS, porque usa la matriz real de pantalla) */
 function dzToUser(clientX, clientY) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   const pt = svg.createSVGPoint(); pt.x = clientX; pt.y = clientY;
   return pt.matrixTransform(svg.getScreenCTM().inverse());
 }
@@ -2659,7 +2659,7 @@ function dzToUser(clientX, clientY) {
    matriz del SVG, así respeta zoom, paneo y rotación de la vista sin repetir
    esas cuentas a mano (que es donde siempre se descalibra). */
 function dzFromUser(x, y) {
-  const svg = $("#dzCanvas") && $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas") && $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return null;
   const m = svg.getScreenCTM();
   if (!m) return null;
@@ -2844,7 +2844,7 @@ function dzMarqueeStart(e) {
   document.addEventListener("pointercancel", up);
 }
 function dzMarqueeSelect(l, t, r, b, additive, contained) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   const kids = [...svg.children].filter(n =>
     !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase()) &&
@@ -2956,7 +2956,7 @@ function dzHandleDown(e) {
 
 /* agregar una forma nueva al centro del lienzo y seleccionarla */
 function dzAddShape(kind) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   dzSnapshot();
   const vb = (svg.getAttribute("viewBox") || "0 0 1080 1080").split(/\s+/).map(Number);
@@ -3024,7 +3024,7 @@ function dzDeleteSelected() {
 
 /* ══ agrupar (Ctrl+G) / desagrupar (Ctrl+Shift+G): como Illustrator ══ */
 function dzGroupSel(unwrap) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   if (unwrap) {
     const g = DZ.sel;
@@ -3057,7 +3057,7 @@ function dzGroupSel(unwrap) {
 
 /* ══ importar imagen como referencia/calco (nivel de imagen de OpenToonz) ══ */
 async function dzImportImage() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   const r = await api.import_ref_image();
   if (!r || r.cancel) return;
@@ -3106,7 +3106,7 @@ function dzPromptModal(title, ph, def) {
 
 /* ── generar FONDO con IA y mandarlo al fondo del eje z ── */
 async function dzGenBg() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return dzSetStatus("Abrí o creá un diseño primero");
   const prompt = await dzPromptModal("Generar fondo con IA",
     "describí el fondo (ej: cielo al atardecer con nubes suaves, estilo acuarela)");
@@ -3130,7 +3130,7 @@ async function dzGenBg() {
 
 /* ── vectorizar: raster (imagen importada/generada)  trazos SVG editables ── */
 async function dzVectorize() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return dzSetStatus("Abrí o creá un diseño primero");
   // usar la imagen seleccionada, o la primera <image> del lienzo
   let img = (DZ.sel && DZ.sel.tagName && DZ.sel.tagName.toLowerCase() === "image")
@@ -3237,7 +3237,7 @@ async function dzVectorize() {
 
 /* ── coloreado inteligente / entintado con IA (FLUX Kontext / SiliconFlow) ── */
 async function dzColorize() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return dzSetStatus("Abrí o creá un diseño primero");
   const style = await dzPromptModal("Coloreado inteligente (IA)",
     "estilo/paleta (opcional): ej 'colores planos estilo anime, piel cálida, sombreado suave'", "");
@@ -3402,7 +3402,7 @@ function dzMarkDirty() {
   DZ.dirty = true;
   clearTimeout(DZ_RECOVERY_TIMER);
   DZ_RECOVERY_TIMER = setTimeout(() => {
-    const svg = $("#dzCanvas")?.querySelector("svg");
+    const svg = $("#dzCanvas")?.querySelector(":scope > svg");
     if (svg && DZ.path) window.LOW?.workspace?.recovery?.checkpoint(DZ.path, dzSerialize(svg), {
       frame: DZ.anim ? DZ.anim.idx + 1 : null, tool: DZ.tool || "select"
     });
@@ -3808,7 +3808,7 @@ function dzDrawDown(e) {
   if (tool === "select" || tool === "direct") return;
   // ═══ 3D: si el clic es sobre un plano 3D, que lo maneje el handler 3D ═══
   if (DZ.d3 && e.target.closest && e.target.closest("#dz3dStage")) return;
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
 
   // ═══ pointerdown SIEMPRE inicia trazo si es pen ═══
@@ -3981,11 +3981,11 @@ function dzSmoothPath(pts) {
    se guarda en el archivo. ══ */
 function dzPenScale() {
   // tamaño de las guías en unidades de usuario, compensando el zoom
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   try { return 1 / (svg.getScreenCTM().a || 1); } catch (e) { return 1; }
 }
 function dzPenDown(p) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (PEN && PEN.anchors.length >= 2) {
     // clic sobre el PRIMER punto  cerrar el trazado (como Illustrator)
     const a0 = PEN.anchors[0], k = dzPenScale();
@@ -4229,7 +4229,7 @@ function dzPrefsModal() {
    de Illustrator. Normaliza el path a comandos ABSOLUTOS y muestra un
    tirador por ancla; arrastrar mueve el punto (las manijas C lo siguen). ══ */
 function dzToScreen(x, y) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   const cv = $("#dzCanvas").getBoundingClientRect();
   const pt = svg.createSVGPoint(); pt.x = x; pt.y = y;
   const sp = pt.matrixTransform(svg.getScreenCTM());
@@ -4264,7 +4264,7 @@ function dzGuidesToggle() {
   $("#dzGuidesBtn") && $("#dzGuidesBtn").classList.toggle("active", DZ.guidesOn);
 }
 function dzRulersRender() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   const cv = $("#dzCanvas").getBoundingClientRect();
   const o = dzToScreen(0, 0);
@@ -4513,7 +4513,7 @@ function dzNodesClick(e) {
 
 /* ══ borrador (E): arrastrá por encima y borra trazos/formas ENTEROS ══ */
 function dzEraseStart(e) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   dzSnapshot();
   let erased = 0;
   const eraseAt = (x, y) => {
@@ -4566,7 +4566,7 @@ function dzDropperPick(e) {
    sobre líneas (fill=none) o zonas cerradas eso "no hacía nada" — por eso ahora
    trabaja por región. Shift = pinta con el color de trazo. ══ */
 async function dzBucketApply(e) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   const vb = dzVB(), W = vb[2] || 1080, H = vb[3] || 1080;
   const p = dzToUser(e.clientX, e.clientY);
@@ -4715,7 +4715,7 @@ function dzRulerDown(e) {
     if (!RULER) RULER = { a: null, el: null, vp: [] };
     RULER.a = p;
     // preview elástico
-    const svg = $("#dzCanvas").querySelector("svg");
+    const svg = $("#dzCanvas").querySelector(":scope > svg");
     if (svg && !RULER.el) {
       RULER.el = document.createElementNS(SVGNS, "line");
       RULER.el.setAttribute("stroke", DZ.drawColor || "#F0450E");
@@ -4739,7 +4739,7 @@ function dzRulerDown(e) {
     if (e.shiftKey) {
       bp = dzRulerSnapAngle(RULER.a, p);
     }
-    const svg = $("#dzCanvas").querySelector("svg");
+    const svg = $("#dzCanvas").querySelector(":scope > svg");
     if (svg) {
       const ln = document.createElementNS(SVGNS, "line");
       ln.setAttribute("x1", RULER.a.x); ln.setAttribute("y1", RULER.a.y);
@@ -4799,7 +4799,7 @@ function dzRulerSnapVP(p) {
 
 /* dibuja los puntos de fuga como círculos semitransparentes */
 function dzRulerRenderVP() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   // limpiar capa de guías de VP
   let g = svg.querySelector("g.dz-vp-guides");
@@ -4840,7 +4840,7 @@ function dzRulerRenderVP() {
 
 function dzRulerClear() {
   if (RULER && RULER.el) { RULER.el.remove(); }
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (svg) { const g = svg.querySelector("g.dz-vp-guides"); if (g) g.remove(); }
   RULER = null;
 }
@@ -4942,7 +4942,7 @@ function dzStroked(el) {
     ["path", "line", "polyline", "polygon", "circle", "ellipse", "rect"].includes(t);
 }
 function dzPickStroke(clientX, clientY, maxPx) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return null;
   const el = document.elementFromPoint(clientX, clientY);
   if (el && el.closest && el.closest("#dzCanvas svg") && !el.closest("g.dz-onion")) {
@@ -5086,7 +5086,7 @@ function dzPliersDown(e) {
   cmds2.push({ c: "L", n: [x2, y2] });
   for (let i = bestSeg + 2; i < cmds.length; i++) cmds2.push(cmds[i]);
   // crear los dos paths nuevos
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   const NS = "http://www.w3.org/2000/svg";
   const el1 = document.createElementNS(NS, "path");
   el1.setAttribute("d", dzPathBuild(cmds1));
@@ -5129,7 +5129,7 @@ function dzMagnetMove(e) {
 
 function dzMagnetApply(e) {
   const p = dzToUser(e.clientX, e.clientY);
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   const r2 = MAGNET.radius * MAGNET.radius;
   const paths = svg.querySelectorAll("path,polygon,polyline,line");
@@ -5317,7 +5317,7 @@ async function dzThumbInto(chip, f, i) {
   let txt = DZ.anim && DZ.anim.cache[f];
   if (!txt) {
     if (i === DZ.anim.idx) {                        // el actual: lo que se ve en vivo
-      const svg = $("#dzCanvas").querySelector("svg");
+      const svg = $("#dzCanvas").querySelector(":scope > svg");
       if (svg) txt = dzSerialize(svg);
     } else {
       const r = await api.image_data(f);
@@ -5343,7 +5343,7 @@ async function dzFrameInsert(blank) {
   let content = null;
   if (blank) {
     // cuadro en blanco: conservar SOLO el fondo (el rect que cubre el lienzo)
-    const svg = $("#dzCanvas").querySelector("svg");
+    const svg = $("#dzCanvas").querySelector(":scope > svg");
     if (svg) {
       const c = svg.cloneNode(true);
       const vb = (c.getAttribute("viewBox") || "0 0 1080 1080").split(/\s+/).map(Number);
@@ -5522,7 +5522,7 @@ function dzTweenModal() {
 async function dzTweenRun(n, ease) {
   await dzPersist();
   const next = DZ.anim.frames[DZ.anim.idx + 1];
-  const svgA = $("#dzCanvas").querySelector("svg");
+  const svgA = $("#dzCanvas").querySelector(":scope > svg");
   const rb = await api.image_data(next);
   if (!svgA || !rb || !rb.svg) return sysMsg(" No pude leer los dos cuadros");
   const tmp = document.createElement("div"); tmp.innerHTML = rb.svg;
@@ -5648,7 +5648,7 @@ async function dzDoExport(kind) {
 /* auto-guardado: los trazos del cuadro persisten SOLOS al cambiar de cuadro,
    reproducir, duplicar o hablar con el agente (flujo OpenToonz, sin diálogos) */
 async function dzPersist() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg || !DZ.path || !DZ.dirty) return;
   const txt = dzSerialize(svg);
   try {
@@ -5739,7 +5739,7 @@ async function dzOnionUpdate() {
   const run = ++ONION_RUN;
   dzOnionClear();
   if (!DZ.anim || !DZ.anim.onion) return;
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   const cfg = dzOnionCfg();
   const rgbB = dzHexToRgbF(cfg.colorB), rgbA = dzHexToRgbF(cfg.colorA);
@@ -5782,7 +5782,7 @@ function dzSceneSave() {
   }
 }
 function dzVB() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   return ((svg && svg.getAttribute("viewBox")) || "0 0 1080 1080").split(/\s+/).map(Number);
 }
 function dzCamDefault() {
@@ -5864,7 +5864,7 @@ function dzCamToggle() {
 function dzCamCur() { return DZ.camDrag || dzCamAt(dzFrameNum(DZ.path)); }
 function dzCamOverlay() {
   const box = $("#dzCam");
-  if (!DZ.camMode || !DZ.path || !$("#dzCanvas").querySelector("svg")) { box.hidden = true; return; }
+  if (!DZ.camMode || !DZ.path || !$("#dzCanvas").querySelector(":scope > svg")) { box.hidden = true; return; }
   const cam = dzCamCur();
   const vb = dzVB();
   const h = cam.w * (vb[3] / vb[2]);
@@ -6046,7 +6046,7 @@ function dzRigStrip(root) {
 }
 /* aplica las poses interpoladas de TODAS las piezas con claves, en el lienzo vivo */
 function dzRigApplyLive(num) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   dzRigStrip(svg);
   const rig = (DZ.scene || {}).rig || {};
@@ -6130,7 +6130,7 @@ function dzRigToggle() {
     dzRigApplyLive(dzRigCur()); dzRigPanelSync();
     dzSetStatus(" Rig: seleccioná una pieza (flecha blanca D), nombrala, posala (arrastrar/panel) y clavá con K");
   } else {
-    dzRigStrip($("#dzCanvas").querySelector("svg"));
+    dzRigStrip($("#dzCanvas").querySelector(":scope > svg"));
   }
 }
 
@@ -6162,7 +6162,7 @@ function dzPerfRec() {
       if (t >= dur) { dzPerfRecEnd(); return; }
       // replay de las pistas ya grabadas (menos la pieza que estás actuando)
       const num = 1 + t * fps;
-      const svg = $("#dzCanvas").querySelector("svg");
+      const svg = $("#dzCanvas").querySelector(":scope > svg");
       const rig = (DZ.scene || {}).rig || {};
       for (const id of Object.keys(rig)) {
         if (id === DZ.perf.rec.active) continue;
@@ -6275,7 +6275,7 @@ async function dzPerfBake() {
 function dzElPath(el) {
   // ruta de índices desde el svg raíz (las capas de UI van siempre al final,
   // así que los índices del contenido se mantienen entre vivo y serializado)
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   const path = [];
   let n = el;
   while (n && n !== svg) {
@@ -6301,7 +6301,7 @@ async function dzTweenFrames(baseSvgText, elPath, offsets) {
   // pivote de rotación: bbox del elemento VIVO — los clones no están montados y
   // getBBox() en un árbol desmontado devuelve 0×0 (giraría sobre el origen)
   let cx = 540, cy = 540;
-  const live = dzElAt($("#dzCanvas").querySelector("svg"), elPath);
+  const live = dzElAt($("#dzCanvas").querySelector(":scope > svg"), elPath);
   if (live && live.getBBox) {
     try { const b = live.getBBox(); cx = b.x + b.width / 2; cy = b.y + b.height / 2; } catch (e) { /* sin render */ }
   }
@@ -6364,7 +6364,7 @@ async function dzMoveTween() {
     dzWritePos(t.el, dzReadPos(t.el), -dx, -dy);
     dzMarkDirty();
     await dzPersist();
-    const base = dzSerialize($("#dzCanvas").querySelector("svg"));
+    const base = dzSerialize($("#dzCanvas").querySelector(":scope > svg"));
     dzSetStatus("🏃 Generando " + n + " cuadros del recorrido…");
     const offs = [];
     for (let k = 1; k <= n; k++) offs.push([dx * fn(k / n), dy * fn(k / n)]);
@@ -6408,7 +6408,7 @@ async function dzRecFinish(rec) {
   dzWritePos(rec.el, dzReadPos(rec.el), -rec.last[0], -rec.last[1]);
   dzMarkDirty();
   await dzPersist();
-  const base = dzSerialize($("#dzCanvas").querySelector("svg"));
+  const base = dzSerialize($("#dzCanvas").querySelector(":scope > svg"));
   dzSetStatus("⏹ Convirtiendo tu actuación en " + nFrames + " cuadros…");
   const err = await dzTweenFrames(base, rec.path, offs);
   if (err) return dzSetStatus(" " + err);
@@ -6448,7 +6448,7 @@ function dzPuppetStart() {
   dzPuppetHUD(" REC  0.0s · 0 cuadros");
   // capturá la escena entera cada 1/fps mientras manipulás el muñeco
   DZ.pup.timer = setInterval(() => {
-    const svg = $("#dzCanvas").querySelector("svg");
+    const svg = $("#dzCanvas").querySelector(":scope > svg");
     if (!svg) return;
     DZ.pup.snaps.push(dzSerialize(svg));
     const secs = ((performance.now() - DZ.pup.t0) / 1000).toFixed(1);
@@ -6526,7 +6526,7 @@ async function dzWalkCycleRun(steps, fpb, bounce, sway) {
   const totalFrames = steps * fpb;
   dzSnapshot();
   await dzPersist();
-  const base = dzSerialize($("#dzCanvas").querySelector("svg"));
+  const base = dzSerialize($("#dzCanvas").querySelector(":scope > svg"));
   dzSetStatus("🚶 Generando " + totalFrames + " cuadros de caminata…");
   const offs = [];
   for (let k = 1; k <= totalFrames; k++) {
@@ -6570,7 +6570,7 @@ function dzZPanelToggle() {
 function dzZPanelRender() {
   const rail = $("#dzZRail");
   if (!rail || $("#dzZPanel").hidden) return;
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) { rail.innerHTML = ""; return; }
   const W = rail.clientWidth || 260;
   rail.innerHTML = `<div class="dz-zaction" style="left:${dzZToX(0, W)}px" title="Plano de acción (z = 0)"></div>`;
@@ -6963,7 +6963,7 @@ async function dzXsThumbInto(cell, f, i) {
   let txt = DZ.anim && DZ.anim.cache[f];
   if (!txt) {
     if (i === DZ.anim.idx) {
-      const svg = $("#dzCanvas").querySelector("svg");
+      const svg = $("#dzCanvas").querySelector(":scope > svg");
       if (svg) txt = dzSerialize(svg);
     } else {
       const r = await api.image_data(f);
@@ -6994,7 +6994,7 @@ async function dzTlFrameSvgs() {
     const f = DZ.anim.frames[i];
     let txt = DZ.anim.cache[f];
     if (!txt) {
-      if (i === DZ.anim.idx) { const s = $("#dzCanvas").querySelector("svg"); txt = s ? dzSerialize(s) : ""; }
+      if (i === DZ.anim.idx) { const s = $("#dzCanvas").querySelector(":scope > svg"); txt = s ? dzSerialize(s) : ""; }
       else { const r = await api.image_data(f); txt = (r && r.svg) || ""; }
       if (txt) DZ.anim.cache[f] = txt;
     }
@@ -7041,7 +7041,7 @@ async function dzTlGridRender() {
     return `<span class="dz-tlg-col${i === cur ? " cur" : ""}${selected(i) ? " selected" : ""}${mj ? " mj" : ""}" data-i="${i}">` +
            `${mj || i === cur ? n : ""}${mark}</span>`;
   }).join("");
-  const liveSvg = $("#dzCanvas").querySelector("svg");
+  const liveSvg = $("#dzCanvas").querySelector(":scope > svg");
   const rows = $("#dzTlgRows");
   rows.innerHTML = "";
   order.forEach(key => {
@@ -7186,7 +7186,7 @@ function dzPanelSnapshot(kind) {
   if (kind === "layers") {
     // mismo filtro y mismo nombre que dzBuildLayers: si no, el panel separado
     // lista cosas que el panel de adentro no muestra (cebolla, UI de la pluma).
-    const svg = $("#dzCanvas") && $("#dzCanvas").querySelector("svg");
+    const svg = $("#dzCanvas") && $("#dzCanvas").querySelector(":scope > svg");
     const kids = svg ? [...svg.children].filter(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase())
       && !(n.classList && (n.classList.contains("dz-onion") || n.classList.contains("dz-penui")))) : [];
     return { kind, layers: kids.slice().reverse().map(el => ({
@@ -7498,7 +7498,7 @@ async function dzAnimPlay() {
       svgTxt = dzCamView(svgTxt, dzCamAt(dzFrameNum(DZ.anim.frames[i])));
     }
     if (svgTxt) {
-      const old = cv.querySelector("svg");
+      const old = cv.querySelector(":scope > svg");
       const tmp = document.createElement("div"); tmp.innerHTML = svgTxt;
       const ns = tmp.querySelector("svg");
       if (old && ns) { if (!ns.getAttribute("width") || throughCam) ns.style.width = old.style.width || "min(80vw, 900px)"; old.replaceWith(ns); dzApplyZoom(); }
@@ -7553,7 +7553,7 @@ const DZ3D_VIEWS = { persp: [-18, 28], front: [0, 0], top: [-89.9, 0], side: [0,
 
 function dz3dToggle() {
   if (DZ.d3) return dz3dExit();
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return sysMsg("Abrí un diseño primero");
   DZ.d3 = { rx: -18, ry: 28, zoom: 0.65, panX: 0, panY: 30, act: -1, els: [] };
   $("#dz3DBtn").classList.add("active");
@@ -7696,7 +7696,7 @@ function dz3dApplyToolClass() {
 
 function dz3dBuild() {
   const cv = $("#dzCanvas");
-  const svg = cv.querySelector("svg");
+  const svg = cv.querySelector(":scope > svg");
   if (!svg || !DZ.d3) return;
   const old = $("#dz3dStage"); if (old) old.remove();
   svg.style.visibility = "hidden";
@@ -8205,7 +8205,7 @@ function dz3dCommitStroke(el, idx, pts, tool, drawColor, drawW) {
    que mira a la cámara actual (±8°) o se crea uno, y el trazo se proyecta
    al plano con dz3dScreenToPlane. Sin eventos sintéticos: matemática. ── */
 function dz3dAirDraw(e) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   const d3 = DZ.d3, stage = $("#dz3dStage");
   if (!svg || !d3 || !stage) return;
   const tool = DZ.tool === "brush" ? "brush" : "pencil";
@@ -8291,7 +8291,7 @@ function dz3dAirDraw(e) {
 
 /* agrega un plano nuevo para dibujar, orientado frente a la cámara (billboard) */
 function dz3dAddPlane() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg || !DZ.d3) return;
   dzSnapshot();
   const g = document.createElementNS(SVGNS, "g");
@@ -8309,7 +8309,7 @@ function dz3dAddPlane() {
 /* Crea un NUEVO plano con orientación predefinida (front/floor/left/right)
    y orbita la cámara para verlo de frente y dibujar cómodo. */
 function dz3dAddOrientedPlane(or) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg || !DZ.d3) return;
   const OR = { front: [0, 0], floor: [90, 0], left: [0, 90], right: [0, -90] };
   const VIEW = { front: [0, 0], floor: [-89.9, 0], left: [0, -90], right: [0, 90] };
@@ -8455,7 +8455,7 @@ function dz3dPlaneUI(cs, vb, contentNode) {
 function dz3dMakeCard(el, i) {
   const d3 = DZ.d3, vb = d3.vb;
   const W = vb[2] || 1080, H = vb[3] || 1080;
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   const defs = [...svg.children].filter(n => DZ_SKIP_TAGS.includes(n.tagName.toLowerCase()));
   const card = document.createElement("div");
   card.className = "dz3d-card";
@@ -8649,7 +8649,7 @@ function dz3dWireCard(card, cs) {
 
 function dz3dExit(silent) {
   const stage = $("#dz3dStage"); if (stage) stage.remove();
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (svg) svg.style.visibility = "";
   $("#dz3DBtn").classList.remove("active");
   DZ.d3 = null;
@@ -8676,7 +8676,7 @@ function dzLayerLabel(el) {
 function dzBuildLayers() {
   const box = $("#dzLayers");
   if (!box) return;
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) { box.innerHTML = ""; return; }
   const kids = [...svg.children].filter(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase())
     && !(n.classList && (n.classList.contains("dz-onion") || n.classList.contains("dz-penui"))));
@@ -8806,7 +8806,7 @@ function dzLayerRow(el, depth) {
 
 /* ── acciones del panel de capas (estilo Photoshop) ── */
 function dzLayerNew() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   dzSnapshot();
   const g = document.createElementNS(SVGNS, "g");
@@ -8816,7 +8816,7 @@ function dzLayerNew() {
   dzSetStatus("Capa nueva «" + g.id + "» al frente — dibujá o pegá adentro");
 }
 function dzUniqueId(base) {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   let i = 1, id;
   do { id = base + i++; } while (svg && svg.querySelector("#" + CSS.escape(id)));
   return id;
@@ -8894,7 +8894,7 @@ DZ.alignLines = [];
 /** Referencias de alineación de todo lo que NO se está moviendo: bordes y
  *  centro de cada objeto, más los bordes y el centro del lienzo. */
 function dzAlignRefs(excluir) {
-  const svg = $("#dzCanvas") && $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas") && $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return { xs: [], ys: [] };
   const fuera = new Set(excluir || []);
   const xs = [], ys = [];
@@ -8966,7 +8966,7 @@ function dzAlignRender(lineas) {
     $("#dzCanvas").appendChild(box);
   }
   if (!lineas || !lineas.length) { box.innerHTML = ""; return; }
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   const cv = $("#dzCanvas").getBoundingClientRect();
   const vistos = new Set();
   box.innerHTML = lineas.map(L => {
@@ -8994,7 +8994,7 @@ function dzAlignClear() {
 
 function dzAlign(mode) {
   const el = DZ.sel;
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!el || !svg) return;
   dzSnapshot();
   const vb = (svg.getAttribute("viewBox") || "0 0 1080 1080").split(/\s+/).map(Number);
@@ -9080,7 +9080,7 @@ async function dzVariations() {
   dzSetStatus("🧬 Generando variaciones del diseño (4 direcciones en paralelo)…");
   try {
     // mandar el estado ACTUAL del lienzo (con tus últimos toques, aún sin guardar)
-    const svg = $("#dzCanvas").querySelector("svg");
+    const svg = $("#dzCanvas").querySelector(":scope > svg");
     const r = await api.design_variations(DZ.path, svg ? dzSerialize(svg) : "");
     const vs = (r && r.variants) || [];
     if (r && r.error) { dzSetStatus(" " + r.error); return; }
@@ -9110,7 +9110,7 @@ async function dzVariations() {
 function dzToggleCode() {
   const panel = $("#dzCode");
   if (panel.hidden) {
-    const svg = $("#dzCanvas").querySelector("svg");
+    const svg = $("#dzCanvas").querySelector(":scope > svg");
     $("#dzCodeArea").value = svg ? dzSerialize(svg) : "";
     panel.hidden = false;
   } else {
@@ -9121,7 +9121,7 @@ function dzToggleCode() {
 function dzApplySvgText(txt) {
   const cv = $("#dzCanvas");
   const handle = $("#dzHandle");
-  const old = cv.querySelector("svg");
+  const old = cv.querySelector(":scope > svg");
   const tmp = document.createElement("div"); tmp.innerHTML = txt;
   const nsvg = tmp.querySelector("svg");
   if (!nsvg) { sysMsg(" El código no tiene un <svg> válido."); return false; }
@@ -9144,11 +9144,11 @@ function dzApplyCode() {
 
 /* ── deshacer/rehacer (Ctrl+Z / Ctrl+Y): fotos del SVG antes de cada cambio ── */
 function dzSnapshot() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   if (!DZ.history) DZ.history = new LOW.core.HistoryManager({ limit: 180 });
   DZ.history.push({ label: "Editar dibujo", domain: "drawing", before: dzSerialize(svg), after: null,
-    capture: () => { const current = $("#dzCanvas").querySelector("svg"); return current ? dzSerialize(current) : null; },
+    capture: () => { const current = $("#dzCanvas").querySelector(":scope > svg"); return current ? dzSerialize(current) : null; },
     apply: (_direction, value) => { if (value) dzApplySvgText(value); } });
   DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
 }
@@ -9388,7 +9388,7 @@ function dzHex(c) {
 }
 
 async function dzSave() {
-  const svg = $("#dzCanvas").querySelector("svg");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg || !DZ.path) return;
   const r = await api.save_file(DZ.path, dzSerialize(svg));
   if (r) { DZ.dirty = false; window.LOW?.workspace?.recovery?.clear(DZ.path); setStatus(" " + (r.name || "diseño guardado")); sysMsg(" Diseño guardado: " + (r.name || DZ.path)); }
