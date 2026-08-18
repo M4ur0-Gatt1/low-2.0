@@ -79,7 +79,12 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   const chipActive = LOW_ACCENT;
 
   const eng = () => engineRef.current;
-  const saveProject = () => {
+  // Ruta del archivo abierto/guardado. Mientras exista, Guardar SOBRESCRIBE sin
+  // diálogo ni aviso: "guardar" tiene que ser un gesto invisible. El diálogo es
+  // solo para "Guardar como…" o para el primer guardado de un proyecto nuevo.
+  const projectPathRef = useRef<string>('');
+  const [savedTick, setSavedTick] = useState(0);
+  const saveProject = (asNew = false) => {
     const project = eng()?.exportProject();
     if (!project) return;
     const json = JSON.stringify(project, null, 2);
@@ -89,7 +94,10 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
     // botón Guardar "no respondía". Ahí le pasamos el JSON a la app, que lo
     // escribe con el diálogo nativo. En un navegador suelto, descarga normal.
     if (window.parent !== window) {
-      window.parent.postMessage({ type: 'low:save-project', name, json }, '*');
+      window.parent.postMessage({
+        type: 'low:save-project', name, json,
+        path: asNew ? '' : projectPathRef.current,
+      }, '*');
       return;
     }
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
@@ -101,9 +109,45 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   };
   const openProject = async (file?: File) => {
     if (!file) return;
-    try { eng()?.importProject(JSON.parse(await file.text())); }
-    catch (error) { window.alert(error instanceof Error ? error.message : 'No se pudo abrir el proyecto'); }
+    try {
+      eng()?.importProject(JSON.parse(await file.text()));
+      // el navegador no da la ruta real del archivo: a partir de acá Guardar
+      // vuelve a preguntar dónde, que es lo correcto (no sabemos de dónde vino)
+      projectPathRef.current = '';
+    } catch (error) { window.alert(error instanceof Error ? error.message : 'No se pudo abrir el proyecto'); }
   };
+  /** Abrir por la app (pywebview): así SÍ queda la ruta y Guardar sobrescribe. */
+  const openProjectViaHost = () => window.parent.postMessage({ type: 'low:open-project' }, '*');
+
+  // respuestas del host: ruta con la que quedó el proyecto
+  useEffect(() => {
+    const onMsg = (ev: MessageEvent) => {
+      const m = ev.data as { type?: string; path?: string; json?: string } | null;
+      if (!m || typeof m !== 'object') return;
+      if (m.type === 'low:saved') {
+        if (m.path) projectPathRef.current = m.path;
+        setSavedTick((n) => n + 1);
+      } else if (m.type === 'low:opened' && typeof m.json === 'string') {
+        try {
+          eng()?.importProject(JSON.parse(m.json));
+          projectPathRef.current = m.path || '';
+        } catch { window.alert('No se pudo abrir el proyecto'); }
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  // Ctrl+S guarda sobre el mismo archivo; Ctrl+Shift+S pregunta dónde.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return;
+      e.preventDefault();
+      saveProject(e.shiftKey);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const applyView = (v: ViewName) => {
     eng()?.setView(v);
     setView(v);
@@ -162,8 +206,15 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
           {barBtn('Nuevo', () => {
             if (window.confirm('¿Empezar un proyecto nuevo? Se descarta el dibujo actual.')) eng()?.newProject();
           }, false, 'Nuevo proyecto (descarta el dibujo actual)')}
-          {barBtn('Abrir', () => fileInputRef.current?.click(), false, 'Abrir proyecto LOW 3D')}
-          {barBtn('Guardar', saveProject, false, 'Guardar proyecto LOW 3D')}
+          {barBtn('Abrir', () => {
+            if (window.parent !== window) openProjectViaHost(); else fileInputRef.current?.click();
+          }, false, 'Abrir proyecto LOW 3D')}
+          {barBtn('Guardar', () => saveProject(false), false,
+            savedTick && projectPathRef.current
+              ? `Guardar (Ctrl+S) — sobrescribe ${projectPathRef.current}`
+              : 'Guardar proyecto LOW 3D (Ctrl+S)')}
+          {barBtn('Guardar como…', () => saveProject(true), false,
+            'Guardar en otro archivo (Ctrl+Shift+S)')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
           {/* vistas abreviadas: el nombre completo queda en el tooltip */}
           {barBtn('Persp', () => applyView('persp'), view === 'persp', 'Perspectiva')}

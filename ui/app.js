@@ -2188,11 +2188,33 @@ window.addEventListener("message", async (event) => {
   // el JSON y lo escribimos con el diálogo nativo de guardar.
   if (msg.type === "low:save-project" && typeof msg.json === "string") {
     try {
-      const r = await api.save_file("", msg.json, msg.name || "proyecto.low3d");
-      setStatus(r && r.name ? "Proyecto 3D guardado: " + r.name : "Guardado cancelado");
+      // msg.path = archivo ya conocido del proyecto: se SOBRESCRIBE sin diálogo
+      // y sin mensaje en el chat. El diálogo queda para "Guardar como…" y para
+      // el primer guardado (path vacío).
+      const known = typeof msg.path === "string" && msg.path ? msg.path : "";
+      const r = await api.save_file(known, msg.json, msg.name || "proyecto.low3d");
+      if (r && r.path) {
+        // avisarle al estudio con qué archivo quedó, para que el próximo
+        // Ctrl+S no vuelva a preguntar
+        frame.contentWindow && frame.contentWindow.postMessage(
+          { type: "low:saved", path: r.path }, "*");
+        setStatus(" " + (r.name || "proyecto 3D guardado"));
+      } else if (!known) setStatus("Guardado cancelado");
     } catch (err) {
       setStatus("No se pudo guardar el proyecto 3D");
       api.log_js && api.log_js("save-3d error: " + err);
+    }
+  }
+  if (msg.type === "low:open-project") {
+    try {
+      const r = await api.open_dialog();
+      if (r && typeof r.content === "string") {
+        frame.contentWindow && frame.contentWindow.postMessage(
+          { type: "low:opened", path: r.path || "", json: r.content }, "*");
+      }
+    } catch (err) {
+      setStatus("No se pudo abrir el proyecto 3D");
+      api.log_js && api.log_js("open-3d error: " + err);
     }
   }
 });

@@ -1,6 +1,6 @@
 {
   "name": "low2-hybrid",
-  "version": "3.29.23",
+  "version": "3.29.24",
   "description": "LOW - estudio creativo generalista y modular para dibujo, animación, composición y entornos 3D",
   "main": "electron/main.cjs",
   "scripts": {

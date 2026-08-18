@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { lowStore, type LowStore } from '../../../store/low-store';
 import type { BrushSettings, GizmoMode, Layer, SurfaceType, ToolType } from '../../../types/design-types';
 
@@ -375,6 +376,13 @@ export class WebGLDesign3D {
           this.detachRig();
           this.syncGizmo();
         } else {
+          // guía o plano recién soltado: si quedó casi tocando la punta de una
+          // línea, se imanta. Va ANTES de tomar el "después" para que el
+          // corrimiento entre en el mismo Ctrl+Z que el movimiento.
+          if ((this.selectedGuide?.mesh === obj || this.selectedSurface?.mesh === obj)
+              && (obj as THREE.Mesh).isMesh) {
+            this.snapPlaneToStrokes(obj as THREE.Mesh);
+          }
           const after = obj.position.clone();
           const afterQuat = obj.quaternion.clone();
           const afterScale = obj.scale.clone();
@@ -1553,50 +1561,191 @@ export class WebGLDesign3D {
 
   private static readonly SNAP_PX = 14;
 
+  /** Colores del imán. Cada tipo de enganche avisa con su propio color, para
+   *  saber a QUÉ se está pegando el trazo sin tener que adivinarlo. */
+  private static readonly SNAP_COLORS: Record<string, string> = {
+    vertex: '#33B5E8',   // punta de otra línea (cian de LOW)
+    line: '#33B5E8',     // cuerpo de otra línea
+    guide: '#F0450E',    // guía o plano (naranja de LOW)
+  };
+  private snapMark?: THREE.Mesh;
+
+  /** Alerta de color en el punto donde el imán va a pegar. Es un anillo chico
+   *  que siempre mira a la cámara y se dibuja por encima de todo. */
+  private showSnapMark(point: THREE.Vector3, kind: string): void {
+    if (!this.snapMark) {
+      const geo = new THREE.RingGeometry(0.045, 0.075, 24);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.95,
+        depthTest: false, side: THREE.DoubleSide,
+      });
+      this.snapMark = new THREE.Mesh(geo, mat);
+      this.snapMark.renderOrder = 1002;
+      this.handlesGroup.add(this.snapMark);
+    }
+    (this.snapMark.material as THREE.MeshBasicMaterial).color.set(
+      WebGLDesign3D.SNAP_COLORS[kind] || WebGLDesign3D.SNAP_COLORS.vertex);
+    this.snapMark.position.copy(point);
+    this.snapMark.quaternion.copy((this.camera as THREE.Camera).quaternion);
+    // tamaño constante en pantalla: en ortogonal el zoom cambia la escala del
+    // mundo, y un anillo fijo se volvía invisible o gigante
+    const k = this.view === 'persp'
+      ? this.camera.position.distanceTo(point) * 0.06
+      : this.orthoSize / ORTHO_SIZE;
+    this.snapMark.scale.setScalar(Math.max(k, 0.25));
+    this.snapMark.visible = true;
+  }
+
+  private hideSnapMark(): void {
+    if (this.snapMark) this.snapMark.visible = false;
+  }
+
+  /** Tolerancia (en unidades de mundo) del imán de un PLANO a una línea. */
+  private static readonly PLANE_SNAP_WORLD = 0.22;
+
+  /** Al soltar una guía o un plano, si quedó casi tocando la punta de una
+   *  línea, se lo corre lo justo para que la toque de verdad y se avisa con el
+   *  anillo de color. Es el caso inverso del imán del trazo: acá lo que se
+   *  mueve es la superficie, y "casi apoyado" no sirve para dibujar encima.
+   *  Devuelve true si lo movió. */
+  private snapPlaneToStrokes(mesh: THREE.Mesh): boolean {
+    mesh.updateMatrixWorld(true);
+    const n = new THREE.Vector3(0, 0, 1)
+      .applyQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion())).normalize();
+    const origin = mesh.getWorldPosition(new THREE.Vector3());
+    const plano = new THREE.Plane().setFromNormalAndCoplanarPoint(n, origin);
+    let best: { point: THREE.Vector3; dist: number } | null = null;
+    for (const rec of this.strokes) {
+      if (rec.kind !== 'stroke') continue;
+      rec.object.updateMatrixWorld(true);
+      // solo las PUNTAS: son las que uno apoya contra un plano
+      for (const idx of [0, rec.points.length - 1]) {
+        const w = rec.object.localToWorld(rec.points[idx].clone());
+        const d = Math.abs(plano.distanceToPoint(w));
+        if (d <= WebGLDesign3D.PLANE_SNAP_WORLD && (!best || d < best.dist)) best = { point: w, dist: d };
+      }
+    }
+    if (!best || best.dist < 1e-5) return false;
+    // correr el plano a lo largo de su normal hasta pasar por el punto
+    mesh.position.addScaledVector(n, plano.distanceToPoint(best.point));
+    mesh.updateMatrixWorld(true);
+    this.showSnapMark(best.point, 'guide');
+    window.setTimeout(() => this.hideSnapMark(), 900);
+    return true;
+  }
+
+  /** Punto más cercano en PANTALLA a lo que el trazo puede engancharse:
+   *  vértices y cuerpo de las líneas ya hechas, y bordes de guías/planos.
+   *  Devuelve también QUÉ enganchó, para poder avisarlo con color. */
+  private findSnapTarget(e: PointerEvent, refPoint?: THREE.Vector3, maxWorld = Infinity):
+      { point: THREE.Vector3; kind: string } | null {
+    const rect = this.canvasBox();
+    const px = e.clientX - rect.left, py = e.clientY - rect.top;
+    const cam = this.camera as THREE.Camera;
+    let best: { point: THREE.Vector3; kind: string } | null = null;
+    let bestDist = WebGLDesign3D.SNAP_PX;
+    const toScreen = (w: THREE.Vector3) => {
+      const v = w.clone().project(cam);
+      return new THREE.Vector2(((v.x + 1) / 2) * rect.width, ((1 - v.y) / 2) * rect.height);
+    };
+    const probar = (world: THREE.Vector3, kind: string) => {
+      if (refPoint && world.distanceTo(refPoint) > maxWorld) return;
+      const sp = toScreen(world);
+      const d = Math.hypot(sp.x - px, sp.y - py);
+      if (d < bestDist) { bestDist = d; best = { point: world, kind }; }
+    };
+    // el vértice gana al cuerpo de la línea aunque esté un poco más lejos: si
+    // apuntás cerca de una punta, querés la punta
+    const vertexBonus = 4;
+
+    for (const rec of this.strokes) {
+      rec.object.updateMatrixWorld(true);
+      const world = rec.points.map((q) => rec.object.localToWorld(q.clone()));
+      for (const w of world) {
+        if (refPoint && w.distanceTo(refPoint) > maxWorld) continue;
+        const sp = toScreen(w);
+        const d = Math.hypot(sp.x - px, sp.y - py) - vertexBonus;
+        if (d < bestDist) { bestDist = d; best = { point: w, kind: 'vertex' }; }
+      }
+      // CUERPO de la línea: el punto más cercano sobre cada segmento. Antes,
+      // llegar al medio de una línea no enganchaba nada — solo sus vértices.
+      for (let i = 0; i + 1 < world.length; i++) {
+        const a = toScreen(world[i]), b = toScreen(world[i + 1]);
+        const ab = b.clone().sub(a);
+        const len2 = ab.lengthSq();
+        if (len2 < 1e-6) continue;
+        const t = THREE.MathUtils.clamp(
+          ((px - a.x) * ab.x + (py - a.y) * ab.y) / len2, 0, 1);
+        probar(world[i].clone().lerp(world[i + 1], t), 'line');
+      }
+    }
+    // anclajes y BORDES de las guías: llegar con una línea al canto de una
+    // guía es el gesto natural para apoyarse en ella
+    for (const guide of this.guides) {
+      guide.mesh.updateMatrixWorld(true);
+      const anchors = guide.mesh.userData.guideAnchors as THREE.Vector3[] | undefined;
+      if (Array.isArray(anchors)) {
+        for (const local of anchors) {
+          const q = local instanceof THREE.Vector3
+            ? local.clone()
+            : new THREE.Vector3(Number((local as { x?: number }).x || 0),
+              Number((local as { y?: number }).y || 0), Number((local as { z?: number }).z || 0));
+          probar(q.applyMatrix4(guide.mesh.matrixWorld), 'guide');
+        }
+      }
+      for (const w of this.meshEdgePoints(guide.mesh)) probar(w, 'guide');
+    }
+    for (const su of this.surfaces) {
+      if (this.guides.some((g) => g.id === su.id)) continue;   // ya recorrida arriba
+      for (const w of this.meshEdgePoints(su.mesh)) probar(w, 'guide');
+    }
+    return best;
+  }
+
+  /** Puntos sobre el CONTORNO de una malla (esquinas y puntos intermedios de
+   *  su caja): alcanza para imantarse al borde de un plano sin recorrer toda
+   *  su geometría en cada movimiento del puntero. */
+  private meshEdgePoints(mesh: THREE.Mesh): THREE.Vector3[] {
+    mesh.updateMatrixWorld(true);
+    const geo = mesh.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    const bb = geo.boundingBox;
+    if (!bb) return [];
+    const out: THREE.Vector3[] = [];
+    const N = 8;   // divisiones por arista
+    // las 12 aristas de la caja. Recorrer solo 4 esquinas "en diagonal" no
+    // servía: una guía extruida no es plana en ningún eje fijo y el contorno
+    // quedaba atravesando el volumen en vez de bordearlo.
+    const v = (ix: number, iy: number, iz: number) => new THREE.Vector3(
+      ix ? bb.max.x : bb.min.x, iy ? bb.max.y : bb.min.y, iz ? bb.max.z : bb.min.z);
+    const aristas: [THREE.Vector3, THREE.Vector3][] = [];
+    for (let eje = 0; eje < 3; eje++) {
+      for (let a = 0; a < 2; a++) {
+        for (let b = 0; b < 2; b++) {
+          const p0 = [0, 0, 0], p1 = [0, 0, 0];
+          const otros = [0, 1, 2].filter((k) => k !== eje);
+          p0[otros[0]] = a; p1[otros[0]] = a;
+          p0[otros[1]] = b; p1[otros[1]] = b;
+          p0[eje] = 0; p1[eje] = 1;
+          aristas.push([v(p0[0], p0[1], p0[2]), v(p1[0], p1[1], p1[2])]);
+        }
+      }
+    }
+    for (const [a, b] of aristas) {
+      for (let k = 0; k <= N; k++) out.push(a.clone().lerp(b, k / N).applyMatrix4(mesh.matrixWorld));
+    }
+    return out;
+  }
+
   /** Si el puntero está cerca (en pantalla) de un vértice de un trazo ya
    *  dibujado, devuelve ese punto exacto en mundo — para poder arrancar (o
    *  terminar) una línea nueva pegada a una existente sin tener que apuntar
    *  perfecto. Las guías no cuentan: no retienen sus puntos tras dibujarlas. */
   private findSnapVertex(e: PointerEvent, refPoint?: THREE.Vector3, maxWorld = Infinity): THREE.Vector3 | null {
-    const rect = this.canvasBox();
-    const px = e.clientX - rect.left, py = e.clientY - rect.top;
-    const cam = this.camera as THREE.Camera;
-    let best: THREE.Vector3 | null = null;
-    let bestDist = WebGLDesign3D.SNAP_PX;
-    for (const rec of this.strokes) {
-      rec.object.updateMatrixWorld(true);
-      for (const p of rec.points) {
-        const world = rec.object.localToWorld(p.clone());
-        // filtro de PROFUNDIDAD: no enganchar vértices que solo caen cerca en
-        // pantalla pero están a otra profundidad (lo que rompía en vista de lado)
-        if (refPoint && world.distanceTo(refPoint) > maxWorld) continue;
-        const v = world.clone().project(cam);
-        const sx = ((v.x + 1) / 2) * rect.width, sy = ((1 - v.y) / 2) * rect.height;
-        const d = Math.hypot(sx - px, sy - py);
-        if (d < bestDist) { bestDist = d; best = world; }
-      }
-    }
-    // Las esquinas/puntos que originaron una guía también son anclajes 3D.
-    // Sin esto, al pasar de Frente a Derecha la segunda guía podía verse
-    // alineada en pantalla pero quedar desplazada a otra coordenada Z.
-    for (const guide of this.guides) {
-      guide.mesh.updateMatrixWorld(true);
-      const anchors = guide.mesh.userData.guideAnchors as THREE.Vector3[] | undefined;
-      if (!Array.isArray(anchors)) continue;
-      for (const local of anchors) {
-        const p = local instanceof THREE.Vector3
-          ? local.clone()
-          : new THREE.Vector3(Number((local as { x?: number }).x || 0),
-            Number((local as { y?: number }).y || 0), Number((local as { z?: number }).z || 0));
-        const world = p.applyMatrix4(guide.mesh.matrixWorld);
-        if (refPoint && world.distanceTo(refPoint) > maxWorld) continue;
-        const v = world.clone().project(cam);
-        const sx = ((v.x + 1) / 2) * rect.width, sy = ((1 - v.y) / 2) * rect.height;
-        const d = Math.hypot(sx - px, sy - py);
-        if (d < bestDist) { bestDist = d; best = world; }
-      }
-    }
-    return best;
+    const t = this.findSnapTarget(e, refPoint, maxWorld);
+    if (t) { this.showSnapMark(t.point, t.kind); return t.point; }
+    this.hideSnapMark();
+    return null;
   }
 
   /** "Hilo tenso": ajusta el punto final para que el segmento start→raw
@@ -1794,6 +1943,13 @@ export class WebGLDesign3D {
     const pts = this.current.points;
     const pressures = this.current.pressures;
 
+    // AVISO del imán en vivo: mientras trazás, si la punta pasa cerca de otra
+    // línea, de una guía o de un plano, aparece el anillo de color. El trazo NO
+    // se corrige acá (mover el cuerpo del trazo es lo que hacía saltar los
+    // puntos entre planos): el enganche se aplica al soltar, en endDraw.
+    const cerca = this.findSnapTarget(e, hit.point, 0.8);
+    if (cerca) this.showSnapMark(cerca.point, cerca.kind); else this.hideSnapMark();
+
     if (e.altKey && pts.length >= 1) {
       // "Hilo tenso": recta pegada al eje X/Y/Z más parecido al gesto —
       // al ser paralela a ese eje del mundo, converge sola hacia SU punto de
@@ -1870,10 +2026,20 @@ export class WebGLDesign3D {
     // igual que un trazo normal — antes solo aplicaba a kind==='stroke'.
     if (this.current && this.current.points.length >= 2) {
       const pts = this.current.points;
+      // El ESTABILIZADOR (pulso) deja el último punto ATRÁS del cursor: con
+      // 35% el trazo terminaba ~25 px corto, y por eso al soltar sobre otra
+      // línea quedaba un hueco y el imán no llegaba a engancharse. Al cerrar,
+      // la punta pasa a ser el punto REAL bajo el cursor.
+      this.setPointerFromEvent(e);
+      const real = (this.current.drawTarget || this.current.drawPlane)
+        ? this.intersectLockedDrawContext()
+        : (this.tool === 'pencil-free' ? this.resolveFreeHit() : this.resolveHit());
+      if (real) pts[pts.length - 1] = real.point.clone();
       const last = pts[pts.length - 1];
       const v = this.findSnapVertex(e, last, 0.6);
       if (v) pts[pts.length - 1] = v.clone();
     }
+    this.hideSnapMark();
     this.commitStroke();
   }
 
@@ -1991,12 +2157,41 @@ export class WebGLDesign3D {
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
+    // TAPAS en las puntas. TubeGeometry es un caño ABIERTO: sin esto se ve el
+    // agujero en cada extremo y, sobre todo, la UNIÓN entre dos trazos queda
+    // hueca (dos bocas abiertas enfrentadas). Con una media esfera del radio
+    // que tiene el trazo en esa punta, la línea se lee maciza y las uniones
+    // cierran redondeadas, como una punta de pincel de verdad.
+    const cuerpo = this.cappedTube(geo, curve, points, pressures, brush);
     const col = new THREE.Color(brush.color);
-    return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    return new THREE.Mesh(cuerpo, new THREE.MeshStandardMaterial({
       color: col, emissive: col.clone().multiplyScalar(0.06),
       roughness: THREE.MathUtils.lerp(0.9, 0.25, brush.hardness ?? 0.8), metalness: 0,
       transparent: brush.opacity < 1, opacity: brush.opacity,
     }));
+  }
+
+  /** Fusiona el tubo con una esfera en cada punta (una sola geometría: así el
+   *  trazo sigue siendo UNA malla y todo lo demás —goma, capas, historial,
+   *  descarte de memoria— sigue funcionando igual). */
+  private cappedTube(tube: THREE.BufferGeometry, curve: THREE.CatmullRomCurve3,
+                     points: THREE.Vector3[], pressures: number[],
+                     brush: BrushSettings): THREE.BufferGeometry {
+    const partes: THREE.BufferGeometry[] = [tube];
+    for (const t of [0, 1]) {
+      const r = this.radiusAt(this.pressureAtT(pressures, t), brush);
+      if (r < 1e-5) continue;
+      const cap = new THREE.SphereGeometry(r, 10, 8);
+      const c = curve.getPoint(t);
+      cap.translate(c.x, c.y, c.z);
+      partes.push(cap);
+    }
+    if (partes.length === 1) return tube;
+    const merged = BufferGeometryUtils.mergeGeometries(partes, false);
+    if (!merged) { partes.slice(1).forEach((g) => g.dispose()); return tube; }
+    partes.forEach((g) => g.dispose());
+    void points;
+    return merged;
   }
 
   /** ¿El trazo es esencialmente RECTO? Desviación perpendicular máxima de los
