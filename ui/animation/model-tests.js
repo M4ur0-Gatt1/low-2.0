@@ -181,6 +181,38 @@
       ok("al reabrir, los fps se conservan", sc2.fps === 24);
     }
 
+    // ── 10. DOCUMENTO: guardar → cerrar → reabrir → seguir ──
+    {
+      const { LowDoc } = animation;
+      const doc = new LowDoc();
+      doc.scene.fps = 24;
+      doc.scene.name = "ciclo";
+      [[1, 1], [5, 2], [9, 3]].forEach(([f, n]) => doc.setCell(f, n));
+      doc.goTo(1); doc.writeDrawing("<path d='M1 1'/>");
+      doc.goTo(5); doc.writeDrawing("<path d='M5 5'/>");
+      doc.goTo(9); doc.writeDrawing("<path d='M9 9'/>");
+      doc.apply("autoexpose", 1, 12);
+      doc.scene.range = { in: 1, out: 12 };
+      const antesCeldas = JSON.stringify(doc.layer.cells);
+
+      const json = JSON.stringify(doc.toJSON());       // guardar
+      const doc2 = LowDoc.fromJSON(JSON.parse(json));  // cerrar y reabrir
+      ok("al reabrir vuelven los mismos dibujos", doc2.level.drawings.length === 3,
+         String(doc2.level.drawings.length));
+      ok("al reabrir vuelve el mismo timing", JSON.stringify(doc2.layer.cells) === antesCeldas);
+      ok("al reabrir vuelve el contenido dibujado",
+         doc2.level.byNumber(2).content.includes("M5 5"));
+      ok("al reabrir vuelven fps, rango y nombre",
+         doc2.scene.fps === 24 && doc2.scene.playRange().out === 12 && doc2.scene.name === "ciclo");
+      ok("al reabrir queda en el frame donde estabas", doc2.frame === 9, String(doc2.frame));
+      // y se puede seguir trabajando
+      doc2.goTo(5);
+      doc2.writeDrawing(doc2.drawing.content + "<path d='M7 7'/>");
+      ok("se puede seguir dibujando sobre lo recuperado",
+         doc2.level.byNumber(2).content.includes("M7 7"));
+      ok("y sin crear dibujos de más", doc2.level.drawings.length === 3);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

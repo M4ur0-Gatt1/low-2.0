@@ -152,7 +152,7 @@ Una fase termina cuando se puede hacer el flujo real, no cuando compila.
 | 1 | Modelo: Scene/Level/Drawing/Cell/Exposure + operaciones de celda | ✅ hecho |
 | 2 | Workspaces genéricos + los 7 layouts | ✅ base hecha |
 | 3 | Xsheet/Timeline sobre el modelo (holds, steps, rangos) | ◐ planilla y navegación hechas |
-| 4 | Motor de dibujo (brush, presión, estabilización) sobre el modelo | pendiente |
+| 4 | El dibujo entra al modelo solo + escena en un archivo | ✅ hecho |
 | 5 | Onion Skin sobre drawings | ✅ hecho |
 | 6 | Workflow: copiar/pegar, insertar, atajos, navegación | ✅ hecho (falta renumerar) |
 | 7 | Playback: FPS real, rango, loop | ◐ falta audio y scrubbing |
@@ -219,11 +219,24 @@ con la ventana oculta — con la timeline en el otro monitor la reproducción se
 rango, y el fps real medido mientras corre) y selección de rango con Shift+clic, que es sobre lo
 que actúan las operaciones de timing.
 
+**Fase 4 (v3.29.34).** Toda edición del lienzo entra al dibujo del modelo sola, por
+`dzMarkDirty` con 260 ms de retardo: antes solo se volcaba al cambiar de frame, así que dibujar
+y guardar sin moverse perdía ese trazo.
+
+La escena entera —niveles, dibujos, capas, exposiciones, fps, rango— va a **un** archivo
+`.lowscene` (Animación → Guardar escena, `Ctrl+Shift+S`), con autoguardado local cada 8 s y
+recuperación al abrir si LOW se cerró mal.
+
+Test de aceptación corrido de punta a punta en la app: dibujar tres poses → autoexpose (holds de
+4) → guardar → descartar todo de memoria (cerrar) → reabrir del archivo → **3 dibujos, mismo
+timing, mismo fps, mismo rango, contenido intacto** → navegar y seguir dibujando encima sin crear
+dibujos de más. Y como prueba automática: **37/37**.
+
 ### Lo que sigue
 
-Fase 4: el motor de dibujo escribiendo directo en el modelo (hoy el puente serializa el SVG del
-lienzo en cada cambio de frame). Con eso se puede retirar `DZ.anim.frames` y la timeline vieja,
-que todavía conviven con lo nuevo. Después: renumerar dibujos, audio y scrubbing, paletas.
+Retirar `DZ.anim.frames` y la timeline vieja, que todavía conviven con lo nuevo (la timeline de
+abajo sigue siendo la anterior; la planilla nueva es la de la X-sheet). Después: renumerar
+dibujos, audio y scrubbing, paletas y estilos.
 
 ### Test de aceptación (el que define si esto sirve)
 
