@@ -500,19 +500,45 @@
         <div class="dz-xs-rows" id="dzXsRows"></div>
       </div>
       <!-- papel cebolla: panel chico, personalizable y ARRASTRABLE -->
-      <div class="dz-onionpanel" id="dzOnionPanel" hidden>
-        <div class="dz-op-head" id="dzOpHead">🗂 papel cebolla <span class="dz-op-x" id="dzOpClose" title="Cerrar">×</span></div>
-        <div class="dz-op-row"><span>Antes</span>
-          <input type="number" id="opBefore" min="0" max="4" value="2" title="Cuadros fantasma anteriores">
-          <input type="color" id="opColorB" value="#8c0000" title="Color de los anteriores">
+      <div class="dz-onionpanel onion2" id="dzOnionPanel" hidden>
+        <div class="dz-op-head" id="dzOpHead">
+          <button class="onion2-power" id="onOn" title="Activar / desactivar (O)">◉</button>
+          <span class="onion2-title">PAPEL CEBOLLA</span>
+          <button class="dz-panel-pop" id="dzOnionDetach" title="Separar en otra ventana">⧉</button>
+          <span class="dz-op-x" id="dzOpClose" title="Cerrar">×</span>
         </div>
-        <div class="dz-op-row"><span>Después</span>
-          <input type="number" id="opAfter" min="0" max="4" value="1" title="Cuadros fantasma siguientes">
-          <input type="color" id="opColorA" value="#00731a" title="Color de los siguientes">
+        <!-- ANTES / DESPUÉS: cuántos DIBUJOS (no frames) mostrar de cada lado.
+             Los puntos hacen de selector rápido, que es como se usa: se cambia
+             de 1 a 3 constantemente mientras se anima. -->
+        <div class="onion2-side" data-side="before">
+          <i class="onion2-swatch" id="onSwB"></i>
+          <span class="onion2-lbl">Antes</span>
+          <div class="onion2-dots" id="onDotsB"></div>
+          <input type="color" id="onColorB" value="#c0392b" title="Color de los dibujos anteriores">
         </div>
-        <div class="dz-op-row"><span>Opacidad</span>
-          <input type="range" id="opAlpha" min="5" max="70" value="38">
+        <div class="onion2-side" data-side="after">
+          <i class="onion2-swatch" id="onSwA"></i>
+          <span class="onion2-lbl">Después</span>
+          <div class="onion2-dots" id="onDotsA"></div>
+          <input type="color" id="onColorA" value="#1e8449" title="Color de los dibujos siguientes">
         </div>
+        <div class="onion2-row">
+          <span class="onion2-lbl">Opacidad</span>
+          <input type="range" id="onAlpha" min="5" max="80" value="38">
+          <b class="onion2-val" id="onAlphaVal">38%</b>
+        </div>
+        <div class="onion2-row">
+          <span class="onion2-lbl">Desvanece</span>
+          <input type="range" id="onFall" min="20" max="100" value="55"
+                 title="Cuánto se apaga cada dibujo más lejano">
+          <b class="onion2-val" id="onFallVal">55%</b>
+        </div>
+        <div class="onion2-fixed">
+          <span class="onion2-lbl">Fijos</span>
+          <span class="onion2-chips" id="onFixed"></span>
+          <button id="onFixAdd" title="Fijar el frame actual como referencia permanente">+ acá</button>
+        </div>
+        <div class="onion2-hint">Trabaja sobre DIBUJOS: dentro de un hold no repite el mismo.</div>
       </div>
       <div class="dz-onionpanel" id="dzRigPanel" hidden>
         <div class="dz-op-head" id="dzRigHead"> rig <span class="dz-op-x" id="dzRigClose" title="Cerrar">×</span></div>
@@ -698,31 +724,31 @@
 <script src="vendor/mode-htmlmixed.min.js"></script>
 <script src="vendor/addon-closebrackets.min.js"></script>
 <script src="vendor/addon-activeline.min.js"></script>
-<script src="mock-api.js?v=3.29.30"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=3.29.31"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=3.29.30"></script>
-<script src="animation/scene-model.js?v=3.29.30"></script>
-<script src="animation/exposures.js?v=3.29.30"></script>
-<script src="animation/onion.js?v=3.29.30"></script>
-<script src="animation/document.js?v=3.29.30"></script>
-<script src="animation/xsheet-view.js?v=3.29.30"></script>
-<script src="animation/model-tests.js?v=3.29.30"></script>
-<script src="animation/timeline.js?v=3.29.30"></script>
-<script src="animation/xsheet.js?v=3.29.30"></script>
-<script src="animation/playback.js?v=3.29.30"></script>
-<script src="animation/camera.js?v=3.29.30"></script>
-<script src="drawing/stabilization.js?v=3.29.30"></script>
-<script src="drawing/pointer-input.js?v=3.29.30"></script>
-<script src="drawing/brushes.js?v=3.29.30"></script>
-<script src="drawing/stroke-engine.js?v=3.29.30"></script>
-<script src="workspace/panels.js?v=3.29.30"></script>
-<script src="workspace/workspaces.js?v=3.29.30"></script>
-<script src="workspace/windows.js?v=3.29.30"></script>
-<script src="workspace/layouts.js?v=3.29.30"></script>
-<script src="workspace/recovery.js?v=3.29.30"></script>
-<script src="ai/commands.js?v=3.29.30"></script>
-<script src="ai/task-runner.js?v=3.29.30"></script>
-<script src="ai/recovery.js?v=3.29.30"></script>
-<script src="app.js?v=3.29.30"></script>
+<script src="core/history.js?v=3.29.31"></script>
+<script src="animation/scene-model.js?v=3.29.31"></script>
+<script src="animation/exposures.js?v=3.29.31"></script>
+<script src="animation/onion.js?v=3.29.31"></script>
+<script src="animation/document.js?v=3.29.31"></script>
+<script src="animation/xsheet-view.js?v=3.29.31"></script>
+<script src="animation/model-tests.js?v=3.29.31"></script>
+<script src="animation/timeline.js?v=3.29.31"></script>
+<script src="animation/xsheet.js?v=3.29.31"></script>
+<script src="animation/playback.js?v=3.29.31"></script>
+<script src="animation/camera.js?v=3.29.31"></script>
+<script src="drawing/stabilization.js?v=3.29.31"></script>
+<script src="drawing/pointer-input.js?v=3.29.31"></script>
+<script src="drawing/brushes.js?v=3.29.31"></script>
+<script src="drawing/stroke-engine.js?v=3.29.31"></script>
+<script src="workspace/panels.js?v=3.29.31"></script>
+<script src="workspace/workspaces.js?v=3.29.31"></script>
+<script src="workspace/windows.js?v=3.29.31"></script>
+<script src="workspace/layouts.js?v=3.29.31"></script>
+<script src="workspace/recovery.js?v=3.29.31"></script>
+<script src="ai/commands.js?v=3.29.31"></script>
+<script src="ai/task-runner.js?v=3.29.31"></script>
+<script src="ai/recovery.js?v=3.29.31"></script>
+<script src="app.js?v=3.29.31"></script>
 </body>
 </html>

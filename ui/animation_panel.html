@@ -38,7 +38,7 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;
 </div>
 <div class="viewport"><div id="content" class="timeline"><div class="empty">Conectando con el editor…</div></div></div>
 <script>
-const KINDS={timeline:'TIMELINE',xsheet:'X-SHEET',layers:'CAPAS',tools:'HERRAMIENTAS',color:'COLOR'};
+const KINDS={timeline:'TIMELINE',xsheet:'X-SHEET',layers:'CAPAS',tools:'HERRAMIENTAS',color:'COLOR',onion:'PAPEL CEBOLLA'};
 // el kind llega por FRAGMENTO (#kind=...): sobre file:// la query se pierde
 // (WebView2 la toma como parte del nombre del archivo). Se acepta ?kind= igual,
 // para cuando el panel se abre desde un servidor durante las pruebas.
@@ -121,10 +121,41 @@ function renderColor(s){
  w.oninput=e=>command('width',{value:e.target.value});
  root.append(fila('Relleno',f),fila('Trazo',st),fila('Grosor',w));return root;
 }
+/* PAPEL CEBOLLA en su propia ventana: los mismos controles que adentro, para
+   dejarlo abierto en el segundo monitor mientras se dibuja en el primero. */
+function renderOnion(s){
+ const root=document.createElement('div');root.className='timeline pad';
+ if(!s||!s.cfg){root.innerHTML='<div class="empty">Abrí una animación en LOW</div>';return root}
+ const c=s.cfg;
+ const fila=(txt,el)=>{const d=document.createElement('div');d.className='frow';
+  const l=document.createElement('label');l.textContent=txt;d.append(l,el);return d};
+ const lado=(txt,valor,color,key)=>{
+  const box=document.createElement('div');box.style.cssText='display:flex;gap:4px';
+  for(let i=1;i<=4;i++){const b=document.createElement('button');
+   b.textContent=i;b.className='tool'+(i<=valor?' on':'');
+   b.style.cssText='min-width:26px;padding:3px 0';
+   b.onclick=()=>command('onion',{key,value:valor===i?i-1:i});box.appendChild(b)}
+  const sw=document.createElement('i');
+  sw.style.cssText=`width:4px;border-radius:2px;background:${color}`;
+  box.prepend(sw);
+  return fila(txt,box)};
+ root.append(lado('Antes',c.before,c.colorBefore,'before'));
+ root.append(lado('Después',c.after,c.colorAfter,'after'));
+ const op=document.createElement('input');op.type='range';op.min=5;op.max=80;
+ op.value=Math.round(c.alpha*100);
+ op.oninput=e=>command('onion',{key:'alpha',value:+e.target.value/100});
+ root.append(fila('Opacidad',op));
+ const on=document.createElement('button');on.className='tool'+(s.enabled?' on':'');
+ on.textContent=s.enabled?'Activado':'Desactivado';
+ on.onclick=()=>command('onion',{key:'enabled',value:!s.enabled});
+ root.append(fila('Estado',on));
+ return root;
+}
 function renderFor(s){
  if(kind==='layers')return renderLayers(s);
  if(kind==='tools')return renderTools(s);
  if(kind==='color')return renderColor(s);
+ if(kind==='onion')return renderOnion(s);
  return kind==='xsheet'?renderXsheet(s):renderTimeline(s);
 }
 async function refresh(){if(!api)return;try{const s=await (api.panel_state?api.panel_state(kind):api.animation_panel_state());const key=JSON.stringify(s);if(key===last)return;last=key;if(isAnim){document.getElementById('fps').textContent=(s.fps||12)+' FPS · '+(s.frames?s.frames.filter(f=>f.exists).length:0)+' frames';document.getElementById('play').textContent=s.playing?'Ⅱ':'▶';}const content=document.getElementById('content');const next=renderFor(s);next.id='content';content.replaceWith(next)}catch(e){}}
