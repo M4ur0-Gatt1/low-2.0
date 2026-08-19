@@ -60,7 +60,25 @@
         t.className = "tl2-tick" + (f % 6 === 1 ? " seg" : "") + (f === doc.frame ? " actual" : "");
         // el número solo cada 6: con uno por frame no se lee nada
         if (f % 6 === 1) t.textContent = String(f);
-        t.onclick = () => doc.goTo(f);
+        // SCRUBBING: arrastrar por la regla recorre la animación con la mano.
+        // Es la forma real de revisar un movimiento — el playback te muestra el
+        // resultado, el scrub te deja buscar el frame exacto donde algo falla.
+        t.onpointerdown = (ev) => {
+          if (ev.button !== 0) return;
+          ev.preventDefault();
+          if (this.playback) this.playback.stop();
+          const rect = pista.getBoundingClientRect();
+          const aFrame = (x) => Math.max(1, Math.min(total,
+            1 + Math.floor((x - rect.left + pista.scrollLeft) / ANCHO)));
+          doc.goTo(aFrame(ev.clientX));
+          const mover = (e2) => doc.goTo(aFrame(e2.clientX));
+          const soltar = () => {
+            document.removeEventListener("pointermove", mover);
+            document.removeEventListener("pointerup", soltar);
+          };
+          document.addEventListener("pointermove", mover);
+          document.addEventListener("pointerup", soltar);
+        };
         pista.appendChild(t);
       }
       regla.appendChild(pista);

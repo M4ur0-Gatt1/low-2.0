@@ -30,6 +30,7 @@
     xsheet:    { label: "X-sheet",       element: "#dzXsheet" },
     camera:    { label: "Cámara",        element: "#dzCam" },
     onion:     { label: "Papel cebolla", element: "#dzOnionPanel" },
+    levelstrip:{ label: "Dibujos del nivel", element: "#dzLevelStrip" },
     color:     { label: "Paleta",        element: "#dzPalette" },
     code:      { label: "Código SVG",    element: ".dz-code" },
   };
@@ -45,6 +46,7 @@
         { id: "layers",   dock: "right" },
         { id: "color",    dock: "right" },
         { id: "onion",    dock: "overlay" },
+        { id: "levelstrip", dock: "overlay" },
         { id: "timeline", hidden: true },
         { id: "xsheet",   hidden: true },
         { id: "camera",   hidden: true },
@@ -58,6 +60,7 @@
         { id: "xsheet",   dock: "right" },
         { id: "timeline", dock: "bottom" },
         { id: "onion",    dock: "overlay" },
+        { id: "levelstrip", dock: "overlay" },
         { id: "layers",   hidden: true },
         { id: "color",    hidden: true },
         { id: "code",     hidden: true },

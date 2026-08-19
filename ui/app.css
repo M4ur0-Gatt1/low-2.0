@@ -2226,3 +2226,42 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .tl2-cell.hold { background: rgba(255,255,255,.06); }
 .tl2-cell.hold::before { content: ""; width: 100%; height: 1px; background: rgba(255,255,255,.25); }
 .tl2-cell:hover { outline: 1px solid var(--accent, #F0450E); outline-offset: -1px; }
+
+/* ══ LEVEL STRIP (los dibujos del nivel) ═══════════════════════════════════
+   El material, no el tiempo: acá están los dibujos existan o no en una celda.
+   Un dibujo que no está expuesto se marca, porque si no es invisible. */
+.ls2 { display: flex; flex-direction: column; height: 100%; min-height: 0;
+  background: var(--panel, #17181c); }
+.ls2-head { display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  font: 600 9px/1 Figtree, sans-serif; letter-spacing: .7px; text-transform: uppercase;
+  color: var(--fg2, #8a93a6); border-bottom: 1px solid var(--line, #2a2d35); }
+.ls2-add { margin-left: auto; width: 18px; height: 18px; border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--line, #2a2d35); background: transparent; color: var(--fg2, #8a93a6);
+  font-size: 12px; line-height: 1; }
+.ls2-add:hover { color: #fff; border-color: var(--accent, #F0450E); }
+.ls2-strip { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex;
+  flex-wrap: wrap; align-content: flex-start; gap: 4px; padding: 6px; }
+.ls2-item { position: relative; width: 62px; height: 46px; cursor: pointer;
+  border: 1px solid var(--line, #2a2d35); border-radius: 4px; overflow: hidden;
+  background: #fff; }
+.ls2-item:hover { border-color: var(--accent, #F0450E); }
+.ls2-item.actual { outline: 2px solid var(--accent, #F0450E); outline-offset: -2px; }
+/* el dibujo que no está en ninguna celda: existe pero no se ve en la escena */
+.ls2-item.suelto { opacity: .55; border-style: dashed; }
+.ls2-thumb { width: 100%; height: 100%; }
+.ls2-thumb svg { width: 100%; height: 100%; display: block; }
+.ls2-num { position: absolute; left: 0; bottom: 0; padding: 0 3px;
+  font: 600 9px/1.5 "JetBrains Mono", monospace; color: #fff;
+  background: rgba(0,0,0,.62); border-top-right-radius: 3px; }
+.ls2-empty { font: 400 10px/1.4 Figtree, sans-serif; color: var(--fg2, #8a93a6);
+  opacity: .7; padding: 8px 4px; }
+.ls2-menu { position: fixed; z-index: 99999; display: flex; flex-direction: column;
+  min-width: 178px; padding: 3px; border-radius: 6px;
+  background: var(--panel2, #1e2026); border: 1px solid var(--line, #2a2d35);
+  box-shadow: 0 10px 30px rgba(0,0,0,.55); }
+.ls2-menu button { text-align: left; border: none; background: transparent; cursor: pointer;
+  color: var(--fg, #e6e9f0); font: 400 11px/1 Figtree, sans-serif; padding: 6px 8px;
+  border-radius: 4px; }
+.ls2-menu button:hover { background: var(--accent, #F0450E); color: #fff; }
+.ls2panel { width: 226px; height: 250px; display: flex; flex-direction: column; padding: 0; }
+.ls2panel #dzLsBody { flex: 1 1 auto; min-height: 0; }

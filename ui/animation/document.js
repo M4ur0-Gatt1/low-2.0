@@ -180,6 +180,110 @@
       }
       return ok;
     }
+    // ── operaciones sobre DIBUJOS (el material, no el tiempo) ────────────
+    /** Duplica un dibujo con número nuevo. Es lo que se hace para partir de una
+     *  pose y modificarla, en vez de dibujar de cero. */
+    duplicateDrawing(number) {
+      const lv = this.level;
+      const src = lv && lv.byNumber(number);
+      if (!src) return null;
+      const n = lv.nextNumber();
+      const nuevo = lv.addDrawing(n, src.content);
+      this.touch(); this.emit("level");
+      if (this.history) {
+        const doc = this;
+        this.history.push({
+          label: "Duplicar dibujo", domain: "anim", before: null, after: n,
+          apply: (dir) => {
+            const l = doc.scene.level(lv.id);
+            if (!l) return;
+            if (dir === "undo") l.removeDrawing(n);
+            else l.addDrawing(n, src.content);
+            doc.emit("level"); doc.emit("frame");
+          },
+        });
+      }
+      return nuevo;
+    }
+
+    /** Cambia el número de un dibujo y arrastra sus exposiciones: renumerar no
+     *  puede dejar celdas apuntando a un dibujo que ya no existe. */
+    renumberDrawing(from, to) {
+      const lv = this.level;
+      if (!lv || lv.byNumber(to)) return false;      // destino ocupado
+      if (!lv.renumber(from, to)) return false;
+      const cambios = [];
+      for (const ly of this.scene.layers) {
+        if (ly.levelId !== lv.id) continue;
+        const antes = ly.cells.slice();
+        ly.cells = ly.cells.map((c) => (c === from ? to : c));
+        cambios.push({ id: ly.id, antes, despues: ly.cells.slice() });
+      }
+      this.touch(); this.emit("cells"); this.emit("level");
+      if (this.history) {
+        const doc = this;
+        this.history.push({
+          label: "Renumerar dibujo", domain: "anim", before: from, after: to,
+          apply: (dir) => {
+            const l = doc.scene.level(lv.id);
+            if (!l) return;
+            l.renumber(dir === "undo" ? to : from, dir === "undo" ? from : to);
+            for (const c of cambios) {
+              const capa = doc.scene.layer(c.id);
+              if (capa) capa.cells = (dir === "undo" ? c.antes : c.despues).slice();
+            }
+            doc.emit("cells"); doc.emit("level"); doc.emit("frame");
+          },
+        });
+      }
+      return true;
+    }
+
+    /** Borra un dibujo del nivel Y vacía las celdas que lo exponían. Es la
+     *  única operación que SÍ destruye un dibujo, y por eso es explícita. */
+    deleteDrawing(number) {
+      const lv = this.level;
+      const d = lv && lv.byNumber(number);
+      if (!d) return false;
+      const copia = { number: d.number, content: d.content, name: d.name };
+      const cambios = [];
+      for (const ly of this.scene.layers) {
+        if (ly.levelId !== lv.id) continue;
+        const antes = ly.cells.slice();
+        ly.cells = ly.cells.map((c) => (c === number ? null : c));
+        cambios.push({ id: ly.id, antes, despues: ly.cells.slice() });
+      }
+      lv.removeDrawing(number);
+      this.touch(); this.emit("cells"); this.emit("level");
+      if (this.history) {
+        const doc = this;
+        this.history.push({
+          label: "Borrar dibujo", domain: "anim", before: copia, after: null,
+          apply: (dir) => {
+            const l = doc.scene.level(lv.id);
+            if (!l) return;
+            if (dir === "undo") { const nd = l.addDrawing(copia.number, copia.content); nd.name = copia.name; }
+            else l.removeDrawing(copia.number);
+            for (const c of cambios) {
+              const capa = doc.scene.layer(c.id);
+              if (capa) capa.cells = (dir === "undo" ? c.antes : c.despues).slice();
+            }
+            doc.emit("cells"); doc.emit("level"); doc.emit("frame");
+          },
+        });
+      }
+      return true;
+    }
+
+    /** Primer frame donde se expone un dibujo (para saltar a él desde la tira). */
+    frameOfDrawing(number) {
+      const ly = this.layer;
+      if (!ly) return null;
+      const total = ly.lastFrame();
+      for (let f = 1; f <= total; f++) if (ly.cellAt(f) === number) return f;
+      return null;
+    }
+
     addLayer(nombre) {
       const lv = this.scene.addLevel(nombre || `Nivel ${this.scene.levels.length + 1}`);
       const ly = this.scene.addLayer(lv.id, nombre || `Capa ${this.scene.layers.length + 1}`);
