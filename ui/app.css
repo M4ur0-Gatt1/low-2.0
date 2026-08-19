@@ -2162,3 +2162,16 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .dz-grip:hover { background-image: repeating-linear-gradient(90deg,
     var(--accent, #F0450E) 0 2px, transparent 2px 5px); }
 .dz-grip:active { cursor: grabbing; }
+
+/* ══ CHAT PLEGABLE ═════════════════════════════════════════════════════════
+   Ocupaba ~100 px fijos abajo, siempre. Sumado a las barras de arriba, la
+   mitad de la pantalla era interfaz. Plegado es una línea de 24 px. */
+.dz-dock.plegado { padding: 0; }
+.dz-dock.plegado > *:not(.dz-dock-toggle) { display: none !important; }
+.dz-dock-toggle { display: none; width: 100%; height: 24px; align-items: center;
+  justify-content: space-between; padding: 0 14px; cursor: text;
+  border: none; background: transparent; color: var(--mut, #8a93a6);
+  font: 400 11px/1 Figtree, sans-serif; }
+.dz-dock.plegado > .dz-dock-toggle { display: flex; }
+.dz-dock-toggle:hover { color: var(--fg, #e6e9f0); background: rgba(255,255,255,.03); }
+.dz-dock-toggle b { font: 500 9px/1 "JetBrains Mono", monospace; opacity: .5; }

@@ -8883,6 +8883,45 @@ function dzLayersToggle() {
 }
 
 /* ── alinear el elemento seleccionado respecto del lienzo (viewBox) ── */
+/* ══ CHAT PLEGABLE ══════════════════════════════════════════════════════
+   El área de dibujo tiene que ser la mayor parte de la pantalla. El chat vive
+   plegado en una línea y se abre cuando se lo necesita. */
+function dzDockPlegar(plegar) {
+  const d = $("#dzDock");
+  if (!d) return;
+  d.classList.toggle("plegado", plegar !== false);
+  if (plegar === false) { const p = $("#dzPrompt"); if (p) p.focus(); }
+}
+function dzDockWire() {
+  const b = $("#dzDockToggle");
+  if (b && !b.dataset.wired) { b.dataset.wired = "1"; b.onclick = () => dzDockPlegar(false); }
+  const p = $("#dzPrompt");
+  if (p && !p.dataset.wiredBlur) {
+    p.dataset.wiredBlur = "1";
+    // se pliega solo al salir, si no quedó nada escrito: no hay que acordarse
+    // de cerrarlo
+    p.addEventListener("blur", () => { if (!p.value.trim()) dzDockPlegar(true); });
+    p.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      // frenar el evento: si sigue subiendo, el Escape global CIERRA el editor
+      // de diseño entero. Acá Escape solo pliega el chat.
+      e.preventDefault();
+      e.stopPropagation();
+      p.blur();
+      dzDockPlegar(true);
+    });
+  }
+  if (!window.__dzDockKey) {
+    window.__dzDockKey = true;
+    window.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        dzDockPlegar($("#dzDock") && !$("#dzDock").classList.contains("plegado"));
+      }
+    });
+  }
+}
+
 /* ══ SACAR UN PANEL ARRASTRÁNDOLO (estilo OpenToonz) ═════════════════════
    En OpenToonz se agarra la barra de título de un panel, se tira, y el panel
    se convierte en una ventana flotante que se puede llevar al otro monitor.
@@ -9174,16 +9213,23 @@ function dzWsAplicar(ws) {
     } else {
       el.hidden = oculto;
     }
-    if (!oculto && cfg && cfg.size) {
-      // alto para lo acoplado abajo, ancho para los laterales
-      if (cfg.dock === "bottom" || cfg.dock === "top") el.style.height = cfg.size + "px";
-      else if (cfg.dock === "left" || cfg.dock === "right") el.style.width = cfg.size + "px";
-    }
+    // NO imponer tamaños. Al hacerlo (tools 56px, inspector 250px, timeline
+    // 92px) la barra de herramientas no entraba en su ancho, el lienzo quedaba
+    // aplastado y aparecían márgenes enormes por todos lados: el workspace
+    // decide QUÉ se ve, no con cuántos píxeles. El tamaño lo manda el CSS de la
+    // app, salvo que el usuario lo haya ajustado y guardado a mano.
+    if (cfg && cfg.userSize) {
+      if (cfg.dock === "bottom" || cfg.dock === "top") el.style.height = cfg.userSize + "px";
+      else if (cfg.dock === "left" || cfg.dock === "right") el.style.width = cfg.userSize + "px";
+    } else { el.style.width = ""; el.style.height = ""; }
     // el registro de paneles conserva el estado para las ventanas separadas
     if (LOW.workspace.panels && LOW.workspace.panels.panels.has(id)) {
       LOW.workspace.panels.update(id, { visible: !oculto, dock: (cfg && cfg.dock) || "right" });
     }
   }
+  // el chat plegado en los workspaces de trabajo: ahí la pantalla es para dibujar
+  dzDockWire();
+  dzDockPlegar(ws.chat !== true);
   if (ws.abre3d && typeof openL3d === "function") openL3d();
   else if (typeof closeL3d === "function" && !$("#l3dView").hidden) closeL3d();
   dzWsRender();
