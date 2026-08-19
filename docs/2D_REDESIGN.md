@@ -151,7 +151,7 @@ Una fase termina cuando se puede hacer el flujo real, no cuando compila.
 |---|---|---|
 | 1 | Modelo: Scene/Level/Drawing/Cell/Exposure + operaciones de celda | ✅ hecho |
 | 2 | Workspaces genéricos + los 7 layouts | ✅ base hecha |
-| 3 | Xsheet/Timeline sobre el modelo (holds, steps, rangos) | pendiente |
+| 3 | Xsheet/Timeline sobre el modelo (holds, steps, rangos) | ◐ planilla y navegación hechas |
 | 4 | Motor de dibujo (brush, presión, estabilización) sobre el modelo | pendiente |
 | 5 | Onion Skin sobre drawings | pendiente |
 | 6 | Workflow: copiar/pegar, insertar, renumerar, atajos, navegación | pendiente |
@@ -184,11 +184,25 @@ reorganiza los paneles y **la escena queda intacta** (mismo SVG, mismo contenido
 (`tools/stamp_version.py`, correr en cada bump). Sin eso el WebView puede seguir ejecutando el
 `app.js` anterior tras actualizar, y el arreglo "no aparece".
 
+**Fase 3 — planilla y navegación (v3.29.30).** `document.js` (LowDoc: dueño de la escena, del
+frame y del dibujo actual, con migración desde la animación vieja) y `xsheet-view.js` (la planilla:
+columnas por capa, holds dibujados como línea de continuación, número editable en la celda, manija
+para estirar la exposición y las operaciones de timing a un clic).
+
+Verificado en pantalla, no solo en tests: dibujar en el frame 1, ir al 5, dibujar otra pose, volver
+— cada dibujo queda donde debe y **no se duplica nada** (2 dibujos, 5 celdas). Parado dentro de un
+hold, el papel cebolla **no repite el dibujo sostenido** y muestra el siguiente distinto.
+
+Al probar la planilla en pantalla apareció un bug que los tests no cazaban: las operaciones que
+ACORTAN la secuencia (1s sobre un 2s, `each`, `dedupe`) dejaban las celdas viejas del final
+colgando — dibujos fantasma al final de la escena. Corregido con `replace()` y con tres pruebas
+nuevas (**30/30**).
+
 ### Lo que sigue
 
-Fase 3: que la Xsheet y la Timeline de la pantalla operen sobre este modelo (hoy siguen sobre
-`DZ.anim.frames`). Es la conexión que convierte todo lo anterior en algo que se usa, e incluye la
-migración de escenas viejas con `Scene.fromLegacy()`.
+Fase 4: el motor de dibujo escribiendo directo en el modelo (hoy el puente serializa el SVG del
+lienzo en cada cambio de frame). Y llevar el resto de la UI — timeline, playback, reproducción —
+al documento, para poder retirar `DZ.anim.frames`.
 
 ### Test de aceptación (el que define si esto sirve)
 

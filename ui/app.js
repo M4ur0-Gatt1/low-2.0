@@ -6799,6 +6799,7 @@ function dzXsSetVisible(show) {
   const canvas = $("#dzCanvas");
   if (!panel) return;
   panel.hidden = !show;
+  if (show) dzXsMount();          // planilla sobre el modelo (fase 3)
   if (button) button.classList.toggle("active", show);
   if (timeline) timeline.classList.toggle("xsheet-mode", show);
   if (canvas) canvas.classList.toggle("xsheet-open", show);
@@ -8884,6 +8885,118 @@ function dzLayersToggle() {
 }
 
 /* ── alinear el elemento seleccionado respecto del lienzo (viewBox) ── */
+/* ══ DOCUMENTO DE ANIMACIÓN sobre el modelo nuevo ════════════════════════
+   Puente entre el modelo (animation/) y la pantalla. Convive con la animación
+   vieja de archivos por frame: si hay una escena legacy abierta se MIGRA, así
+   nada se pierde y a partir de ahí ya se pueden hacer holds.
+   Ver docs/2D_REDESIGN.md — fase 3. */
+DZ.doc = null;      // LowDoc
+DZ.xsView = null;   // XsheetView
+
+/** Contenido dibujable del lienzo (lo de adentro del <svg>, sin el <svg>). */
+function dzCanvasInner() {
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
+  if (!svg) return "";
+  // se excluye lo que es asistencia visual, no dibujo
+  const tmp = svg.cloneNode(true);
+  tmp.querySelectorAll("g.dz-onion, g.dz-penui").forEach((n) => n.remove());
+  return tmp.innerHTML;
+}
+/** Pinta un dibujo del modelo en el lienzo. */
+function dzCanvasSet(contenido) {
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
+  if (!svg) return false;
+  svg.innerHTML = contenido || "";
+  dzDeselect && dzDeselect();
+  dzBuildLayers && dzBuildLayers();
+  return true;
+}
+
+/** Guarda lo que hay en el lienzo dentro del dibujo actual del documento. */
+function dzDocCommit() {
+  if (!DZ.doc) return;
+  DZ.doc.writeDrawing(dzCanvasInner());
+}
+
+/** Abre el frame `f`: guarda lo actual y muestra el dibujo que corresponde. */
+function dzDocGoTo(f) {
+  if (!DZ.doc) return;
+  dzDocCommit();
+  DZ.doc.goTo(f);
+  const d = DZ.doc.drawing;
+  dzCanvasSet(d ? d.content : "");
+  dzOnionRender();
+}
+
+/** Papel cebolla sobre DIBUJOS: pide al modelo qué mostrar y lo pinta. */
+function dzOnionRender() {
+  document.querySelectorAll("#dzCanvas svg g.dz-onion").forEach((n) => n.remove());
+  if (!DZ.doc || !DZ.onionOn) return;
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
+  if (!svg) return;
+  const cfg = { ...LOW.animation.onion.DEFAULTS, ...(DZ.doc.onionCfg || {}) };
+  const capas = LOW.animation.onion.resolve(DZ.doc.scene, DZ.doc.layerId, DZ.doc.frame, cfg);
+  for (const c of capas) {
+    const g = document.createElementNS(SVGNS, "g");
+    g.setAttribute("class", "dz-onion");
+    g.setAttribute("opacity", String(c.opacity));
+    g.setAttribute("pointer-events", "none");
+    g.innerHTML = c.drawing.content || "";
+    // teñir: todo el fantasma del color de su lado del tiempo
+    g.querySelectorAll("*").forEach((n) => {
+      if (n.getAttribute("fill") && n.getAttribute("fill") !== "none") n.setAttribute("fill", c.color);
+      if (n.getAttribute("stroke") && n.getAttribute("stroke") !== "none") n.setAttribute("stroke", c.color);
+    });
+    svg.insertBefore(g, svg.firstChild);
+  }
+}
+
+/** Arranca (o migra) el documento de animación. */
+async function dzDocInit() {
+  const A = LOW.animation;
+  if (!A || !A.LowDoc) return null;
+  if (DZ.doc) return DZ.doc;
+  // migrar desde la animación vieja si la hay
+  if (DZ.anim && DZ.anim.frames && DZ.anim.frames.length) {
+    const contents = {};
+    for (const ruta of DZ.anim.frames) {
+      if (DZ.anim.cache[ruta]) { contents[ruta] = dzInnerOf(DZ.anim.cache[ruta]); continue; }
+      try { const r = await api.image_data(ruta); if (r && r.svg) contents[ruta] = dzInnerOf(r.svg); }
+      catch (_) { /* un frame ilegible no puede frenar la migración */ }
+    }
+    DZ.doc = A.LowDoc.fromLegacy(DZ.anim.frames, contents, DZ.scene?.fps || 12, DZ.path);
+    dzSetStatus(" Escena migrada al modelo nuevo: " + DZ.doc.scene.levels[0].drawings.length + " dibujos");
+  } else {
+    DZ.doc = new A.LowDoc();
+    DZ.doc.writeDrawing(dzCanvasInner());   // lo que ya estaba dibujado es el dibujo 1
+  }
+  DZ.onionOn = true;
+  DZ.doc.subscribe((doc, motivo) => { if (motivo === "frame" || motivo === "onion") dzOnionRender(); });
+  return DZ.doc;
+}
+
+/** Extrae el interior de un <svg> serializado. */
+function dzInnerOf(texto) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = texto || "";
+  const s = tmp.querySelector("svg");
+  return s ? s.innerHTML : "";
+}
+
+/** Muestra la X-sheet nueva en su panel. */
+async function dzXsMount() {
+  const host = $("#dzXsRows");
+  if (!host || !LOW.animation.XsheetView) return;
+  await dzDocInit();
+  if (!DZ.xsView) DZ.xsView = new LOW.animation.XsheetView(host, DZ.doc);
+  else DZ.xsView.setDoc(DZ.doc);
+  // navegar desde la planilla cambia el dibujo del lienzo
+  DZ.doc.subscribe((doc, motivo) => { if (motivo === "frame") {
+    const d = doc.drawing; dzCanvasSet(d ? d.content : ""); dzOnionRender();
+  } });
+  DZ.xsView.render();
+}
+
 /* ══ WORKSPACES: un layout por etapa del proceso ═════════════════════════
    Cambiar de workspace reorganiza la interfaz y NADA más: la escena, el
    documento abierto y el estado del proyecto quedan intactos. Los layouts son
