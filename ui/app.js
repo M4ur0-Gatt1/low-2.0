@@ -9176,8 +9176,23 @@ async function dzXsMount() {
   const host = $("#dzXsRows");
   if (!host || !LOW.animation.XsheetView) return;
   await dzDocInit();
+  if (!DZ.playback) {
+    DZ.playback = new LOW.animation.Playback(DZ.doc);
+    // el transporte se redibuja al reproducir/parar para reflejar el estado
+    DZ.playback.subscribe(() => { if (DZ.xsView) DZ.xsView.render(); });
+  } else DZ.playback.setDoc(DZ.doc);
   if (!DZ.xsView) DZ.xsView = new LOW.animation.XsheetView(host, DZ.doc);
   else DZ.xsView.setDoc(DZ.doc);
+  DZ.xsView.playback = DZ.playback;
+  // sacar el foco de cualquier campo de texto: si quedó en el chat, los atajos
+  // de una tecla (espacio, flechas, punto y coma) no llegan nunca
+  if (typeof dzReleaseFocus === "function") dzReleaseFocus();
+  // atajos de animación: navegar por frames y por DIBUJOS, timing y celdas
+  LOW.animation.shortcuts.wire(() => DZ.doc, () => DZ.playback, {
+    getSelection: () => DZ.xsView && DZ.xsView.sel,
+    status: (m) => dzSetStatus(" " + m),
+    toggleOnion: () => { DZ.onionOn = !DZ.onionOn; dzOnion2Render(); dzOnionRender(); },
+  });
   // navegar desde la planilla cambia el dibujo del lienzo
   DZ.doc.subscribe((doc, motivo) => { if (motivo === "frame") {
     const d = doc.drawing; dzCanvasSet(d ? d.content : ""); dzOnionRender();

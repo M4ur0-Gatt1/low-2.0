@@ -117,6 +117,7 @@
       tabla.appendChild(cuerpo);
 
       this.host.innerHTML = "";
+      if (this.playback) this.host.appendChild(this._transporte());
       this.host.appendChild(this._barra());
       this.host.appendChild(tabla);
 
@@ -138,8 +139,10 @@
       const val = ly.cellAt(f);
       const esHold = ly.isHold(f);
       const inicio = val != null && !esHold;
+      const enSel = this.sel && this.sel.layerId === ly.id && f >= this.sel.from && f <= this.sel.to
+        && this.sel.to > this.sel.from;
       const c = document.createElement("div");
-      c.className = "xs2-cell"
+      c.className = "xs2-cell" + (enSel ? " rango" : "")
         + (val == null ? " vacia" : "")
         + (esHold ? " hold" : "")
         + (inicio ? " inicio" : "")
@@ -150,7 +153,18 @@
       c.textContent = inicio ? String(val) : "";
       c.title = val == null ? "Vacía" : `Dibujo ${val}${esHold ? " (sostenido)" : ""}`;
 
-      c.onclick = () => { doc.selectLayer(ly.id); doc.goTo(f); this.sel = { layerId: ly.id, from: f, to: f }; };
+      c.onclick = (e) => {
+        doc.selectLayer(ly.id);
+        if (e.shiftKey && this.sel && this.sel.layerId === ly.id) {
+          // Shift+clic extiende la selección desde donde estabas: así se agarra
+          // un tramo entero para copiarlo o cambiarle el timing de una
+          this.sel = { layerId: ly.id, from: Math.min(this.sel.from, f), to: Math.max(this.sel.from, f) };
+          this.render();
+          return;
+        }
+        this.sel = { layerId: ly.id, from: f, to: f };
+        doc.goTo(f);
+      };
       // doble clic: escribir el número del dibujo (sustitución directa)
       c.ondblclick = () => {
         const n = prompt(`Dibujo en el frame ${f} (vacío = borrar la exposición):`, val == null ? "" : String(val));
@@ -178,6 +192,55 @@
       return c;
     }
 
+    /** Transporte: reproducir, navegar, FPS y rango. */
+    _transporte() {
+      const doc = this.doc, pb = this.playback;
+      const b = document.createElement("div");
+      b.className = "xs2-tp";
+      const btn = (txt, title, fn, act) => {
+        const x = document.createElement("button");
+        x.className = "xs2-tpb" + (act ? " on" : "");
+        x.textContent = txt; x.title = title; x.onclick = fn;
+        b.appendChild(x); return x;
+      };
+      btn("⏮", "Primer frame (Inicio)", () => pb.first());
+      btn("◀", "Dibujo anterior (↑)", () => pb.stepDrawing(-1));
+      btn(pb.playing ? "⏸" : "▶", "Reproducir / parar (Espacio)", () => pb.toggle(), pb.playing);
+      btn("▶|", "Dibujo siguiente (↓)", () => pb.stepDrawing(+1));
+      btn("⏭", "Último frame (Fin)", () => pb.last());
+      btn("↻", "Repetir (L)", () => pb.setLoop(!pb.loop), pb.loop);
+
+      const fps = document.createElement("input");
+      fps.type = "number"; fps.min = 1; fps.max = 120; fps.value = doc.scene.fps;
+      fps.className = "xs2-num"; fps.title = "Cuadros por segundo";
+      fps.onchange = () => pb.setFps(+fps.value);
+      b.append(this._et("FPS"), fps);
+
+      const r = doc.scene.playRange();
+      const inp = (v, title, fn) => {
+        const i = document.createElement("input");
+        i.type = "number"; i.min = 1; i.value = v; i.className = "xs2-num"; i.title = title;
+        i.onchange = () => fn(+i.value);
+        return i;
+      };
+      b.append(this._et("Rango"),
+        inp(r.in, "Primer frame del rango", (v) => pb.setRange(v, doc.scene.range.out)),
+        inp(r.out, "Último frame del rango", (v) => pb.setRange(doc.scene.range.in, v)));
+
+      const info = document.createElement("b");
+      info.className = "xs2-tpinfo";
+      info.textContent = pb.playing && pb.medidoFps
+        ? `${doc.frame} · ${pb.medidoFps} fps reales`
+        : `${doc.frame} / ${r.out}`;
+      b.appendChild(info);
+      return b;
+    }
+    _et(txt) {
+      const s = document.createElement("span");
+      s.className = "xs2-et"; s.textContent = txt;
+      return s;
+    }
+
     /** Barra de operaciones de timing. Son las que se usan todo el tiempo. */
     _barra() {
       const doc = this.doc;
@@ -185,7 +248,8 @@
       b.className = "xs2-bar";
       const rango = () => {
         const ly = doc.layer;
-        const s = this.sel && this.sel.layerId === doc.layerId ? this.sel : null;
+        const s = this.sel && this.sel.layerId === doc.layerId && this.sel.to > this.sel.from
+          ? this.sel : null;
         return s ? [s.from, s.to] : [1, Math.max(1, ly ? ly.lastFrame() : 1)];
       };
       const btn = (txt, title, fn) => {
