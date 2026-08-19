@@ -22,6 +22,15 @@
   const LOW = global.LOW = global.LOW || {};
   const animation = LOW.animation = LOW.animation || {};
 
+  /** Nombres de las operaciones, para que el historial diga qué se deshace. */
+  const ETIQUETAS = {
+    step: "Cambiar el paso", each: "Comprimir", stepChange: "Cambiar la exposición",
+    insert: "Insertar frame", clear: "Vaciar celdas", remove: "Quitar frames",
+    move: "Mover exposición", repeat: "Repetir", reverse: "Invertir",
+    swing: "Ida y vuelta", resetStep: "Volver a 1s", dedupe: "Sacar holds",
+    autoexpose: "Sostener dibujos", fillHandle: "Estirar exposición",
+  };
+
   class LowDoc {
     constructor(scene) {
       this.scene = scene || new animation.Scene({ fps: 24 });
@@ -43,6 +52,52 @@
     get drawing() { return this.scene.drawingAt(this.layerId, this.frame); }
     /** Número de dibujo en la celda actual (null si está vacía). */
     get cell() { const ly = this.layer; return ly ? ly.cellAt(this.frame) : null; }
+
+    // ── historial ────────────────────────────────────────────────────────
+    /** Historial compartido con el resto del editor (LOW.core.HistoryManager).
+     *  Es UNA sola pila: así Ctrl+Z deshace lo último que hiciste, sea un trazo
+     *  o un cambio de timing, en el orden real en que pasaron las cosas. */
+    setHistory(h) { this.history = h; return this; }
+
+    /** Registra un cambio de CELDAS de una capa. Guarda el array de celdas —
+     *  números, nada pesado — antes y después. */
+    _histCells(label, layerId, antes) {
+      if (!this.history) return;
+      const ly = this.scene.layer(layerId);
+      if (!ly) return;
+      const despues = ly.cells.slice();
+      if (JSON.stringify(antes) === JSON.stringify(despues)) return;   // no pasó nada
+      const doc = this;
+      this.history.push({
+        label, domain: "anim", before: antes, after: despues,
+        apply: (_dir, valor) => {
+          const capa = doc.scene.layer(layerId);
+          if (!capa || !valor) return;
+          capa.cells = valor.slice();
+          doc.emit("cells");
+          const d = doc.drawing;
+          doc.emit("frame");
+          void d;
+        },
+      });
+    }
+
+    /** Registra un cambio de CONTENIDO de un dibujo. */
+    _histDrawing(label, levelId, number, antes, despues) {
+      if (!this.history || antes === despues) return;
+      const doc = this;
+      this.history.push({
+        label, domain: "anim", before: antes, after: despues,
+        apply: (_dir, valor) => {
+          const lv = doc.scene.level(levelId);
+          const d = lv && lv.byNumber(number);
+          if (!d) return;
+          d.content = valor || "";
+          doc.emit("content");
+          doc.emit("frame");     // que el lienzo vuelva a pintar lo que corresponde
+        },
+      });
+    }
 
     subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
     emit(motivo) { this.listeners.forEach((fn) => { try { fn(this, motivo); } catch (_) { /* un oyente roto no frena al resto */ } }); }
@@ -86,18 +141,30 @@
     }
     /** Guarda el contenido dibujado en el dibujo actual. */
     writeDrawing(contenido) {
+      const lyAntes = this.layer ? this.layer.cells.slice() : null;
+      const habia = this.cell != null;
       const d = this.ensureDrawing();
       if (!d) return false;
+      const antes = d.content;
       d.content = contenido || "";
       this.touch();
       this.emit("content");
+      // si la celda estaba vacía, el dibujo se acaba de crear: eso también
+      // tiene que poder deshacerse
+      if (!habia && lyAntes) this._histCells("Dibujar en un frame vacío", this.layerId, lyAntes);
+      this._histDrawing("Dibujar", this.layer && this.layer.levelId, d.number, antes, d.content);
       return true;
     }
     /** Expone un número de dibujo en la celda (escribirlo en la xsheet). */
     setCell(frame, drawingNumber, layerId) {
       const id = layerId || this.layerId;
+      const ly = this.scene.layer(id);
+      const antes = ly ? ly.cells.slice() : null;
       const ok = this.scene.expose(id, frame, drawingNumber);
-      if (ok) { this.touch(); this.emit("cells"); }
+      if (ok) {
+        this.touch(); this.emit("cells");
+        if (antes) this._histCells("Exponer dibujo", id, antes);
+      }
       return ok;
     }
     /** Aplica una operación de `exposures` sobre la capa actual y avisa. */
@@ -105,8 +172,12 @@
       const ly = this.layer;
       const fn = animation.exposures[op];
       if (!ly || typeof fn !== "function") return false;
+      const antes = ly.cells.slice();
       const ok = fn(ly, ...args);
-      if (ok) { this.touch(); this.emit("cells"); }
+      if (ok) {
+        this.touch(); this.emit("cells");
+        this._histCells(ETIQUETAS[op] || "Cambiar exposición", ly.id, antes);
+      }
       return ok;
     }
     addLayer(nombre) {
