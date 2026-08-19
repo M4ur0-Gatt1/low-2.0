@@ -213,6 +213,45 @@
       ok("y sin crear dibujos de más", doc2.level.drawings.length === 3);
     }
 
+    // 11. Rangos rectangulares: copiar/cortar/pegar entre varias columnas.
+    {
+      const sc = new Scene();
+      const la = sc.addLevel("A"), lb = sc.addLevel("B");
+      const a = sc.addLayer(la.id, "A"), b = sc.addLayer(lb.id, "B");
+      [1,2,3].forEach((n, i) => sc.expose(a.id, i + 1, n));
+      [4,5,6].forEach((n, i) => sc.expose(b.id, i + 1, n));
+      const doc = new animation.LowDoc(sc);
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      const range = { fromLayerId: a.id, toLayerId: b.id, from: 1, to: 2 };
+      const clip = doc.readCells(range);
+      ok("copiar rectangulo conserva filas y columnas", clip.width === 2 && clip.height === 2);
+      doc.clearCells(range, "Cortar rango");
+      ok("cortar vacia las dos columnas", a.cellAt(1) == null && b.cellAt(2) == null);
+      history.undo();
+      ok("undo de cortar restaura el rectangulo completo", a.cellAt(1) === 1 && b.cellAt(2) === 5);
+      doc.pasteCells(clip, a.id, 4);
+      ok("pegar rectangulo conserva su geometria", a.cellAt(4) === 1 && b.cellAt(5) === 5);
+      history.undo();
+      ok("undo de pegar restaura todas las columnas", a.cellAt(4) == null && b.cellAt(5) == null);
+    }
+
+    // 12. Level Strip -> XSheet: importa material y permite insertar con undo.
+    {
+      const sc = new Scene();
+      const source = sc.addLevel("Fuente"), target = sc.addLevel("Destino");
+      const srcLayer = sc.addLayer(source.id, "Fuente"), dstLayer = sc.addLayer(target.id, "Destino");
+      source.addDrawing(1, "<path id='uno'/>"); source.addDrawing(2, "<path id='dos'/>");
+      target.addDrawing(1, "<path id='ocupado'/>");
+      sc.expose(dstLayer.id, 1, 1);
+      const doc = new animation.LowDoc(sc);
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      doc.exposeDrawings(source.id, [1,2], dstLayer.id, 1, { insert: true });
+      ok("drop insert desplaza contenido existente", dstLayer.cellAt(3) === 1);
+      ok("drop remapea colision sin pisar dibujos", target.byNumber(1).content.includes("ocupado") && dstLayer.cellAt(1) !== 1);
+      history.undo();
+      ok("undo de drop restaura celdas y nivel", dstLayer.cellAt(1) === 1 && dstLayer.cellAt(2) == null && target.drawings.length === 1);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

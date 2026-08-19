@@ -99,6 +99,36 @@
       });
     }
 
+    /** Registra una operacion atomica que afecta varias columnas y, si hace
+     * falta, los dibujos de sus niveles. Es la base de rangos, pegado y drop. */
+    _histRange(label, before, after) {
+      if (!this.history || JSON.stringify(before) === JSON.stringify(after)) return;
+      const doc = this;
+      const restore = (snap) => {
+        for (const item of snap.layers || []) {
+          const ly = doc.scene.layer(item.id);
+          if (ly) ly.cells = item.cells.slice();
+        }
+        for (const item of snap.levels || []) {
+          const lv = doc.scene.level(item.id);
+          if (!lv) continue;
+          lv.drawings = item.drawings.map((d) => new animation.Drawing(d));
+        }
+        doc.touch(); doc.emit("cells"); doc.emit("level"); doc.emit("frame");
+      };
+      this.history.push({ label, domain: "anim", before, after,
+        apply: (_dir, value) => restore(value) });
+    }
+
+    _snapshot(layerIds, levelIds) {
+      return {
+        layers: [...new Set(layerIds || [])].map((id) => this.scene.layer(id)).filter(Boolean)
+          .map((ly) => ({ id: ly.id, cells: ly.cells.slice() })),
+        levels: [...new Set(levelIds || [])].map((id) => this.scene.level(id)).filter(Boolean)
+          .map((lv) => ({ id: lv.id, drawings: lv.drawings.map((d) => d.toJSON()) })),
+      };
+    }
+
     subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
     emit(motivo) { this.listeners.forEach((fn) => { try { fn(this, motivo); } catch (_) { /* un oyente roto no frena al resto */ } }); }
     touch() { this.dirty = true; this.scene.touch(); return this; }
@@ -179,6 +209,85 @@
         this._histCells(ETIQUETAS[op] || "Cambiar exposición", ly.id, antes);
       }
       return ok;
+    }
+
+    /** Lee un rectangulo de la XSheet. Las coordenadas son inclusivas. */
+    readCells(range) {
+      const layers = this.scene.layers;
+      const a = Math.max(0, layers.findIndex((l) => l.id === range.fromLayerId));
+      const b0 = layers.findIndex((l) => l.id === range.toLayerId);
+      const b = b0 < 0 ? a : b0;
+      const left = Math.min(a, b), right = Math.max(a, b);
+      const from = Math.max(1, Math.min(range.from, range.to));
+      const to = Math.max(from, Math.max(range.from, range.to));
+      return {
+        width: right - left + 1, height: to - from + 1,
+        columns: layers.slice(left, right + 1).map((ly) => {
+          const lv = this.scene.level(ly.levelId);
+          const cells = animation.exposures.read(ly, from, to);
+          const used = new Set(cells.filter((n) => n != null));
+          return { levelId: ly.levelId, cells,
+            drawings: lv ? lv.drawings.filter((d) => used.has(d.number)).map((d) => d.toJSON()) : [] };
+        }),
+      };
+    }
+
+    clearCells(range, label) {
+      const layers = this.scene.layers;
+      const a = layers.findIndex((l) => l.id === range.fromLayerId);
+      const b = layers.findIndex((l) => l.id === range.toLayerId);
+      if (a < 0 || b < 0) return false;
+      const selected = layers.slice(Math.min(a, b), Math.max(a, b) + 1);
+      const before = this._snapshot(selected.map((l) => l.id), []);
+      const from = Math.max(1, Math.min(range.from, range.to));
+      const to = Math.max(from, Math.max(range.from, range.to));
+      selected.forEach((ly) => { if (!ly.locked) animation.exposures.clear(ly, from, to); });
+      this.touch(); this.emit("cells");
+      this._histRange(label || "Vaciar rango", before, this._snapshot(selected.map((l) => l.id), []));
+      return true;
+    }
+
+    /** Pega una matriz desde su esquina superior izquierda. Cada columna se
+     * adapta al nivel de destino: conserva numeros libres y remapea colisiones
+     * sin perder ni sobrescribir dibujos existentes. */
+    pasteCells(clip, startLayerId, startFrame, options) {
+      if (!clip || !clip.columns || !clip.columns.length) return false;
+      const opts = options || {};
+      const layers = this.scene.layers;
+      const start = layers.findIndex((l) => l.id === startLayerId);
+      if (start < 0) return false;
+      const targets = layers.slice(start, start + clip.columns.length);
+      if (!targets.length) return false;
+      const layerIds = targets.map((l) => l.id), levelIds = targets.map((l) => l.levelId);
+      const before = this._snapshot(layerIds, levelIds);
+      const frame = Math.max(1, Math.round(startFrame) || 1);
+      targets.forEach((ly, ci) => {
+        if (ly.locked) return;
+        const source = clip.columns[ci], lv = this.scene.level(ly.levelId);
+        if (!source || !lv) return;
+        const remap = new Map();
+        for (const drawing of source.drawings || []) {
+          const existing = lv.byNumber(drawing.number);
+          if (!existing) { lv.drawings.push(new animation.Drawing(drawing)); remap.set(drawing.number, drawing.number); }
+          else if (existing.content === drawing.content) remap.set(drawing.number, drawing.number);
+          else { const n = lv.nextNumber(); lv.addDrawing(n, drawing.content); remap.set(drawing.number, n); }
+        }
+        const values = (source.cells || []).map((n) => n == null ? null : (remap.get(n) || n));
+        if (opts.insert) animation.exposures.insert(ly, frame, values.length);
+        animation.exposures.write(ly, frame, values);
+      });
+      this.touch(); this.emit("cells"); this.emit("level");
+      this._histRange(opts.label || "Pegar rango", before, this._snapshot(layerIds, levelIds));
+      return true;
+    }
+
+    exposeDrawings(levelId, numbers, targetLayerId, startFrame, options) {
+      const lv = this.scene.level(levelId);
+      const list = (numbers || []).map(Number).filter((n) => lv && lv.byNumber(n));
+      if (!lv || !list.length) return false;
+      return this.pasteCells({ columns: [{ levelId, cells: list,
+        drawings: list.map((n) => lv.byNumber(n).toJSON()) }] },
+        targetLayerId, startFrame, { insert: !!(options && options.insert), label: "Exponer dibujos" });
     }
     // ── operaciones sobre DIBUJOS (el material, no el tiempo) ────────────
     /** Duplica un dibujo con número nuevo. Es lo que se hace para partir de una
