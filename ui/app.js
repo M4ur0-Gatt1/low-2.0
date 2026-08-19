@@ -4164,6 +4164,8 @@ function dzRunAction(act) {
   if (act === "escena-guardar") return dzSceneSave(false);
   if (act === "escena-guardar-como") return dzSceneSave(true);
   if (act === "escena-abrir") return dzSceneOpen();
+  if (act === "audio-cargar") return dzAudioCargar();
+  if (act === "audio-quitar") return dzAudioQuitar();
   // Ventana: separar un panel a su propia ventana (segundo monitor)
   if (act && act.startsWith("win-")) {
     const kind = act.slice(4);
@@ -9023,6 +9025,58 @@ function dzDragOutAll() {
   }
 }
 
+/* ══ AUDIO DE LA ESCENA ═════════════════════════════════════════════════
+   Lo mínimo para animar con sonido: ver la onda frame a frame, escucharla
+   sincronizada y encontrar la sílaba arrastrando. Los picos se guardan con la
+   escena, así la onda sigue estando aunque el archivo no esté a mano. */
+function dzAudioTrack() {
+  if (!DZ.doc) return null;
+  if (!DZ.doc.audio && LOW.animation.AudioTrack) {
+    DZ.doc.audio = new LOW.animation.AudioTrack(DZ.doc);
+  }
+  return DZ.doc.audio || null;
+}
+
+function dzAudioWire() {
+  const inp = $("#dzAudioFile");
+  if (!inp || inp.dataset.wired) return;
+  inp.dataset.wired = "1";
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0];
+    inp.value = "";
+    if (!f) return;
+    const track = dzAudioTrack();
+    if (!track) return;
+    try {
+      dzSetStatus(" Analizando el audio…");
+      await track.load(await f.arrayBuffer(), f.name);
+      DZ.doc.touch();
+      if (DZ.tlView) { DZ.tlView.audio = track; DZ.tlView.render(); }
+      if (DZ.playback) DZ.playback.audio = track;
+      dzSetStatus(" Audio cargado: " + f.name + " · " + track.peaks.length + " frames de onda");
+    } catch (err) {
+      sysMsg(" No pude leer ese audio: " + (err.message || err));
+    }
+  };
+}
+
+function dzAudioCargar() {
+  dzAudioWire();
+  const inp = $("#dzAudioFile");
+  if (inp) inp.click();
+}
+
+function dzAudioQuitar() {
+  const track = DZ.doc && DZ.doc.audio;
+  if (!track) return;
+  track.stop();
+  DZ.doc.audio = null;
+  if (DZ.tlView) { DZ.tlView.audio = null; DZ.tlView.render(); }
+  if (DZ.playback) DZ.playback.audio = null;
+  DZ.doc.touch();
+  dzSetStatus(" Audio quitado");
+}
+
 /* ══ TIRA DE DIBUJOS DEL NIVEL ══════════════════════════════════════════
    Muestra el MATERIAL (qué dibujos existen), no el tiempo. Un dibujo que no
    está en ninguna celda antes era invisible aunque existiera. */
@@ -9052,6 +9106,8 @@ async function dzTlMount() {
   await dzDocInit();
   if (!DZ.tlView) DZ.tlView = new LOW.animation.TimelineView(host, DZ.doc);
   else DZ.tlView.setDoc(DZ.doc);
+  DZ.tlView.playback = DZ.playback || null;
+  DZ.tlView.audio = (DZ.doc && DZ.doc.audio) || null;
   // el encabezado de la vieja sobra: la nueva trae su propia regla de frames
   const head = document.querySelector("#dzTlGrid .dz-tlg-head");
   if (head) head.hidden = true;
@@ -9341,6 +9397,8 @@ async function dzXsMount() {
   if (!DZ.xsView) DZ.xsView = new LOW.animation.XsheetView(host, DZ.doc);
   else DZ.xsView.setDoc(DZ.doc);
   DZ.xsView.playback = DZ.playback;
+  dzAudioWire();
+  if (DZ.doc.audio) { DZ.playback.audio = DZ.doc.audio; if (DZ.tlView) DZ.tlView.audio = DZ.doc.audio; }
   // sacar el foco de cualquier campo de texto: si quedó en el chat, los atajos
   // de una tecla (espacio, flechas, punto y coma) no llegan nunca
   if (typeof dzReleaseFocus === "function") dzReleaseFocus();

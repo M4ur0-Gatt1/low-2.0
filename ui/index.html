@@ -330,6 +330,8 @@
       <span data-act="escena-guardar">Guardar escena <kbd>Ctrl+Shift+S</kbd></span>
       <span data-act="escena-guardar-como">Guardar escena como…</span>
       <span data-act="escena-abrir">Abrir escena…</span>
+      <hr><span data-act="audio-cargar">Cargar audio… <kbd>wav · mp3</kbd></span>
+      <span data-act="audio-quitar">Quitar el audio</span>
       <hr><span data-act="timeline">Línea de tiempo</span>
       <span data-act="cuadro">Duplicar cuadro al final</span>
       <span data-act="insertar">Insertar cuadro <kbd>Shift: en blanco</kbd></span>
@@ -705,6 +707,7 @@
        COLAPSABLE: ocupaba ~100 px fijos de alto en todo momento, aunque no se
        usara. Con las barras de arriba, la mitad de la pantalla era interfaz y
        no lienzo. Ahora se pliega a una línea y se abre con Ctrl+K o un clic. -->
+  <input type="file" id="dzAudioFile" accept="audio/*" hidden>
   <div class="dz-dock" id="dzDock">
     <button class="dz-dock-toggle" id="dzDockToggle" title="Pedirle un cambio a LOW (Ctrl+K)">
       <span>Pedile un cambio a LOW…</span><b>Ctrl+K</b></button>
@@ -727,44 +730,45 @@
 
 <div class="overlay" id="overlay" hidden><div class="modal" id="modal"></div></div>
 
-<script src="vendor/codemirror.min.js?v=3.29.37"></script>
-<script src="vendor/mode-python.min.js?v=3.29.37"></script>
-<script src="vendor/mode-javascript.min.js?v=3.29.37"></script>
-<script src="vendor/mode-shell.min.js?v=3.29.37"></script>
-<script src="vendor/mode-powershell.min.js?v=3.29.37"></script>
-<script src="vendor/mode-xml.min.js?v=3.29.37"></script>
-<script src="vendor/mode-css.min.js?v=3.29.37"></script>
-<script src="vendor/mode-htmlmixed.min.js?v=3.29.37"></script>
-<script src="vendor/addon-closebrackets.min.js?v=3.29.37"></script>
-<script src="vendor/addon-activeline.min.js?v=3.29.37"></script>
-<script src="mock-api.js?v=3.29.37"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="vendor/codemirror.min.js?v=3.29.38"></script>
+<script src="vendor/mode-python.min.js?v=3.29.38"></script>
+<script src="vendor/mode-javascript.min.js?v=3.29.38"></script>
+<script src="vendor/mode-shell.min.js?v=3.29.38"></script>
+<script src="vendor/mode-powershell.min.js?v=3.29.38"></script>
+<script src="vendor/mode-xml.min.js?v=3.29.38"></script>
+<script src="vendor/mode-css.min.js?v=3.29.38"></script>
+<script src="vendor/mode-htmlmixed.min.js?v=3.29.38"></script>
+<script src="vendor/addon-closebrackets.min.js?v=3.29.38"></script>
+<script src="vendor/addon-activeline.min.js?v=3.29.38"></script>
+<script src="mock-api.js?v=3.29.38"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=3.29.37"></script>
-<script src="animation/scene-model.js?v=3.29.37"></script>
-<script src="animation/exposures.js?v=3.29.37"></script>
-<script src="animation/onion.js?v=3.29.37"></script>
-<script src="animation/document.js?v=3.29.37"></script>
-<script src="animation/xsheet-view.js?v=3.29.37"></script>
-<script src="animation/timeline-view.js?v=3.29.37"></script>
-<script src="animation/level-strip.js?v=3.29.37"></script>
-<script src="animation/shortcuts.js?v=3.29.37"></script>
-<script src="animation/model-tests.js?v=3.29.37"></script>
-<script src="animation/timeline.js?v=3.29.37"></script>
-<script src="animation/xsheet.js?v=3.29.37"></script>
-<script src="animation/playback.js?v=3.29.37"></script>
-<script src="animation/camera.js?v=3.29.37"></script>
-<script src="drawing/stabilization.js?v=3.29.37"></script>
-<script src="drawing/pointer-input.js?v=3.29.37"></script>
-<script src="drawing/brushes.js?v=3.29.37"></script>
-<script src="drawing/stroke-engine.js?v=3.29.37"></script>
-<script src="workspace/panels.js?v=3.29.37"></script>
-<script src="workspace/workspaces.js?v=3.29.37"></script>
-<script src="workspace/windows.js?v=3.29.37"></script>
-<script src="workspace/layouts.js?v=3.29.37"></script>
-<script src="workspace/recovery.js?v=3.29.37"></script>
-<script src="ai/commands.js?v=3.29.37"></script>
-<script src="ai/task-runner.js?v=3.29.37"></script>
-<script src="ai/recovery.js?v=3.29.37"></script>
-<script src="app.js?v=3.29.37"></script>
+<script src="core/history.js?v=3.29.38"></script>
+<script src="animation/scene-model.js?v=3.29.38"></script>
+<script src="animation/exposures.js?v=3.29.38"></script>
+<script src="animation/onion.js?v=3.29.38"></script>
+<script src="animation/document.js?v=3.29.38"></script>
+<script src="animation/xsheet-view.js?v=3.29.38"></script>
+<script src="animation/timeline-view.js?v=3.29.38"></script>
+<script src="animation/level-strip.js?v=3.29.38"></script>
+<script src="animation/audio.js?v=3.29.38"></script>
+<script src="animation/shortcuts.js?v=3.29.38"></script>
+<script src="animation/model-tests.js?v=3.29.38"></script>
+<script src="animation/timeline.js?v=3.29.38"></script>
+<script src="animation/xsheet.js?v=3.29.38"></script>
+<script src="animation/playback.js?v=3.29.38"></script>
+<script src="animation/camera.js?v=3.29.38"></script>
+<script src="drawing/stabilization.js?v=3.29.38"></script>
+<script src="drawing/pointer-input.js?v=3.29.38"></script>
+<script src="drawing/brushes.js?v=3.29.38"></script>
+<script src="drawing/stroke-engine.js?v=3.29.38"></script>
+<script src="workspace/panels.js?v=3.29.38"></script>
+<script src="workspace/workspaces.js?v=3.29.38"></script>
+<script src="workspace/windows.js?v=3.29.38"></script>
+<script src="workspace/layouts.js?v=3.29.38"></script>
+<script src="workspace/recovery.js?v=3.29.38"></script>
+<script src="ai/commands.js?v=3.29.38"></script>
+<script src="ai/task-runner.js?v=3.29.38"></script>
+<script src="ai/recovery.js?v=3.29.38"></script>
+<script src="app.js?v=3.29.38"></script>
 </body>
 </html>
