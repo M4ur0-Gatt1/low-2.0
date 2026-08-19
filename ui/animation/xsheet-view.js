@@ -28,7 +28,7 @@
     constructor(host, doc) {
       this.host = typeof host === "string" ? document.querySelector(host) : host;
       this.doc = doc;
-      this.sel = null;              // { layerId, from, to }
+      this.sel = null;              // rectangular, inclusive selection
       this._desuscribir = doc ? doc.subscribe(() => this.render()) : null;
     }
     setDoc(doc) {
@@ -139,8 +139,7 @@
       const val = ly.cellAt(f);
       const esHold = ly.isHold(f);
       const inicio = val != null && !esHold;
-      const enSel = this.sel && this.sel.layerId === ly.id && f >= this.sel.from && f <= this.sel.to
-        && this.sel.to > this.sel.from;
+      const enSel = this._inSelection(ly.id, f);
       const c = document.createElement("div");
       c.className = "xs2-cell" + (enSel ? " rango" : "")
         + (val == null ? " vacia" : "")
@@ -189,7 +188,74 @@
         document.addEventListener("pointermove", mover);
         document.addEventListener("pointerup", soltar);
       };
+      // Selection owns the cell drag; the fill handle below owns timing stretch.
+      c.onclick = () => {};
+      c.onpointerdown = (e) => {
+        if (e.button !== 0 || e.target.closest(".xs2-fill")) return;
+        e.preventDefault();
+        const anchor = e.shiftKey && this.sel
+          ? { layerId: this.sel.anchorLayerId, frame: this.sel.anchorFrame }
+          : { layerId: ly.id, frame: f };
+        const update = (layerId, frame) => {
+          this.sel = this._selection(anchor.layerId, anchor.frame, layerId, frame);
+          doc.selectLayer(layerId); doc.goTo(frame); this.render();
+        };
+        update(ly.id, f);
+        const mover = (ev) => {
+          const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+          const cell = hit && hit.closest ? hit.closest(".xs2-cell") : null;
+          if (cell && cell.dataset.layerId) update(cell.dataset.layerId, Number(cell.dataset.frame));
+        };
+        const soltar = () => { document.removeEventListener("pointermove", mover);
+          document.removeEventListener("pointerup", soltar); };
+        document.addEventListener("pointermove", mover); document.addEventListener("pointerup", soltar);
+      };
+      c.dataset.layerId = ly.id; c.dataset.frame = String(f);
+      c.ondragover = (e) => {
+        if (!Array.from(e.dataTransfer.types || []).includes("application/x-low-level-drawings")) return;
+        e.preventDefault(); c.classList.add("drop-target");
+      };
+      c.ondragleave = () => c.classList.remove("drop-target");
+      c.ondrop = (e) => {
+        e.preventDefault(); c.classList.remove("drop-target");
+        try {
+          const data = JSON.parse(e.dataTransfer.getData("application/x-low-level-drawings"));
+          doc.exposeDrawings(data.levelId, data.numbers, ly.id, f, { insert: e.shiftKey && !e.altKey });
+          this.sel = this._selection(ly.id, f, ly.id, f + data.numbers.length - 1);
+        } catch (_) { /* ignore external drops */ }
+      };
+      if (val != null && ly.cellAt(f + 1) !== val) {
+        const handle = document.createElement("i"); handle.className = "xs2-fill";
+        handle.onpointerdown = (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const y0 = e.clientY, alto = c.getBoundingClientRect().height || 18;
+          let hasta = f;
+          const mover = (ev) => { hasta = f + Math.max(0, Math.round((ev.clientY - y0) / alto)); };
+          const soltar = () => { document.removeEventListener("pointermove", mover);
+            document.removeEventListener("pointerup", soltar);
+            if (hasta > f) doc.apply("fillHandle", ly.holdStart(f), f, hasta); };
+          document.addEventListener("pointermove", mover); document.addEventListener("pointerup", soltar);
+        };
+        c.appendChild(handle);
+      }
       return c;
+    }
+
+    _selection(aLayer, aFrame, bLayer, bFrame) {
+      const layers = this.doc.scene.layers;
+      const ai = layers.findIndex((l) => l.id === aLayer), bi = layers.findIndex((l) => l.id === bLayer);
+      const left = Math.min(ai, bi), right = Math.max(ai, bi);
+      return { anchorLayerId: aLayer, anchorFrame: aFrame,
+        fromLayerId: layers[left].id, toLayerId: layers[right].id,
+        from: Math.min(aFrame, bFrame), to: Math.max(aFrame, bFrame) };
+    }
+    _inSelection(layerId, frame) {
+      if (!this.sel) return false;
+      const layers = this.doc.scene.layers;
+      const i = layers.findIndex((l) => l.id === layerId);
+      const a = layers.findIndex((l) => l.id === this.sel.fromLayerId);
+      const b = layers.findIndex((l) => l.id === this.sel.toLayerId);
+      return i >= a && i <= b && frame >= this.sel.from && frame <= this.sel.to;
     }
 
     /** Transporte: reproducir, navegar, FPS y rango. */
@@ -248,7 +314,7 @@
       b.className = "xs2-bar";
       const rango = () => {
         const ly = doc.layer;
-        const s = this.sel && this.sel.layerId === doc.layerId && this.sel.to > this.sel.from
+        const s = this.sel && this.sel.fromLayerId === doc.layerId && this.sel.toLayerId === doc.layerId && this.sel.to > this.sel.from
           ? this.sel : null;
         return s ? [s.from, s.to] : [1, Math.max(1, ly ? ly.lastFrame() : 1)];
       };

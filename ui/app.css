@@ -2193,6 +2193,9 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   color: var(--fg2, #8a93a6); }
 /* rango elegido con Shift+clic */
 .xs2-cell.rango { box-shadow: inset 0 0 0 1px rgba(240,69,14,.55); background: rgba(240,69,14,.10); }
+.xs2-cell.drop-target { box-shadow: inset 0 0 0 2px #54d68b; background: rgba(84,214,139,.16); }
+.xs2-fill { position: absolute; right: 0; bottom: 0; width: 7px; height: 7px;
+  background: var(--accent, #F0450E); cursor: ns-resize; z-index: 2; }
 
 /* ══ TIMELINE (horizontal) ═════════════════════════════════════════════════
    La otra lectura del mismo modelo: una fila por capa, el tiempo hacia la
@@ -2246,6 +2249,8 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   background: #fff; }
 .ls2-item:hover { border-color: var(--accent, #F0450E); }
 .ls2-item.actual { outline: 2px solid var(--accent, #F0450E); outline-offset: -2px; }
+.ls2-item.selected { background: rgba(240,69,14,.16); box-shadow: inset 0 0 0 1px var(--accent, #F0450E); }
+.ls2-item.dragging { opacity: .45; }
 /* el dibujo que no está en ninguna celda: existe pero no se ve en la escena */
 .ls2-item.suelto { opacity: .55; border-style: dashed; }
 .ls2-thumb { width: 100%; height: 100%; }
