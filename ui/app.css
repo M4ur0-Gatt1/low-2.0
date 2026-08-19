@@ -2056,3 +2056,55 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   .agent { width: 350px; }
   .search { min-width: 190px; }
 }
+
+/* ══ X-SHEET (planilla de exposición) ═══════════════════════════════════════
+   Densa a propósito: un animador mira decenas de frames a la vez, y el espacio
+   en blanco acá es información perdida. Tipografía monoespaciada para que los
+   números de dibujo se alineen en columna como en una planilla de papel. */
+.xs2 { display: flex; flex-direction: column; height: 100%; min-height: 0;
+  font: 500 11px/1 "JetBrains Mono", ui-monospace, monospace; color: var(--fg, #e6e9f0);
+  background: var(--panel, #17181c); user-select: none; }
+.xs2-head { display: flex; align-items: stretch; position: sticky; top: 0; z-index: 2;
+  background: var(--panel2, #1e2026); border-bottom: 1px solid var(--line, #2a2d35); }
+.xs2-corner { width: 34px; flex: 0 0 34px; display: grid; place-items: center;
+  font-size: 10px; opacity: .5; }
+.xs2-col-head { flex: 1 1 0; min-width: 58px; padding: 5px 6px; cursor: pointer;
+  font-size: 10px; letter-spacing: .3px; text-transform: uppercase;
+  border-left: 1px solid var(--line, #2a2d35); color: var(--fg2, #8a93a6);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xs2-col-head:hover { background: rgba(255,255,255,.04); color: var(--fg, #fff); }
+.xs2-col-head.sel { color: var(--fg, #fff); box-shadow: inset 0 -2px 0 var(--accent, #F0450E); }
+.xs2-addcol { width: 24px; border: none; background: transparent; cursor: pointer;
+  color: var(--fg2, #8a93a6); font-size: 14px; }
+.xs2-addcol:hover { color: var(--accent, #F0450E); }
+
+.xs2-body { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+.xs2-row { display: flex; align-items: stretch; height: 18px; }
+.xs2-row.seg { border-top: 1px solid var(--line2, #23252c); }   /* cada 6 frames */
+.xs2-row.actual .xs2-fnum { background: var(--accent, #F0450E); color: #fff; }
+.xs2-row.actual { background: rgba(240,69,14,.07); }
+.xs2-fnum { width: 34px; flex: 0 0 34px; display: flex; align-items: center;
+  justify-content: flex-end; gap: 3px; padding-right: 5px; cursor: pointer;
+  font-size: 10px; color: var(--fg2, #8a93a6); background: var(--panel2, #1e2026); }
+.xs2-fnum:hover { color: var(--fg, #fff); }
+.xs2-onion { width: 6px; height: 6px; border-radius: 1px; transform: rotate(45deg);
+  display: inline-block; flex: 0 0 6px; }
+
+.xs2-cell { flex: 1 1 0; min-width: 58px; display: grid; place-items: center;
+  border-left: 1px solid var(--line, #2a2d35); cursor: pointer; position: relative; }
+.xs2-cell.vacia { background: repeating-linear-gradient(45deg,
+  transparent 0 4px, rgba(255,255,255,.02) 4px 8px); }
+.xs2-cell.inicio { background: rgba(255,255,255,.07); font-weight: 600; }
+/* el HOLD se dibuja como la línea de continuación de una planilla de papel:
+   sin número, con una vertical que baja desde la celda que sí lo tiene */
+.xs2-cell.hold::before { content: ""; position: absolute; top: 0; bottom: 0;
+  left: 50%; width: 1px; background: rgba(255,255,255,.28); }
+.xs2-cell.cursor { outline: 1px solid var(--accent, #F0450E); outline-offset: -1px; }
+.xs2-cell:hover { background: rgba(255,255,255,.10); }
+
+.xs2-bar { display: flex; gap: 2px; padding: 4px 5px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--line, #2a2d35); background: var(--panel2, #1e2026); }
+.xs2-op { min-width: 26px; height: 22px; padding: 0 6px; border-radius: 4px;
+  border: 1px solid var(--line, #2a2d35); background: var(--panel, #17181c);
+  color: var(--fg2, #8a93a6); font: 600 10px/1 Figtree, sans-serif; cursor: pointer; }
+.xs2-op:hover { color: var(--fg, #fff); border-color: var(--accent, #F0450E); }

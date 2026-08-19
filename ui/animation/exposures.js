@@ -35,9 +35,20 @@
   function trim(layer) {
     while (layer.cells.length && layer.cells[layer.cells.length - 1] == null) layer.cells.pop();
   }
+  /** Escribe `cells` desde `from` y BORRA lo que quedaba más allá.
+   *  Sin esto, una operación que ACORTA la secuencia (1s sobre un 2s, each,
+   *  dedupe) dejaba las celdas viejas del final colgando: aparecían dibujos
+   *  fantasma al final de la escena. */
+  function replace(layer, from, cells) {
+    write(layer, from, cells);
+    const finViejo = layer.cells.length;
+    for (let f = from + cells.length; f <= finViejo; f++) layer.setCell(f, null);
+    trim(layer);
+    return true;
+  }
 
   const ops = {
-    read, write,
+    read, write, replace,
 
     /** STEP N: cada dibujo del rango pasa a durar N frames (trabajar en 2s, 3s).
      *  Es la operación más usada de todas. */
@@ -52,8 +63,7 @@
         if (c !== prev) { for (let k = 0; k < n; k++) out.push(c); prev = c; }
       }
       const resto = read(layer, to + 1, layer.lastFrame());
-      write(layer, from, out.concat(resto));
-      trim(layer);
+      replace(layer, from, out.concat(resto));
       return true;
     },
 
@@ -64,8 +74,7 @@
       const src = read(layer, from, to);
       const out = src.filter((_, i) => i % n === 0);
       const resto = read(layer, to + 1, layer.lastFrame());
-      write(layer, from, out.concat(resto));
-      trim(layer);
+      replace(layer, from, out.concat(resto));
       return true;
     },
 
@@ -79,8 +88,7 @@
       const nuevo = Math.max(1, largo + delta);
       const resto = read(layer, inicio + largo, layer.lastFrame());
       const bloque = new Array(nuevo).fill(v);
-      write(layer, inicio, bloque.concat(resto));
-      trim(layer);
+      replace(layer, inicio, bloque.concat(resto));
       return true;
     },
 
@@ -158,8 +166,7 @@
       const src = read(layer, from, to);
       const out = src.filter((c, i) => i === 0 || c !== src[i - 1]);
       const resto = read(layer, to + 1, layer.lastFrame());
-      write(layer, from, out.concat(resto));
-      trim(layer);
+      replace(layer, from, out.concat(resto));
       return true;
     },
 

@@ -60,6 +60,23 @@
          JSON.stringify(cells(ly, 4)));
     }
 
+    // ── 3b. Acortar la secuencia NO puede dejar cola vieja ──
+    //  (apareció al probar la xsheet en pantalla: pasar de 2s a 1s dejaba los
+    //   dibujos del final colgando y se veían celdas fantasma)
+    {
+      const sc = new Scene();
+      const lv = sc.addLevel("A"); const ly = sc.addLayer(lv.id, "A");
+      [1,2,3,4].forEach((n) => sc.expose(ly.id, n, n));
+      X.step(ly, 1, 4, 2);                    // 1,1,2,2,3,3,4,4  (8 celdas)
+      X.step(ly, 1, ly.lastFrame(), 1);       // vuelve a 1,2,3,4 (4 celdas)
+      ok("volver a 1s no deja celdas fantasma", ly.lastFrame() === 4,
+         `último frame=${ly.lastFrame()} · ${JSON.stringify(cells(ly, 8))}`);
+      ok("y el contenido es el correcto",
+         JSON.stringify(cells(ly, 4)) === JSON.stringify([1,2,3,4]), JSON.stringify(cells(ly, 4)));
+      X.each(ly, 1, 4, 2);
+      ok("each tampoco deja cola", ly.lastFrame() === 2, `último=${ly.lastFrame()}`);
+    }
+
     // ── 4. Extender y acortar un hold ──
     {
       const sc = new Scene();
