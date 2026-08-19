@@ -1034,6 +1034,17 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 @keyframes dz-pulse { 50% { opacity: .55; } }
 /* ── chrome de estudio: menubar, statusbar, splitter, tool-opts, x-sheet ── */
 .ico .fill { fill: currentColor; stroke: none; }
+/* Pestañas de WORKSPACE. Densas y chicas a propósito: son navegación, no
+   botones de acción — tienen que ocupar poco y leerse de un vistazo. */
+.dz-ws { display: flex; align-items: stretch; gap: 1px; margin-right: 10px; }
+.dz-ws-tab {
+  border: none; background: transparent; color: var(--fg2, #8a93a6);
+  font: 500 11px/1 Figtree, system-ui, sans-serif; letter-spacing: .2px;
+  padding: 0 10px; height: 100%; min-height: 26px; cursor: pointer;
+  border-bottom: 2px solid transparent; white-space: nowrap;
+}
+.dz-ws-tab:hover { color: var(--fg, #e6e9f0); background: rgba(255,255,255,.05); }
+.dz-ws-tab.active { color: var(--fg, #fff); border-bottom-color: var(--accent, #F0450E); }
 .dz-menubar {
   flex: none; display: flex; align-items: center; gap: 2px;
   background: var(--panel2); border-bottom: 1px solid var(--line);

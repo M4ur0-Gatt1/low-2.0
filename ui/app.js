@@ -2270,6 +2270,7 @@ const DZ_PAIRS = [
 
 async function openDesign(path) {
   if (DZ.path && DZ.path !== path) await dzPersist();
+  dzWsInit();          // el editor abre en el workspace donde se dejó
   const r = await api.image_data(path);
   if (!r || r.error || !r.svg) return sysMsg(" No pude abrir el diseño: " + ((r && r.error) || path));
   DZ.path = path; DZ.sel = null;
@@ -8883,6 +8884,81 @@ function dzLayersToggle() {
 }
 
 /* ── alinear el elemento seleccionado respecto del lienzo (viewBox) ── */
+/* ══ WORKSPACES: un layout por etapa del proceso ═════════════════════════
+   Cambiar de workspace reorganiza la interfaz y NADA más: la escena, el
+   documento abierto y el estado del proyecto quedan intactos. Los layouts son
+   datos (workspace/workspaces.js), así que el usuario puede guardar los suyos.
+   Esta parte es solo la vista: aplica lo que el modelo decide. */
+function dzWsAplicar(ws) {
+  const cat = LOW.workspace.PANEL_CATALOG;
+  const body = $(".dz-body");
+  if (!ws || !body) return;
+
+  for (const [id, meta] of Object.entries(cat)) {
+    const cfg = (ws.panels || []).find((x) => x.id === id);
+    const el = document.querySelector(meta.element);
+    if (!el) continue;
+    const oculto = !cfg || cfg.hidden;
+    // el viewer no se puede ocultar: sin lienzo no hay programa
+    if (meta.fijo) { el.hidden = false; continue; }
+    if (id === "timeline") {
+      // la timeline tiene su propio encendido (carga la escena): no basta con
+      // mostrar el div, hay que pedirle al módulo que se abra o se cierre
+      const abierta = !el.hidden;
+      if (!oculto && !abierta) dzAnimToggle();
+      else if (oculto && abierta) dzAnimToggle();
+    } else if (id === "xsheet") {
+      if (typeof dzXsSetVisible === "function") dzXsSetVisible(!oculto);
+    } else {
+      el.hidden = oculto;
+    }
+    if (!oculto && cfg && cfg.size) {
+      // alto para lo acoplado abajo, ancho para los laterales
+      if (cfg.dock === "bottom" || cfg.dock === "top") el.style.height = cfg.size + "px";
+      else if (cfg.dock === "left" || cfg.dock === "right") el.style.width = cfg.size + "px";
+    }
+    // el registro de paneles conserva el estado para las ventanas separadas
+    if (LOW.workspace.panels && LOW.workspace.panels.panels.has(id)) {
+      LOW.workspace.panels.update(id, { visible: !oculto, dock: (cfg && cfg.dock) || "right" });
+    }
+  }
+  if (ws.abre3d && typeof openL3d === "function") openL3d();
+  else if (typeof closeL3d === "function" && !$("#l3dView").hidden) closeL3d();
+  dzWsRender();
+  dzSetStatus(" " + ws.name + (ws.descripcion ? " — " + ws.descripcion : ""));
+}
+
+/** Dibuja las pestañas de workspace. */
+function dzWsRender() {
+  const box = $("#dzWorkspaces");
+  if (!box) return;
+  const W = LOW.workspace.workspaces;
+  const activo = W.activeId || W.lastUsed();
+  box.innerHTML = "";
+  for (const ws of W.all()) {
+    const b = document.createElement("button");
+    b.className = "dz-ws-tab" + (ws.id === activo ? " active" : "");
+    b.textContent = ws.name;
+    b.title = ws.descripcion || ws.name;
+    b.onclick = () => W.activate(ws.id, dzWsAplicar);
+    // doble clic: guardar el layout actual con otro nombre, como en OpenToonz
+    b.ondblclick = (e) => {
+      e.preventDefault();
+      const nombre = prompt("Nombre del espacio de trabajo:", ws.name);
+      if (!nombre) return;
+      W.save(ws.id, ws.panels, nombre);
+      dzWsRender();
+    };
+    box.appendChild(b);
+  }
+}
+
+function dzWsInit() {
+  if (!window.LOW || !LOW.workspace || !LOW.workspace.workspaces) return;
+  dzWsRender();
+  LOW.workspace.workspaces.activate(LOW.workspace.workspaces.lastUsed(), dzWsAplicar);
+}
+
 /* ══ GUÍAS DE ALINEACIÓN DINÁMICAS (estilo Illustrator) ══════════════════
    Mientras arrastrás, si un borde o el centro de lo que movés queda casi a la
    altura del de otro objeto, se imanta y aparece la línea de alineación. Es

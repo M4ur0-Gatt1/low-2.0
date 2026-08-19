@@ -1,54 +1,247 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   MODELO DE ESCENA 2D — Scene · Level · Drawing · Layer · Cell
+
+   Es el corazón del módulo de animación, y NO toca el DOM. Antes toda la
+   animación era `DZ.anim.frames = [rutas de archivo]`, o sea "un frame es un
+   archivo": no existía el dibujo como entidad, así que un dibujo no podía
+   ocupar varios frames y los holds eran imposibles. De ahí venía que el papel
+   cebolla mirara `idx ± n` en vez de dibujos.
+
+   El modelo separa las dos cosas que la animación tradicional tiene separadas
+   desde siempre (y que OpenToonz respeta en su Xsheet):
+
+     Level   = el material dibujado          Layer/Cell = el TIEMPO
+     ├ Drawing 1                             frame 1 → dibujo 1
+     ├ Drawing 2                             frame 2 → dibujo 1   ← hold
+     └ Drawing 3                             frame 3 → dibujo 2
+
+   Reglas que el resto del programa puede dar por ciertas:
+     1. Drawing ≠ Frame. El dibujo vive en el Level; la celda lo REFERENCIA.
+     2. La misma referencia en celdas seguidas ES un hold. Nada se duplica.
+     3. Borrar una celda NO borra el dibujo (son operaciones distintas).
+     4. Mover exposiciones reordena referencias, nunca contenido.
+
+   @module animation/scene-model
+   ══════════════════════════════════════════════════════════════════════════ */
 (function (global) {
   "use strict";
   const LOW = global.LOW = global.LOW || {};
   const animation = LOW.animation = LOW.animation || {};
 
-  function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
-  function uid(prefix) { return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`; }
+  const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
+  let seq = 0;
+  const uid = (p) => `${p}_${(seq++).toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
-  class SceneModel {
+  /** Un dibujo: contenido + su número dentro del nivel. El número es lo que se
+   *  escribe en la celda de la xsheet, y es renumerable sin perder el dibujo. */
+  class Drawing {
     constructor(data = {}) {
-      this.version = 1;
-      this.id = data.id || uid("scene");
-      this.name = data.name || "Escena";
-      this.fps = Math.max(1, Math.min(120, Number(data.fps) || 12));
-      this.range = { in: 1, out: 0, ...(data.range || {}) };
-      this.drawings = clone(data.drawings || {});
-      this.levels = (data.levels || []).map((level, index) => this._level(level, index));
-      this.camera = clone(data.camera || { keys: {} });
-      this.audio = clone(data.audio || []);
-      this.metadata = clone(data.metadata || {});
-      this.revision = Number(data.revision) || 0;
+      this.id = data.id || uid("dw");
+      this.number = Number(data.number) || 1;
+      this.content = data.content || "";     // SVG del dibujo
+      this.name = data.name || "";
+      this.meta = clone(data.meta || {});
     }
+    isEmpty() { return !this.content || !/<(path|g|rect|circle|ellipse|line|polyline|polygon|text|image)\b/.test(this.content); }
+    toJSON() { return { id: this.id, number: this.number, content: this.content, name: this.name, meta: this.meta }; }
+  }
 
-    _level(level, index) {
-      return {
-        id: level.id || uid("level"), name: level.name || `Nivel ${index + 1}`,
-        visible: level.visible !== false, locked: !!level.locked,
-        color: level.color || "#67aeb6", exposures: clone(level.exposures || [])
-      };
+  /** Un nivel: la colección de dibujos numerados. Equivale al "animation level"
+   *  de OpenToonz — el material, sin ninguna noción de tiempo. */
+  class Level {
+    constructor(data = {}) {
+      this.id = data.id || uid("lv");
+      this.name = data.name || "Nivel";
+      this.type = data.type === "raster" ? "raster" : "vector";
+      this.paletteId = data.paletteId || null;
+      this.drawings = (data.drawings || []).map((d) => new Drawing(d));
     }
-
-    touch() { this.revision += 1; return this; }
-    snapshot() { return clone(this.toJSON()); }
+    /** Dibujo por NÚMERO (lo que referencia la celda), no por índice. */
+    byNumber(n) { return this.drawings.find((d) => d.number === Number(n)) || null; }
+    /** Números en uso, ordenados. */
+    numbers() { return this.drawings.map((d) => d.number).sort((a, b) => a - b); }
+    nextNumber() { const n = this.numbers(); return n.length ? n[n.length - 1] + 1 : 1; }
+    /** Crea un dibujo. Si el número ya existe, devuelve el que había: nunca se
+     *  pisa contenido en silencio. */
+    addDrawing(number, content = "") {
+      const n = Number(number) || this.nextNumber();
+      const ya = this.byNumber(n);
+      if (ya) return ya;
+      const d = new Drawing({ number: n, content });
+      this.drawings.push(d);
+      this.drawings.sort((a, b) => a.number - b.number);
+      return d;
+    }
+    removeDrawing(number) {
+      const i = this.drawings.findIndex((d) => d.number === Number(number));
+      if (i < 0) return null;
+      return this.drawings.splice(i, 1)[0];
+    }
+    /** Renumera un dibujo. Devuelve false si el destino está ocupado (el
+     *  llamador decide si intercambia o aborta; nunca se pierde un dibujo). */
+    renumber(from, to) {
+      const d = this.byNumber(from);
+      if (!d || this.byNumber(to)) return false;
+      d.number = Number(to);
+      this.drawings.sort((a, b) => a.number - b.number);
+      return true;
+    }
     toJSON() {
-      return { version: this.version, id: this.id, name: this.name, fps: this.fps,
-        range: this.range, drawings: this.drawings, levels: this.levels,
-        camera: this.camera, audio: this.audio, metadata: this.metadata,
-        revision: this.revision };
-    }
-
-    static fromLegacy({ frames = [], levels = [], fps = 12, scene = {} } = {}) {
-      const model = new SceneModel({ name: scene.name, fps, camera: { keys: scene.cam || {} } });
-      model.metadata.legacyFrames = true;
-      const names = levels.length ? levels : ["Dibujo"];
-      model.levels = names.map((name, li) => model._level({ name, exposures: frames.map((path, i) => ({
-        frame: i + 1, drawingId: path ? `${li}:${path}` : null, hold: false, path: path || null
-      })) }, li));
-      return model;
+      return { id: this.id, name: this.name, type: this.type,
+               paletteId: this.paletteId, drawings: this.drawings.map((d) => d.toJSON()) };
     }
   }
 
+  /** Una columna de la xsheet: qué dibujo se ve en cada frame.
+   *  `cells` es disperso — índice = frame - 1; un hueco es una celda vacía. */
+  class Layer {
+    constructor(data = {}) {
+      this.id = data.id || uid("ly");
+      this.name = data.name || "Capa";
+      this.levelId = data.levelId || null;
+      this.visible = data.visible !== false;
+      this.locked = !!data.locked;
+      this.opacity = data.opacity == null ? 1 : Number(data.opacity);
+      this.z = Number(data.z) || 0;            // profundidad para la cámara multiplano
+      this.cells = Array.isArray(data.cells) ? data.cells.slice() : [];
+    }
+    /** Celda en un frame (1-based): número de dibujo, o null si está vacía. */
+    cellAt(frame) {
+      const c = this.cells[Math.max(0, Math.round(frame) - 1)];
+      return c == null ? null : c;
+    }
+    setCell(frame, drawingNumber) {
+      const i = Math.max(0, Math.round(frame) - 1);
+      while (this.cells.length < i) this.cells.push(null);
+      this.cells[i] = drawingNumber == null ? null : Number(drawingNumber);
+      return true;
+    }
+    /** Último frame con contenido. */
+    lastFrame() {
+      for (let i = this.cells.length - 1; i >= 0; i--) if (this.cells[i] != null) return i + 1;
+      return 0;
+    }
+    /** ¿Este frame repite el dibujo del anterior? (o sea: es parte de un hold) */
+    isHold(frame) {
+      if (frame <= 1) return false;
+      const a = this.cellAt(frame), b = this.cellAt(frame - 1);
+      return a != null && a === b;
+    }
+    /** Primer frame del bloque de exposición que contiene a `frame`. */
+    holdStart(frame) {
+      let f = Math.max(1, Math.round(frame));
+      const v = this.cellAt(f);
+      if (v == null) return f;
+      while (f > 1 && this.cellAt(f - 1) === v) f--;
+      return f;
+    }
+    /** Cuántos frames dura la exposición que contiene a `frame`. */
+    holdLength(frame) {
+      const v = this.cellAt(frame);
+      if (v == null) return 0;
+      let n = 0, f = this.holdStart(frame);
+      while (this.cellAt(f) === v) { n++; f++; }
+      return n;
+    }
+    toJSON() {
+      return { id: this.id, name: this.name, levelId: this.levelId, visible: this.visible,
+               locked: this.locked, opacity: this.opacity, z: this.z, cells: this.cells.slice() };
+    }
+  }
+
+  /** La escena: niveles (material) + capas (tiempo) + ajustes. */
+  class Scene {
+    constructor(data = {}) {
+      this.version = 2;
+      this.id = data.id || uid("sc");
+      this.name = data.name || "Escena";
+      this.fps = Math.max(1, Math.min(120, Number(data.fps) || 24));
+      this.width = Number(data.width) || 1920;
+      this.height = Number(data.height) || 1080;
+      this.range = { in: Number(data.range?.in) || 1, out: Number(data.range?.out) || 0 };
+      this.levels = (data.levels || []).map((l) => new Level(l));
+      this.layers = (data.layers || []).map((l) => new Layer(l));
+      this.camera = clone(data.camera || { keys: {} });
+      this.audio = clone(data.audio || []);
+      this.revision = Number(data.revision) || 0;
+    }
+
+    touch() { this.revision++; return this; }
+    level(id) { return this.levels.find((l) => l.id === id) || null; }
+    layer(id) { return this.layers.find((l) => l.id === id) || null; }
+
+    addLevel(name, type) {
+      const l = new Level({ name: name || `Nivel ${this.levels.length + 1}`, type });
+      this.levels.push(l); this.touch(); return l;
+    }
+    addLayer(levelId, name) {
+      const l = new Layer({ levelId, name: name || `Capa ${this.layers.length + 1}` });
+      this.layers.push(l); this.touch(); return l;
+    }
+
+    /** Último frame con contenido en toda la escena. */
+    lastFrame() { return this.layers.reduce((m, l) => Math.max(m, l.lastFrame()), 0); }
+    /** Rango efectivo de reproducción. */
+    playRange() {
+      const out = this.range.out > 0 ? this.range.out : this.lastFrame() || 1;
+      return { in: Math.max(1, this.range.in), out: Math.max(1, out) };
+    }
+
+    /** El dibujo que se ve en una capa en un frame dado (resolviendo la
+     *  referencia celda → nivel → dibujo). null si la celda está vacía. */
+    drawingAt(layerId, frame) {
+      const ly = this.layer(layerId);
+      if (!ly) return null;
+      const num = ly.cellAt(frame);
+      if (num == null) return null;
+      const lv = this.level(ly.levelId);
+      return lv ? lv.byNumber(num) : null;
+    }
+
+    /** Expone un dibujo en un frame. Si el dibujo no existe en el nivel, lo
+     *  CREA vacío: dibujar es lo que después le pone contenido. */
+    expose(layerId, frame, drawingNumber) {
+      const ly = this.layer(layerId);
+      if (!ly || ly.locked) return false;
+      const lv = this.level(ly.levelId);
+      if (lv && drawingNumber != null) lv.addDrawing(drawingNumber);
+      ly.setCell(frame, drawingNumber);
+      this.touch();
+      return true;
+    }
+
+    toJSON() {
+      return { version: this.version, id: this.id, name: this.name, fps: this.fps,
+               width: this.width, height: this.height, range: this.range,
+               levels: this.levels.map((l) => l.toJSON()),
+               layers: this.layers.map((l) => l.toJSON()),
+               camera: this.camera, audio: this.audio, revision: this.revision };
+    }
+
+    /** Convierte el modelo VIEJO (`frames` = lista de archivos) al nuevo. Cada
+     *  archivo pasa a ser un dibujo numerado y se expone un frame cada uno:
+     *  el resultado se ve idéntico a antes, pero ya con dibujos de verdad, así
+     *  que a partir de ahí se pueden hacer holds. */
+    static fromLegacy({ frames = [], fps = 12, name = "Escena", contents = {} } = {}) {
+      const sc = new Scene({ name, fps });
+      const lv = sc.addLevel("Nivel 1");
+      const ly = sc.addLayer(lv.id, "Capa 1");
+      frames.forEach((ruta, i) => {
+        const d = lv.addDrawing(i + 1, contents[ruta] || "");
+        d.meta.legacyPath = ruta || null;
+        ly.setCell(i + 1, d.number);
+      });
+      return sc;
+    }
+  }
+
+  animation.Scene = Scene;
+  animation.Level = Level;
+  animation.Layer = Layer;
+  animation.Drawing = Drawing;
+  animation.clone = clone;
+
+  // La clase History previa se conserva: la usa el resto del módulo.
   class History {
     constructor(limit = 150) { this.limit = limit; this.undoStack = []; this.redoStack = []; }
     commit(label, before, after) {
@@ -56,11 +249,8 @@
       if (this.undoStack.length > this.limit) this.undoStack.shift();
       this.redoStack.length = 0;
     }
-    undo(model) { const e = this.undoStack.pop(); if (!e) return model; this.redoStack.push(e); return new SceneModel(e.before); }
-    redo(model) { const e = this.redoStack.pop(); if (!e) return model; this.undoStack.push(e); return new SceneModel(e.after); }
+    undo(model) { const e = this.undoStack.pop(); if (!e) return model; this.redoStack.push(e); return new Scene(e.before); }
+    redo(model) { const e = this.redoStack.pop(); if (!e) return model; this.undoStack.push(e); return new Scene(e.after); }
   }
-
-  animation.SceneModel = SceneModel;
   animation.History = History;
-  animation.clone = clone;
 })(window);
