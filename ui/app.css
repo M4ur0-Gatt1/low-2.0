@@ -2108,3 +2108,57 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   border: 1px solid var(--line, #2a2d35); background: var(--panel, #17181c);
   color: var(--fg2, #8a93a6); font: 600 10px/1 Figtree, sans-serif; cursor: pointer; }
 .xs2-op:hover { color: var(--fg, #fff); border-color: var(--accent, #F0450E); }
+
+/* ══ PAPEL CEBOLLA ═════════════════════════════════════════════════════════
+   Panel de trabajo, no un formulario: los controles que se tocan cada minuto
+   (cuántos dibujos antes y después) son puntos de un clic, no campos numéricos
+   donde hay que apuntar y escribir. */
+.onion2 { width: 214px; padding: 0 0 6px; }
+.onion2 .dz-op-head { display: flex; align-items: center; gap: 6px; padding: 5px 7px;
+  font: 600 9px/1 Figtree, sans-serif; letter-spacing: .8px; }
+.onion2-title { flex: 1; opacity: .75; }
+.onion2-power { width: 18px; height: 18px; border: none; border-radius: 4px; cursor: pointer;
+  background: transparent; color: var(--fg2, #8a93a6); font-size: 11px; line-height: 1; }
+.onion2-power.on { background: var(--accent, #F0450E); color: #fff; }
+
+.onion2-side, .onion2-row, .onion2-fixed {
+  display: flex; align-items: center; gap: 6px; padding: 3px 8px; }
+.onion2-lbl { font: 500 10px/1 Figtree, sans-serif; color: var(--fg2, #8a93a6);
+  min-width: 52px; }
+.onion2-swatch { width: 3px; height: 14px; border-radius: 2px; flex: 0 0 3px; }
+.onion2-dots { display: flex; gap: 3px; flex: 1; }
+.onion2-dots i { width: 13px; height: 13px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--line, #2a2d35); display: block; }
+.onion2-dots i.on { border-color: transparent; }
+.onion2-side input[type=color] { width: 18px; height: 16px; padding: 0; border: none;
+  background: transparent; cursor: pointer; }
+.onion2-row input[type=range] { flex: 1; accent-color: var(--accent, #F0450E); }
+.onion2-val { font: 500 9px/1 "JetBrains Mono", monospace; color: var(--fg2, #8a93a6);
+  min-width: 26px; text-align: right; }
+
+.onion2-fixed { flex-wrap: wrap; }
+.onion2-chips { display: flex; gap: 3px; flex-wrap: wrap; flex: 1; }
+.onion2-chips b { font: 500 9px/1 "JetBrains Mono", monospace; padding: 2px 4px;
+  border-radius: 3px; background: rgba(255,255,255,.10); cursor: pointer; }
+.onion2-chips b:hover { background: var(--accent, #F0450E); color: #fff; }
+.onion2-fixed button { font: 500 9px/1 Figtree, sans-serif; padding: 3px 6px; cursor: pointer;
+  border: 1px solid var(--line, #2a2d35); border-radius: 4px;
+  background: transparent; color: var(--fg2, #8a93a6); }
+.onion2-fixed button:hover { color: var(--fg, #fff); border-color: var(--accent, #F0450E); }
+.onion2-hint { font: 400 9px/1.3 Figtree, sans-serif; color: var(--fg2, #8a93a6);
+  opacity: .6; padding: 4px 8px 0; }
+
+/* ══ SACAR PANELES ARRASTRANDO ═════════════════════════════════════════════ */
+.dz-dragout { position: fixed; z-index: 99999; pointer-events: none;
+  padding: 5px 9px; border-radius: 6px; font: 600 10px/1 Figtree, sans-serif;
+  background: rgba(20,20,24,.94); color: var(--fg2, #8a93a6);
+  border: 1px solid var(--line, #2a2d35); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.dz-dragout.listo { color: #fff; border-color: var(--accent, #F0450E);
+  box-shadow: 0 0 0 1px var(--accent, #F0450E), 0 8px 24px rgba(0,0,0,.5); }
+/* manija de los paneles que no tienen barra de título propia */
+.dz-grip { height: 9px; flex: 0 0 9px; cursor: grab;
+  background: repeating-linear-gradient(90deg,
+    var(--line, #2a2d35) 0 2px, transparent 2px 5px) center / auto 3px no-repeat; }
+.dz-grip:hover { background-image: repeating-linear-gradient(90deg,
+    var(--accent, #F0450E) 0 2px, transparent 2px 5px); }
+.dz-grip:active { cursor: grabbing; }

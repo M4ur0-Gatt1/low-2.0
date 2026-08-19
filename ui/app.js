@@ -667,20 +667,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     $("#dzOnionPanel").hidden = !DZ.anim.onion;
     dzOnionUpdate();
   };
-  // panel 🗂 flotante: configuración en vivo + arrastrable por el encabezado
-  const opCfg = dzOnionCfg();
-  $("#opBefore").value = opCfg.before; $("#opAfter").value = opCfg.after;
-  $("#opAlpha").value = opCfg.alpha;
-  $("#opColorB").value = opCfg.colorB; $("#opColorA").value = opCfg.colorA;
-  const opBind = (id, key, num) => {
-    $("#" + id).oninput = (e) => {
-      DZ.onionCfg[key] = num ? +e.target.value : e.target.value;
-      dzOnionCfgSave(); dzOnionUpdate();
-    };
-  };
-  opBind("opBefore", "before", true); opBind("opAfter", "after", true);
-  opBind("opAlpha", "alpha", true);
-  opBind("opColorB", "colorB", false); opBind("opColorA", "colorA", false);
+  dzOnion2Wire();     // panel de papel cebolla (sobre el modelo de dibujos)
   $("#dzOpClose").onclick = () => { $("#dzOnionPanel").hidden = true; };
   // chrome de estudio: menubar, splitter, opciones de herramienta, statusbar
   dzMenubarWire();
@@ -7174,7 +7161,7 @@ function dzPushAnimationPanelPlayback(index, playing) {
    monitor son los paneles de apoyo. Python hace de buzón: acá publicamos una
    FOTO chica del panel y ejecutamos los comandos que llegan de vuelta.
    El lienzo no está en la lista a propósito: es el centro del trabajo. */
-const DZ_PANELS = ["timeline", "xsheet", "layers", "tools", "color"];
+const DZ_PANELS = ["timeline", "xsheet", "layers", "tools", "color", "onion"];
 DZ.detached = DZ.detached || new Set();
 
 /** Id estable para una capa: el panel remoto no puede mandar un nodo del DOM. */
@@ -7207,6 +7194,10 @@ function dzPanelSnapshot(kind) {
       id: b.dataset.tool, label: (b.title || b.dataset.tool || "").split(/[·(:]/)[0].trim(),
       active: b.dataset.tool === cur,
     })).filter(t => t.id) };
+  }
+  if (kind === "onion") {
+    const cfg = dzOnionCfgActual();
+    return { kind, enabled: !!DZ.onionOn, frame: DZ.doc ? DZ.doc.frame : 1, cfg };
   }
   if (kind === "color") {
     // se lee del elemento seleccionado, no de inputs del panel: esos se crean
@@ -7291,6 +7282,13 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
     return true;
   }
 
+  if (kind === "onion") {
+    if (action === "onion") {
+      if (payload.key === "enabled") { DZ.onionOn = !!payload.value; dzOnion2Render(); dzOnionRender(); }
+      else dzOnionCfgSet({ [payload.key]: payload.value });
+    }
+    return true;
+  }
   if (kind === "color") {
     if (action === "fill" || action === "stroke") dzStyleApply(action, payload.value);
     else if (action === "width") dzStyleApply("stroke-width", payload.value);
@@ -8885,6 +8883,157 @@ function dzLayersToggle() {
 }
 
 /* ── alinear el elemento seleccionado respecto del lienzo (viewBox) ── */
+/* ══ SACAR UN PANEL ARRASTRÁNDOLO (estilo OpenToonz) ═════════════════════
+   En OpenToonz se agarra la barra de título de un panel, se tira, y el panel
+   se convierte en una ventana flotante que se puede llevar al otro monitor.
+   Acá igual: cuando el arrastre se aleja lo suficiente del panel, se abre como
+   ventana nativa (open_panel) y el panel acoplado se oculta.
+
+   Se exige distancia — no basta con un clic — porque el mismo encabezado se
+   usa para mover el panel dentro de la ventana. */
+const DZ_DETACH_PX = 90;
+
+function dzDragOutWire(cabecera, kind) {
+  const head = typeof cabecera === "string" ? $(cabecera) : cabecera;
+  if (!head || head.dataset.dragout === "1") return;
+  head.dataset.dragout = "1";
+  head.title = (head.title ? head.title + " · " : "") + "arrastrá para sacarlo a otra pantalla";
+  head.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target.closest("button, input, .dz-op-x")) return;
+    const x0 = e.clientX, y0 = e.clientY;
+    let aviso = null, disparado = false;
+    const mover = (ev) => {
+      const d = Math.hypot(ev.clientX - x0, ev.clientY - y0);
+      if (d > 24 && !aviso) {
+        aviso = document.createElement("div");
+        aviso.className = "dz-dragout";
+        aviso.textContent = "Soltá para sacarlo a otra ventana";
+        document.body.appendChild(aviso);
+      }
+      if (aviso) {
+        aviso.style.left = ev.clientX + 14 + "px";
+        aviso.style.top = ev.clientY + 14 + "px";
+        aviso.classList.toggle("listo", d > DZ_DETACH_PX);
+      }
+      if (d > DZ_DETACH_PX) disparado = true;
+    };
+    const soltar = () => {
+      document.removeEventListener("pointermove", mover);
+      document.removeEventListener("pointerup", soltar);
+      if (aviso) aviso.remove();
+      if (disparado) dzDetachPanel(kind);
+    };
+    document.addEventListener("pointermove", mover);
+    document.addEventListener("pointerup", soltar);
+  });
+}
+
+/** Engancha el arrastre en todos los paneles que se pueden separar. */
+function dzDragOutAll() {
+  const mapa = [
+    ["#dzOpHead", "onion"],
+    ["#dzXsHead", "xsheet"],
+    ["#tlHead", "timeline"],
+  ];
+  for (const [sel, kind] of mapa) dzDragOutWire(sel, kind);
+  // los paneles del chrome (herramientas, capas, color) no tienen encabezado
+  // propio: se les pone una manija arriba, del alto justo para agarrarla
+  const conManija = [[".dz-tools", "tools"], [".dz-inspector", "layers"]];
+  for (const [sel, kind] of conManija) {
+    const el = document.querySelector(sel);
+    if (!el || el.querySelector(":scope > .dz-grip")) continue;
+    const g = document.createElement("div");
+    g.className = "dz-grip";
+    g.title = LOW.workspace.PANEL_CATALOG[kind]
+      ? LOW.workspace.PANEL_CATALOG[kind].label + " — arrastrá para sacarlo a otra pantalla"
+      : "arrastrá para sacarlo a otra pantalla";
+    el.insertBefore(g, el.firstChild);
+    dzDragOutWire(g, kind);
+  }
+}
+
+/* ══ PANEL DE PAPEL CEBOLLA ══════════════════════════════════════════════
+   Los controles que se tocan a cada rato (cuántos dibujos antes y después) son
+   puntos de un clic. Escribe en la config del documento, que es la que usa
+   `animation/onion.js` para resolver QUÉ dibujos mostrar. */
+function dzOnionCfgActual() {
+  const base = LOW.animation.onion.DEFAULTS;
+  if (DZ.doc) return { ...base, ...(DZ.doc.onionCfg || {}) };
+  return { ...base, ...(DZ.onionCfg2 || {}) };
+}
+function dzOnionCfgSet(patch) {
+  const cfg = { ...dzOnionCfgActual(), ...patch };
+  if (DZ.doc) DZ.doc.onionCfg = cfg; else DZ.onionCfg2 = cfg;
+  try { localStorage.setItem("low.onion.v2", JSON.stringify(cfg)); } catch (_) { /* noop */ }
+  dzOnion2Render();
+  dzOnionRender();
+}
+function dzOnion2Render() {
+  const cfg = dzOnionCfgActual();
+  const puntos = (host, valor, color, key) => {
+    const box = $(host);
+    if (!box) return;
+    box.innerHTML = "";
+    for (let i = 1; i <= 4; i++) {
+      const d = document.createElement("i");
+      d.className = i <= valor ? "on" : "";
+      d.style.background = i <= valor ? color : "transparent";
+      d.title = `${i} dibujo${i > 1 ? "s" : ""}`;
+      // volver a tocar el punto encendido más alto apaga ese lado: sin esto
+      // no había forma rápida de dejar solo los anteriores
+      d.onclick = () => dzOnionCfgSet({ [key]: (valor === i ? i - 1 : i) });
+      box.appendChild(d);
+    }
+  };
+  puntos("#onDotsB", cfg.before, cfg.colorBefore, "before");
+  puntos("#onDotsA", cfg.after, cfg.colorAfter, "after");
+  const set = (id, v) => { const e = $(id); if (e) e.value = v; };
+  set("#onColorB", cfg.colorBefore); set("#onColorA", cfg.colorAfter);
+  set("#onAlpha", Math.round(cfg.alpha * 100)); set("#onFall", Math.round(cfg.falloff * 100));
+  const txt = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  txt("#onAlphaVal", Math.round(cfg.alpha * 100) + "%");
+  txt("#onFallVal", Math.round(cfg.falloff * 100) + "%");
+  const sb = $("#onSwB"), sa = $("#onSwA");
+  if (sb) sb.style.background = cfg.colorBefore;
+  if (sa) sa.style.background = cfg.colorAfter;
+  const pw = $("#onOn");
+  if (pw) pw.classList.toggle("on", !!DZ.onionOn);
+  // marcadores fijos: cada uno se saca con un clic
+  const box = $("#onFixed");
+  if (box) {
+    box.innerHTML = "";
+    for (const f of cfg.fixed || []) {
+      const b = document.createElement("b");
+      b.textContent = f;
+      b.title = "Quitar el fijo del frame " + f;
+      b.onclick = () => dzOnionCfgSet(LOW.animation.onion.toggleFixed(dzOnionCfgActual(), f));
+      box.appendChild(b);
+    }
+    if (!(cfg.fixed || []).length) {
+      const s = document.createElement("span");
+      s.className = "onion2-val"; s.textContent = "—";
+      box.appendChild(s);
+    }
+  }
+}
+function dzOnion2Wire() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem("low.onion.v2") || "{}");
+    DZ.onionCfg2 = { ...LOW.animation.onion.DEFAULTS, ...guardado };
+  } catch (_) { DZ.onionCfg2 = { ...LOW.animation.onion.DEFAULTS }; }
+  const on = (id, ev, fn) => { const e = $(id); if (e) e[ev] = fn; };
+  on("#onColorB", "oninput", (e) => dzOnionCfgSet({ colorBefore: e.target.value }));
+  on("#onColorA", "oninput", (e) => dzOnionCfgSet({ colorAfter: e.target.value }));
+  on("#onAlpha", "oninput", (e) => dzOnionCfgSet({ alpha: +e.target.value / 100 }));
+  on("#onFall", "oninput", (e) => dzOnionCfgSet({ falloff: +e.target.value / 100 }));
+  on("#onOn", "onclick", () => { DZ.onionOn = !DZ.onionOn; dzOnion2Render(); dzOnionRender(); });
+  on("#onFixAdd", "onclick", () => {
+    const f = DZ.doc ? DZ.doc.frame : 1;
+    dzOnionCfgSet(LOW.animation.onion.toggleFixed(dzOnionCfgActual(), f));
+  });
+  dzOnion2Render();
+}
+
 /* ══ DOCUMENTO DE ANIMACIÓN sobre el modelo nuevo ════════════════════════
    Puente entre el modelo (animation/) y la pantalla. Convive con la animación
    vieja de archivos por frame: si hay una escena legacy abierta se MIGRA, así
@@ -9068,6 +9217,7 @@ function dzWsRender() {
 
 function dzWsInit() {
   if (!window.LOW || !LOW.workspace || !LOW.workspace.workspaces) return;
+  dzDragOutAll();
   dzWsRender();
   LOW.workspace.workspaces.activate(LOW.workspace.workspaces.lastUsed(), dzWsAplicar);
 }

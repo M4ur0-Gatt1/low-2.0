@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.30"
+LOW_VERSION = "3.29.31"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -198,6 +198,7 @@ class Api:
         "layers":   {"title": "Capas",    "w": 340,  "h": 720, "min": (260, 320)},
         "tools":    {"title": "Herramientas", "w": 300, "h": 640, "min": (220, 320)},
         "color":    {"title": "Color",    "w": 340,  "h": 420, "min": (260, 260)},
+        "onion":    {"title": "Papel cebolla", "w": 250, "h": 330, "min": (220, 260)},
     }
 
     @classmethod
