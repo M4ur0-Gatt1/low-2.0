@@ -232,6 +232,12 @@ Test de aceptación corrido de punta a punta en la app: dibujar tres poses → a
 timing, mismo fps, mismo rango, contenido intacto** → navegar y seguir dibujando encima sin crear
 dibujos de más. Y como prueba automática: **37/37**.
 
+**Timeline nueva (v3.29.35).** `timeline-view.js`: una fila por capa, el tiempo hacia la derecha,
+regla de frames, ojo de visibilidad y arrastre de bloques de exposición. Es la otra lectura del
+MISMO documento — lo que cambiás en la planilla aparece acá al instante, sin sincronizar nada a
+mano. Verificado: 3 exposiciones y 6 holds en la timeline y los mismos 3 números en la X-sheet,
+las dos marcando el frame actual.
+
 ### Lo que sigue
 
 Retirar `DZ.anim.frames` y la timeline vieja, que todavía conviven con lo nuevo (la timeline de

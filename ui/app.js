@@ -9005,6 +9005,24 @@ function dzDragOutAll() {
   }
 }
 
+/* ══ TIMELINE NUEVA (sobre el modelo) ═══════════════════════════════════
+   Se monta en el mismo cajón que la vieja. Las dos vistas —planilla vertical y
+   timeline horizontal— leen el MISMO documento, así que lo que cambiás en una
+   aparece en la otra sin sincronizar nada a mano. */
+async function dzTlMount() {
+  const host = $("#dzTlgRows");
+  if (!host || !LOW.animation.TimelineView) return;
+  await dzDocInit();
+  if (!DZ.tlView) DZ.tlView = new LOW.animation.TimelineView(host, DZ.doc);
+  else DZ.tlView.setDoc(DZ.doc);
+  // el encabezado de la vieja sobra: la nueva trae su propia regla de frames
+  const head = document.querySelector("#dzTlGrid .dz-tlg-head");
+  if (head) head.hidden = true;
+  const cols = $("#dzTlgCols");
+  if (cols) cols.innerHTML = "";
+  DZ.tlView.render();
+}
+
 /* ══ GUARDAR Y ABRIR LA ESCENA ══════════════════════════════════════════
    La escena entera (niveles, dibujos, capas, exposiciones, fps, rango) va a UN
    archivo `.lowscene`. Antes cada frame era un .svg suelto y no había dónde
@@ -9321,6 +9339,7 @@ function dzWsAplicar(ws) {
       const abierta = !el.hidden;
       if (!oculto && !abierta) dzAnimToggle();
       else if (oculto && abierta) dzAnimToggle();
+      if (!oculto) dzTlMount();
     } else if (id === "xsheet") {
       if (typeof dzXsSetVisible === "function") dzXsSetVisible(!oculto);
     } else {
