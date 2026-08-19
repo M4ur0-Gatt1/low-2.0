@@ -881,7 +881,19 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   });
   // atajos del editor de diseño (si no estás escribiendo en un campo)
   document.addEventListener("keydown", e => {
-    if ($("#designView").hidden || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ""))) return;
+    if ($("#designView").hidden) return;
+    // DESHACER / REHACER van ANTES del guard de campos: son lo último que uno
+    // quiere que falle. Solo se ceden dentro de un campo de TEXTO, donde
+    // Ctrl+Z tiene que deshacer lo que estás escribiendo.
+    const t = (e.target.tagName || "").toUpperCase();
+    const escribiendoTexto = t === "TEXTAREA"
+      || (t === "INPUT" && /^(text|search|email|url|password|)$/i.test(e.target.type || ""));
+    if ((e.ctrlKey || e.metaKey) && !escribiendoTexto) {
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) { e.preventDefault(); dzUndo(); return; }
+      if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); dzRedo(); return; }
+    }
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(t)) return;
     if (e.key === "Tab") { e.preventDefault(); dzZenToggle(); return; }   // modo dibujo
     if (e.key === "F7") { e.preventDefault(); dzLayersToggle(); return; } // capas
     if (e.ctrlKey && e.key.toLowerCase() === "r") { e.preventDefault(); dzRulersToggle(); return; } // reglas 2D
@@ -2284,7 +2296,13 @@ async function openDesign(path) {
   cv.insertBefore(svg, $("#dzHandle"));
   if (!svg.getAttribute("width")) svg.style.width = "min(80vw, 900px)";
   DZ.zoom = 1; DZ.panX = 0; DZ.panY = 0; dzApplyZoom();
-  DZ.history = new LOW.core.HistoryManager({ limit: 180 });
+  // Abrir un diseño LIMPIA el historial, pero conserva el MISMO objeto: el
+  // documento de animación guarda una referencia, y si acá se creaba uno nuevo
+  // el doc seguía escribiendo en el viejo — sus cambios de timing no se
+  // deshacían nunca porque Ctrl+Z miraba otra pila.
+  if (!DZ.history) DZ.history = new LOW.core.HistoryManager({ limit: 180 });
+  else DZ.history.clear();
+  if (DZ.doc) DZ.doc.setHistory(DZ.history);
   DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
   DZ.dirty = false;             // recién cargado = limpio (no arrastrar el flag)
   DZ.multi = []; dzNodesClear();
@@ -9275,6 +9293,10 @@ async function dzDocInit() {
     }
   }
   DZ.onionOn = true;
+  // UNA sola pila de historial para todo el editor: así Ctrl+Z deshace lo
+  // último que hiciste, sea un trazo o un cambio de timing, en el orden real.
+  if (!DZ.history) DZ.history = new LOW.core.HistoryManager({ limit: 180 });
+  DZ.doc.setHistory(DZ.history);
   DZ.doc.subscribe((doc, motivo) => { if (motivo === "frame" || motivo === "onion") dzOnionRender(); });
   return DZ.doc;
 }
@@ -9670,11 +9692,16 @@ function dzSnapshot() {
   DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
 }
 function dzUndo() {
+  // El volcado del lienzo al modelo está en camino (260 ms): si se dispara
+  // DESPUÉS de deshacer, vuelve a escribir lo que acabás de sacar. Se cancela.
+  clearTimeout(DZ_DOC_TIMER);
   if (!DZ.history || !DZ.history.undo()) { setStatus("(nada para deshacer)"); return; }
   DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
-  setStatus("↩ deshecho");
+  const sig = DZ.history.redoStack[DZ.history.redoStack.length - 1];
+  setStatus("↩ deshecho" + (sig && sig.label ? ": " + sig.label.toLowerCase() : ""));
 }
 function dzRedo() {
+  clearTimeout(DZ_DOC_TIMER);
   if (!DZ.history || !DZ.history.redo()) return;
   DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
   setStatus("↪ rehecho");
