@@ -153,9 +153,9 @@ Una fase termina cuando se puede hacer el flujo real, no cuando compila.
 | 2 | Workspaces genéricos + los 7 layouts | ✅ base hecha |
 | 3 | Xsheet/Timeline sobre el modelo (holds, steps, rangos) | ◐ planilla y navegación hechas |
 | 4 | Motor de dibujo (brush, presión, estabilización) sobre el modelo | pendiente |
-| 5 | Onion Skin sobre drawings | pendiente |
-| 6 | Workflow: copiar/pegar, insertar, renumerar, atajos, navegación | pendiente |
-| 7 | Playback: FPS real, rango, loop, audio, scrubbing | pendiente |
+| 5 | Onion Skin sobre drawings | ✅ hecho |
+| 6 | Workflow: copiar/pegar, insertar, atajos, navegación | ✅ hecho (falta renumerar) |
+| 7 | Playback: FPS real, rango, loop | ◐ falta audio y scrubbing |
 | 8 | Paletas y estilos, pegbars, function editor, schematic | pendiente |
 | 9 | Integración con el módulo 3D | pendiente |
 
@@ -198,11 +198,32 @@ ACORTAN la secuencia (1s sobre un 2s, `each`, `dedupe`) dejaban las celdas vieja
 colgando — dibujos fantasma al final de la escena. Corregido con `replace()` y con tres pruebas
 nuevas (**30/30**).
 
+**Fases 5, 6 y 7 (v3.29.33).**
+
+*Papel cebolla:* panel nuevo, sobre dibujos, con puntos de un clic para cuántos ver de cada
+lado, color por lado, desvanecido por distancia y marcadores fijos. Se saca a otra ventana.
+
+*Atajos* (`shortcuts.js`), los que se usan sin mirar el teclado: `←/→` frame, **`↑/↓` DIBUJO —
+saltea los holds**, `Inicio/Fin`, `Espacio` reproducir, `L` loop, `.`/`,` alargar y acortar la
+exposición, `Insert`, `Supr` (vacía la celda, no toca el dibujo), `O` papel cebolla,
+`Ctrl+C/X/V` sobre celdas. Copiar celdas copia REFERENCIAS: pegar no duplica dibujos —
+verificado, 3 dibujos antes y después de pegar.
+
+*Playback* (`playback.js`): reproduce sobre el modelo, sin precargar archivos. El frame se
+calcula por RELOJ REAL, así que si la máquina no llega saltea frames en vez de ir en cámara
+lenta. Medido: 12 frames en 1 s a 12 fps, loop correcto, y sin loop se detiene al final.
+No usa `requestAnimationFrame`: despierta 60 veces por segundo para nada a 12 fps, y se PAUSA
+con la ventana oculta — con la timeline en el otro monitor la reproducción se congelaba.
+
+*X-sheet:* transporte propio (reproducir, dibujo anterior/siguiente, primero/último, loop, FPS,
+rango, y el fps real medido mientras corre) y selección de rango con Shift+clic, que es sobre lo
+que actúan las operaciones de timing.
+
 ### Lo que sigue
 
 Fase 4: el motor de dibujo escribiendo directo en el modelo (hoy el puente serializa el SVG del
-lienzo en cada cambio de frame). Y llevar el resto de la UI — timeline, playback, reproducción —
-al documento, para poder retirar `DZ.anim.frames`.
+lienzo en cada cambio de frame). Con eso se puede retirar `DZ.anim.frames` y la timeline vieja,
+que todavía conviven con lo nuevo. Después: renumerar dibujos, audio y scrubbing, paletas.
 
 ### Test de aceptación (el que define si esto sirve)
 
