@@ -24,6 +24,8 @@
     constructor(host, doc) {
       this.host = typeof host === "string" ? document.querySelector(host) : host;
       this.doc = doc;
+      this.selected = new Set();
+      this.anchor = null;
       this._desuscribir = doc ? doc.subscribe((d, m) => {
         // se redibuja con lo que la afecta, no con cada movimiento del frame
         if (m === "level" || m === "cells" || m === "content" || m === "frame") this.render();
@@ -71,6 +73,7 @@
         const cel = document.createElement("div");
         cel.className = "ls2-item"
           + (d.number === actual ? " actual" : "")
+          + (this.selected.has(d.number) ? " selected" : "")
           + (expuestos.has(d.number) ? "" : " suelto");
         cel.title = expuestos.has(d.number)
           ? `Dibujo ${d.number} · clic: ir a donde está expuesto`
@@ -88,10 +91,30 @@
         num.textContent = d.number;
         cel.append(mini, num);
 
-        cel.onclick = () => {
+        cel.onclick = (e) => {
+          const drawings = lv.drawings.map((x) => x.number);
+          if (e.ctrlKey || e.metaKey) {
+            this.selected.has(d.number) ? this.selected.delete(d.number) : this.selected.add(d.number);
+            this.anchor = d.number;
+          } else if (e.shiftKey && this.anchor != null) {
+            const a = drawings.indexOf(this.anchor), b = drawings.indexOf(d.number);
+            this.selected = new Set(drawings.slice(Math.min(a, b), Math.max(a, b) + 1));
+          } else { this.selected = new Set([d.number]); this.anchor = d.number; }
           const f = doc.frameOfDrawing(d.number);
           if (f) doc.goTo(f); else doc.setCell(doc.frame, d.number);
+          this.render();
         };
+        cel.draggable = true;
+        cel.ondragstart = (e) => {
+          if (!this.selected.has(d.number)) this.selected = new Set([d.number]);
+          const numbers = lv.drawings.map((x) => x.number).filter((n) => this.selected.has(n));
+          e.dataTransfer.effectAllowed = "copyMove";
+          e.dataTransfer.setData("application/x-low-level-drawings",
+            JSON.stringify({ levelId: lv.id, numbers }));
+          e.dataTransfer.setData("text/plain", numbers.join(", "));
+          cel.classList.add("dragging");
+        };
+        cel.ondragend = () => cel.classList.remove("dragging");
         // menú con lo que se puede hacer con un dibujo
         cel.oncontextmenu = (e) => {
           e.preventDefault();
