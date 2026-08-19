@@ -906,6 +906,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     if (e.ctrlKey && e.key.toLowerCase() === "d" && DZ.sel) {
       e.preventDefault(); dzDuplicate();
     }
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "s" && DZ.doc) {
+      e.preventDefault(); dzSceneSave(false); return;
+    }
     if (e.ctrlKey && e.key.toLowerCase() === "g") {
       e.preventDefault(); dzGroupSel(e.shiftKey);
     }
@@ -3386,8 +3389,15 @@ function dzPaletteRender() {
   box.appendChild(pro);
 }
 let DZ_RECOVERY_TIMER = null;
+let DZ_DOC_TIMER = null;
 function dzMarkDirty() {
   DZ.dirty = true;
+  // Toda edición del lienzo entra al DIBUJO del modelo. Antes solo se volcaba
+  // al cambiar de frame: si dibujabas y guardabas sin moverte, ese trazo no
+  // llegaba nunca al documento. Con retardo, para no serializar el SVG en cada
+  // punto de un trazo.
+  clearTimeout(DZ_DOC_TIMER);
+  DZ_DOC_TIMER = setTimeout(() => { if (DZ.doc) dzDocCommit(); }, 260);
   clearTimeout(DZ_RECOVERY_TIMER);
   DZ_RECOVERY_TIMER = setTimeout(() => {
     const svg = $("#dzCanvas")?.querySelector(":scope > svg");
@@ -4132,6 +4142,10 @@ function dzRunAction(act) {
   if (["rect", "ellipse", "text", "line"].includes(act)) return dzAddShape(act);
   if (act === "zoomin") return dzZoom(0.15);
   if (act === "zoomout") return dzZoom(-0.15);
+  // Escena de animación: un archivo con TODO (dibujos, capas, timing, fps)
+  if (act === "escena-guardar") return dzSceneSave(false);
+  if (act === "escena-guardar-como") return dzSceneSave(true);
+  if (act === "escena-abrir") return dzSceneOpen();
   // Ventana: separar un panel a su propia ventana (segundo monitor)
   if (act && act.startsWith("win-")) {
     const kind = act.slice(4);
@@ -8991,6 +9005,78 @@ function dzDragOutAll() {
   }
 }
 
+/* ══ GUARDAR Y ABRIR LA ESCENA ══════════════════════════════════════════
+   La escena entera (niveles, dibujos, capas, exposiciones, fps, rango) va a UN
+   archivo `.lowscene`. Antes cada frame era un .svg suelto y no había dónde
+   guardar el timing: los holds y el rango se perdían al cerrar.
+
+   El autoguardado local es la red de seguridad: si LOW se cierra mal, al
+   reabrir se ofrece lo último. */
+const DZ_SCENE_KEY = "low.scene.autosave";
+
+async function dzSceneSave(comoNuevo) {
+  if (!DZ.doc) return false;
+  dzDocCommit();                      // lo que esté en el lienzo, adentro
+  const json = JSON.stringify(DZ.doc.toJSON(), null, 1);
+  const nombre = (DZ.doc.scene.name || "escena").replace(/[^\w\-.]+/g, "_") + ".lowscene";
+  try {
+    const r = await api.save_file(comoNuevo ? "" : (DZ.doc.path || ""), json, nombre);
+    if (r && r.path) {
+      DZ.doc.path = r.path;
+      DZ.doc.dirty = false;
+      dzSetStatus(" Escena guardada: " + (r.name || r.path));
+      return true;
+    }
+  } catch (err) { sysMsg(" No pude guardar la escena: " + (err.message || err)); }
+  return false;
+}
+
+async function dzSceneOpen() {
+  try {
+    const r = await api.open_dialog();
+    if (!r || !r.content) return false;
+    const doc = LOW.animation.LowDoc.fromJSON(r.content);
+    doc.path = r.path || null;
+    dzDocUse(doc);
+    dzSetStatus(" Escena abierta: " + (r.name || r.path));
+    return true;
+  } catch (err) { sysMsg(" No pude abrir la escena: " + (err.message || err)); }
+  return false;
+}
+
+/** Pone un documento en uso y reengancha todo lo que depende de él. */
+function dzDocUse(doc) {
+  DZ.doc = doc;
+  if (DZ.playback) DZ.playback.setDoc(doc);
+  if (DZ.xsView) DZ.xsView.setDoc(doc);
+  doc.subscribe((d, motivo) => {
+    if (motivo === "frame") { const dw = d.drawing; dzCanvasSet(dw ? dw.content : ""); dzOnionRender(); }
+    else if (motivo === "onion") dzOnionRender();
+  });
+  const d = doc.drawing;
+  dzCanvasSet(d ? d.content : "");
+  dzOnionRender();
+  dzOnion2Render();
+}
+
+/** Autoguardado de la escena, por si LOW se cierra mal. */
+function dzSceneAutosave() {
+  if (!DZ.doc) return;
+  try { localStorage.setItem(DZ_SCENE_KEY, JSON.stringify(DZ.doc.toJSON())); }
+  catch (_) { /* sin espacio: no romper el dibujo por esto */ }
+}
+setInterval(() => { if (DZ.doc && DZ.doc.dirty) dzSceneAutosave(); }, 8000);
+
+/** ¿Hay una escena sin guardar de la sesión anterior? */
+function dzSceneRecovered() {
+  try {
+    const raw = localStorage.getItem(DZ_SCENE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    return d && d.scene ? d : null;
+  } catch (_) { return null; }
+}
+
 /* ══ PANEL DE PAPEL CEBOLLA ══════════════════════════════════════════════
    Los controles que se tocan a cada rato (cuántos dibujos antes y después) son
    puntos de un clic. Escribe en la config del documento, que es la que usa
@@ -9155,8 +9241,20 @@ async function dzDocInit() {
     DZ.doc = A.LowDoc.fromLegacy(DZ.anim.frames, contents, DZ.scene?.fps || 12, DZ.path);
     dzSetStatus(" Escena migrada al modelo nuevo: " + DZ.doc.scene.levels[0].drawings.length + " dibujos");
   } else {
-    DZ.doc = new A.LowDoc();
-    DZ.doc.writeDrawing(dzCanvasInner());   // lo que ya estaba dibujado es el dibujo 1
+    // ¿quedó una escena sin guardar de la sesión anterior?
+    const rec = dzSceneRecovered();
+    const tieneAlgo = rec && (rec.scene.levels || []).some(
+      (l) => (l.drawings || []).some((d) => d.content && d.content.length > 40));
+    if (tieneAlgo && confirm(
+        "LOW encontró una escena de animación que no llegó a guardarse. ¿La recuperás?")) {
+      try {
+        DZ.doc = A.LowDoc.fromJSON(rec);
+        dzSetStatus(" Escena recuperada");
+      } catch (_) { DZ.doc = new A.LowDoc(); }
+    } else {
+      DZ.doc = new A.LowDoc();
+      DZ.doc.writeDrawing(dzCanvasInner());   // lo que ya estaba dibujado es el dibujo 1
+    }
   }
   DZ.onionOn = true;
   DZ.doc.subscribe((doc, motivo) => { if (motivo === "frame" || motivo === "onion") dzOnionRender(); });
