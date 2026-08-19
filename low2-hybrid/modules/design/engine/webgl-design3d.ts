@@ -537,7 +537,13 @@ export class WebGLDesign3D {
     }
     colors.needsUpdate = true;
     gm.opacity = dark ? 0.35 : 0.5;
-    this.cursorEl.style.borderColor = dark ? '#e6ebf5' : '#2a2f3a';
+    // el anillo del pincel, con doble borde: uno oscuro y un halo claro por
+    // fuera. Así se ve tanto sobre el fondo como sobre un trazo negro, que es
+    // donde más se perdía.
+    this.cursorEl.style.borderColor = dark ? '#e6ebf5' : '#23272f';
+    this.cursorEl.style.boxShadow = dark
+      ? '0 0 0 1px rgba(0,0,0,.55)'
+      : '0 0 0 1px rgba(255,255,255,.85)';
   }
 
   // ---------------------------------------------------------------- ejes / puntos de fuga

@@ -19,7 +19,10 @@ import { Panel3D } from './components/Panel3D';
 import { LOW_ACCENT } from './theme';
 
 const bg: Record<Theme, string> = {
-  light: 'radial-gradient(120% 120% at 50% 10%, #ffffff 0%, #eef1f6 70%, #e6eaf1 100%)',
+  // El claro NO llega al blanco puro. Arrancaba en #ffffff justo en el centro,
+  // que es donde uno dibuja: contra ese fondo se perdían de vista el anillo del
+  // pincel y el cursor. Un gris claro los deja siempre visibles y no cansa.
+  light: 'radial-gradient(120% 120% at 50% 10%, #eceef2 0%, #e2e6ee 70%, #d8dde7 100%)',
   dark: 'radial-gradient(120% 120% at 50% 15%, #1b2030 0%, #0e0f13 60%, #08090c 100%)',
 };
 
