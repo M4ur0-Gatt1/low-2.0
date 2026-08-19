@@ -2265,3 +2265,12 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .ls2-menu button:hover { background: var(--accent, #F0450E); color: #fff; }
 .ls2panel { width: 226px; height: 250px; display: flex; flex-direction: column; padding: 0; }
 .ls2panel #dzLsBody { flex: 1 1 auto; min-height: 0; }
+
+/* pista de audio en la timeline */
+.tl2-audio .tl2-name { color: var(--fg2, #8a93a6); }
+.tl2-wave { align-items: center; cursor: grab; }
+.tl2-wave:active { cursor: grabbing; }
+.tl2-peak { width: 13px; flex: 0 0 13px; height: 20px; display: grid; place-items: center; }
+.tl2-peak::before { content: ""; width: 7px; height: var(--h, 0%); min-height: 1px;
+  background: var(--cyan, #33B5E8); border-radius: 1px; opacity: .8; }
+.tl2-peak.actual::before { background: var(--accent, #F0450E); opacity: 1; }

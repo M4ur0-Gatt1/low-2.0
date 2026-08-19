@@ -70,8 +70,12 @@
           const rect = pista.getBoundingClientRect();
           const aFrame = (x) => Math.max(1, Math.min(total,
             1 + Math.floor((x - rect.left + pista.scrollLeft) / ANCHO)));
-          doc.goTo(aFrame(ev.clientX));
-          const mover = (e2) => doc.goTo(aFrame(e2.clientX));
+          const ir = (x) => {
+            const f = aFrame(x);
+            if (f !== doc.frame) { doc.goTo(f); if (this.audio) this.audio.scrub(f); }
+          };
+          ir(ev.clientX);
+          const mover = (e2) => ir(e2.clientX);
           const soltar = () => {
             document.removeEventListener("pointermove", mover);
             document.removeEventListener("pointerup", soltar);
@@ -135,6 +139,55 @@
           };
           track.appendChild(c);
         }
+        fila.appendChild(track);
+        cont.appendChild(fila);
+      }
+
+      // ── pista de AUDIO (si hay) ──
+      if (this.audio && this.audio.peaks.length) {
+        const fila = document.createElement("div");
+        fila.className = "tl2-row tl2-audio";
+        const cab = document.createElement("div");
+        cab.className = "tl2-name";
+        const mudo = document.createElement("button");
+        mudo.className = "tl2-eye";
+        mudo.textContent = this.audio.muted ? "🔇" : "🔊";
+        mudo.title = this.audio.muted ? "Activar el sonido" : "Silenciar";
+        mudo.onclick = (e) => { e.stopPropagation(); this.audio.setMuted(!this.audio.muted); this.render(); };
+        const nom = document.createElement("span");
+        nom.textContent = this.audio.name || "audio";
+        nom.title = "Arrastrá la onda para correr el audio y calzarlo con la acción";
+        cab.append(mudo, nom);
+        fila.appendChild(cab);
+
+        const track = document.createElement("div");
+        track.className = "tl2-track tl2-wave";
+        for (let f = 1; f <= total; f++) {
+          const p = this.audio.peakAt(f);
+          const b = document.createElement("i");
+          b.className = "tl2-peak" + (f === doc.frame ? " actual" : "");
+          // la barra crece desde el centro, como una onda de verdad
+          b.style.setProperty("--h", Math.round(p * 100) + "%");
+          b.title = `Frame ${f}`;
+          track.appendChild(b);
+        }
+        // arrastrar la onda = correr el audio en frames (calzarlo con la acción)
+        track.onpointerdown = (ev) => {
+          if (ev.button !== 0) return;
+          ev.preventDefault();
+          const x0 = ev.clientX, off0 = this.audio.offset;
+          const mover = (e2) => {
+            this.audio.offset = off0 + Math.round((e2.clientX - x0) / ANCHO);
+            this.render();
+          };
+          const soltar = () => {
+            document.removeEventListener("pointermove", mover);
+            document.removeEventListener("pointerup", soltar);
+            this.audio.setOffset(this.audio.offset);
+          };
+          document.addEventListener("pointermove", mover);
+          document.addEventListener("pointerup", soltar);
+        };
         fila.appendChild(track);
         cont.appendChild(fila);
       }

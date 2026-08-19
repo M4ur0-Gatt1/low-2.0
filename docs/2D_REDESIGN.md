@@ -155,7 +155,7 @@ Una fase termina cuando se puede hacer el flujo real, no cuando compila.
 | 4 | El dibujo entra al modelo solo + escena en un archivo | ✅ hecho |
 | 5 | Onion Skin sobre drawings | ✅ hecho |
 | 6 | Workflow: copiar/pegar, insertar, atajos, navegación, renumerar | ✅ hecho |
-| 7 | Playback: FPS real, rango, loop, scrubbing | ◐ falta audio |
+| 7 | Playback: FPS real, rango, loop, scrubbing, audio | ✅ hecho |
 | 8 | Paletas y estilos, pegbars, function editor, schematic | pendiente |
 | 9 | Integración con el módulo 3D | pendiente |
 
@@ -250,6 +250,19 @@ borrar devuelve el dibujo con su contenido y sus exposiciones.
 
 **Scrubbing:** arrastrar por la regla de la timeline recorre la animación con la mano — el
 playback muestra el resultado, el scrub sirve para encontrar el frame exacto donde algo falla.
+
+**Audio (v3.29.38).** `audio.js`: lo mínimo para animar con sonido, sobre todo lipsync. La onda
+se dibuja frame a frame en la timeline, se arrastra para calzar el audio con la acción, y suena
+sincronizada con el playback — arrancando desde el frame donde estás parado y reanclándose al dar
+la vuelta con loop, que es donde imagen y sonido se separan si no se cuida. Al hacer scrub suena
+el recorte de ese frame, con desvanecido en la cola para que no haga clic: así se busca la sílaba.
+
+Los PICOS se guardan con la escena (1 KB para 2 segundos), así la onda se sigue viendo al reabrir
+aunque el archivo no esté a mano y no hay que volver a decodificar.
+
+Verificado: 4 golpes detectados en los frames 1, 13, 25 y 37; con desplazamiento 6 pasan a 7, 19,
+31 y 43; el playback pide el audio desde el frame actual, lo corta al parar y lo reancla al dar la
+vuelta; y la onda sobrevive a guardar y reabrir.
 
 ### Lo que sigue
 

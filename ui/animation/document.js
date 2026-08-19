@@ -295,7 +295,11 @@
     // ── serialización ────────────────────────────────────────────────────
     toJSON() {
       return { format: "lowscene", version: 1, savedAt: new Date().toISOString(),
-               frame: this.frame, layerId: this.layerId, scene: this.scene.toJSON() };
+               frame: this.frame, layerId: this.layerId, scene: this.scene.toJSON(),
+               // la ONDA se guarda con la escena: así se sigue viendo al
+               // reabrir aunque el archivo de audio no esté a mano, y no hay
+               // que volver a decodificarlo
+               audio: this.audio ? this.audio.toJSON() : null };
     }
     static fromJSON(data) {
       const d = (typeof data === "string") ? JSON.parse(data) : data;
@@ -303,6 +307,9 @@
       const doc = new LowDoc(new animation.Scene(d.scene));
       doc.frame = Math.max(1, Number(d.frame) || 1);
       if (d.layerId && doc.scene.layer(d.layerId)) doc.layerId = d.layerId;
+      if (d.audio && animation.AudioTrack) {
+        doc.audio = new animation.AudioTrack(doc).fromJSON(d.audio);
+      }
       doc.dirty = false;
       return doc;
     }
