@@ -9023,6 +9023,25 @@ function dzDragOutAll() {
   }
 }
 
+/* ══ TIRA DE DIBUJOS DEL NIVEL ══════════════════════════════════════════
+   Muestra el MATERIAL (qué dibujos existen), no el tiempo. Un dibujo que no
+   está en ninguna celda antes era invisible aunque existiera. */
+function dzLsMount() {
+  const host = $("#dzLsBody");
+  if (!host || !LOW.animation.LevelStrip || !DZ.doc) return;
+  if (!DZ.lsView) DZ.lsView = new LOW.animation.LevelStrip(host, DZ.doc);
+  else DZ.lsView.setDoc(DZ.doc);
+  const panel = $("#dzLevelStrip");
+  if (panel) panel.hidden = false;
+  DZ.lsView.render();
+  const cerrar = $("#dzLsClose");
+  if (cerrar && !cerrar.dataset.wired) {
+    cerrar.dataset.wired = "1";
+    cerrar.onclick = () => { $("#dzLevelStrip").hidden = true; };
+  }
+  if (typeof dzDragOutWire === "function") dzDragOutWire("#dzLsHead", "levelstrip");
+}
+
 /* ══ TIMELINE NUEVA (sobre el modelo) ═══════════════════════════════════
    Se monta en el mismo cajón que la vieja. Las dos vistas —planilla vertical y
    timeline horizontal— leen el MISMO documento, así que lo que cambiás en una
@@ -9325,6 +9344,7 @@ async function dzXsMount() {
   // sacar el foco de cualquier campo de texto: si quedó en el chat, los atajos
   // de una tecla (espacio, flechas, punto y coma) no llegan nunca
   if (typeof dzReleaseFocus === "function") dzReleaseFocus();
+  dzLsMount();
   // atajos de animación: navegar por frames y por DIBUJOS, timing y celdas
   LOW.animation.shortcuts.wire(() => DZ.doc, () => DZ.playback, {
     getSelection: () => DZ.xsView && DZ.xsView.sel,

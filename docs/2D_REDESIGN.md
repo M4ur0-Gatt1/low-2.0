@@ -154,8 +154,8 @@ Una fase termina cuando se puede hacer el flujo real, no cuando compila.
 | 3 | Xsheet/Timeline sobre el modelo (holds, steps, rangos) | ◐ planilla y navegación hechas |
 | 4 | El dibujo entra al modelo solo + escena en un archivo | ✅ hecho |
 | 5 | Onion Skin sobre drawings | ✅ hecho |
-| 6 | Workflow: copiar/pegar, insertar, atajos, navegación | ✅ hecho (falta renumerar) |
-| 7 | Playback: FPS real, rango, loop | ◐ falta audio y scrubbing |
+| 6 | Workflow: copiar/pegar, insertar, atajos, navegación, renumerar | ✅ hecho |
+| 7 | Playback: FPS real, rango, loop, scrubbing | ◐ falta audio |
 | 8 | Paletas y estilos, pegbars, function editor, schematic | pendiente |
 | 9 | Integración con el módulo 3D | pendiente |
 
@@ -237,6 +237,19 @@ regla de frames, ojo de visibilidad y arrastre de bloques de exposición. Es la 
 MISMO documento — lo que cambiás en la planilla aparece acá al instante, sin sincronizar nada a
 mano. Verificado: 3 exposiciones y 6 holds en la timeline y los mismos 3 números en la X-sheet,
 las dos marcando el frame actual.
+
+**Level Strip y operaciones de dibujo (v3.29.37).** La tira muestra el MATERIAL —qué dibujos
+existen en el nivel, estén expuestos o no—, que era la mitad del modelo que no se veía en ninguna
+parte: un dibujo fuera de toda celda era invisible aunque existiera. Ahora se marca como suelto.
+Con clic derecho: exponer acá, duplicar, renumerar y borrar. Las tres operaciones entran al
+historial, y **renumerar arrastra las celdas** para que ninguna quede apuntando a un dibujo que ya
+no existe.
+
+Ctrl+Z verificado en cada una: duplicar se deshace, renumerar vuelve el número y las celdas, y
+borrar devuelve el dibujo con su contenido y sus exposiciones.
+
+**Scrubbing:** arrastrar por la regla de la timeline recorre la animación con la mano — el
+playback muestra el resultado, el scrub sirve para encontrar el frame exacto donde algo falla.
 
 ### Lo que sigue
 
