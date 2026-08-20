@@ -27,6 +27,12 @@
   "use strict";
   const LOW = global.LOW = global.LOW || {};
   const animation = LOW.animation = LOW.animation || {};
+  const DEFAULT_WIDTH = 1020;
+  const DEFAULT_HEIGHT = 1080;
+  const documentDimension = (value, fallback) => {
+    const n = Math.round(Number(value));
+    return Number.isFinite(n) && n >= 16 ? Math.min(16384, n) : fallback;
+  };
 
   const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
   let seq = 0;
@@ -166,8 +172,8 @@
       this.id = data.id || uid("sc");
       this.name = data.name || "Escena";
       this.fps = Math.max(1, Math.min(120, Number(data.fps) || 24));
-      this.width = Number(data.width) || 1920;
-      this.height = Number(data.height) || 1080;
+      this.width = documentDimension(data.width, DEFAULT_WIDTH);
+      this.height = documentDimension(data.height, DEFAULT_HEIGHT);
       this.range = { in: Number(data.range?.in) || 1, out: Number(data.range?.out) || 0 };
       this.levels = (data.levels || []).map((l) => new Level(l));
       this.layers = (data.layers || []).map((l) => new Layer(l));
@@ -178,6 +184,13 @@
     }
 
     touch() { this.revision++; return this; }
+    /** Resolución lógica de la mesa. Es estado del archivo, nunca del panel. */
+    setSize(width, height) {
+      const w = documentDimension(width, this.width || DEFAULT_WIDTH);
+      const h = documentDimension(height, this.height || DEFAULT_HEIGHT);
+      if (w === this.width && h === this.height) return false;
+      this.width = w; this.height = h; this.touch(); return true;
+    }
     level(id) { return this.levels.find((l) => l.id === id) || null; }
     layer(id) { return this.layers.find((l) => l.id === id) || null; }
 

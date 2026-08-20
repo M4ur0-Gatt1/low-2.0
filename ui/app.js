@@ -2371,7 +2371,12 @@ async function openDesign(path) {
   const svg = tmp.querySelector("svg");
   if (!svg) return sysMsg(" El archivo no tiene un <svg> válido: " + path);
   cv.insertBefore(svg, $("#dzHandle"));
-  if (!svg.getAttribute("width")) svg.style.width = "min(80vw, 900px)";
+  // La resolución vive en el archivo. El panel puede cambiar de tamaño, pero
+  // eso sólo afecta al zoom: nunca se vuelve a inferir otro ancho/alto visual.
+  const frameOfCurrentScene = !!(DZ.doc && DZ.anim?.frames?.includes(path));
+  dzNormalizeSvgDocument(svg, frameOfCurrentScene ? {
+    width: DZ.doc.scene.width, height: DZ.doc.scene.height
+  } : null);
   DZ.zoom = 1; DZ.panX = 0; DZ.panY = 0; dzApplyZoom();
   // Abrir un diseño LIMPIA el historial, pero conserva el MISMO objeto: el
   // documento de animación guarda una referencia, y si acá se creaba uno nuevo
@@ -2390,6 +2395,7 @@ async function openDesign(path) {
   dzBuildLayers();
   if (DZ.d3) dz3dBuild();       // en espacio 3D: reconstruir los planos del cuadro nuevo
   $("#designView").hidden = false;
+  requestAnimationFrame(() => { if (!$("#designView").hidden) dzFitView(); });
 }
 function closeDesign() { dzPersist(); if (DZ.d3) dz3dExit(true); $("#designView").hidden = true; DZ.sel = null; if (RULER) dzRulerClear(); }
 
@@ -2397,7 +2403,7 @@ function closeDesign() { dzPersist(); if (DZ.d3) dz3dExit(true); $("#designView"
 function dzApplyZoom() {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (svg) svg.style.transform =
-    `translate(${DZ.panX || 0}px, ${DZ.panY || 0}px) rotate(${DZ.viewRot || 0}deg) scale(${DZ.zoom})`;
+    `translate(-50%, -50%) translate(${DZ.panX || 0}px, ${DZ.panY || 0}px) rotate(${DZ.viewRot || 0}deg) scale(${DZ.zoom})`;
   const lbl = $("#dzZoomLbl"); if (lbl) lbl.textContent = Math.round(DZ.zoom * 100) + "%";
   const rl = $("#dzRotLbl"); if (rl) rl.textContent = Math.round(DZ.viewRot || 0) + "°";
   const sb = $("#sbZoom"); if (sb) sb.textContent = Math.round(DZ.zoom * 100) + "%" +
@@ -2438,7 +2444,7 @@ function dzFitView() {
   const cont = $("#dzCanvas");
   if (!svg || !cont) return;
   DZ.viewRot = 0; DZ.panX = 0; DZ.panY = 0;
-  svg.style.transform = "scale(1)";
+  svg.style.transform = "translate(-50%, -50%) scale(1)";
   const r = svg.getBoundingClientRect(), c = cont.getBoundingClientRect();
   if (r.width > 2 && r.height > 2)
     DZ.zoom = Math.max(0.05, Math.min(4,
@@ -2446,25 +2452,80 @@ function dzFitView() {
   dzApplyZoom();
 }
 /* ──  Documento: tamaño del lienzo, presets y color de fondo ── */
+const DZ_DEFAULT_DOCUMENT = Object.freeze({ width: 1020, height: 1080 });
 const DZ_DOC_PRESETS = [
+  ["LOW animación 1020×1080", 1020, 1080],
+  ["Full HD horizontal 1920×1080", 1920, 1080],
+  ["Full HD vertical 1080×1920", 1080, 1920],
+  ["HD horizontal 1280×720", 1280, 720],
+  ["4K UHD 3840×2160", 3840, 2160],
   ["Cuadrado 1080×1080 (Instagram)", 1080, 1080],
-  ["HD horizontal 1920×1080", 1920, 1080],
-  ["Vertical 1080×1920 (Stories/TikTok)", 1080, 1920],
   ["Cine 2048×858 (2K scope)", 2048, 858],
   ["A4 impresión 2480×3508 (300dpi)", 2480, 3508],
   ["Carta 2550×3300", 2550, 3300],
 ];
+
+function dzSvgDocumentSize(svg) {
+  const raw = String(svg?.getAttribute("viewBox") || "").trim().split(/[ ,]+/).map(Number);
+  const aw = parseFloat(svg?.getAttribute("width")), ah = parseFloat(svg?.getAttribute("height"));
+  const width = Number.isFinite(raw[2]) && raw[2] > 0 ? raw[2] :
+    (Number.isFinite(aw) && aw > 0 ? aw : DZ_DEFAULT_DOCUMENT.width);
+  const height = Number.isFinite(raw[3]) && raw[3] > 0 ? raw[3] :
+    (Number.isFinite(ah) && ah > 0 ? ah : DZ_DEFAULT_DOCUMENT.height);
+  return { x: Number.isFinite(raw[0]) ? raw[0] : 0, y: Number.isFinite(raw[1]) ? raw[1] : 0,
+    width: Math.max(16, Math.min(16384, Math.round(width))),
+    height: Math.max(16, Math.min(16384, Math.round(height))) };
+}
+
+/** Normaliza el SVG sin escalar su contenido. `width/height/viewBox` expresan
+ *  una sola resolución lógica y el CSS se limita a mostrarla con zoom. */
+function dzNormalizeSvgDocument(svg, requested) {
+  if (!svg) return null;
+  const own = dzSvgDocumentSize(svg), size = requested || own;
+  const width = Math.max(16, Math.min(16384, Math.round(Number(size.width) || own.width)));
+  const height = Math.max(16, Math.min(16384, Math.round(Number(size.height) || own.height)));
+  const x = Number.isFinite(Number(size.x)) ? Number(size.x) : own.x;
+  const y = Number.isFinite(Number(size.y)) ? Number(size.y) : own.y;
+  svg.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
+  svg.setAttribute("width", width); svg.setAttribute("height", height);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  ["width", "height", "max-width", "max-height", "aspect-ratio"].forEach((p) => svg.style.removeProperty(p));
+  return { x, y, width, height };
+}
+
+function dzCurrentDocumentSize() {
+  const own = dzSvgDocumentSize($("#dzCanvas")?.querySelector(":scope > svg"));
+  if (DZ.doc?.scene) return { x: own.x, y: own.y,
+    width: DZ.doc.scene.width, height: DZ.doc.scene.height };
+  return own;
+}
+
+function dzSyncCanvasDocument(fit = false) {
+  const svg = $("#dzCanvas")?.querySelector(":scope > svg");
+  if (!svg) return null;
+  const size = dzNormalizeSvgDocument(svg, dzCurrentDocumentSize());
+  if (fit) requestAnimationFrame(dzFitView);
+  return size;
+}
+
+function dzDocumentBackground(svg, size) {
+  return [...svg.querySelectorAll("rect")].find((rc) => {
+    const w = Math.abs(parseFloat(rc.getAttribute("width")) || 0);
+    const h = Math.abs(parseFloat(rc.getAttribute("height")) || 0);
+    return w * h >= size.width * size.height * .9;
+  });
+}
+
 function dzDocModal() {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
-  const vb = dzVB();
+  const size = dzCurrentDocumentSize();
   // el fondo es el rect que cubre (casi) todo el lienzo, si existe
-  const bg = [...svg.querySelectorAll("rect")].find(rc =>
-    ((+rc.getAttribute("width") || 0) * (+rc.getAttribute("height") || 0)) >= vb[2] * vb[3] * 0.9);
+  const bg = dzDocumentBackground(svg, size);
   const bgColor = bg ? dzHex(bg.getAttribute("fill")) || "#ffffff" : "#ffffff";
-  openModal(`<h2> Documento</h2>
-    <div class="sub">El tamaño define el viewBox del lienzo. Los elementos no se mueven:
-    si achicás el documento pueden quedar afuera (los ves igual y los podés reacomodar).</div>
+  openModal(`<h2>Configuración del archivo</h2>
+    <div class="sub">Resolución fija del archivo. Cambiar panel, monitor o zoom no modifica estos píxeles.
+    Si achicás el documento, el contenido conserva sus coordenadas y puede quedar fuera del encuadre.</div>
     <div class="dz-style-row">
       <span class="dz-hint">Preset</span>
       <select id="docPreset" class="langsel" style="flex:1">
@@ -2473,8 +2534,12 @@ function dzDocModal() {
       </select>
     </div>
     <div class="dz-style-row">
-      <span class="dz-hint">Ancho</span><input type="number" id="docW" class="dz-win" style="width:76px" value="${vb[2]}" min="16" max="8000">
-      <span class="dz-hint">Alto</span><input type="number" id="docH" class="dz-win" style="width:76px" value="${vb[3]}" min="16" max="8000">
+      <label class="dz-hint" for="docW">Ancho</label><input type="number" id="docW" class="dz-win" style="width:82px" value="${size.width}" min="16" max="16384">
+      <button class="ghost" id="docSwap" title="Intercambiar ancho y alto" aria-label="Intercambiar ancho y alto">↔</button>
+      <label class="dz-hint" for="docH">Alto</label><input type="number" id="docH" class="dz-win" style="width:82px" value="${size.height}" min="16" max="16384">
+      <output id="docRatio" class="dz-hint" aria-live="polite"></output>
+    </div>
+    <div class="dz-style-row">
       <span class="dz-hint">Fondo</span><input type="color" id="docBg" value="${bgColor}">
       <label class="dz-hint" style="display:flex;align-items:center;gap:4px">
         <input type="checkbox" id="docNoBg" ${bg ? "" : "checked"}> sin fondo (transparente)</label>
@@ -2483,35 +2548,53 @@ function dzDocModal() {
       <button class="ghost" id="mCancel">Cancelar</button>
       <button class="primary" id="docGo">Aplicar</button>
     </div>`);
+  const ratio = () => {
+    const w = Math.max(1, +$("#docW").value || 1), h = Math.max(1, +$("#docH").value || 1);
+    $("#docRatio").textContent = `${(w / h).toFixed(3)}:1`;
+    const i = DZ_DOC_PRESETS.findIndex((p) => p[1] === w && p[2] === h);
+    $("#docPreset").value = i >= 0 ? String(i) : "";
+  };
   $("#docPreset").onchange = (e) => {
     const p = DZ_DOC_PRESETS[+e.target.value];
-    if (p) { $("#docW").value = p[1]; $("#docH").value = p[2]; }
+    if (p) { $("#docW").value = p[1]; $("#docH").value = p[2]; ratio(); }
   };
+  $("#docW").oninput = ratio; $("#docH").oninput = ratio;
+  $("#docSwap").onclick = () => {
+    const w = $("#docW").value; $("#docW").value = $("#docH").value; $("#docH").value = w; ratio();
+  };
+  ratio();
   $("#mCancel").onclick = closeModal;
   $("#docGo").onclick = () => {
-    const W = Math.max(16, +$("#docW").value || vb[2]);
-    const H = Math.max(16, +$("#docH").value || vb[3]);
+    const W = Math.max(16, Math.min(16384, Math.round(+$("#docW").value || size.width)));
+    const H = Math.max(16, Math.min(16384, Math.round(+$("#docH").value || size.height)));
     const color = $("#docBg").value, noBg = $("#docNoBg").checked;
     closeModal();
-    dzSnapshot();
-    svg.setAttribute("viewBox", `${vb[0]} ${vb[1]} ${W} ${H}`);
-    if (svg.getAttribute("width")) svg.setAttribute("width", W);
-    if (svg.getAttribute("height")) svg.setAttribute("height", H);
+    const before = { width: size.width, height: size.height, svg: dzSerialize(svg) };
+    if (DZ.doc) DZ.doc.setSize(W, H, { history: false });
+    dzNormalizeSvgDocument(svg, { x: size.x, y: size.y, width: W, height: H });
     if (noBg) {
       if (bg) bg.remove();
     } else if (bg) {
-      bg.setAttribute("x", vb[0]); bg.setAttribute("y", vb[1]);
+      bg.setAttribute("x", size.x); bg.setAttribute("y", size.y);
       bg.setAttribute("width", W); bg.setAttribute("height", H);
       bg.setAttribute("fill", color);
     } else {
       const rc = document.createElementNS(SVGNS, "rect");
-      rc.setAttribute("x", vb[0]); rc.setAttribute("y", vb[1]);
+      rc.setAttribute("x", size.x); rc.setAttribute("y", size.y);
       rc.setAttribute("width", W); rc.setAttribute("height", H);
       rc.setAttribute("fill", color);
       svg.insertBefore(rc, svg.firstChild);
     }
+    const after = { width: W, height: H, svg: dzSerialize(svg) };
+    if (!DZ.history) DZ.history = new LOW.core.HistoryManager({ limit: 180 });
+    DZ.history.push({ label: "Cambiar tamaño del documento", domain: "document", before, after,
+      apply: (_direction, value) => {
+        if (DZ.doc) DZ.doc.setSize(value.width, value.height, { history: false });
+        dzApplySvgText(value.svg, { documentSize: value });
+        dzFitView();
+      } });
     dzMarkDirty(); dzBuildLayers(); dzFitView();
-    dzSetStatus(` Documento: ${W}×${H}` + (noBg ? " · fondo transparente" : ""));
+    dzSetStatus(` Documento fijo: ${W}×${H} px` + (noBg ? " · fondo transparente" : ""));
   };
 }
 /* paneo del lienzo: espacio+arrastrar o botón del medio (mano de Toon Boom).
@@ -9823,9 +9906,11 @@ function dzDocUse(doc) {
   doc.subscribe((d, motivo) => {
     if (motivo === "frame") { const dw = d.drawing; dzCanvasSet(dw ? dw.content : ""); dzOnionRender(); }
     else if (motivo === "onion") dzOnionRender();
+    else if (motivo === "document") dzSyncCanvasDocument();
   });
   const d = doc.drawing;
   dzCanvasSet(d ? d.content : "");
+  dzSyncCanvasDocument(true);
   dzOnionRender();
   dzOnion2Render();
 }
@@ -10002,6 +10087,9 @@ function dzCanvasSet(contenido) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return false;
   svg.innerHTML = contenido || "";
+  // Cambiar de Drawing sólo reemplaza el contenido interior. La raíz conserva
+  // exactamente la resolución canónica de la escena.
+  dzSyncCanvasDocument();
   dzDeselect && dzDeselect();
   dzBuildLayers && dzBuildLayers();
   return true;
@@ -10053,6 +10141,9 @@ async function dzDocInit() {
   const A = LOW.animation;
   if (!A || !A.LowDoc) return null;
   if (DZ.doc) return DZ.doc;
+  const root = $("#dzCanvas")?.querySelector(":scope > svg");
+  const openedSize = dzSvgDocumentSize(root);
+  let recoveredDocument = false;
   // migrar desde la animación vieja si la hay
   if (DZ.anim && DZ.anim.frames && DZ.anim.frames.length) {
     const contents = {};
@@ -10072,6 +10163,7 @@ async function dzDocInit() {
         "LOW encontró una escena de animación que no llegó a guardarse. ¿La recuperás?")) {
       try {
         DZ.doc = A.LowDoc.fromJSON(rec);
+        recoveredDocument = true;
         dzSetStatus(" Escena recuperada");
       } catch (_) { DZ.doc = new A.LowDoc(); }
     } else {
@@ -10079,6 +10171,7 @@ async function dzDocInit() {
       DZ.doc.writeDrawing(dzCanvasInner());   // lo que ya estaba dibujado es el dibujo 1
     }
   }
+  if (!recoveredDocument) DZ.doc.scene.setSize(openedSize.width, openedSize.height);
   if (DZ.scene && DZ.scene.rig && !Object.keys(DZ.doc.scene.rig.nodes).length) {
     DZ.doc.scene.rig = new A.Scene({ rig: DZ.scene.rig }).rig;
     DZ.doc.dirty = true;
@@ -10094,7 +10187,9 @@ async function dzDocInit() {
       dzCanvasSet(drawing ? drawing.content : "");
       dzOnionRender();
     } else if (motivo === "onion") dzOnionRender();
+    else if (motivo === "document") dzSyncCanvasDocument();
   });
+  dzSyncCanvasDocument();
   return DZ.doc;
 }
 
@@ -10500,7 +10595,7 @@ function dzToggleCode() {
   }
 }
 /* reemplaza el svg del lienzo por otro (texto), conservando tirador/pin */
-function dzApplySvgText(txt) {
+function dzApplySvgText(txt, options = {}) {
   const cv = $("#dzCanvas");
   const handle = $("#dzHandle");
   const old = cv.querySelector(":scope > svg");
@@ -10509,7 +10604,10 @@ function dzApplySvgText(txt) {
   if (!nsvg) { sysMsg(" El código no tiene un <svg> válido."); return false; }
   if (old) old.remove();
   cv.insertBefore(nsvg, handle);
-  if (!nsvg.getAttribute("width")) nsvg.style.width = "min(80vw, 900px)";
+  const wanted = options.documentSize || (DZ.doc?.scene ? {
+    width: DZ.doc.scene.width, height: DZ.doc.scene.height
+  } : null);
+  dzNormalizeSvgDocument(nsvg, wanted);
   DZ.sel = null; DZ.multi = []; dzNodesClear();
   $("#dzProps").hidden = true; $("#dzEmpty").hidden = false; handle.hidden = true;
   dzApplyZoom(); dzMarkDirty(); dzBuildLayers();
@@ -10559,7 +10657,8 @@ function dzSerialize(svg) {
   c.querySelectorAll(".dz-sel").forEach(n => n.classList.remove("dz-sel"));
   c.querySelectorAll(".dz-msel").forEach(n => n.classList.remove("dz-msel"));
   c.querySelectorAll("[class='']").forEach(n => n.removeAttribute("class"));
-  c.style.removeProperty("transform"); c.style.removeProperty("width");
+  c.style.removeProperty("transform");
+  ["width", "height", "max-width", "max-height", "aspect-ratio"].forEach((p) => c.style.removeProperty(p));
   if (!c.getAttribute("style")) c.removeAttribute("style");   // no dejar style="" vacío
   return c.outerHTML;
 }
