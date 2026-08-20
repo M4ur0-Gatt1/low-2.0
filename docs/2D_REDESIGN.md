@@ -442,3 +442,39 @@ válido para los seis paneles auxiliares generales. Pruebas del modelo: **72/72*
 Pruebas del modelo: **118/118**. Incluyen migración v3→v4, JSON sin estado
 duplicado, sustituciones y Undo, orden visual, canales, constraints ordenadas,
 rechazo atómico de ciclos, diagnóstico y reapertura.
+
+---
+
+## 10. Armado gráfico y ruta de deformación (pasada 2026-08-20)
+
+- `Crear hueso` ya trabaja sobre la mesa: arrastrar define cabeza y punta; si
+  el gesto empieza en una punta existente, el nuevo hueso nace conectado como
+  hijo. No requiere registrar una pieza de arte antes.
+- Los huesos puros se seleccionan desde el overlay o la jerarquía. Cabeza y
+  punta se editan gráficamente, conservan una longitud mínima y se guardan en
+  el mismo `Scene.rig.bones` canónico.
+- Crear, extender y editar geometría producen una operación atómica de Undo.
+- La carga de un SVG preserva los overlays del editor. Antes eliminaba todos
+  los hijos `<svg>` y podía borrar el overlay del rig junto con el dibujo.
+- Prueba interactiva real: crear raíz, extender un hijo desde la punta,
+  verificar `parentId`, Undo, Redo, cambiar longitud y deshacer.
+
+Pruebas del modelo: **120/120**.
+
+### Decisiones tomadas a partir del informe técnico adjunto
+
+El objetivo de deformación avanzada se divide para no confundir una interfaz
+con un motor terminado:
+
+1. malla 2D explícita, triangulación, bindings y LBS con pesos dispersos;
+2. auto-pesado BBW opcional en bind-time, aislado en Worker, con cancelación,
+   caché y fallback manual; nunca recalculado durante playback;
+3. deformadores de curva/jaula, switches y Master Controllers sobre los
+   channels/actions v4;
+4. rigs 360° como vistas y sustituciones coordinadas por controladores;
+5. Shape-aware IK sólo después de medir calidad y latencia sobre escenas de
+   producción.
+
+Dual-quaternion skinning y generalized winding numbers no son requisitos del
+primer motor 2D: se evaluarán únicamente para torsión o geometría problemática
+que demuestre una mejora frente al coste y complejidad añadidos.

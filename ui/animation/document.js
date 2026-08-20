@@ -465,9 +465,12 @@
     // ── rig canónico ────────────────────────────────────────────────────
     _ensureRigBoneRecord(rig, data) {
       const id = data.id;
+      const initialHead = data.head || data.pivot || null;
       if (!rig.bones[id]) rig.bones[id] = { id, type: "bone", name: data.name || id,
         parentId: data.parentId || null,
-        pivot: data.pivot ? { x: +data.pivot.x || 0, y: +data.pivot.y || 0 } : null,
+        pivot: initialHead ? { x: +initialHead.x || 0, y: +initialHead.y || 0 } : null,
+        head: initialHead ? { x: +initialHead.x || 0, y: +initialHead.y || 0 } : null,
+        tail: data.tail ? { x: +data.tail.x || 0, y: +data.tail.y || 0 } : null,
         rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
         pinned: !!data.pinned, inherit: { translation: true, rotation: true, scale: true },
         limits: data.limits || { min: -180, max: 180 } };
@@ -531,6 +534,16 @@
     ensureRigBone(id, data = {}) {
       if (!id) return null;
       return this._rigChange("Crear hueso", (rig) => this._ensureRigBoneRecord(rig, { ...data, id }));
+    }
+
+    setRigBoneGeometry(id, head, tail) {
+      return this._rigChange("Editar hueso", (rig) => {
+        const bone = rig.bones[id];
+        if (!bone || !head || !tail) return false;
+        const h = { x: +head.x || 0, y: +head.y || 0 }, t = { x: +tail.x || 0, y: +tail.y || 0 };
+        if (Math.hypot(t.x - h.x, t.y - h.y) < 2) return false;
+        bone.head = h; bone.pivot = h; bone.tail = t; return true;
+      });
     }
 
     ensureRigNode(id, data = {}) {

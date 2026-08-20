@@ -10,7 +10,8 @@
    Cualquier método no listado devuelve una promesa vacía ({}). */
 (function () {
   if (!new URLSearchParams(location.search).has("mock")) return;
-  if (window.pywebview) return;
+  // `?mock=1` es una opción explícita de pruebas: debe reemplazar incluso el
+  // contenedor vacío que algunos navegadores embebidos inyectan antes de cargar.
 
   // diseño de muestra: dos capas <g> con profundidad + una capa SUELTA
   // (el <path> superior) para poder probar el flujo "capa suelta" del 3D
@@ -46,6 +47,8 @@
     history: async () => [],
     ollama_models: async () => [],
     refresh_tree: async () => ({ tree: [] }),
+    new_design: async () => ({ path: "C:\\mock\\rig-test.svg" }),
+    save_design: async () => ({ ok: true }),
     image_data: async path => ({ svg: SAMPLE_SVG, name: path || "mock.svg" }),
   };
   const noop = async () => ({});

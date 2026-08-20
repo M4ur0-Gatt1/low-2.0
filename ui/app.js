@@ -844,6 +844,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     e.preventDefault(); dzRigRegisterSelected();
   });
   $("#rigAuto").onclick = dzRigPrepareDrawing;
+  $("#rigBoneTool").onclick = dzRigToggleBoneTool;
   $("#rigAdd").onclick = dzRigRegisterSelected;
   $("#rigRemove").onclick = dzRigRemoveSelected;
   $("#rigPivotTool").onclick = () => { dzSetTool("pivot"); dzSetStatus("Pivote: hacé clic donde articula la pieza seleccionada"); };
@@ -852,32 +853,32 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     $("#" + id).addEventListener("input", () => {
       if (!dzRigSelectedNode()) return dzSetStatus("Esta capa todavía no es una pieza · usá Preparar dibujo o Añadir");
       const k = dzRigReadPanel();
-      dzRigApplyLive(dzRigCur(), { [DZ.sel.id]: k });
+      dzRigApplyLive(dzRigCur(), { [dzRigSelectedNode().id]: k });
     });
     $("#" + id).addEventListener("change", () => {
       if (!dzRigSelectedNode()) return dzSetStatus("Esta capa todavía no es una pieza · usá Preparar dibujo o Añadir");
-      dzRigSetKey(DZ.sel.id, dzRigCur(), dzRigReadPanel());   // auto-clave AE-style
+      dzRigSetKey(dzRigSelectedNode().id, dzRigCur(), dzRigReadPanel());   // auto-clave AE-style
       dzSetStatus(" clave en el cuadro " + dzRigCur());
     });
   });
   ["rigMin", "rigMax"].forEach(id => $("#" + id).addEventListener("change", () => {
-    if (!DZ.doc || !DZ.sel?.id) return;
-    DZ.doc.setRigLimits(DZ.sel.id, +$("#rigMin").value, +$("#rigMax").value);
+    const node = dzRigSelectedNode(); if (!DZ.doc || !node) return;
+    DZ.doc.setRigLimits(node.id, +$("#rigMin").value, +$("#rigMax").value);
     dzRigPanelSync(); dzRigOverlayRender();
   }));
   $("#rigKey").onclick = () => {
     if (!dzRigSelectedNode()) return dzSetStatus("Seleccioná una pieza registrada o usá Preparar dibujo");
-    dzRigSetKey(DZ.sel.id, dzRigCur(), dzRigReadPanel());
+    dzRigSetKey(dzRigSelectedNode().id, dzRigCur(), dzRigReadPanel());
     dzSetStatus(" pose clavada en el cuadro " + dzRigCur());
   };
   $("#rigKeyAll").onclick = dzRigKeyAll;
   $("#rigDel").onclick = () => {
-    if (DZ.sel && DZ.sel.id) dzRigDelKey(DZ.sel.id, dzRigCur());
+    const node = dzRigSelectedNode(); if (node) dzRigDelKey(node.id, dzRigCur());
   };
   $("#rigReset").onclick = dzRigResetPose;
   $("#rigParent").onchange = e => {
-    if (!DZ.doc || !DZ.sel || !DZ.sel.id) return;
-    if (!DZ.doc.setRigParent(DZ.sel.id, e.target.value || null)) dzSetStatus(" No se puede crear un ciclo en la jerarquía");
+    const node = dzRigSelectedNode(); if (!DZ.doc || !node) return;
+    if (!DZ.doc.setRigParent(node.id, e.target.value || null)) dzSetStatus(" No se puede crear un ciclo en la jerarquía");
     else { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); }
   };
   $("#rigIkCreate").onclick = dzRigCreateIK;
@@ -2376,7 +2377,9 @@ async function openDesign(path) {
   // NO usar innerHTML: adentro del lienzo viven #dzHandle y #dzPin — pisarlos
   // rompía todo el editor ("Cannot set properties of null"). Solo cambiar el svg.
   // Solo el svg del DISEÑO, que es hijo directo; los overlays del editor se conservan.
-  [...cv.children].filter(n => n.tagName.toLowerCase() === "svg").forEach(n => n.remove());
+  [...cv.children]
+    .filter(n => n.tagName.toLowerCase() === "svg" && n.id !== "dzRigOverlay")
+    .forEach(n => n.remove());
   let sourceSvg = r.svg;
   const recovery = window.LOW?.workspace?.recovery?.get(path);
   if (recovery && recovery.content !== r.svg) {
@@ -2656,6 +2659,7 @@ function dzZoomAt(factor, clientX, clientY) {
 function dzSelect(el) {
   if (DZ.sel) DZ.sel.classList.remove("dz-sel");
   DZ.sel = el; el.classList.add("dz-sel");
+  if (DZ.rigMode) DZ.rigSelectedId = DZ.doc?.scene.rigNode(el.id) ? el.id : null;
   dzBuildInspector(el);
   dzPositionHandle();
   dzBuildLayers();
@@ -6397,7 +6401,21 @@ function dzRigParentDelta(id, dx, dy, frame) {
   if (Math.abs(det) < 1e-9) return { x: dx, y: dy };
   return { x: (m[3] * dx - m[2] * dy) / det, y: (-m[1] * dx + m[0] * dy) / det };
 }
-function dzRigSelectedNode() { return DZ.doc && DZ.sel?.id ? DZ.doc.scene.rigNode(DZ.sel.id) : null; }
+function dzRigSelectedNode() {
+  if (!DZ.doc) return null;
+  return DZ.doc.scene.rigNode(DZ.rigSelectedId || DZ.sel?.id) || null;
+}
+function dzRigSelectNode(id) {
+  const node = DZ.doc?.scene.rigNode(id); if (!node) return false;
+  DZ.rigSelectedId = id;
+  const target = dzRigNodeElement(node);
+  if (target) dzSelect(target);
+  else {
+    dzDeselect(); DZ.rigSelectedId = id;
+    dzRigPanelSync(); dzRigOverlayRender();
+  }
+  return true;
+}
 function dzRigIsPageElement(el, svg) {
   if (!el || el.tagName.toLowerCase() !== "rect") return false;
   const vb = String(svg?.getAttribute("viewBox") || "0 0 1080 1080").trim().split(/[ ,]+/).map(Number);
@@ -6440,6 +6458,7 @@ function dzRigPieceSpec(el, index, requestedId) {
 function dzRigRegisterSpecs(specs, label) {
   if (!DZ.doc || !specs.length) return [];
   const activeId = specs[0].id;
+  DZ.rigSelectedId = activeId;
   DZ.sel = specs[0].element;
   dzDocCommit();
   const ids = DZ.doc.ensureRigNodes(specs, label) || [];
@@ -6474,7 +6493,8 @@ function dzRigPrepareDrawing() {
 function dzRigRemoveSelected() {
   const node = dzRigSelectedNode(); if (!node) return;
   if (DZ.doc.removeRigNode(node.id)) {
-    DZ.sel?.removeAttribute("data-pivot"); dzRigApplyLive(dzRigCur()); dzRigPanelSync();
+    DZ.sel?.removeAttribute("data-pivot"); DZ.rigSelectedId = null;
+    dzRigApplyLive(dzRigCur()); dzRigPanelSync();
     dzSetStatus(`«${node.id}» salió del esqueleto; el dibujo permanece intacto`);
   }
 }
@@ -6484,6 +6504,8 @@ function dzRigTogglePin() {
 }
 function dzRigSetMode(mode) {
   DZ.rigSubmode = ["build", "fk", "ik"].includes(mode) ? mode : "build";
+  if (DZ.rigSubmode !== "build") DZ.rigBoneTool = false;
+  $("#rigBoneTool")?.classList.toggle("on", !!DZ.rigBoneTool);
   $("#dzRigPanel").dataset.mode = DZ.rigSubmode;
   [["rigModeBuild", "build"], ["rigModeFk", "fk"], ["rigModeIk", "ik"]].forEach(([id, value]) =>
     $("#" + id).classList.toggle("on", DZ.rigSubmode === value));
@@ -6493,10 +6515,114 @@ function dzRigSetMode(mode) {
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
 }
 
+function dzRigToggleBoneTool() {
+  if (!DZ.doc) return dzSetStatus("Abrí una animación antes de crear huesos");
+  dzRigSetMode("build");
+  DZ.rigBoneTool = !DZ.rigBoneTool;
+  $("#rigBoneTool").classList.toggle("on", DZ.rigBoneTool);
+  dzRigOverlayRender();
+  dzSetStatus(DZ.rigBoneTool
+    ? "Crear hueso: arrastrá desde la articulación hasta la punta · empezá cerca de otra punta para encadenarlo"
+    : "Herramienta de huesos desactivada");
+}
+
+function dzRigBoneId() {
+  const bones = DZ.doc?.scene.rig.bones || {};
+  let index = Object.keys(bones).length + 1, id = "hueso_" + index;
+  while (bones[id]) id = "hueso_" + (++index);
+  return id;
+}
+
+function dzRigNearestBoneTail(point, maxDistance = 18 / Math.max(.1, DZ.zoom || 1)) {
+  let best = null;
+  for (const bone of Object.values(DZ.doc?.scene.rig.bones || {})) {
+    if (!bone.tail) continue;
+    const tail = DZ.doc.scene.rigWorldPoint(bone.id, dzRigCur(), bone.tail);
+    const distance = Math.hypot(tail.x - point.x, tail.y - point.y);
+    if (distance <= maxDistance && (!best || distance < best.distance)) best = { bone, point: tail, distance };
+  }
+  return best;
+}
+
+function dzRigBoneCreateDrag(e, forced = null) {
+  if (!DZ.doc || !DZ.rigBoneTool || DZ.rigSubmode !== "build") return;
+  e.preventDefault(); e.stopPropagation();
+  const pointerId = e.pointerId, rawHead = forced?.head || dzToUser(e.clientX, e.clientY);
+  const snap = forced?.parentId ? { bone: DZ.doc.scene.rigBone(forced.parentId), point: rawHead } :
+    dzRigNearestBoneTail(rawHead);
+  const head = snap?.point || rawHead, parentId = forced?.parentId || snap?.bone?.id || null;
+  DZ.rigBonePreview = { head, tail: head, parentId };
+  const preview = ev => {
+    if (ev.pointerId !== pointerId) return;
+    DZ.rigBonePreview = { head, tail: dzToUser(ev.clientX, ev.clientY), parentId };
+    dzRigOverlayRender();
+  };
+  const cleanup = () => {
+    document.removeEventListener("pointermove", preview);
+    document.removeEventListener("pointerup", finish);
+    document.removeEventListener("pointercancel", cancel);
+  };
+  const finish = ev => {
+    if (ev.pointerId !== pointerId) return; cleanup();
+    const value = DZ.rigBonePreview; DZ.rigBonePreview = null;
+    if (!value || Math.hypot(value.tail.x - value.head.x, value.tail.y - value.head.y) < 4) {
+      dzRigOverlayRender(); return;
+    }
+    const id = dzRigBoneId();
+    DZ.doc.ensureRigBone(id, { name: id, parentId: value.parentId,
+      head: value.head, pivot: value.head, tail: value.tail });
+    DZ.rigSelectedId = id;
+    dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
+    dzSetStatus(value.parentId
+      ? "Hueso «" + id + "» conectado a «" + value.parentId + "» · podés seguir desde su punta"
+      : "Hueso raíz «" + id + "» creado · arrastrá desde su punta para continuar la cadena");
+  };
+  const cancel = () => { cleanup(); DZ.rigBonePreview = null; dzRigOverlayRender(); };
+  document.addEventListener("pointermove", preview);
+  document.addEventListener("pointerup", finish);
+  document.addEventListener("pointercancel", cancel);
+}
+
+function dzRigBoneGeometryDrag(e, node, handle) {
+  if (!DZ.doc || DZ.rigSubmode !== "build" || !node?.head || !node?.tail) return;
+  e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
+  const pointerId = e.pointerId, start = dzToUser(e.clientX, e.clientY);
+  const original = { head: { ...node.head }, tail: { ...node.tail } };
+  const preview = ev => {
+    if (ev.pointerId !== pointerId) return;
+    const point = dzToUser(ev.clientX, ev.clientY);
+    if (handle === "tail") DZ.rigBoneGeometryPreview = { id: node.id, head: original.head, tail: point };
+    else {
+      const dx = point.x - start.x, dy = point.y - start.y;
+      DZ.rigBoneGeometryPreview = { id: node.id,
+        head: { x: original.head.x + dx, y: original.head.y + dy },
+        tail: { x: original.tail.x + dx, y: original.tail.y + dy } };
+    }
+    dzRigOverlayRender();
+  };
+  const cleanup = () => {
+    document.removeEventListener("pointermove", preview);
+    document.removeEventListener("pointerup", finish);
+    document.removeEventListener("pointercancel", cancel);
+  };
+  const finish = ev => {
+    if (ev.pointerId !== pointerId) return; cleanup();
+    const value = DZ.rigBoneGeometryPreview; DZ.rigBoneGeometryPreview = null;
+    if (value && DZ.doc.setRigBoneGeometry(node.id, value.head, value.tail)) {
+      dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
+      dzSetStatus(handle === "tail" ? "Longitud y dirección del hueso actualizadas" : "Hueso movido en la pose de armado");
+    } else dzRigOverlayRender();
+  };
+  const cancel = () => { cleanup(); DZ.rigBoneGeometryPreview = null; dzRigOverlayRender(); };
+  document.addEventListener("pointermove", preview);
+  document.addEventListener("pointerup", finish);
+  document.addEventListener("pointercancel", cancel);
+}
+
 function dzRigBuildPivotDrag(e, node) {
   if (!DZ.doc || DZ.rigSubmode !== "build") return;
   e.preventDefault(); e.stopPropagation();
-  const target = dzRigNodeElement(node); if (target) dzSelect(target);
+  const target = dzRigNodeElement(node); dzRigSelectNode(node.id);
   const pointerId = e.pointerId;
   const preview = ev => {
     if (ev.pointerId !== pointerId) return;
@@ -6611,37 +6737,73 @@ function dzRigIKDrag(e, constraintId) {
 }
 function dzRigOverlayRender() {
   const overlay = $("#dzRigOverlay"), doc = DZ.doc;
-  if (!overlay || !DZ.rigMode || !doc || !Object.keys(doc.scene.rig.nodes).length) {
-    if (overlay) { overlay.setAttribute("hidden", ""); overlay.innerHTML = ""; } return;
+  if (!overlay || !DZ.rigMode || !doc ||
+      (!Object.keys(doc.scene.rig.nodes).length && !DZ.rigBoneTool)) {
+    if (overlay) {
+      overlay.setAttribute("hidden", ""); overlay.innerHTML = "";
+      overlay.classList.remove("bone-create"); overlay.onpointerdown = null;
+    } return;
   }
   overlay.removeAttribute("hidden"); overlay.innerHTML = ""; overlay.dataset.mode = DZ.rigSubmode || "build";
+  overlay.classList.toggle("bone-create", !!DZ.rigBoneTool && DZ.rigSubmode === "build");
+  overlay.onpointerdown = e => {
+    if (e.target === overlay && DZ.rigBoneTool) dzRigBoneCreateDrag(e);
+  };
   const num = dzRigCur(), cv = $("#dzCanvas").getBoundingClientRect();
   overlay.setAttribute("viewBox", `0 0 ${Math.max(1, cv.width)} ${Math.max(1, cv.height)}`);
   const point = id => {
     const node = doc.scene.rigNode(id); if (!node?.pivot) return null;
-    const localPivot = DZ.rigBuildPreview?.nodeId === id ? DZ.rigBuildPreview.pivot : node.pivot;
+    const geometry = DZ.rigBoneGeometryPreview?.id === id ? DZ.rigBoneGeometryPreview : null;
+    const localPivot = geometry?.head || (DZ.rigBuildPreview?.nodeId === id ? DZ.rigBuildPreview.pivot : node.pivot);
     const p = doc.scene.rigWorldPoint(id, num, localPivot, DZ.rigIKPreview?.poses || {}), s = dzFromUser(p.x, p.y);
     return s && { x: s.x - cv.left, y: s.y - cv.top };
+  };
+  const tailPoint = node => {
+    const geometry = DZ.rigBoneGeometryPreview?.id === node.id ? DZ.rigBoneGeometryPreview : null;
+    const localTail = geometry?.tail || node.tail; if (!localTail) return null;
+    const p = doc.scene.rigWorldPoint(node.id, num, localTail, DZ.rigIKPreview?.poses || {}), s = dzFromUser(p.x, p.y);
+    return s && { x: s.x - cv.left, y: s.y - cv.top, user: p };
   };
   const ns = "http://www.w3.org/2000/svg", add = (tag, attrs, cls) => {
     const el = document.createElementNS(ns, tag); if (cls) el.setAttribute("class", cls);
     Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v)); overlay.appendChild(el); return el;
   };
+  const selectedId = DZ.rigSelectedId || DZ.sel?.id;
   for (const node of Object.values(doc.scene.rig.nodes)) {
-    if (!node.parentId) continue; const a = point(node.parentId), b = point(node.id); if (!a || !b) continue;
-    add("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y }, "dz-rig-bone" + (DZ.sel?.id === node.id ? " active" : ""));
+    let a = point(node.id), b = tailPoint(node);
+    if (!b && node.parentId) { a = point(node.parentId); b = point(node.id); }
+    if (!a || !b) continue;
+    add("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y },
+      "dz-rig-bone" + (selectedId === node.id ? " active" : ""));
+    const hit = add("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, "data-id": node.id }, "dz-rig-bone-hit");
+    hit.onpointerdown = e => { e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id); };
   }
   for (const node of Object.values(doc.scene.rig.nodes)) {
     const p = point(node.id); if (!p) continue;
     const joint = add("circle", { cx: p.x, cy: p.y, r: node.pinned ? 7 : 5, "data-id": node.id },
-      "dz-rig-joint" + (node.pinned ? " root" : "") + (DZ.sel?.id === node.id ? " selected" : ""));
+      "dz-rig-joint" + (node.pinned ? " root" : "") + (selectedId === node.id ? " selected" : ""));
     joint.onpointerdown = e => {
+      if (DZ.rigSubmode === "build" && node.tail) return dzRigBoneGeometryDrag(e, node, "head");
       if (DZ.rigSubmode === "build") return dzRigBuildPivotDrag(e, node);
-      e.preventDefault(); e.stopPropagation(); const el = dzRigNodeElement(node); if (el) dzSelect(el);
+      e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
     };
-    if (DZ.sel?.id === node.id) { const label = add("text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label"); label.textContent = node.id; }
+    const tipPoint = tailPoint(node);
+    if (tipPoint) {
+      const tip = add("circle", { cx: tipPoint.x, cy: tipPoint.y, r: 5, "data-id": node.id }, "dz-rig-bone-tip");
+      tip.onpointerdown = e => {
+        if (DZ.rigBoneTool) return dzRigBoneCreateDrag(e, { head: tipPoint.user, parentId: node.id });
+        return dzRigBoneGeometryDrag(e, node, "tail");
+      };
+    }
+    if (selectedId === node.id) { const label = add("text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label"); label.textContent = node.id; }
   }
-  const selected = DZ.sel?.id && doc.scene.rigNode(DZ.sel.id), selectedPoint = selected && point(selected.id);
+  if (DZ.rigBonePreview) {
+    const hs = dzFromUser(DZ.rigBonePreview.head.x, DZ.rigBonePreview.head.y);
+    const ts = dzFromUser(DZ.rigBonePreview.tail.x, DZ.rigBonePreview.tail.y);
+    if (hs && ts) add("line", { x1: hs.x - cv.left, y1: hs.y - cv.top,
+      x2: ts.x - cv.left, y2: ts.y - cv.top }, "dz-rig-bone-preview");
+  }
+  const selected = selectedId && doc.scene.rigNode(selectedId), selectedPoint = selected && point(selected.id);
   if (DZ.rigSubmode === "build" && selectedPoint) {
     const hx = selectedPoint.x + 28, hy = selectedPoint.y - 28;
     add("line", { x1: selectedPoint.x, y1: selectedPoint.y, x2: hx, y2: hy }, "dz-rig-link-arm");
@@ -6664,8 +6826,8 @@ function dzRigOverlayRender() {
 function dzRigPanelSync() {
   if ($("#dzRigPanel").hidden) return;
   const el = DZ.sel, num = dzRigCur(), nodes = DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : [], current = dzRigSelectedNode();
-  $("#rigId").value = (el && el.id) || ""; $("#rigCount").textContent = nodes.length; $("#rigFrame").textContent = "F" + num;
-  const k = (el?.id && dzRigLocalAt(el.id, num)) || { x: 0, y: 0, r: 0, sx: 1, sy: 1 };
+  $("#rigId").value = current?.id || (el && el.id) || ""; $("#rigCount").textContent = nodes.length; $("#rigFrame").textContent = "F" + num;
+  const k = (current && dzRigLocalAt(current.id, num)) || { x: 0, y: 0, r: 0, sx: 1, sy: 1 };
   $("#rigX").value = Math.round(k.x); $("#rigY").value = Math.round(k.y); $("#rigR").value = Math.round(k.r * 10) / 10;
   $("#rigSX").value = Math.round((k.sx == null ? (k.s == null ? 1 : k.s) : k.sx) * 100) / 100;
   $("#rigSY").value = Math.round((k.sy == null ? (k.s == null ? 1 : k.s) : k.sy) * 100) / 100;
@@ -6678,14 +6840,14 @@ function dzRigPanelSync() {
   const drawBranch = (node, depth) => {
     const row = document.createElement("div"); row.className = "rig2-node" + (!node.parentId ? " root" : "") + (current?.id === node.id ? " on" : "");
     row.style.paddingLeft = (6 + depth * 14) + "px"; row.innerHTML = `<i></i><span></span><small>${node.pinned ? "fija" : ""}</small>`;
-    row.querySelector("span").textContent = node.id; row.onclick = () => { const target = dzRigNodeElement(node); if (target) dzSelect(target); };
+    row.querySelector("span").textContent = node.id; row.onclick = () => dzRigSelectNode(node.id);
     tree.appendChild(row); nodes.filter(n => n.parentId === node.id).forEach(child => drawBranch(child, depth + 1));
   };
   nodes.filter(n => !n.parentId || !DZ.doc.scene.rigNode(n.parentId)).forEach(n => drawBranch(n, 0));
-  const chips = $("#rigChips"); chips.innerHTML = ""; const trk = (el?.id && dzRigTracks()[el.id]) || {};
+  const chips = $("#rigChips"); chips.innerHTML = ""; const trk = (current && dzRigTracks()[current.id]) || {};
   Object.keys(trk).map(Number).sort((a, b) => a - b).forEach(n => {
     const c = document.createElement("span"); c.className = "dz-chip" + (n === num ? " on" : ""); c.textContent = " " + n;
-    c.title = "Ir a F" + n + " · Alt+clic: borrar"; c.onclick = e => { if (e.altKey) dzRigDelKey(el.id, n); else if (DZ.doc) DZ.doc.goTo(n); };
+    c.title = "Ir a F" + n + " · Alt+clic: borrar"; c.onclick = e => { if (e.altKey) dzRigDelKey(current.id, n); else if (DZ.doc) DZ.doc.goTo(n); };
     chips.appendChild(c);
   });
   ["rigIkRoot", "rigIkMid", "rigIkEnd"].forEach(id => {
@@ -6713,7 +6875,10 @@ function dzRigToggle() {
   DZ.rigMode = !DZ.rigMode; $("#dzRigBtn").classList.toggle("active", DZ.rigMode); $("#tlRigOpen")?.classList.toggle("active", DZ.rigMode); $("#dzRigPanel").hidden = !DZ.rigMode;
   $("#dzRigOverlay").toggleAttribute("hidden", !DZ.rigMode);
   if (DZ.rigMode) { dzRigSetMode(DZ.rigSubmode || "build"); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzSetStatus("Esqueleto cut-out: registrá las piezas y armá la jerarquía desde la raíz"); }
-  else { $("#dzRigOverlay").innerHTML = ""; }
+  else {
+    DZ.rigBoneTool = false; $("#rigBoneTool")?.classList.remove("on");
+    $("#dzRigOverlay").classList.remove("bone-create"); $("#dzRigOverlay").innerHTML = "";
+  }
 }
 async function dzRigOpen() {
   if (!DZ.anim) await dzAnimToggle();
@@ -7904,10 +8069,10 @@ function dzPanelSnapshot(kind) {
     const doc = DZ.doc, frame = doc ? doc.frame : 1;
     const nodes = doc ? Object.values(doc.scene.rig.nodes).map(node => ({
       id: node.id, elementId: node.elementId, parentId: node.parentId,
-      pivot: node.pivot, pinned: !!node.pinned, limits: node.limits,
+      pivot: node.pivot, head: node.head, tail: node.tail, pinned: !!node.pinned, limits: node.limits,
       pose: doc.scene.rigPose(node.id, frame), keyed: !!node.keys?.[frame],
       worldPivot: node.pivot ? doc.scene.rigWorldPoint(node.id, frame, node.pivot) : null,
-      selected: DZ.sel?.id === node.id,
+      selected: (DZ.rigSelectedId || DZ.sel?.id) === node.id,
     })) : [];
     const constraints = doc ? Object.values(doc.scene.rig.constraints || {}).map(c => ({
       id: c.id, rootId: c.rootId, midId: c.midId, effectorId: c.effectorId,
@@ -7915,7 +8080,7 @@ function dzPanelSnapshot(kind) {
       active: c.id === DZ.rigConstraintId,
     })) : [];
     return { schema: 2, kind, frame, mode: DZ.rigSubmode || "build", visible: !!DZ.rigMode,
-      selected: DZ.sel?.id || null, activeConstraint: DZ.rigConstraintId || null,
+      selected: DZ.rigSelectedId || DZ.sel?.id || null, activeConstraint: DZ.rigConstraintId || null,
       nodes, constraints };
   }
   return DZ.animationPanelState || null;   // timeline / xsheet
@@ -8111,7 +8276,7 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
   if (kind === "rig" && DZ.doc) {
     const node = payload.id && DZ.doc.scene.rigNode(payload.id);
     if (action === "select-node" && node) {
-      const el = dzRigNodeElement(node); if (el) dzSelect(el); return !!el;
+      return dzRigSelectNode(node.id);
     }
     if (action === "mode") { dzRigSetMode(payload.mode); return true; }
     if (action === "key-all") { dzRigKeyAll(); return true; }

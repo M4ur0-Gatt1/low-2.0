@@ -19,6 +19,10 @@ qué debe entrar en la próxima versión; no afirma que el instalador ya exista.
   del arte, slots/attachments/bindings, canales por propiedad, orden explícito
   de constraints, rechazo de ciclos y diagnóstico de referencias rotas. Un
   esqueleto puede existir y guardarse sin una pieza de arte obligatoria.
+- Creación gráfica de huesos sobre la mesa: raíz por arrastre, continuidad de
+  cadena desde una punta, selección de huesos sin arte, edición de geometría y
+  Undo/Redo por gesto.
+- Corregida la carga de SVG para que no borre el overlay interactivo del rig.
 
 ## Trabajo concurrente de Claude incluido en la rama
 
@@ -32,7 +36,9 @@ borrador no convierte una prueba pendiente en una validación aprobada.
 
 ## Verificación
 
-- ✅ 118/118 pruebas del modelo 2D.
+- ✅ 120/120 pruebas del modelo 2D.
+- ✅ Prueba interactiva en navegador de raíz→hijo, parenting automático,
+  edición de longitud, Undo y Redo visibles en el overlay.
 - ✅ E2E previo de registrar piezas, mover pivote, vincular y Undo.
 - ✅ Compilación TypeScript sin errores.
 - ✅ Build de producción del renderer híbrido.

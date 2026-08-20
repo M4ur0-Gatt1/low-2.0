@@ -1046,8 +1046,12 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
   transform: none !important; background: transparent; box-shadow: none;
 }
 .dz-rig-overlay[hidden] { display: none; }
+.dz-rig-overlay.bone-create { pointer-events: all; cursor: crosshair; }
 .dz-rig-bone { stroke: #e98b55; stroke-width: 3; stroke-linecap: round; opacity: .86; }
 .dz-rig-bone.active { stroke: #ffd29d; stroke-width: 4; }
+.dz-rig-bone-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.dz-rig-bone-preview { fill: none; stroke: #ffd29d; stroke-width: 2; stroke-dasharray: 5 4; pointer-events: none; }
+.dz-rig-bone-tip { fill: #171615; stroke: #ffd29d; stroke-width: 2; pointer-events: all; }
 .dz-rig-joint { fill: #171615; stroke: #f2a06e; stroke-width: 2; pointer-events: all; cursor: pointer; }
 .dz-rig-joint.root { fill: #4f8bb8; stroke: #a8d9ff; }
 .dz-rig-joint.selected { fill: #f0450e; stroke: #fff; }
