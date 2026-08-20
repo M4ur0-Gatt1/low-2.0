@@ -490,7 +490,6 @@
       <!-- X-sheet: planilla de exposición vertical (flotante) -->
       <div class="dz-xsheet" id="dzXsheet" hidden>
         <div class="dz-op-head" id="dzXsHead"><svg class="ico"><use href="#i-xsheet"/></svg> X-sheet · OpenToonz
-          <button class="dz-panel-pop" id="dzXsDetach" title="Separar X-sheet en otra ventana"><svg class="ico"><use href="#i-ext"/></svg></button>
           <span class="dz-op-x" id="dzXsClose" title="Cerrar">×</span></div>
         <div class="dz-xs-rows" id="dzXsRows"></div>
       </div>
@@ -504,7 +503,6 @@
         <div class="dz-op-head" id="dzOpHead">
           <button class="onion2-power" id="onOn" title="Activar / desactivar (O)">◉</button>
           <span class="onion2-title">PAPEL CEBOLLA</span>
-          <button class="dz-panel-pop" id="dzOnionDetach" title="Separar en otra ventana">⧉</button>
           <span class="dz-op-x" id="dzOpClose" title="Cerrar">×</span>
         </div>
         <!-- ANTES / DESPUÉS: cuántos DIBUJOS (no frames) mostrar de cada lado.
@@ -576,6 +574,7 @@
       </div>
       <div class="dz-pin" id="dzPin" hidden>💬</div>
     </div>
+    <aside class="dz-animation-dock" id="dzAnimationDock" hidden aria-label="Paneles de animación"></aside>
     <div class="dz-code" id="dzCode" hidden>
       <textarea id="dzCodeArea" spellcheck="false"></textarea>
       <div class="dz-code-bar">
@@ -669,8 +668,6 @@
     <button class="ibtn active" id="tlOnion" title="Papel cebolla: mostrar/ocultar (el panel flotante lo personaliza)"><svg class="ico"><use href="#i-onion"/></svg></button>
     <button class="ibtn dz-anim-mode active" id="tlLayers" title="Timeline OpenToonz: niveles en filas y fotogramas en columnas"><svg class="ico"><use href="#i-files"/></svg><span>Timeline</span></button>
     <button class="ibtn dz-anim-mode" id="tlXs" title="X-sheet: tiempo vertical, niveles en columnas"><svg class="ico"><use href="#i-xsheet"/></svg><span>X-sheet</span></button>
-    <button class="ibtn" id="tlDetach" title="Separar Timeline en una ventana para el segundo monitor"><svg class="ico"><use href="#i-ext"/></svg></button>
-    <button class="ibtn" id="tlDetachXs" title="Separar X-sheet en una ventana para el segundo monitor"><svg class="ico"><use href="#i-xsheet"/></svg><span class="dz-pop-mark">↗</span></button>
     <div class="tl-frames" id="tlFrames" title="Arrastrá sobre los cuadros para hojearlos (scrub)"></div>
     <button class="ibtn" id="tlKey" title="Marcar/desmarcar este cuadro como FOTOGRAMA CLAVE (pose principal del flujo pose-a-pose)"><svg class="ico"><use href="#i-key"/></svg></button>
     <button class="ibtn" id="tlAdd" title="Duplicar este cuadro al FINAL (flujo clásico: dibujar sobre la copia)"><svg class="ico"><use href="#i-plus"/></svg></button>

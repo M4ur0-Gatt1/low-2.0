@@ -671,10 +671,6 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   // X-sheet: vista principal de animación (tiempo vertical estilo OpenToonz)
   $("#tlXs").onclick = dzXsToggle;
   $("#tlLayers").onclick = dzTlGridToggle;
-  $("#tlDetach").onclick = () => dzDetachAnimationPanel("timeline");
-  $("#tlDetachXs").onclick = () => dzDetachAnimationPanel("xsheet");
-  $("#dzXsDetach").onclick = (e) => { e.stopPropagation(); dzDetachAnimationPanel("xsheet"); };
-  $("#dzXsDetach").onpointerdown = e => e.stopPropagation();
   const tlGrid = $("#dzTlGrid"), tlResize = $("#dzTlgResize");
   const savedTlHeight = +(localStorage.getItem("low.timeline.height") || 230);
   if (tlGrid) tlGrid.style.height = Math.max(120, Math.min(window.innerHeight * .48, savedTlHeight)) + "px";
@@ -701,6 +697,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   });
   $("#dzXsClose").onclick = () => dzAnimSetView("timeline");
   $("#dzXsHead").addEventListener("mousedown", (e) => {
+    if ($("#dzXsheet").classList.contains("docked") || $("#dzCanvas").classList.contains("xsheet-open")) return;
     if (e.target.id === "dzXsClose") return;
     e.preventDefault();
     const pnl = $("#dzXsheet");
@@ -754,6 +751,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   });
   $("#dzOpHead").addEventListener("mousedown", (e) => {
+    if ($("#dzOnionPanel").closest("#dzAnimationDock")) return;
     if (e.target.id === "dzOpClose") return;
     e.preventDefault();
     const pnl = $("#dzOnionPanel");
@@ -5248,6 +5246,7 @@ async function dzAnimToggle() {
     dzXsSetVisible(false);
     $("#dzOnionPanel").hidden = true;
     $("#dzTlGrid").hidden = true;   // el grid de capas vive con la timeline
+    dzAnimationDock(false);
     if (DZ.camMode) { DZ.camMode = false; $("#dzCamBtn").classList.remove("active"); $("#dzCam").hidden = true; $("#tlCamKey").hidden = true; }
     return;
   }
@@ -5260,6 +5259,7 @@ async function dzAnimToggle() {
     await openDesign(r.path);
   }
   DZ.anim = { frames: [], idx: 0, playing: false, onion: false, cache: {} };
+  dzAnimationDock(true);
   $("#dzOnionPanel").hidden = true;
   $("#tlOnion").classList.remove("active");
   // cargar la escena (claves de cámara/dibujo, easing) que vive junto a los cuadros
@@ -8989,26 +8989,22 @@ function dzDragOutWire(cabecera, kind) {
 
 /** Engancha el arrastre en todos los paneles que se pueden separar. */
 function dzDragOutAll() {
-  const mapa = [
-    ["#dzOpHead", "onion"],
-    ["#dzXsHead", "xsheet"],
-    ["#tlHead", "timeline"],
-  ];
-  for (const [sel, kind] of mapa) dzDragOutWire(sel, kind);
-  // los paneles del chrome (herramientas, capas, color) no tienen encabezado
-  // propio: se les pone una manija arriba, del alto justo para agarrarla
-  const conManija = [[".dz-tools", "tools"], [".dz-inspector", "layers"]];
-  for (const [sel, kind] of conManija) {
-    const el = document.querySelector(sel);
-    if (!el || el.querySelector(":scope > .dz-grip")) continue;
-    const g = document.createElement("div");
-    g.className = "dz-grip";
-    g.title = LOW.workspace.PANEL_CATALOG[kind]
-      ? LOW.workspace.PANEL_CATALOG[kind].label + " — arrastrá para sacarlo a otra pantalla"
-      : "arrastrá para sacarlo a otra pantalla";
-    el.insertBefore(g, el.firstChild);
-    dzDragOutWire(g, kind);
+  // Deshabilitado: el desacople nativo no conserva todavía una experiencia
+  // consistente de tamaño, posición y escala entre monitores.
+}
+
+function dzAnimationDock(visible) {
+  const dock = $("#dzAnimationDock");
+  if (!dock) return;
+  for (const id of ["#dzLevelStrip", "#dzOnionPanel"]) {
+    const panel = $(id);
+    if (!panel) continue;
+    if (panel.parentElement !== dock) dock.appendChild(panel);
+    panel.style.left = panel.style.right = panel.style.top = panel.style.bottom = "";
   }
+  dock.hidden = !visible;
+  const view = $("#designView");
+  if (view) view.classList.toggle("animation-workspace", !!visible);
 }
 
 /* ══ TIRA DE DIBUJOS DEL NIVEL ══════════════════════════════════════════
@@ -9027,7 +9023,6 @@ function dzLsMount() {
     cerrar.dataset.wired = "1";
     cerrar.onclick = () => { $("#dzLevelStrip").hidden = true; };
   }
-  if (typeof dzDragOutWire === "function") dzDragOutWire("#dzLsHead", "levelstrip");
 }
 
 /* ══ TIMELINE NUEVA (sobre el modelo) ═══════════════════════════════════
@@ -9207,8 +9202,6 @@ function dzOnion2Wire() {
   const on = (id, ev, fn) => { const e = $(id); if (e) e[ev] = fn; };
   const power = $("#onOn");
   if (power) { power.innerHTML = '<svg class="ico"><use href="#i-onion"/></svg>'; power.setAttribute("aria-label", "Activar papel cebolla"); }
-  const detach = $("#dzOnionDetach");
-  if (detach) { detach.innerHTML = '<svg class="ico"><use href="#i-ext"/></svg>'; detach.setAttribute("aria-label", "Separar papel cebolla"); }
   on("#onColorB", "oninput", (e) => dzOnionCfgSet({ colorBefore: e.target.value }));
   on("#onColorA", "oninput", (e) => dzOnionCfgSet({ colorAfter: e.target.value }));
   on("#onAlpha", "oninput", (e) => dzOnionCfgSet({ alpha: +e.target.value / 100 }));
