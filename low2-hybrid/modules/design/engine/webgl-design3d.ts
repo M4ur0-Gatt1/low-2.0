@@ -996,6 +996,95 @@ export class WebGLDesign3D {
     return Math.abs(this.raycaster.ray.direction.dot(plane.normal)) < 0.08;
   }
 
+  /** Punto de una superficie CURVA (esfera/cilindro/toro) más cercano al rayo,
+   *  aunque el rayo no la toque.
+   *
+   *  Hace falta porque dibujar sobre una esfera se iba de las manos: mientras el
+   *  cursor estaba sobre la malla el trazo se apoyaba bien, pero al pasar la
+   *  silueta el punto seguía por el plano TANGENTE al primer contacto y salía
+   *  disparado. Medido en un solo trazo sobre una esfera de radio 1.5: el radio
+   *  de los puntos pasaba de 1.5 a 4.8, o sea el trazo terminaba a tres radios
+   *  de la superficie sobre la que se creía estar dibujando.
+   *
+   *  Proyectando, el trazo se queda pegado a la superficie y al llegar al borde
+   *  se DESLIZA por la silueta, que es lo que uno espera al dibujar sobre un
+   *  volumen (y lo que hacen Feather o el Grease Pencil de Blender).
+   *
+   *  Se trabaja en coordenadas LOCALES de la malla: así la posición, rotación y
+   *  escala de la superficie salen gratis por la matriz, sin deshacerlas a mano.
+   *  `loft` no tiene forma analítica: devuelve null y el llamador se queda con
+   *  el comportamiento anterior. */
+  private projectOnSurface(s: SurfaceObj): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
+    s.mesh.updateMatrixWorld();
+    const inv = new THREE.Matrix4().copy(s.mesh.matrixWorld).invert();
+    const o = this.raycaster.ray.origin.clone().applyMatrix4(inv);
+    const dir = this.raycaster.ray.direction.clone().transformDirection(inv).normalize();
+    // punto del rayo más cercano al centro local de la superficie
+    const t = -o.dot(dir);
+    const cerca = o.clone().add(dir.clone().multiplyScalar(Math.max(0, t)));
+    return this.pegarASuperficieLocal(s, cerca);
+  }
+
+  /** Pega un punto del MUNDO a la piel de la superficie. Se usa para sanear
+   *  cada punto del trazo: "dibujar sobre la esfera" significa que los puntos
+   *  están EN la esfera, y conviene no depender de qué rama del raycast los
+   *  produjo. De paso saca el facetado — el raycast devuelve el punto sobre la
+   *  cara plana del mallado, hasta 0.03 por dentro de la esfera ideal, y eso se
+   *  notaba como un trazo levemente hundido y ondulado. */
+  private pegarASuperficie(s: SurfaceObj, puntoMundo: THREE.Vector3):
+      { point: THREE.Vector3; normal: THREE.Vector3 } | null {
+    s.mesh.updateMatrixWorld();
+    const inv = new THREE.Matrix4().copy(s.mesh.matrixWorld).invert();
+    return this.pegarASuperficieLocal(s, puntoMundo.clone().applyMatrix4(inv));
+  }
+
+  /** El cálculo en sí, con el punto YA en coordenadas locales de la malla. */
+  private pegarASuperficieLocal(s: SurfaceObj, cerca: THREE.Vector3):
+      { point: THREE.Vector3; normal: THREE.Vector3 } | null {
+    const par = (s.mesh.geometry as unknown as { parameters?: Record<string, number> }).parameters;
+    if (!par) return null;
+    let punto: THREE.Vector3;
+    let normal: THREE.Vector3;
+    if (s.type === 'sphere') {
+      const r = par.radius ?? 1;
+      const n = cerca.lengthSq() > 1e-12 ? cerca.clone().normalize() : new THREE.Vector3(0, 0, 1);
+      punto = n.clone().multiplyScalar(r);
+      normal = n;
+    } else if (s.type === 'cylinder') {
+      // eje Y, sin tapas: radial en XZ y limitado a la altura de la malla
+      const r = par.radiusTop ?? par.radius ?? 1;
+      const h = (par.height ?? r * 2) / 2;
+      const radial = new THREE.Vector3(cerca.x, 0, cerca.z);
+      if (radial.lengthSq() < 1e-12) radial.set(0, 0, 1);
+      radial.normalize();
+      punto = new THREE.Vector3(radial.x * r, THREE.MathUtils.clamp(cerca.y, -h, h), radial.z * r);
+      normal = radial;
+    } else if (s.type === 'torus') {
+      // primero al círculo mayor (plano XY), después al tubo
+      const R = par.radius ?? 1;
+      const tubo = par.tube ?? R * 0.35;
+      const enPlano = new THREE.Vector3(cerca.x, cerca.y, 0);
+      if (enPlano.lengthSq() < 1e-12) enPlano.set(1, 0, 0);
+      const centroTubo = enPlano.clone().normalize().multiplyScalar(R);
+      const haciaFuera = cerca.clone().sub(centroTubo);
+      if (haciaFuera.lengthSq() < 1e-12) haciaFuera.set(0, 0, 1);
+      haciaFuera.normalize();
+      punto = centroTubo.add(haciaFuera.clone().multiplyScalar(tubo));
+      normal = haciaFuera;
+    } else {
+      return null;
+    }
+    return {
+      point: punto.applyMatrix4(s.mesh.matrixWorld),
+      normal: normal.transformDirection(s.mesh.matrixWorld).normalize(),
+    };
+  }
+
+  /** La superficie activa, si la hay. */
+  private activeSurfaceObj(): SurfaceObj | undefined {
+    return this.activeSurfaceId ? this.surfaces.find((x) => x.id === this.activeSurfaceId) : undefined;
+  }
+
   private resolveHit(): HitInfo | null {
     this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
     // PRIORIDAD: la guía ACTIVA gana sobre cualquier otra superficie. Con varias
@@ -1052,12 +1141,16 @@ export class WebGLDesign3D {
             }
           }
         } else {
-          // CURVAS (esfera, cilindro, toro): fuera de la malla no había ningún
-          // respaldo, así que el trazo que empezaba al lado de la esfera no se
-          // dibujaba, o se enganchaba a otro plano y ya nunca se pegaba a ella.
-          // Se usa el plano que pasa por su centro, de frente a la cámara: el
-          // trazo sigue teniendo profundidad coherente y, apenas entra en la
-          // superficie, se apoya en ella (ver el respaldo de moveDraw).
+          // CURVAS (esfera, cilindro, toro): fuera de la malla el punto se
+          // PROYECTA sobre la superficie. Antes se usaba el plano que pasa por
+          // su centro de frente a la cámara, y eso dejaba el punto DENTRO del
+          // volumen: en una esfera de radio 1.5 el primer punto del trazo
+          // aparecía a radio 1.4, hundido bajo la piel donde se creía dibujar.
+          const proy = this.projectOnSurface(act);
+          if (proy) {
+            return { point: proy.point, normal: proy.normal, target: act.mesh, kind: 'surface' };
+          }
+          // loft (y cualquiera sin forma analítica): plano por el centro
           const centro = act.mesh.getWorldPosition(new THREE.Vector3());
           const haciaCam = new THREE.Vector3();
           (this.camera as THREE.Camera).getWorldDirection(haciaCam);
@@ -1166,6 +1259,38 @@ export class WebGLDesign3D {
     const point = this.raycaster.ray.origin.clone().addScaledVector(this.raycaster.ray.direction, this.freeDrawDepth);
     const normal = this.raycaster.ray.direction.clone().negate();
     return { point, normal };
+  }
+
+  /** Punto del gesto EN CURSO, respetando la superficie donde se apoya.
+   *
+   *  Existe para que moveDraw, endDraw y pointFromScreen decidan IGUAL. Antes
+   *  cada uno llamaba a intersectLockedDrawContext() por su cuenta, que fuera
+   *  de la malla cae al plano tangente del primer contacto; el cierre del trazo
+   *  reemplaza el último punto con eso, y como el commit remuestrea entre el
+   *  último punto bueno y ese, la última mitad del trazo se despegaba de la
+   *  esfera aunque cada punto intermedio hubiera estado bien (medido: los
+   *  puntos iban de radio 1.40 a 2.62 sobre una esfera de radio 1.4). */
+  private lockedHit(): HitInfo | null {
+    const hit = this.intersectLockedDrawContext();
+    const act = this.activeSurfaceObj();
+    if (!act || act.type === 'plane' || this.current?.drawTarget !== act.mesh) return hit;
+    const sh = this.raycaster.intersectObject(act.mesh, false);
+    if (sh.length) {
+      const h = sh[0];
+      // se pega a la piel ideal: el raycast devuelve el punto de la CARA plana
+      // del mallado, un poco por dentro, y eso deja el trazo ondulado
+      const liso = this.pegarASuperficie(act, h.point);
+      return {
+        point: liso ? liso.point : h.point.clone(),
+        normal: liso ? liso.normal : (h.face
+          ? h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize()
+          : (hit?.normal.clone() ?? new THREE.Vector3(0, 0, 1))),
+        target: act.mesh,
+      };
+    }
+    // pasado el borde de la silueta, DESLIZA por la superficie
+    const proy = this.projectOnSurface(act);
+    return proy ? { point: proy.point, normal: proy.normal, target: act.mesh } : hit;
   }
 
   private intersectLockedDrawContext(): HitInfo | null {
@@ -1751,7 +1876,7 @@ export class WebGLDesign3D {
     this.pointer.x = (px / rect.width) * 2 - 1;
     this.pointer.y = -(py / rect.height) * 2 + 1;
     const hit = (this.current?.drawTarget || this.current?.drawPlane)
-      ? this.intersectLockedDrawContext()
+      ? this.lockedHit()
       : (this.tool === 'pencil-free' ? this.resolveFreeHit() : this.resolveHit());
     this.pointer.copy(antes);
     return hit ? hit.point.clone() : null;
@@ -1935,7 +2060,9 @@ export class WebGLDesign3D {
     // intención de compartir vértice: no se descarta por la profundidad
     // provisional del plano de cámara. El punto devuelto conserva el XYZ real.
     const snap = this.findSnapVertex(e, surf?.point, this.tool === 'guide' ? Infinity : 0.8);
-    const hit = snap ? { point: snap, normal: surf?.normal ?? new THREE.Vector3(0, 0, 1) } : surf;
+    // `let`: si el gesto se apoya en una superficie curva, más abajo el punto
+    // se pega a su piel (ver la INVARIANTE).
+    let hit = snap ? { point: snap, normal: surf?.normal ?? new THREE.Vector3(0, 0, 1) } : surf;
     if (!hit) {
       this.canvas.title = this.activeGuideIsEdgeOn()
         // Caso normal, no un error: una guía de PARED está parada sobre la línea
@@ -1958,6 +2085,17 @@ export class WebGLDesign3D {
     if ((this.mirror.x || this.mirror.y || this.mirror.z) && kind === 'stroke') {
       mirrorLine = this.makePreviewLine(kind);
       this.strokesGroup.add(mirrorLine);
+    }
+    // INVARIANTE: si el gesto se apoya en una superficie curva, sus puntos
+    // están EN la superficie — el primero incluido. Medido antes de esto: el
+    // arranque caía a radio 1.206 en una esfera de 1.4, o sea 0.2 hundido bajo
+    // la piel donde se creía dibujar.
+    {
+      const act = this.activeSurfaceObj();
+      if (act && act.type !== 'plane' && hit.target === act.mesh) {
+        const liso = this.pegarASuperficie(act, hit.point);
+        if (liso) { hit = { ...hit, point: liso.point, normal: liso.normal }; }
+      }
     }
     this.smoothed = hit.point.clone(); // sin retraso en el primer punto
     this.current = {
@@ -2058,26 +2196,9 @@ export class WebGLDesign3D {
     if (this.tool === 'pencil-free') {
       hit = this.resolveFreeHit();
     } else if (this.current.drawTarget || this.current.drawPlane) {
-      hit = this.intersectLockedDrawContext();
-      // La SUPERFICIE ACTIVA manda sobre el plano bloqueado: si el rayo la
-      // toca, el trazo se apoya en ella aunque haya arrancado en otro lado.
-      // Sin esto, empezar la línea al costado de una esfera dejaba el trazo
-      // pegado a un plano y ya nunca se subía a la superficie.
-      const act = this.activeSurfaceId
-        ? this.surfaces.find((x) => x.id === this.activeSurfaceId)
-        : undefined;
-      if (act && act.type !== 'plane') {
-        const sh = this.raycaster.intersectObject(act.mesh, false);
-        if (sh.length) {
-          const h = sh[0];
-          hit = {
-            point: h.point.clone(),
-            normal: h.face
-              ? h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize()
-              : (hit?.normal.clone() ?? new THREE.Vector3(0, 0, 1)),
-          };
-        }
-      }
+      // lockedHit() aplica la prioridad completa: malla de apoyo → proyección
+      // sobre ella si el cursor pasó la silueta → plano bloqueado.
+      hit = this.lockedHit();
     } else {
       hit = this.resolveHit();
     }
@@ -2183,7 +2304,7 @@ export class WebGLDesign3D {
       // la punta pasa a ser el punto REAL bajo el cursor.
       this.setPointerFromEvent(e);
       const real = (this.current.drawTarget || this.current.drawPlane)
-        ? this.intersectLockedDrawContext()
+        ? this.lockedHit()
         : (this.tool === 'pencil-free' ? this.resolveFreeHit() : this.resolveHit());
       if (real) pts[pts.length - 1] = real.point.clone();
       // ALINEACIÓN con la punta de otra línea: se corrige en PANTALLA y se
