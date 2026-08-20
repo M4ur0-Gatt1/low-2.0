@@ -29,11 +29,13 @@
 
 ## Prioridad activa
 
-Completar sobre el rig cut-out rígido ya canónico: controles IK persistentes,
-editor de curvas, Schematic y deformación flexible. No llamar “rig completo” a
-un registro automático de formas: el armado profesional separa piezas/arte,
-esqueleto o pegs, binding y controles de animación. La decisión está registrada en
-`docs/ADR_2D_CUTOUT_RIG.md` y el estado en `docs/2D_REDESIGN.md`.
+Implementar incrementalmente el contrato v4 descrito en
+`docs/ADR_2D_PRO_RIG_ARCHITECTURE.md`. El próximo bloque es el fundamento:
+bones separados del arte, slots/attachments, canales por propiedad, constraints
+ordenadas con detección de ciclos y migración desde rig v3. Después siguen
+cut-out profesional, malla/pesos, controladores/acciones y rigs 360 por vistas.
+No llamar “rig completo” a un registro de formas ni a controles que sólo
+modifican el DOM.
 
 ## Últimos bloques 2D confirmados
 
@@ -56,3 +58,10 @@ esqueleto o pegs, binding y controles de animación. La decisión está registra
   v3 con binding rígido explícito y migración desde escenas anteriores.
 - Validación automática actual: 98/98, más prueba E2E de registro sin jerarquía,
   arrastre de pivote, vinculación gráfica y Undo.
+- Investigación comparativa de rigging documentada. BBW queda como generador
+  opcional de pesos en bind-time; el runtime 2D usa matrices afines y pesos
+  dispersos. DQS y mallas volumétricas 3D no son requisitos del núcleo 2D.
+- El borrador `docs/RELEASE_v3.29.41.md` incluye explícitamente los commits
+  concurrentes de Claude `767f07e`, `bcb8f08` y `b474a19`; las pruebas
+  automáticas pasaron y faltan la prueba manual final 3D, subir, etiquetar y
+  publicar, en ese orden.
