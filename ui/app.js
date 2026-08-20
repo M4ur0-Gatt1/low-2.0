@@ -634,7 +634,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     if (r && r.error) return sysMsg(" " + r.error);
     try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
     await openDesign(r.path);
-    $("#dzTimeline").hidden = false;
+    dzTimelineReveal();
     await dzTimelineRefresh();
     dzOnionUpdate();
   };
@@ -5315,10 +5315,17 @@ function dzDiscToggle() {
 
 /* ══ animación: línea de tiempo + papel cebolla (cuadros _f001.svg…) ══ */
 DZ.anim = null;   // {frames:[rutas], idx, playing, onion, cache:{}}
+function dzIsPanelDetached(kind) {
+  return !!(DZ.detached?.has(kind) || DZ.detachedAnimationPanels?.has(kind));
+}
+function dzTimelineReveal() {
+  const panel = $("#dzTimeline");
+  if (panel) panel.hidden = dzIsPanelDetached("timeline");
+}
 
 async function dzAnimToggle() {
   const bar = $("#dzTimeline");
-  if (!bar.hidden) {
+  if (DZ.anim) {
     dzAnimStop(); bar.hidden = true; DZ.anim = null; dzOnionClear();
     dzXsSetVisible(false);
     $("#dzOnionPanel").hidden = true;
@@ -5345,7 +5352,7 @@ async function dzAnimToggle() {
   DZ.scene = (sc && sc.scene) || {};
   DZ.sceneHistory = new LOW.animation.History(180);
   DZ.sceneModel = DZ.scene.lowModel ? new LOW.animation.SceneModel(DZ.scene.lowModel) : null;
-  bar.hidden = false;
+  dzTimelineReveal();
   // Sala Timeline de OpenToonz: visor arriba, transporte y editor de niveles ×
   // fotogramas acoplado abajo. La X-sheet vertical es una vista alternativa.
   dzAnimSetView("timeline");
@@ -5439,7 +5446,7 @@ async function dzFrameInsert(blank) {
   DZ.anim.cache = {};                                // los números se corrieron
   try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
   await openDesign(r.path);
-  $("#dzTimeline").hidden = false;
+  dzTimelineReveal();
   await dzTimelineRefresh();
   dzOnionUpdate();
 }
@@ -5741,7 +5748,7 @@ async function dzGoFrame(i) {
   await openDesign(DZ.anim.frames[i]);
   // openDesign no conoce la animación: restaurar la barra y el estado
   DZ.anim.idx = i;
-  $("#dzTimeline").hidden = false;
+  dzTimelineReveal();
   await dzTimelineRefresh();
   dzOnionUpdate();
   if (DZ.rigMode) { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); }
@@ -5754,7 +5761,7 @@ async function dzFrameAdd() {
   if (r && r.error) return sysMsg(" " + r.error);
   try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
   await openDesign(r.path);
-  $("#dzTimeline").hidden = false;
+  dzTimelineReveal();
   await dzTimelineRefresh();
   dzOnionUpdate();
 }
@@ -6933,6 +6940,7 @@ function dzXsSetVisible(show) {
   const timeline = $("#dzTimeline");
   const canvas = $("#dzCanvas");
   if (!panel) return;
+  show = !!show && !dzIsPanelDetached("xsheet");
   panel.hidden = !show;
   if (show) dzXsMount();          // planilla sobre el modelo (fase 3)
   if (button) button.classList.toggle("active", show);
@@ -6968,6 +6976,8 @@ async function dzDetachAnimationPanel(kind) {
   if (!result || !result.error) {
     DZ.detachedAnimationPanels = DZ.detachedAnimationPanels || new Set();
     DZ.detachedAnimationPanels.add(kind);
+    DZ.detached = DZ.detached || new Set();
+    DZ.detached.add(kind);
     window.LOW?.workspace?.panels?.detach(kind);
     // Desacople real: la mesa principal recupera el espacio ocupado por el panel.
     if (kind === "timeline") {
@@ -7327,6 +7337,12 @@ function dzPanelSnapshot(kind) {
       tool: DZ.tool || "pencil", color: DZ.drawColor || "#1a1a1a", width: DZ.drawW || 6,
       frame: DZ.doc ? DZ.doc.frame : 1 };
   }
+  if (kind === "levelstrip") {
+    const lv = DZ.doc && DZ.doc.level;
+    return { kind, level: lv ? lv.name : "", current: DZ.doc ? DZ.doc.cell : null,
+      drawings: lv ? lv.drawings.map(d => ({ number: d.number,
+        exposed: DZ.doc.scene.layers.some(ly => ly.levelId === lv.id && ly.cells.includes(d.number)) })) : [] };
+  }
   if (kind === "layers") {
     // mismo filtro y mismo nombre que dzBuildLayers: si no, el panel separado
     // lista cosas que el panel de adentro no muestra (cebolla, UI de la pluma).
@@ -7393,6 +7409,7 @@ setInterval(() => { dzPanelsPublish(); }, 900);
 /** Separar un panel a su propia ventana. */
 async function dzDetachPanel(kind) {
   if (!api || !DZ_PANELS.includes(kind)) return;
+  if (kind === "timeline" || kind === "xsheet") return dzDetachAnimationPanel(kind);
   const call = api.open_panel ? api.open_panel(kind) : api.open_animation_panel(kind);
   const r = await call;
   // sin confirmación no se marca como separado: si no, la ventana principal
@@ -7400,11 +7417,6 @@ async function dzDetachPanel(kind) {
   if (!r || r.error) {
     dzSetStatus(" No se pudo separar el panel" + (r && r.error ? ": " + r.error : ""));
     return;
-  }
-  if (kind === "levelstrip") {
-    const lv = DZ.doc && DZ.doc.level;
-    return { kind, level: lv ? lv.name : "", current: DZ.doc ? DZ.doc.cell : null,
-      drawings: lv ? lv.drawings.map(d => ({ number: d.number, exposed: DZ.doc.scene.layers.some(ly => ly.levelId === lv.id && ly.cells.includes(d.number)) })) : [] };
   }
   DZ.detached.add(kind);
   const meta = LOW.workspace.PANEL_CATALOG[kind];
@@ -7512,12 +7524,13 @@ window.lowAnimationPanelCommand = async ({ action, payload }) => {
     const kind = payload && payload.kind === "xsheet" ? "xsheet" : "timeline";
     DZ.detachedAnimationPanels = DZ.detachedAnimationPanels || new Set();
     DZ.detachedAnimationPanels.delete(kind);
+    DZ.detached?.delete(kind);
     window.LOW?.workspace?.panels?.dock(kind);
     if (kind === "xsheet") {
-      if (!DZ.detachedAnimationPanels.has("timeline")) $("#dzTimeline").hidden = false;
+      dzTimelineReveal();
       dzAnimSetView("xsheet");
     } else {
-      $("#dzTimeline").hidden = false;
+      dzTimelineReveal();
       dzAnimSetView("timeline");
     }
   }
@@ -7565,7 +7578,7 @@ async function dzDeleteFrameSelection() {
   DZ.timelineSelection = null;
   try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
   if (result && result.path) await openDesign(result.path);
-  $("#dzTimeline").hidden = false;
+  dzTimelineReveal();
   await dzTimelineRefresh();
   dzOnionUpdate();
   dzSetStatus(`${paths.length} fotograma(s) eliminados`);
@@ -7649,7 +7662,7 @@ function dzAIKeyModal() {
     dzSceneSave();
     try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
     await openDesign(currentPath);
-    $("#dzTimeline").hidden = false;
+    dzTimelineReveal();
     await dzTimelineRefresh();
     dzOnionUpdate();
     dzAnimSetView("timeline");
