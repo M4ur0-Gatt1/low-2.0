@@ -321,8 +321,14 @@
       <span data-act="win-layers">Separar Capas</span>
       <span data-act="win-tools">Separar Herramientas</span>
       <span data-act="win-color">Separar Color</span>
+      <span data-act="win-onion">Separar Papel cebolla</span>
+      <span data-act="win-levelstrip">Separar Dibujos del nivel</span>
       <hr><span data-act="win-timeline">Separar Línea de tiempo</span>
       <span data-act="win-xsheet">Separar X-sheet</span>
+      <hr><span data-act="ws-save">Guardar disposición actual</span>
+      <span data-act="ws-duplicate">Duplicar espacio de trabajo…</span>
+      <span data-act="ws-lock">Bloquear / desbloquear disposición</span>
+      <span data-act="ws-reset">Restablecer espacio actual</span>
       <hr><span data-act="win-info">Cada panel recuerda su monitor</span>
     </div></div>
     <div class="dz-menu" data-menu="capa">Capa<div class="dz-dd">
@@ -469,7 +475,9 @@
       <div class="dz-rotate" id="dzRotate" title="Arrastrá para rotar · Shift: de a 15°" hidden></div>
       <!-- cámara (🎬): el encuadre animable — arrastrá para mover, esquina = zoom,  = rotar -->
       <div class="dz-cam" id="dzCam" hidden>
-        <span class="dz-cam-tag" id="dzCamTag">🎬 cámara</span>
+        <span class="dz-cam-tag" id="dzCamTag">Cámara 2D</span>
+        <span class="dz-cam-safe" aria-hidden="true"></span>
+        <span class="dz-cam-center" aria-hidden="true"></span>
         <div class="dz-cam-size" id="dzCamSize" title="Arrastrá: zoom de cámara (achica el encuadre = acerca)"></div>
         <div class="dz-cam-rot" id="dzCamRot" title="Arrastrá para rotar la cámara"></div>
       </div>

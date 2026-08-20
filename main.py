@@ -199,6 +199,7 @@ class Api:
         "tools":    {"title": "Herramientas", "w": 300, "h": 640, "min": (220, 320)},
         "color":    {"title": "Color",    "w": 340,  "h": 420, "min": (260, 260)},
         "onion":    {"title": "Papel cebolla", "w": 250, "h": 330, "min": (220, 260)},
+        "levelstrip":{"title": "Dibujos del nivel", "w": 360, "h": 620, "min": (260, 320)},
     }
 
     @classmethod
