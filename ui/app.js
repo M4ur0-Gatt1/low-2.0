@@ -819,6 +819,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   });
   // ── panel de rig ──
   $("#dzRigBtn").onclick = dzRigToggle;
+  $("#tlRigOpen").onclick = dzRigOpen;
   $("#dzRigClose").onclick = dzRigToggle;
   $("#dzRigHead").addEventListener("mousedown", (e) => {
     if (window.LOW_PANEL_DOCKING || $("#dzRigPanel").closest("#dzAnimationDock")) return;
@@ -6566,10 +6567,18 @@ function dzRigReadPanel() {
 }
 function dzRigToggle() {
   if (!DZ.anim) { sysMsg("Abrí una animación antes de armar el esqueleto."); return; }
-  DZ.rigMode = !DZ.rigMode; $("#dzRigBtn").classList.toggle("active", DZ.rigMode); $("#dzRigPanel").hidden = !DZ.rigMode;
+  DZ.rigMode = !DZ.rigMode; $("#dzRigBtn").classList.toggle("active", DZ.rigMode); $("#tlRigOpen")?.classList.toggle("active", DZ.rigMode); $("#dzRigPanel").hidden = !DZ.rigMode;
   $("#dzRigOverlay").hidden = !DZ.rigMode;
   if (DZ.rigMode) { dzRigSetMode(DZ.rigSubmode || "build"); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzSetStatus("Esqueleto cut-out: registrá las piezas y armá la jerarquía desde la raíz"); }
   else { $("#dzRigOverlay").innerHTML = ""; }
+}
+async function dzRigOpen() {
+  if (!DZ.anim) await dzAnimToggle();
+  if (!DZ.anim) return;
+  if (!DZ.rigMode) { dzRigToggle(); return; }
+  $("#dzRigPanel").hidden = false;
+  $("#dzRigBtn").classList.add("active"); $("#tlRigOpen")?.classList.add("active");
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender();
 }
 
 
@@ -7093,7 +7102,8 @@ function dzMenuAction(act) {
     pivote: () => dzSetTool("pivot"),
     timeline: dzAnimToggle, cuadro: dzFrameAdd, insertar: () => dzFrameInsert(false),
     clave: dzKeyToggle, intercalar: dzTweenModal, interpolar: dzMoveTween,
-    grabar: dzRecToggle, claveia: dzAIKeyModal, camara: dzCamToggle, clavecam: dzCamKeyToggle,
+    grabar: dzRecToggle, claveia: dzAIKeyModal, esqueleto: dzRigOpen,
+    camara: dzCamToggle, clavecam: dzCamKeyToggle,
     acerca: () => {
       openModal(`<h2>LOW Estudio</h2>
         <div class="sub">Editor de vectores y animación 2D con IA integrada, dentro de LOW v${S.version || ""}.
@@ -7853,7 +7863,7 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
     const meta = LOW.workspace.PANEL_CATALOG[kind], panel = meta && document.querySelector(meta.element);
     if (panel) { panel.hidden = false; DZ.panelDock?.dock(panel, "right"); }
     LOW.workspace.panels?.dock(kind, "right");
-    if (kind === "rig") { DZ.rigMode = true; $("#dzRigBtn")?.classList.add("active"); dzRigPanelSync(); dzRigOverlayRender(); }
+    if (kind === "rig") { DZ.rigMode = true; $("#dzRigBtn")?.classList.add("active"); $("#tlRigOpen")?.classList.add("active"); dzRigPanelSync(); dzRigOverlayRender(); }
     return true;
   }
 
