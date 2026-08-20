@@ -308,6 +308,9 @@
       ]);
       ok("preparar dibujo registra todas las piezas en una operación",
         Object.keys(prepared.scene.rig.nodes).length === 3 && prepared.scene.rigNode("brazo_auto").parentId === "torso_auto");
+      ok("cada pieza explicita su vínculo rígido con el arte",
+        prepared.scene.rig.version === 3 && prepared.scene.rigNode("mano_auto").binding.mode === "rigid" &&
+        prepared.scene.rigNode("mano_auto").binding.elementId === "mano_auto");
       preparedHistory.undo();
       ok("undo de preparar dibujo quita el rig completo", Object.keys(prepared.scene.rig.nodes).length === 0);
       preparedHistory.redo();
@@ -331,6 +334,8 @@
       ok("rig se conserva al guardar y reabrir", reopened.scene.rigNode("brazo").parentId === "torso" && reopened.scene.rigNode("brazo").keys[13].r === 90);
       const migrated = new animation.Scene({ rig: { mano: { 1: { x: 3, y: 4, r: 5, s: 1 } } } });
       ok("rig legacy migra a nodos canónicos", migrated.rigNode("mano").keys[1].x === 3);
+      ok("rig legacy migra al esquema cut-out v3", migrated.rig.version === 3 &&
+        migrated.rig.setup.mode === "cutout" && migrated.rigNode("mano").binding.mode === "rigid");
       doc.setRigKey("torso", 1, { x: 10, y: 0, r: 90, s: 2 });
       doc.setRigKey("brazo", 1, { x: 5, y: 0, r: 15, s: 1 });
       const world = doc.scene.rigWorldPose("brazo", 1);

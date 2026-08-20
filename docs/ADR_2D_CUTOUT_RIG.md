@@ -15,15 +15,23 @@ en el dibujo y las operaciones complejas no eran atómicas en Undo.
 ## Decisión
 
 El rig vive en `LowDoc.scene.rig`, no en una escena ni archivo paralelo. Su
-contrato versión 2 contiene:
+contrato versión 3 contiene:
 
 - nodos de pieza con ID estable, padre, pivote, pose neutra, límites y claves;
+- un vínculo explícito `rigid` entre cada nodo y su elemento de dibujo;
 - constraints IK de dos huesos con objetivo animable y dirección de flexión;
 - evaluación por matrices afines, desde pose local hasta pose mundial;
 - métodos de `LowDoc` para todas las mutaciones, con una transacción de Undo por
   intención del usuario;
 - Timeline, mesa, panel separado, reproducción, exportación y guardado como
-  consumidores del mismo estado.
+consumidores del mismo estado.
+
+El armado nunca infiere anatomía a partir del tamaño o la posición del arte.
+`Registrar piezas` crea piezas sin padre; el usuario define la raíz, mueve los
+pivotes y crea los vínculos hijo→padre directamente en la mesa. Esto corresponde
+al cut-out rígido por secciones/pegs. No se presenta como deformación flexible:
+una malla con pesos, regiones de influencia o curvas es otro tipo de binding y
+debe implementarse explícitamente sobre este mismo documento.
 
 El contenido del `Drawing` permanece en pose neutra. La evaluación del rig se
 aplica sólo para visualizar o exportar y se elimina antes de serializar el SVG
@@ -45,6 +53,8 @@ mundial se obtiene del grafo canónico.
 - El panel de rig y la mesa pueden separarse a otro monitor sin duplicar el
   modelo; intercambian snapshots y comandos validados.
 - Los rigs antiguos se migran al contrato canónico.
+- El modo Armado modifica pivotes y vínculos persistentes; FK/IK modifican
+  canales de pose. Construcción y animación no se confunden.
 - La deformación flexible tipo malla/curva, el Function Editor y Schematic se
   agregan después sobre este grafo; no requieren reemplazarlo.
 

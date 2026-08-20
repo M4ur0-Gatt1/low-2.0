@@ -6466,16 +6466,9 @@ function dzRigPrepareDrawing() {
   const pieces = dzRigDrawableElements();
   if (!pieces.length) return dzSetStatus("Dibujá o importá piezas separadas antes de preparar el esqueleto");
   const specs = pieces.map((el, index) => dzRigPieceSpec(el, index, ""));
-  const fresh = specs.filter(spec => !DZ.doc.scene.rigNode(spec.id));
-  const root = (fresh.length ? fresh : specs).reduce((best, spec) => !best || spec.area > best.area ? spec : best, null);
-  specs.forEach(spec => {
-    const existing = DZ.doc.scene.rigNode(spec.id);
-    if (!existing) { spec.parentId = spec.id === root.id ? null : root.id; spec.pinned = spec.id === root.id; }
-  });
-  specs.sort((a, b) => a.id === root.id ? -1 : b.id === root.id ? 1 : b.area - a.area);
   const ids = dzRigRegisterSpecs(specs, "Preparar rig desde capas");
-  dzRigSetMode("fk");
-  dzSetStatus(`Rig activo: ${ids.length} piezas · raíz «${root.id}» · arrastrá una pieza para moverla; Shift+arrastrar rota`);
+  dzRigSetMode("build");
+  dzSetStatus(`${ids.length} piezas registradas sin inventar jerarquía · elegí la raíz, fijala y vinculá cada hijo arrastrando su cuadrado al pivote del padre`);
   return ids;
 }
 function dzRigRemoveSelected() {
@@ -6494,10 +6487,77 @@ function dzRigSetMode(mode) {
   $("#dzRigPanel").dataset.mode = DZ.rigSubmode;
   [["rigModeBuild", "build"], ["rigModeFk", "fk"], ["rigModeIk", "ik"]].forEach(([id, value]) =>
     $("#" + id).classList.toggle("on", DZ.rigSubmode === value));
-  const hints = { build: "Armado: registrá cada pieza, colocá pivotes y vinculá desde el torso hacia las extremidades.",
+  const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado de la pieza hija hasta el pivote de su padre.",
     fk: "FK: arrastrá para mover o Shift+arrastrá para rotar. Cada gesto crea una clave.",
     ik: "IK: elegí una cadena y arrastrá el rombo. Ambos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
+}
+
+function dzRigBuildPivotDrag(e, node) {
+  if (!DZ.doc || DZ.rigSubmode !== "build") return;
+  e.preventDefault(); e.stopPropagation();
+  const target = dzRigNodeElement(node); if (target) dzSelect(target);
+  const pointerId = e.pointerId;
+  const preview = ev => {
+    if (ev.pointerId !== pointerId) return;
+    DZ.rigBuildPreview = { nodeId: node.id, pivot: dzToUser(ev.clientX, ev.clientY) };
+    dzRigOverlayRender();
+  };
+  const finish = ev => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", preview);
+    document.removeEventListener("pointerup", finish);
+    document.removeEventListener("pointercancel", cancel);
+    const value = DZ.rigBuildPreview; DZ.rigBuildPreview = null;
+    if (value?.nodeId === node.id) {
+      DZ.doc.setRigPivot(node.id, value.pivot);
+      target?.setAttribute("data-pivot", `${Math.round(value.pivot.x)} ${Math.round(value.pivot.y)}`);
+      dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
+      dzSetStatus(`Pivote de «${node.id}» colocado · ahora arrastrá su cuadrado al padre`);
+    } else dzRigOverlayRender();
+  };
+  const cancel = () => {
+    DZ.rigBuildPreview = null;
+    document.removeEventListener("pointermove", preview);
+    document.removeEventListener("pointerup", finish);
+    document.removeEventListener("pointercancel", cancel);
+    dzRigOverlayRender();
+  };
+  document.addEventListener("pointermove", preview);
+  document.addEventListener("pointerup", finish);
+  document.addEventListener("pointercancel", cancel);
+}
+
+function dzRigBuildLinkDrag(e, node) {
+  if (!DZ.doc || DZ.rigSubmode !== "build") return;
+  e.preventDefault(); e.stopPropagation();
+  const pointerId = e.pointerId;
+  const pointer = ev => ({ x: ev.clientX, y: ev.clientY });
+  DZ.rigLinkPreview = { childId: node.id, pointer: pointer(e) };
+  const preview = ev => {
+    if (ev.pointerId !== pointerId) return;
+    DZ.rigLinkPreview = { childId: node.id, pointer: pointer(ev) }; dzRigOverlayRender();
+  };
+  const cleanup = () => {
+    document.removeEventListener("pointermove", preview);
+    document.removeEventListener("pointerup", finish);
+    document.removeEventListener("pointercancel", cancel);
+  };
+  const finish = ev => {
+    if (ev.pointerId !== pointerId) return; cleanup();
+    const hit = document.elementsFromPoint(ev.clientX, ev.clientY)
+      .find(el => el.classList?.contains("dz-rig-joint") && el.dataset.id !== node.id);
+    DZ.rigLinkPreview = null;
+    const parentId = hit?.dataset.id || null;
+    const changed = DZ.doc.setRigParent(node.id, parentId);
+    if (changed === false && parentId) dzSetStatus("Ese vínculo formaría un ciclo y no se aplicó");
+    else dzSetStatus(parentId ? `«${node.id}» vinculada a «${parentId}»` : `«${node.id}» quedó sin padre`);
+    dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
+  };
+  const cancel = () => { cleanup(); DZ.rigLinkPreview = null; dzRigOverlayRender(); };
+  document.addEventListener("pointermove", preview);
+  document.addEventListener("pointerup", finish);
+  document.addEventListener("pointercancel", cancel);
 }
 function dzRigKeyAll() {
   if (!DZ.doc) return;
@@ -6552,14 +6612,15 @@ function dzRigIKDrag(e, constraintId) {
 function dzRigOverlayRender() {
   const overlay = $("#dzRigOverlay"), doc = DZ.doc;
   if (!overlay || !DZ.rigMode || !doc || !Object.keys(doc.scene.rig.nodes).length) {
-    if (overlay) { overlay.hidden = true; overlay.innerHTML = ""; } return;
+    if (overlay) { overlay.setAttribute("hidden", ""); overlay.innerHTML = ""; } return;
   }
-  overlay.hidden = false; overlay.innerHTML = "";
+  overlay.removeAttribute("hidden"); overlay.innerHTML = ""; overlay.dataset.mode = DZ.rigSubmode || "build";
   const num = dzRigCur(), cv = $("#dzCanvas").getBoundingClientRect();
   overlay.setAttribute("viewBox", `0 0 ${Math.max(1, cv.width)} ${Math.max(1, cv.height)}`);
   const point = id => {
     const node = doc.scene.rigNode(id); if (!node?.pivot) return null;
-    const p = doc.scene.rigWorldPoint(id, num, node.pivot, DZ.rigIKPreview?.poses || {}), s = dzFromUser(p.x, p.y);
+    const localPivot = DZ.rigBuildPreview?.nodeId === id ? DZ.rigBuildPreview.pivot : node.pivot;
+    const p = doc.scene.rigWorldPoint(id, num, localPivot, DZ.rigIKPreview?.poses || {}), s = dzFromUser(p.x, p.y);
     return s && { x: s.x - cv.left, y: s.y - cv.top };
   };
   const ns = "http://www.w3.org/2000/svg", add = (tag, attrs, cls) => {
@@ -6574,8 +6635,23 @@ function dzRigOverlayRender() {
     const p = point(node.id); if (!p) continue;
     const joint = add("circle", { cx: p.x, cy: p.y, r: node.pinned ? 7 : 5, "data-id": node.id },
       "dz-rig-joint" + (node.pinned ? " root" : "") + (DZ.sel?.id === node.id ? " selected" : ""));
-    joint.onpointerdown = e => { e.preventDefault(); e.stopPropagation(); const el = dzRigNodeElement(node); if (el) dzSelect(el); };
+    joint.onpointerdown = e => {
+      if (DZ.rigSubmode === "build") return dzRigBuildPivotDrag(e, node);
+      e.preventDefault(); e.stopPropagation(); const el = dzRigNodeElement(node); if (el) dzSelect(el);
+    };
     if (DZ.sel?.id === node.id) { const label = add("text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label"); label.textContent = node.id; }
+  }
+  const selected = DZ.sel?.id && doc.scene.rigNode(DZ.sel.id), selectedPoint = selected && point(selected.id);
+  if (DZ.rigSubmode === "build" && selectedPoint) {
+    const hx = selectedPoint.x + 28, hy = selectedPoint.y - 28;
+    add("line", { x1: selectedPoint.x, y1: selectedPoint.y, x2: hx, y2: hy }, "dz-rig-link-arm");
+    const handle = add("rect", { x: hx - 5, y: hy - 5, width: 10, height: 10, rx: 1,
+      "data-id": selected.id }, "dz-rig-link-handle");
+    handle.onpointerdown = e => dzRigBuildLinkDrag(e, selected);
+    if (DZ.rigLinkPreview?.childId === selected.id) {
+      const p = DZ.rigLinkPreview.pointer;
+      add("line", { x1: selectedPoint.x, y1: selectedPoint.y, x2: p.x - cv.left, y2: p.y - cv.top }, "dz-rig-link-preview");
+    }
   }
   for (const c of Object.values(doc.scene.rig.constraints || {})) {
     const raw = DZ.rigIKPreview?.constraintId === c.id ? DZ.rigIKPreview.target : doc.scene.rigTargetAt(c.id, num); if (!raw) continue;
@@ -6595,7 +6671,7 @@ function dzRigPanelSync() {
   $("#rigSY").value = Math.round((k.sy == null ? (k.s == null ? 1 : k.s) : k.sy) * 100) / 100;
   $("#rigMin").value = current?.limits?.min ?? -180; $("#rigMax").value = current?.limits?.max ?? 180;
   $("#rigPin").classList.toggle("on", !!current?.pinned); $("#rigPin").textContent = current?.pinned ? "Raíz fijada" : "Fijar raíz";
-  const parent = $("#rigParent"); parent.innerHTML = '<option value="">— raíz —</option>';
+  const parent = $("#rigParent"); parent.innerHTML = '<option value="">— sin padre —</option>';
   nodes.filter(n => !current || n.id !== current.id).forEach(n => { const o = document.createElement("option"); o.value = n.id; o.textContent = n.id; o.selected = !!current && current.parentId === n.id; parent.appendChild(o); });
   parent.disabled = !current;
   const tree = $("#rigTree"); tree.innerHTML = "";
@@ -6635,7 +6711,7 @@ function dzRigReadPanel() {
 function dzRigToggle() {
   if (!DZ.anim) { sysMsg("Abrí una animación antes de armar el esqueleto."); return; }
   DZ.rigMode = !DZ.rigMode; $("#dzRigBtn").classList.toggle("active", DZ.rigMode); $("#tlRigOpen")?.classList.toggle("active", DZ.rigMode); $("#dzRigPanel").hidden = !DZ.rigMode;
-  $("#dzRigOverlay").hidden = !DZ.rigMode;
+  $("#dzRigOverlay").toggleAttribute("hidden", !DZ.rigMode);
   if (DZ.rigMode) { dzRigSetMode(DZ.rigSubmode || "build"); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzSetStatus("Esqueleto cut-out: registrá las piezas y armá la jerarquía desde la raíz"); }
   else { $("#dzRigOverlay").innerHTML = ""; }
 }
