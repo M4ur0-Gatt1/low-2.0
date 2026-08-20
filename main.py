@@ -190,9 +190,9 @@ class Api:
         """El usuario pidió detener la consulta en curso."""
         s._cancel = True
 
-    # Paneles que se pueden separar a otra ventana (pensado para dos monitores).
-    # El lienzo NO está: separarlo no tiene sentido, es el centro del trabajo.
+    # Paneles y mesa que se pueden separar a otra ventana para dos monitores.
     PANELS = {
+        "viewer":   {"title": "Mesa de dibujo", "w": 1280, "h": 820, "min": (720, 480)},
         "timeline": {"title": "Timeline", "w": 1180, "h": 520, "min": (720, 320)},
         "xsheet":   {"title": "X-sheet",  "w": 760,  "h": 760, "min": (520, 360)},
         "layers":   {"title": "Capas",    "w": 340,  "h": 720, "min": (260, 320)},

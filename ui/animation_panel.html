@@ -27,6 +27,9 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;
 .frow{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .frow label{color:var(--mut)}.frow input[type=color]{width:60px;height:30px;border:0;background:none}
 .frow input[type=number]{width:80px;height:30px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:0 8px}
+.viewerdesk{position:absolute;inset:0;overflow:hidden;background:#10100f;touch-action:none;cursor:crosshair}
+.viewerdesk svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.viewerdesk .live{pointer-events:none}.viewer-tools{display:flex;gap:3px}.viewer-tools button.on{background:rgba(223,108,72,.18);color:var(--orange)}
 </style>
 </head>
 <body>
@@ -38,7 +41,7 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;
 </div>
 <div class="viewport"><div id="content" class="timeline"><div class="empty">Conectando con el editor…</div></div></div>
 <script>
-const KINDS={timeline:'TIMELINE',xsheet:'X-SHEET',layers:'CAPAS',tools:'HERRAMIENTAS',color:'COLOR',onion:'PAPEL CEBOLLA',levelstrip:'DIBUJOS DEL NIVEL'};
+const KINDS={viewer:'MESA DE DIBUJO',timeline:'TIMELINE',xsheet:'X-SHEET',layers:'CAPAS',tools:'HERRAMIENTAS',color:'COLOR',onion:'PAPEL CEBOLLA',levelstrip:'DIBUJOS DEL NIVEL'};
 // el kind llega por FRAGMENTO (#kind=...): sobre file:// la query se pierde
 // (WebView2 la toma como parte del nombre del archivo). Se acepta ?kind= igual,
 // para cuando el panel se abre desde un servidor durante las pruebas.
@@ -47,6 +50,7 @@ const pedido=(location.hash.match(/kind=([a-z]+)/)||[])[1]
 const kind=KINDS[pedido]?pedido:'timeline';
 document.getElementById('mode').textContent=KINDS[kind];
 const isAnim=kind==='timeline'||kind==='xsheet';
+const isViewer=kind==='viewer';
 // los controles de reproducción solo tienen sentido en timeline/x-sheet
 if(!isAnim)['prev','play','next','add','blank'].forEach(id=>document.getElementById(id).style.display='none');
 let api=null,last='';
@@ -157,13 +161,38 @@ function renderOnion(s){
  root.append(fila('Estado',on));
  return root;
 }
+let viewerState=null,viewerTool='pencil';
+function viewerPoint(e,host,state){
+ const vb=(state.viewBox||'0 0 1920 1080').trim().split(/[ ,]+/).map(Number),r=host.getBoundingClientRect();
+ const scale=Math.min(r.width/vb[2],r.height/vb[3]),w=vb[2]*scale,h=vb[3]*scale;
+ return [vb[0]+(e.clientX-r.left-(r.width-w)/2)/scale,vb[1]+(e.clientY-r.top-(r.height-h)/2)/scale,e.pressure||.5];
+}
+function renderViewer(s){
+ viewerState=s;const root=document.createElement('div');root.className='viewerdesk';
+ root.innerHTML=s.svg||'<div class="empty">Abrí un dibujo en LOW</div>';
+ const svg=root.querySelector('svg');if(svg){svg.removeAttribute('width');svg.removeAttribute('height');svg.setAttribute('preserveAspectRatio','xMidYMid meet')}
+ let pts=[],live=null;
+ root.onpointerdown=e=>{if(e.button!==0||viewerTool==='hand')return;e.preventDefault();root.setPointerCapture(e.pointerId);pts=[viewerPoint(e,root,viewerState)];
+  if(svg){live=document.createElementNS('http://www.w3.org/2000/svg','path');live.classList.add('live');live.setAttribute('fill','none');live.setAttribute('stroke',s.color||'#111');live.setAttribute('stroke-width',s.width||6);live.setAttribute('stroke-linecap','round');svg.appendChild(live)}};
+ root.onpointermove=e=>{if(!pts.length)return;pts.push(viewerPoint(e,root,viewerState));if(live)live.setAttribute('d',pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(2)+' '+p[1].toFixed(2)).join(' '))};
+ const finish=e=>{if(!pts.length)return;pts.push(viewerPoint(e,root,viewerState));command('stroke',{points:pts,color:s.color,width:s.width,tool:viewerTool});pts=[];live=null};
+ root.onpointerup=finish;root.onpointercancel=()=>{pts=[];if(live)live.remove();live=null};return root;
+}
 function renderFor(s){
+ if(kind==='viewer')return renderViewer(s);
  if(kind==='layers')return renderLayers(s);
  if(kind==='tools')return renderTools(s);
  if(kind==='color')return renderColor(s);
  if(kind==='onion')return renderOnion(s);
  if(kind==='levelstrip')return renderLevelStrip(s);
  return kind==='xsheet'?renderXsheet(s):renderTimeline(s);
+}
+if(isViewer){
+ const tools=document.createElement('div');tools.className='viewer-tools';
+ [['pencil','Lápiz'],['brush','Pincel']].forEach(([id,label])=>{const b=document.createElement('button');b.textContent=label;b.className=id===viewerTool?'on':'';b.onclick=()=>{viewerTool=id;tools.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));command('tool',{id})};tools.appendChild(b)});
+ const undo=document.createElement('button');undo.textContent='↶';undo.title='Deshacer';undo.onclick=()=>command('undo');tools.appendChild(undo);
+ const redo=document.createElement('button');redo.textContent='↷';redo.title='Rehacer';redo.onclick=()=>command('redo');tools.appendChild(redo);
+ document.querySelector('.top').insertBefore(tools,document.querySelector('.spacer'));
 }
 async function refresh(){if(!api)return;try{const s=await (api.panel_state?api.panel_state(kind):api.animation_panel_state());const key=JSON.stringify(s);if(key===last)return;last=key;if(isAnim){document.getElementById('fps').textContent=(s.fps||12)+' FPS · '+(s.frames?s.frames.filter(f=>f.exists).length:0)+' frames';document.getElementById('play').textContent=s.playing?'Ⅱ':'▶';}const content=document.getElementById('content');const next=renderFor(s);next.id='content';content.replaceWith(next)}catch(e){}}
 window.addEventListener('pywebviewready',()=>{api=window.pywebview.api;refresh();setInterval(refresh,350)});
