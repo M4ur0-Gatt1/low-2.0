@@ -109,6 +109,8 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
     setShowWheel((v) => !v);
   };
   const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, figuras: true, seleccion: false, superficies: false, pincel: true });
+  const [estilo, setEstilo] = useState<'stroke' | 'fill' | 'both'>(engine?.current?.getShapeStyle() ?? 'both');
+  const esFigura = currentTool === 'rect' || currentTool === 'circle' || currentTool === 'poly';
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   const draw: { id: ToolType; icon: React.FC; label: string }[] = [
@@ -120,8 +122,8 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
     { id: 'liquify', icon: Icons.Liquify, label: 'Liquify — arrastrá para deformar el trazo (radio = tamaño de pincel) (L)' },
   ];
   const figuras: { id: ToolType; icon: React.FC; label: string }[] = [
-    { id: 'rect', icon: Icons.Rect, label: 'Rectángulo — arrastrá sobre el plano activo. Shift: cuadrado' },
-    { id: 'circle', icon: Icons.Circle, label: 'Círculo / elipse — arrastrá sobre el plano activo. Shift: círculo perfecto' },
+    { id: 'rect', icon: Icons.Rect, label: 'Rectángulo — arrastrá sobre el plano activo (o sobre la vista). Shift: cuadrado' },
+    { id: 'circle', icon: Icons.Circle, label: 'Círculo / elipse — arrastrá sobre el plano activo (o sobre la vista). Shift: círculo perfecto' },
     { id: 'poly', icon: Icons.Poly, label: 'Polígono regular — la cantidad de lados se elige abajo. Shift: proporcionado' },
   ];
   const sel: { id: ToolType; icon: React.FC; label: string }[] = [
@@ -154,6 +156,26 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
 
       <Section title="Figuras" open={open.figuras} onToggle={() => toggle('figuras')}>
         {figuras.map(toolBtn)}
+        {/* Contorno / relleno de la figura. Vive en el motor, como los lados del
+            polígono: es una opción de la herramienta, no del documento. */}
+        {esFigura && (
+          <div style={{ display: 'flex', gap: 2, width: '100%', padding: '4px 0' }}>
+            {([
+              ['stroke', 'Contorno', 'Solo el perímetro, sin relleno'],
+              ['fill', 'Relleno', 'Solo la cara sólida, sin contorno'],
+              ['both', 'Ambos', 'Contorno y cara sólida en una sola pieza'],
+            ] as const).map(([id, label, title]) => (
+              <button key={id} title={title}
+                onClick={() => { engine?.current?.setShapeStyle(id); setEstilo(id); }}
+                style={{
+                  flex: 1, height: 22, border: 'none', borderRadius: 5, cursor: 'pointer',
+                  fontSize: 10, fontFamily: 'system-ui, sans-serif',
+                  backgroundColor: estilo === id ? LOW_ACCENT : 'transparent',
+                  color: estilo === id ? '#fff' : '#ccc',
+                }}>{label}</button>
+            ))}
+          </div>
+        )}
         {currentTool === 'poly' && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 2px', width: '100%' }}>
             <span style={{ opacity: 0.7 }}>Lados</span>
