@@ -257,6 +257,81 @@ Retirar `DZ.anim.frames` y la timeline vieja, que todavía conviven con lo nuevo
 abajo sigue siendo la anterior; la planilla nueva es la de la X-sheet). Después: renumerar
 dibujos, audio y scrubbing, paletas y estilos.
 
+---
+
+## Rigging 2D: auditoría y deuda P0 (2026-08-20)
+
+Estado honesto: **prototipo funcional de pegs, no sistema profesional de rigging**.
+
+### Lo que sí funciona actualmente
+
+- Asignar un pivote SVG a una pieza o grupo.
+- Guardar claves `x/y/rotación/escala` por identificador de elemento.
+- Interpolar esas claves y mostrar la transformación sobre el SVG.
+- Grabar un arrastre en tiempo real y remuestrearlo como claves.
+- Aplicar la transformación al preview/export legacy.
+
+Estas capacidades son reutilizables, pero no alcanzan para anunciar “rigging” comparable a una
+herramienta profesional.
+
+### Por qué hoy se percibe como una función falsa
+
+1. El estado vive en `DZ.scene.rig` y calcula el cuadro desde `DZ.anim.frames`; no pertenece al
+   `LowDoc` canónico usado por XSheet, Timeline, exposiciones y guardado `.lowscene`.
+2. Las claves se aplican buscando nodos DOM por `id`. Renombrar, duplicar o reemplazar una pieza
+   puede dejar pistas huérfanas.
+3. No existe un modelo explícito `Peg/Bone/Constraint`; sólo transformaciones sueltas.
+4. No hay jerarquía padre-hijo de rig, propagación de transformaciones ni reparentado seguro.
+5. No hay IK, límites angulares, orientación, pinning, targets ni constraints.
+6. No hay deformadores de malla/curva para doblar una pieza: sólo transformación rígida del SVG.
+7. No existe Schematic ni Function Editor para inspeccionar conexiones y curvas.
+8. Crear, mover o borrar claves de rig no forma una transacción consistente en el Undo canónico.
+9. La grabación y `bake` todavía recorren/duplican frames legacy en disco.
+10. No hay tests del modelo de rig ni prueba guardar-cerrar-reabrir-continuar.
+
+### Arquitectura obligatoria para resolverlo
+
+Sin crear una escena paralela, extender el modelo actual:
+
+```text
+Scene
+ ├── rigs: Rig[]
+ │    ├── nodes: Peg | Bone | DrawingNode
+ │    ├── parentId
+ │    ├── pivot, restTransform
+ │    └── constraints[]
+ └── functionCurves[nodeId/property] → Keyframe[]
+```
+
+Las capas/celdas continúan determinando qué Drawing está expuesto. El rig referencia IDs estables
+del modelo, nunca posiciones del DOM. Viewer, Timeline, XSheet, Schematic y export leen la misma
+evaluación de escena.
+
+### Pasada de implementación
+
+- **P0.1 — Canonizar:** migrar `DZ.scene.rig` al `Scene`/`LowDoc`, IDs estables, serialización,
+  migración legacy y Undo para crear/mover/borrar claves.
+- **P0.2 — Peg hierarchy:** nodos padre-hijo, rest pose, pivotes y transformación mundial/local.
+- **P0.3 — Timeline/Function curves:** pistas visibles, selección múltiple de claves, copy/paste,
+  easing editable y navegación desde XSheet/Timeline.
+- **P0.4 — Bones + IK:** cadena de dos huesos, target, pin, límites angulares y flip controlado.
+- **P0.5 — Deformación:** deformador por curva o malla con pesos persistentes y edición de rest pose.
+- **P0.6 — Schematic:** vista de conexiones que edita el mismo grafo, sin duplicar estado.
+- **P0.7 — Actuación:** grabación sobre las curvas canónicas, reducción configurable de claves y
+  reproducción por reloj real.
+- **P0.8 — Export:** evaluación idéntica entre Viewer, playback y export; eliminar el bake basado
+  en duplicar archivos por frame.
+
+### Criterio de aceptación
+
+Crear torso, brazo y antebrazo → parentar la cadena → fijar pivotes → añadir IK con mano fijada →
+posar en frames 1 y 13 → editar easing → ver la misma pose en Viewer/XSheet/Timeline → Undo/Redo
+de claves y parenting → guardar `.lowscene` → cerrar → reabrir → conservar rig, constraints y
+curvas → exportar y comparar los frames 1/7/13 con el Viewer.
+
+Mientras ese flujo no pase completo, LOW debe llamar a la función **Pegs (experimental)** y no
+presentarla como rigging profesional terminado.
+
 ### Test de aceptación (el que define si esto sirve)
 
 Escena a 24 fps → crear un nivel → dibujar poses en 1, 5, 9, 13 → exponerlas → onion skin →
