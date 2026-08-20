@@ -491,6 +491,38 @@
       });
     }
 
+    /** Registra varias piezas como una sola operación. Además de evitar
+     * repintados intermedios, hace que Preparar dibujo tenga un único Undo. */
+    ensureRigNodes(items, label = "Preparar rig") {
+      const entries = (items || []).filter((item) => item && item.id);
+      if (!entries.length) return [];
+      return this._rigChange(label, (rig) => {
+        const created = new Set();
+        for (const data of entries) {
+          if (!rig.nodes[data.id]) {
+            rig.nodes[data.id] = { id: data.id, type: data.type || "drawing",
+              elementId: data.elementId || data.id, parentId: null,
+              pivot: data.pivot ? { x: +data.pivot.x || 0, y: +data.pivot.y || 0 } : null,
+              rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
+              pinned: !!data.pinned, limits: data.limits || { min: -180, max: 180 } };
+            created.add(data.id);
+          } else {
+            const node = rig.nodes[data.id];
+            node.elementId = data.elementId || node.elementId || data.id;
+            if (!node.pivot && data.pivot) node.pivot = { x: +data.pivot.x || 0, y: +data.pivot.y || 0 };
+          }
+        }
+        for (const data of entries) {
+          const node = rig.nodes[data.id];
+          if (!node || (!created.has(data.id) && !data.reparent)) continue;
+          node.parentId = data.parentId && data.parentId !== data.id && rig.nodes[data.parentId]
+            ? data.parentId : null;
+          if (data.pinned != null) node.pinned = !!data.pinned;
+        }
+        return entries.map((entry) => entry.id);
+      });
+    }
+
     setRigKey(id, frame, pose) {
       if (!id) return false;
       return this._rigChange("Crear clave de rig", (rig) => {

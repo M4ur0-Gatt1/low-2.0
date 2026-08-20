@@ -299,6 +299,21 @@
 
     // 14. Rig canónico: claves, jerarquía, Undo, migración y reapertura.
     {
+      const prepared = new animation.LowDoc();
+      const preparedHistory = new LOW.core.HistoryManager(); prepared.setHistory(preparedHistory);
+      prepared.ensureRigNodes([
+        { id: "torso_auto", pivot: { x: 50, y: 50 }, pinned: true },
+        { id: "brazo_auto", pivot: { x: 80, y: 45 }, parentId: "torso_auto" },
+        { id: "mano_auto", pivot: { x: 120, y: 45 }, parentId: "torso_auto" },
+      ]);
+      ok("preparar dibujo registra todas las piezas en una operación",
+        Object.keys(prepared.scene.rig.nodes).length === 3 && prepared.scene.rigNode("brazo_auto").parentId === "torso_auto");
+      preparedHistory.undo();
+      ok("undo de preparar dibujo quita el rig completo", Object.keys(prepared.scene.rig.nodes).length === 0);
+      preparedHistory.redo();
+      ok("redo de preparar dibujo recupera jerarquía y pivotes",
+        prepared.scene.rigNode("torso_auto").pinned && prepared.scene.rigNode("mano_auto").pivot.x === 120);
+
       const doc = new animation.LowDoc();
       const history = new LOW.core.HistoryManager(); doc.setHistory(history);
       doc.ensureRigNode("torso"); doc.ensureRigNode("brazo"); history.clear();
