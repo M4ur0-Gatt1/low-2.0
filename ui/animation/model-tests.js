@@ -324,6 +324,21 @@
       ok("pivote pertenece al nodo canónico", doc.scene.rigNode("brazo").pivot.x === 12);
     }
 
+    // 15. El transporte visible controla el reproductor del documento único.
+    {
+      ok("reproductor canonico disponible", typeof animation.Playback === "function");
+      if (animation.Playback) {
+        const doc = new animation.LowDoc();
+        doc.scene.range = { in: 1, out: 3 };
+        const playback = new animation.Playback(doc);
+        let cambios = 0; playback.subscribe(() => { cambios++; });
+        playback.toggle();
+        ok("play inicia el reloj canonico", playback.playing === true && cambios === 1);
+        playback.toggle();
+        ok("segundo play pausa y limpia el reloj", playback.playing === false && playback.raf === 0 && cambios === 2);
+      }
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }
