@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=dev1787248000">
+<link rel="stylesheet" href="app.css?v=dev1787252000">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -566,9 +566,10 @@
         </div>
         <section class="rig2-section" data-rig-section="build">
           <div class="rig2-title"><b>Piezas</b><span id="rigCount">0</span></div>
+          <div class="rig2-actions rig2-prepare"><button class="primary" id="rigAuto" title="Registra las capas dibujables, elige una raíz y crea una jerarquía inicial funcional">Preparar dibujo</button></div>
           <div class="rig2-row rig2-wide"><input type="text" id="rigId" placeholder="nombre de la pieza" title="ID estable de la pieza">
-            <button id="rigAdd" title="Registrar la selección como pieza del esqueleto">＋</button>
-            <button id="rigRemove" title="Quitar la pieza seleccionada del esqueleto">−</button></div>
+            <button id="rigAdd" title="Registrar la selección como pieza del esqueleto">Añadir</button>
+            <button id="rigRemove" title="Quitar la pieza seleccionada del esqueleto">Quitar</button></div>
           <label class="rig2-field"><span>Padre</span><select id="rigParent"><option value="">— raíz —</option></select></label>
           <div class="rig2-actions">
             <button id="rigPivotTool" title="Colocar el pivote de la pieza en la mesa">Pivote</button>
@@ -795,13 +796,13 @@
 <script src="animation/scene-model.js?v=dev1787248000"></script>
 <script src="animation/exposures.js?v=3.29.40"></script>
 <script src="animation/onion.js?v=3.29.40"></script>
-<script src="animation/document.js?v=dev1787248000"></script>
+<script src="animation/document.js?v=dev1787253000"></script>
 <script src="animation/xsheet-view.js?v=3.29.40"></script>
 <script src="animation/timeline-view.js?v=dev1787248000"></script>
 <script src="animation/level-strip.js?v=3.29.40"></script>
 <script src="animation/audio.js?v=3.29.40"></script>
 <script src="animation/shortcuts.js?v=3.29.40"></script>
-<script src="animation/model-tests.js?v=dev1787248000"></script>
+<script src="animation/model-tests.js?v=dev1787253000"></script>
 <script src="animation/timeline.js?v=3.29.40"></script>
 <script src="animation/xsheet.js?v=3.29.40"></script>
 <script src="animation/playback.js?v=3.29.40"></script>
@@ -818,6 +819,6 @@
 <script src="ai/commands.js?v=3.29.40"></script>
 <script src="ai/task-runner.js?v=3.29.40"></script>
 <script src="ai/recovery.js?v=3.29.40"></script>
-<script src="app.js?v=dev1787251000"></script>
+<script src="app.js?v=dev1787253000"></script>
 </body>
 </html>

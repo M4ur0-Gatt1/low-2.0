@@ -1072,6 +1072,8 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .rig2-limits > span { width: 50px; }.rig2-limits label { grid-template-columns: 24px 57px; align-items: center; }
 .rig2-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
 .rig2-actions button { flex: 1 1 auto; }
+.rig2-prepare { margin: 1px 0 7px; }
+.rig2-prepare button { min-height: 31px; }
 .rig2-tree { max-height: 132px; overflow: auto; margin-top: 7px; border: 1px solid var(--line2); border-radius: 5px; background: #171615; }
 .rig2-node { display: flex; align-items: center; gap: 5px; min-height: 25px; padding: 3px 6px; color: var(--mut); cursor: pointer; }
 .rig2-node:hover { background: var(--surface-hover); color: var(--txt); }.rig2-node.on { color: var(--txt); background: var(--redsoft); }
@@ -1918,6 +1920,10 @@ body {
   --radius-xl: 18px;
   --shadow-float: 0 18px 50px rgba(0, 0, 0, .34), 0 2px 8px rgba(0, 0, 0, .18);
   --shadow-soft: 0 8px 24px rgba(0, 0, 0, .18);
+  --range-track: rgba(238, 234, 226, .20);
+  --range-track-hover: rgba(238, 234, 226, .34);
+  --range-thumb: #c9c5bc;
+  --range-thumb-hover: #f0ece4;
   font-size: 13.5px;
   line-height: 1.45;
   letter-spacing: -.006em;
@@ -1934,6 +1940,10 @@ body.light {
   --txt: #292621;
   --mut: #6f6a62;
   --faint: #a09a91;
+  --range-track: rgba(41, 38, 33, .20);
+  --range-track-hover: rgba(41, 38, 33, .34);
+  --range-thumb: #625d55;
+  --range-thumb-hover: #292621;
   /* idem: el rojo/naranja de marca del tema claro vale desde arriba. */
 }
 
@@ -2520,3 +2530,65 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .tl2-peak::before { content: ""; width: 7px; height: var(--h, 0%); min-height: 1px;
   background: var(--cyan, #33B5E8); border-radius: 1px; opacity: .8; }
 .tl2-peak.actual::before { background: var(--accent, #F0450E); opacity: 1; }
+
+/* Deslizadores 2D: pista silenciosa y marcador de precisión. El área táctil
+   sigue midiendo 20 px, aunque la parte visible sea deliberadamente fina. */
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+  padding: 0;
+  margin-block: 0;
+  background: transparent;
+  cursor: pointer;
+  accent-color: var(--orange);
+}
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--range-track);
+}
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 6px;
+  height: 12px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--range-thumb);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .24);
+  transition: background-color .12s ease, box-shadow .12s ease;
+}
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"]::-moz-range-track {
+  height: 2px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--range-track);
+}
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"]::-moz-range-thumb {
+  width: 6px;
+  height: 12px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--range-thumb);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .24);
+}
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"]:hover::-webkit-slider-runnable-track {
+  background: var(--range-track-hover);
+}
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"]:hover::-webkit-slider-thumb {
+  background: var(--range-thumb-hover);
+}
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"]:focus-visible {
+  outline: none;
+}
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"]:focus-visible::-webkit-slider-thumb {
+  background: var(--orange);
+  box-shadow: 0 0 0 3px var(--orangesoft);
+}
+#designView :where(.dz-toolopts, .dz-style-row, .dz-lt-op, .dz-op-row, .dz-compositor, .onion2-row) input[type="range"]:focus-visible::-moz-range-thumb {
+  background: var(--orange);
+  box-shadow: 0 0 0 3px var(--orangesoft);
+}
