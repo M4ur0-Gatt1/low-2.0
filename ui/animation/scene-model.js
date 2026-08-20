@@ -32,6 +32,16 @@
   let seq = 0;
   const uid = (p) => `${p}_${(seq++).toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
+  function rigData(data) {
+    if (data && data.nodes) return { version: 1, nodes: clone(data.nodes) };
+    const nodes = {};
+    for (const [elementId, keys] of Object.entries(data || {})) {
+      nodes[elementId] = { id: elementId, type: "drawing", elementId,
+        parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: clone(keys || {}) };
+    }
+    return { version: 1, nodes };
+  }
+
   /** Un dibujo: contenido + su número dentro del nivel. El número es lo que se
    *  escribe en la celda de la xsheet, y es renumerable sin perder el dibujo. */
   class Drawing {
@@ -163,6 +173,7 @@
       this.layers = (data.layers || []).map((l) => new Layer(l));
       this.camera = clone(data.camera || { keys: {} });
       this.audio = clone(data.audio || []);
+      this.rig = rigData(data.rig);
       this.revision = Number(data.revision) || 0;
     }
 
@@ -198,6 +209,25 @@
       return lv ? lv.byNumber(num) : null;
     }
 
+    rigNode(id) { return this.rig.nodes[id] || null; }
+    rigPose(id, frame) {
+      const node = this.rigNode(id), keys = node && node.keys;
+      if (!keys) return null;
+      const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!frames.length) return null;
+      const f = Number(frame) || 1;
+      if (keys[f]) return clone(keys[f]);
+      if (f <= frames[0]) return clone(keys[frames[0]]);
+      if (f >= frames.at(-1)) return clone(keys[frames.at(-1)]);
+      let a = frames[0], b = frames.at(-1);
+      for (const k of frames) { if (k <= f) a = k; else { b = k; break; } }
+      const t = (f - a) / (b - a), p = keys[a], q = keys[b];
+      const lerp = (x, y) => Number(x || 0) + (Number(y || 0) - Number(x || 0)) * t;
+      return { x: lerp(p.x, q.x), y: lerp(p.y, q.y), r: lerp(p.r, q.r),
+        sx: lerp(p.sx == null ? (p.s == null ? 1 : p.s) : p.sx, q.sx == null ? (q.s == null ? 1 : q.s) : q.sx),
+        sy: lerp(p.sy == null ? (p.s == null ? 1 : p.s) : p.sy, q.sy == null ? (q.s == null ? 1 : q.s) : q.sy) };
+    }
+
     /** Expone un dibujo en un frame. Si el dibujo no existe en el nivel, lo
      *  CREA vacío: dibujar es lo que después le pone contenido. */
     expose(layerId, frame, drawingNumber) {
@@ -215,7 +245,7 @@
                width: this.width, height: this.height, range: this.range,
                levels: this.levels.map((l) => l.toJSON()),
                layers: this.layers.map((l) => l.toJSON()),
-               camera: this.camera, audio: this.audio, revision: this.revision };
+               camera: this.camera, audio: this.audio, rig: clone(this.rig), revision: this.revision };
     }
 
     /** Convierte el modelo VIEJO (`frames` = lista de archivos) al nuevo. Cada

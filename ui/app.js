@@ -6026,7 +6026,7 @@ function dzTimelineBadges() {
   document.querySelectorAll("#tlFrames .tl-frame").forEach((c, i) => {
     c.querySelectorAll(".tl-key").forEach(n => n.remove());
     const num = dzFrameNum(DZ.anim.frames[i]);
-    const rig = (DZ.scene && DZ.scene.rig) || {};
+    const rig = dzRigTracks();
     const hasRig = Object.keys(rig).some(id => rig[id] && rig[id][num]);
     let badge = (keys.includes(num) ? "🔑" : "") + (cams[num] ? "🎬" : "") + (hasRig ? "" : "");
     if (badge) {
@@ -6039,15 +6039,22 @@ function dzTimelineBadges() {
 
 
 /* ══ RIG: claves de transformación por PIEZA (pegs de Toon Boom / AE) ══════
-   DZ.scene.rig = { id: { cuadro: {x,y,r,s} } } — vive en la escena junto a
-   las claves de cámara y comparte su curva de easing. La pose interpolada se
+   Vive en LowDoc.scene.rig; el formato DZ.scene.rig queda sólo como migración.
+   La pose interpolada se
    aplica ENCIMA del dibujo (nunca se hornea en el archivo): el transform
    original se preserva en data-rigbase y se restaura al serializar. */
 function dzRigCur() {
+  if (DZ.doc) return DZ.doc.frame;
   return (DZ.anim && DZ.anim.frames[DZ.anim.idx]) ? dzFrameNum(DZ.anim.frames[DZ.anim.idx]) : 1;
 }
+function dzRigTracks() {
+  const nodes = DZ.doc && DZ.doc.scene && DZ.doc.scene.rig && DZ.doc.scene.rig.nodes;
+  if (nodes) return Object.fromEntries(Object.entries(nodes).map(([id, node]) => [id, node.keys || {}]));
+  return (DZ.scene && DZ.scene.rig) || {};
+}
 function dzRigAt(id, num) {
-  const trk = ((DZ.scene || {}).rig || {})[id];
+  if (DZ.doc && DZ.doc.scene.rigNode(id)) return DZ.doc.scene.rigPose(id, num);
+  const trk = dzRigTracks()[id];
   if (!trk) return null;
   const ks = Object.keys(trk).map(Number).sort((a, b) => a - b);
   if (!ks.length) return null;
@@ -6072,9 +6079,10 @@ function dzRigChunk(el, k) {
   let t = "";
   if (k.x || k.y) t += `translate(${k.x.toFixed(1)} ${k.y.toFixed(1)}) `;
   if (k.r) t += `rotate(${k.r.toFixed(2)} ${pv.x.toFixed(1)} ${pv.y.toFixed(1)}) `;
-  const s = k.s == null ? 1 : k.s;
-  if (Math.abs(s - 1) > 0.001)
-    t += `translate(${pv.x.toFixed(1)} ${pv.y.toFixed(1)}) scale(${s.toFixed(3)}) translate(${(-pv.x).toFixed(1)} ${(-pv.y).toFixed(1)}) `;
+  const sx = k.sx == null ? (k.s == null ? 1 : k.s) : k.sx;
+  const sy = k.sy == null ? (k.s == null ? 1 : k.s) : k.sy;
+  if (Math.abs(sx - 1) > 0.001 || Math.abs(sy - 1) > 0.001)
+    t += `translate(${pv.x.toFixed(1)} ${pv.y.toFixed(1)}) scale(${sx.toFixed(3)} ${sy.toFixed(3)}) translate(${(-pv.x).toFixed(1)} ${(-pv.y).toFixed(1)}) `;
   return t.trim();
 }
 function dzRigApplyTo(el, k) {
@@ -6098,7 +6106,7 @@ function dzRigApplyLive(num) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   dzRigStrip(svg);
-  const rig = (DZ.scene || {}).rig || {};
+  const rig = dzRigTracks();
   for (const id of Object.keys(rig)) {
     const el = svg.querySelector('[id="' + id.replace(/"/g, '') + '"]');
     if (!el) continue;
@@ -6109,7 +6117,7 @@ function dzRigApplyLive(num) {
 }
 /* versión para reproducción/export: sobre el TEXTO del cuadro */
 function dzRigView(svgText, num) {
-  const rig = (DZ.scene || {}).rig || {};
+  const rig = dzRigTracks();
   const ids = Object.keys(rig);
   if (!ids.length) return svgText;
   const tmp = document.createElement("div"); tmp.innerHTML = svgText;
@@ -6128,6 +6136,9 @@ function dzRigView(svgText, num) {
   return svg.outerHTML;
 }
 function dzRigSetKey(id, num, k) {
+  if (DZ.doc) {
+    DZ.doc.setRigKey(id, num, k); dzTimelineBadges(); dzRigPanelSync(); return;
+  }
   DZ.scene = DZ.scene || {};
   DZ.scene.rig = DZ.scene.rig || {};
   DZ.scene.rig[id] = DZ.scene.rig[id] || {};
@@ -6135,7 +6146,10 @@ function dzRigSetKey(id, num, k) {
   dzSceneSave(); dzTimelineBadges(); dzRigPanelSync();
 }
 function dzRigDelKey(id, num) {
-  const trk = ((DZ.scene || {}).rig || {})[id];
+  if (DZ.doc) {
+    DZ.doc.deleteRigKey(id, num); dzTimelineBadges(); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); return;
+  }
+  const trk = dzRigTracks()[id];
   if (!trk || !trk[num]) return;
   delete trk[num];
   if (!Object.keys(trk).length) delete DZ.scene.rig[id];
@@ -6149,10 +6163,10 @@ function dzRigPanelSync() {
   $("#rigId").placeholder = el ? (el.id ? el.id : "sin nombre — escribí uno y Enter") : "seleccioná una pieza (D)";
   const k = (el && el.id && dzRigAt(el.id, num)) || { x: 0, y: 0, r: 0, s: 1 };
   $("#rigX").value = Math.round(k.x); $("#rigY").value = Math.round(k.y);
-  $("#rigR").value = Math.round(k.r * 10) / 10; $("#rigS").value = Math.round((k.s == null ? 1 : k.s) * 100) / 100;
+  $("#rigR").value = Math.round(k.r * 10) / 10; $("#rigS").value = Math.round((k.s == null ? (k.sx == null ? 1 : k.sx) : k.s) * 100) / 100;
   const chips = $("#rigChips");
   chips.innerHTML = "";
-  const trk = (el && el.id && ((DZ.scene || {}).rig || {})[el.id]) || {};
+  const trk = (el && el.id && dzRigTracks()[el.id]) || {};
   Object.keys(trk).map(Number).sort((a, b) => a - b).forEach(n => {
     const c = document.createElement("span");
     c.className = "dz-chip" + (n === num ? " on" : "");
@@ -6212,7 +6226,7 @@ function dzPerfRec() {
       // replay de las pistas ya grabadas (menos la pieza que estás actuando)
       const num = 1 + t * fps;
       const svg = $("#dzCanvas").querySelector(":scope > svg");
-      const rig = (DZ.scene || {}).rig || {};
+      const rig = dzRigTracks();
       for (const id of Object.keys(rig)) {
         if (id === DZ.perf.rec.active) continue;
         const el2 = svg && svg.querySelector('[id="' + id.replace(/"/g, '') + '"]');
@@ -6237,8 +6251,7 @@ function dzPerfRecEnd(early) {
   const N = Math.max(2, Math.round(rec.dur * rec.fps));
   for (const id of ids) {
     const ss = rec.take[id];
-    DZ.scene.rig = DZ.scene.rig || {};
-    DZ.scene.rig[id] = DZ.scene.rig[id] || {};
+    const keys = { ...(dzRigTracks()[id] || {}) };
     for (let f = 1; f <= N + 1; f++) {
       const tf = (f - 1) / rec.fps;
       let a = ss[0], b = ss[ss.length - 1];
@@ -6247,15 +6260,17 @@ function dzPerfRecEnd(early) {
       else for (let i = 0; i < ss.length - 1; i++)
         if (ss[i].t <= tf && ss[i + 1].t >= tf) { a = ss[i]; b = ss[i + 1]; break; }
       const u = (b.t === a.t) ? 0 : (tf - a.t) / (b.t - a.t);
-      DZ.scene.rig[id][f] = {
+      keys[f] = {
         x: Math.round(dzLerp(a.x, b.x, u) * 10) / 10,
         y: Math.round(dzLerp(a.y, b.y, u) * 10) / 10,
         r: Math.round(dzLerp(a.r || 0, b.r || 0, u) * 10) / 10,
         s: a.s == null ? 1 : a.s,
       };
     }
+    if (DZ.doc) DZ.doc.replaceRigKeys(id, keys, "Grabar actuación");
+    else { DZ.scene.rig = DZ.scene.rig || {}; DZ.scene.rig[id] = keys; }
   }
-  dzSceneSave(); dzTimelineBadges(); dzRigPanelSync();
+  if (!DZ.doc) dzSceneSave(); dzTimelineBadges(); dzRigPanelSync();
   dzSetStatus("🎥 Toma lista: " + ids.join(", ") + " (" + N + " claves). Otra ⏹ suma la próxima pieza.  para verla.");
   dzPerfPlay();
 }
@@ -6276,7 +6291,7 @@ function dzPerfPlay() {
 }
 /*  suavizado: promedio móvil sobre las claves — saca el temblor del pulso */
 function dzPerfSmooth() {
-  const rig = (DZ.scene || {}).rig || {};
+  const rig = dzRigTracks();
   let done = 0;
   for (const id of Object.keys(rig)) {
     const ks = Object.keys(rig[id]).map(Number).sort((a, b) => a - b);
@@ -6291,9 +6306,10 @@ function dzPerfSmooth() {
         s: c.s == null ? 1 : c.s,
       };
     }
+    if (DZ.doc) DZ.doc.replaceRigKeys(id, rig[id], "Suavizar actuación");
     done++;
   }
-  dzSceneSave(); dzRigApplyLive(dzRigCur()); dzRigPanelSync();
+  if (!DZ.doc) dzSceneSave(); dzRigApplyLive(dzRigCur()); dzRigPanelSync();
   dzSetStatus(done ? " actuación suavizada (" + done + " pista(s)) — repetí para más suave" : " no hay pistas para suavizar");
 }
 /*  generar los cuadros del lapso (mismo dibujo; el rig se aplica al exportar) */
@@ -9718,6 +9734,10 @@ async function dzDocInit() {
       DZ.doc = new A.LowDoc();
       DZ.doc.writeDrawing(dzCanvasInner());   // lo que ya estaba dibujado es el dibujo 1
     }
+  }
+  if (DZ.scene && DZ.scene.rig && !Object.keys(DZ.doc.scene.rig.nodes).length) {
+    DZ.doc.scene.rig = new A.Scene({ rig: DZ.scene.rig }).rig;
+    DZ.doc.dirty = true;
   }
   DZ.onionOn = true;
   // UNA sola pila de historial para todo el editor: así Ctrl+Z deshace lo

@@ -309,8 +309,9 @@ evaluación de escena.
 
 ### Pasada de implementación
 
-- **P0.1 — Canonizar:** migrar `DZ.scene.rig` al `Scene`/`LowDoc`, IDs estables, serialización,
-  migración legacy y Undo para crear/mover/borrar claves.
+- **P0.1 — Canonizar: ✅ hecho.** `Scene.rig.nodes` guarda IDs estables, claves, rest pose y
+  parenting; `LowDoc` serializa, migra `DZ.scene.rig` y registra crear/mover/borrar claves y
+  jerarquía en el Undo compartido. La UI, playback y grabación ya leen/escriben ese estado.
 - **P0.2 — Peg hierarchy:** nodos padre-hijo, rest pose, pivotes y transformación mundial/local.
 - **P0.3 — Timeline/Function curves:** pistas visibles, selección múltiple de claves, copy/paste,
   easing editable y navegación desde XSheet/Timeline.

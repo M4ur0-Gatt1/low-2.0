@@ -443,6 +443,73 @@
       return ly;
     }
 
+    // ── rig canónico ────────────────────────────────────────────────────
+    _rigChange(label, mutate) {
+      const before = animation.clone(this.scene.rig);
+      const result = mutate(this.scene.rig);
+      const after = animation.clone(this.scene.rig);
+      if (JSON.stringify(before) === JSON.stringify(after)) return result;
+      this.touch(); this.emit("rig"); this.emit("frame");
+      if (this.history) {
+        const doc = this;
+        this.history.push({ label, domain: "rig", before, after,
+          apply: (_dir, value) => {
+            doc.scene.rig = animation.clone(value);
+            doc.touch(); doc.emit("rig"); doc.emit("frame");
+          } });
+      }
+      return result;
+    }
+
+    ensureRigNode(id, data = {}) {
+      if (!id) return null;
+      return this._rigChange("Crear nodo de rig", (rig) => {
+        if (!rig.nodes[id]) rig.nodes[id] = { id, type: data.type || "drawing",
+          elementId: data.elementId || id, parentId: data.parentId || null,
+          pivot: data.pivot || null, rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {} };
+        return rig.nodes[id];
+      });
+    }
+
+    setRigKey(id, frame, pose) {
+      if (!id) return false;
+      return this._rigChange("Crear clave de rig", (rig) => {
+        const node = rig.nodes[id] || (rig.nodes[id] = { id, type: "drawing", elementId: id,
+          parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {} });
+        const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
+        const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
+        node.keys[Math.max(1, Math.round(frame))] = { x: +pose.x || 0, y: +pose.y || 0,
+          r: +pose.r || 0, sx, sy };
+        return true;
+      });
+    }
+
+    replaceRigKeys(id, keys, label = "Editar claves de rig") {
+      if (!id) return false;
+      return this._rigChange(label, (rig) => {
+        const node = rig.nodes[id] || (rig.nodes[id] = { id, type: "drawing", elementId: id,
+          parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {} });
+        node.keys = animation.clone(keys || {}); return true;
+      });
+    }
+
+    deleteRigKey(id, frame) {
+      return this._rigChange("Borrar clave de rig", (rig) => {
+        const node = rig.nodes[id]; if (!node || !node.keys[frame]) return false;
+        delete node.keys[frame]; return true;
+      });
+    }
+
+    setRigParent(id, parentId) {
+      return this._rigChange("Cambiar jerarquía del rig", (rig) => {
+        const node = rig.nodes[id], parent = parentId && rig.nodes[parentId];
+        if (!node || (parentId && !parent) || id === parentId) return false;
+        let p = parent;
+        while (p) { if (p.id === id) return false; p = p.parentId && rig.nodes[p.parentId]; }
+        node.parentId = parentId || null; return true;
+      });
+    }
+
     // ── serialización ────────────────────────────────────────────────────
     toJSON() {
       return { format: "lowscene", version: 1, savedAt: new Date().toISOString(),
