@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=dev1787232053">
+<link rel="stylesheet" href="app.css?v=dev1787248000">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -338,6 +338,7 @@
       <span data-act="win-color">Separar Color</span>
       <span data-act="win-onion">Separar Papel cebolla</span>
       <span data-act="win-levelstrip">Separar Dibujos del nivel</span>
+      <span data-act="win-rig">Separar Esqueleto / Cut-out</span>
       <hr><span data-act="win-timeline">Separar Línea de tiempo</span>
       <span data-act="win-xsheet">Separar X-sheet</span>
       <hr><span data-act="ws-save">Guardar disposición actual</span>
@@ -453,7 +454,7 @@
       <button class="ibtn" id="dzBg" title="Generar un FONDO con IA y enviarlo al fondo del lienzo (eje z)"><svg class="ico"><use href="#i-bg"/></svg></button>
       <button class="ibtn" id="dzVec" title="Vectorizar: convierte la imagen importada/generada en trazos SVG editables (calcar). No más dibujo tosco a mano."><svg class="ico"><use href="#i-vector"/></svg></button>
       <button class="ibtn" id="dzCamBtn" title="Cámara (C): mové/zoomeá/rotá el encuadre y dejá claves por cuadro — el export sale por la cámara"><svg class="ico"><use href="#i-cam"/></svg></button>
-      <button class="ibtn" id="dzRigBtn" title="Rig (): claves de posición/rotación/escala por PIEZA — posá el personaje en cada cuadro clave y LOW interpola (pegs de Toon Boom)"><svg class="ico"><use href="#i-key"/></svg></button>
+      <button class="ibtn" id="dzRigBtn" title="Esqueleto cut-out: armá jerarquías, pivotes, FK/IK, límites y poses con claves"><svg class="ico"><use href="#i-key"/></svg></button>
       <button class="ibtn" id="dzZBtn" title="Cámara multiplano: arrastrá cada capa cerca/lejos de la cámara (profundidad Z) — el paneo Y EL ZOOM producen parallax real, como la cámara multiplano de Disney/Toon Boom/OpenToonz"><svg class="ico"><use href="#i-stage"/></svg></button>
       <div class="hsep"></div>
       <button class="ibtn" id="dzPenDbgBtn" title=" Diagnóstico de tableta: panel en vivo de eventos pointer — útil para depurar tabletas Huion/Wacom. Clic para activar/desactivar." onclick="dzPenDebugToggle()"></button>
@@ -499,6 +500,7 @@
         <div class="dz-cam-rot" id="dzCamRot" title="Arrastrá para rotar la cámara"></div>
       </div>
       <div class="dz-pivotmark" id="dzPivot" title="Pivote de rotación (rig) — la rotación gira alrededor de acá" hidden>✛</div>
+      <svg class="dz-rig-overlay" id="dzRigOverlay" aria-label="Controles del esqueleto" hidden></svg>
       <!-- 🎭 Diorama: vista lateral del multiplano (cámara  capas  fondo).
            El compositing sin nodos: cada capa es una tarjeta física que corrés
            en profundidad, como el diorama de la cámara multiplano de Disney -->
@@ -553,38 +555,64 @@
         </div>
         <div class="onion2-hint">Cada fader controla un dibujo distinto; los holds no se repiten. Doble clic restablece un canal.</div>
       </div>
-      <div class="dz-onionpanel" id="dzRigPanel" hidden>
-        <div class="dz-op-head" id="dzRigHead"> rig <span class="dz-op-x" id="dzRigClose" title="Cerrar">×</span></div>
-        <div class="dz-op-row"><span>Pieza</span>
-          <input type="text" id="rigId" placeholder="elegí y nombrá…" title="Id de la pieza (Enter para asignar) — seleccioná con la flecha blanca (D)">
+      <div class="dz-onionpanel rig2" id="dzRigPanel" hidden>
+        <div class="dz-op-head" id="dzRigHead"><svg class="ico"><use href="#i-key"/></svg> ESQUELETO · CUT-OUT
+          <span class="dz-op-x" id="dzRigClose" title="Cerrar">×</span></div>
+        <div class="rig2-modes" role="tablist" aria-label="Modo de esqueleto">
+          <button id="rigModeBuild" class="on" title="Registrar piezas, pivotes y vínculos">Armado</button>
+          <button id="rigModeFk" title="Posar cada articulación directamente">FK</button>
+          <button id="rigModeIk" title="Mover un extremo y resolver la cadena">IK</button>
         </div>
-        <div class="dz-op-row"><span>Padre</span>
-          <select id="rigParent" title="La transformación del padre se propaga a esta pieza"><option value="">— raíz —</option></select>
-        </div>
-        <div class="dz-op-row"><span>X · Y</span>
-          <input type="number" id="rigX" value="0" step="1" title="Desplazamiento X">
-          <input type="number" id="rigY" value="0" step="1" title="Desplazamiento Y">
-        </div>
-        <div class="dz-op-row"><span>Rot · Esc</span>
-          <input type="number" id="rigR" value="0" step="1" title="Rotación (°) alrededor del pivote ">
-          <input type="number" id="rigS" value="1" step="0.05" title="Escala alrededor del pivote">
-        </div>
-        <div class="dz-op-row">
-          <button class="ghost" id="rigKey" title="Clavar la pose en este cuadro (K)"> clavar</button>
-          <button class="ghost" id="rigDel" title="Quitar la clave de este cuadro">✕</button>
-        </div>
-        <div class="dz-op-row"><div class="dz-suggest" id="rigChips"></div></div>
-        <div class="dz-op-row dz-perf-sep"><span>🎥 Actuación</span>
-          <input type="number" id="perfDur" value="3" min="0.5" max="30" step="0.5" title="Duración de la toma (segundos)">
-          <span class="dz-hint">seg</span>
-        </div>
-        <div class="dz-op-row">
-          <button class="ghost" id="perfRec" title="Grabar una TOMA: cuenta 3-2-1 y actuá el movimiento arrastrando la pieza (Shift = rotarla desde el pivote). Las pasadas anteriores se reproducen mientras grabás — como un titiritero por capas.">⏹ actuar</button>
-          <button class="ghost" id="perfPlay" title="Ver la actuación completa"></button>
-          <button class="ghost" id="perfSmooth" title=" Suavizar la toma (limpia el temblor del pulso sin perder la intención)"></button>
-          <button class="ghost" id="perfBake" title=" Generar los cuadros del lapso (para exportar GIF/video)"></button>
-        </div>
-        <div class="dz-hint" id="rigHint">posá    otro cuadro  posá   · LOW interpola entre claves</div>
+        <section class="rig2-section" data-rig-section="build">
+          <div class="rig2-title"><b>Piezas</b><span id="rigCount">0</span></div>
+          <div class="rig2-row rig2-wide"><input type="text" id="rigId" placeholder="nombre de la pieza" title="ID estable de la pieza">
+            <button id="rigAdd" title="Registrar la selección como pieza del esqueleto">＋</button>
+            <button id="rigRemove" title="Quitar la pieza seleccionada del esqueleto">−</button></div>
+          <label class="rig2-field"><span>Padre</span><select id="rigParent"><option value="">— raíz —</option></select></label>
+          <div class="rig2-actions">
+            <button id="rigPivotTool" title="Colocar el pivote de la pieza en la mesa">Pivote</button>
+            <button id="rigPin" title="Fijar o liberar esta pieza como raíz">Fijar raíz</button>
+          </div>
+          <div class="rig2-tree" id="rigTree" aria-label="Jerarquía del personaje"></div>
+        </section>
+        <section class="rig2-section" data-rig-section="pose">
+          <div class="rig2-title"><b>Transformación</b><span id="rigFrame">F1</span></div>
+          <div class="rig2-grid">
+            <label>X<input type="number" id="rigX" value="0" step="1"></label>
+            <label>Y<input type="number" id="rigY" value="0" step="1"></label>
+            <label>Rot<input type="number" id="rigR" value="0" step="1"></label>
+            <label>Esc X<input type="number" id="rigSX" value="1" step="0.05"></label>
+            <label>Esc Y<input type="number" id="rigSY" value="1" step="0.05"></label>
+          </div>
+          <div class="rig2-limits"><span>Límite</span>
+            <label>mín<input type="number" id="rigMin" value="-180" min="-360" max="360"></label>
+            <label>máx<input type="number" id="rigMax" value="180" min="-360" max="360"></label></div>
+          <div class="rig2-actions">
+            <button class="primary" id="rigKey" title="Crear clave para la pieza activa">Clave</button>
+            <button id="rigKeyAll" title="Crear una clave para todas las piezas">Clave global</button>
+            <button id="rigDel" title="Quitar la clave de esta pieza">Borrar</button>
+            <button id="rigReset" title="Restablecer y clavar la pose neutra">Neutra</button>
+          </div>
+          <div class="dz-suggest rig2-keys" id="rigChips"></div>
+        </section>
+        <section class="rig2-section" data-rig-section="ik">
+          <div class="rig2-title"><b>Cadena IK</b><span id="rigIkStatus">sin cadena</span></div>
+          <label class="rig2-field"><span>Hombro</span><select id="rigIkRoot"></select></label>
+          <label class="rig2-field"><span>Codo</span><select id="rigIkMid"></select></label>
+          <label class="rig2-field"><span>Extremo</span><select id="rigIkEnd"></select></label>
+          <div class="rig2-actions"><button class="primary" id="rigIkCreate">Crear IK</button>
+            <button id="rigIkFlip" title="Invertir el lado de flexión">Invertir</button>
+            <button id="rigIkDelete">Eliminar</button></div>
+          <label class="rig2-field"><span>Activa</span><select id="rigConstraint"><option value="">— ninguna —</option></select></label>
+          <div class="rig2-target"><span>Objetivo</span><b id="rigTarget">—</b><small>arrastrá el rombo en la mesa</small></div>
+        </section>
+        <details class="rig2-performance">
+          <summary>Captura de actuación</summary>
+          <div class="rig2-row"><label>Duración <input type="number" id="perfDur" value="3" min="0.5" max="30" step="0.5"> s</label></div>
+          <div class="rig2-actions"><button id="perfRec">Actuar</button><button id="perfPlay">Ver</button>
+            <button id="perfSmooth">Suavizar</button><button id="perfBake">Generar</button></div>
+        </details>
+        <div class="rig2-hint" id="rigHint">Armado: registrá cada pieza, colocá pivotes y vinculá desde el torso hacia las extremidades.</div>
       </div>
       <div class="dz-pin" id="dzPin" hidden>💬</div>
     </div>
@@ -762,16 +790,16 @@
 <script src="mock-api.js?v=dev1787240000"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
 <script src="core/history.js?v=3.29.40"></script>
-<script src="animation/scene-model.js?v=dev1787240000"></script>
+<script src="animation/scene-model.js?v=dev1787248000"></script>
 <script src="animation/exposures.js?v=3.29.40"></script>
 <script src="animation/onion.js?v=3.29.40"></script>
-<script src="animation/document.js?v=dev1787240000"></script>
+<script src="animation/document.js?v=dev1787248000"></script>
 <script src="animation/xsheet-view.js?v=3.29.40"></script>
-<script src="animation/timeline-view.js?v=3.29.40"></script>
+<script src="animation/timeline-view.js?v=dev1787248000"></script>
 <script src="animation/level-strip.js?v=3.29.40"></script>
 <script src="animation/audio.js?v=3.29.40"></script>
 <script src="animation/shortcuts.js?v=3.29.40"></script>
-<script src="animation/model-tests.js?v=dev1787240000"></script>
+<script src="animation/model-tests.js?v=dev1787248000"></script>
 <script src="animation/timeline.js?v=3.29.40"></script>
 <script src="animation/xsheet.js?v=3.29.40"></script>
 <script src="animation/playback.js?v=3.29.40"></script>
@@ -788,6 +816,6 @@
 <script src="ai/commands.js?v=3.29.40"></script>
 <script src="ai/task-runner.js?v=3.29.40"></script>
 <script src="ai/recovery.js?v=3.29.40"></script>
-<script src="app.js?v=dev1787244000"></script>
+<script src="app.js?v=dev1787248000"></script>
 </body>
 </html>

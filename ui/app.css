@@ -1034,6 +1034,52 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
   text-shadow: 0 0 3px #000, 0 0 6px #000;
 }
 .dz-pivotmark[hidden] { display: none; }
+.dz-rig-overlay {
+  position: absolute; inset: 0; z-index: 7; width: 100%; height: 100%;
+  overflow: visible; pointer-events: none;
+}
+.dz-rig-overlay[hidden] { display: none; }
+.dz-rig-bone { stroke: #e98b55; stroke-width: 3; stroke-linecap: round; opacity: .86; }
+.dz-rig-bone.active { stroke: #ffd29d; stroke-width: 4; }
+.dz-rig-joint { fill: #171615; stroke: #f2a06e; stroke-width: 2; pointer-events: all; cursor: pointer; }
+.dz-rig-joint.root { fill: #4f8bb8; stroke: #a8d9ff; }
+.dz-rig-joint.selected { fill: #f0450e; stroke: #fff; }
+.dz-rig-target { fill: #171615; stroke: #59c3a6; stroke-width: 2.5; pointer-events: all; cursor: move; }
+.dz-rig-target.active { fill: #2c846b; stroke: #d6fff1; }
+.dz-rig-label { fill: #f1ece7; stroke: #171615; stroke-width: 3; paint-order: stroke; font: 600 11px Figtree,sans-serif; pointer-events: none; }
+
+/* Esqueleto/cut-out: panel de trabajo, no tarjeta decorativa. */
+.dz-onionpanel.rig2 { width: 306px; max-height: calc(100% - 72px); overflow: auto; font-size: 12px; }
+.rig2 .dz-op-head { position: sticky; top: 0; z-index: 3; min-height: 34px; letter-spacing: .025em; }
+.rig2-modes { position: sticky; top: 34px; z-index: 2; display: grid; grid-template-columns: repeat(3,1fr); padding: 5px; gap: 3px; background: var(--panel); border-bottom: 1px solid var(--line2); }
+.rig2 button { min-height: 28px; padding: 4px 8px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel2); color: var(--mut); font: 600 11px Figtree,sans-serif; cursor: pointer; }
+.rig2 button:hover { color: var(--txt); background: var(--surface-hover); }
+.rig2 button.on,.rig2 button.primary { color: var(--txt); border-color: rgba(240,69,14,.65); background: var(--redsoft); }
+.rig2-section { padding: 8px; border-bottom: 1px solid var(--line2); }
+.rig2-section[data-rig-section="ik"] { display: none; }
+.rig2[data-mode="ik"] .rig2-section[data-rig-section="ik"] { display: block; }
+.rig2-title { display: flex; align-items: center; justify-content: space-between; min-height: 24px; color: var(--mut); }
+.rig2-title b { color: var(--txt); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.rig2-row,.rig2-field,.rig2-limits,.rig2-target { display: flex; align-items: center; gap: 6px; min-height: 31px; color: var(--mut); }
+.rig2-wide input { flex: 1; min-width: 0; }
+.rig2 input,.rig2 select { height: 27px; min-width: 0; border: 1px solid var(--line2); border-radius: 5px; padding: 3px 6px; background: #171615; color: var(--txt); font: 500 11px Figtree,sans-serif; }
+.rig2-field > span { width: 57px; flex: none; }
+.rig2-field select { flex: 1; }
+.rig2-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; }
+.rig2-grid label,.rig2-limits label { display: grid; gap: 3px; color: var(--mut); font-size: 10px; }
+.rig2-grid input,.rig2-limits input { width: 100%; }
+.rig2-limits { margin-top: 5px; }
+.rig2-limits > span { width: 50px; }.rig2-limits label { grid-template-columns: 24px 57px; align-items: center; }
+.rig2-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.rig2-actions button { flex: 1 1 auto; }
+.rig2-tree { max-height: 132px; overflow: auto; margin-top: 7px; border: 1px solid var(--line2); border-radius: 5px; background: #171615; }
+.rig2-node { display: flex; align-items: center; gap: 5px; min-height: 25px; padding: 3px 6px; color: var(--mut); cursor: pointer; }
+.rig2-node:hover { background: var(--surface-hover); color: var(--txt); }.rig2-node.on { color: var(--txt); background: var(--redsoft); }
+.rig2-node i { width: 10px; height: 10px; border: 1.5px solid #e98b55; border-radius: 50%; }.rig2-node.root i { border-radius: 2px; background: #4f8bb8; }
+.rig2-node small { margin-left: auto; opacity: .6; }.rig2-node span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rig2-keys { min-height: 25px; padding-top: 6px; }.rig2-target { margin-top: 6px; align-items: baseline; }.rig2-target span { width: 57px; }.rig2-target small { margin-left: auto; font-size: 9px; }
+.rig2-performance { padding: 8px; border-bottom: 1px solid var(--line2); }.rig2-performance summary { cursor: pointer; color: var(--txt); font-weight: 650; }
+.rig2-performance input { width: 58px; }.rig2-hint { padding: 8px 10px 10px; color: var(--mut); font-size: 10px; line-height: 1.35; }
 /* capas v2: chip de color + zona de drop */
 .dz-chipcolor {
   width: 12px; height: 12px; border-radius: 3px; flex: none;
@@ -2300,6 +2346,9 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .tl2-cell.hold::before { content: ""; width: 100%; height: 1px; background: rgba(255,255,255,.25); }
 .tl2-cell:hover { outline: 1px solid var(--accent, #F0450E); outline-offset: -1px; }
 .tl2-cell.rango { background: rgba(240,69,14,.14); box-shadow: inset 0 0 0 1px rgba(240,69,14,.48); }
+.tl2-row.tl2-rig .tl2-name { color: #e7ae82; }.tl2-cell.rig { position: relative; }
+.tl2-cell.rigkey::after { content: ""; width: 6px; height: 6px; background: #e98b55; transform: rotate(45deg); border-radius: 1px; }
+.tl2-cell.rigkey:hover::after { background: #ffd29d; }
 
 /* ══ LEVEL STRIP (los dibujos del nivel) ═══════════════════════════════════
    El material, no el tiempo: acá están los dibujos existan o no en una celda.
