@@ -261,33 +261,34 @@ dibujos, audio y scrubbing, paletas y estilos.
 
 ## Rigging 2D: auditoría y deuda P0 (2026-08-20)
 
-Estado honesto: **prototipo funcional de pegs, no sistema profesional de rigging**.
+Estado honesto: **flujo cut-out rígido funcional; deformación flexible y editor de curvas aún pendientes**.
 
-### Lo que sí funciona actualmente
+### Lo que funciona actualmente
 
-- Asignar un pivote SVG a una pieza o grupo.
-- Guardar claves `x/y/rotación/escala` por identificador de elemento.
-- Interpolar esas claves y mostrar la transformación sobre el SVG.
-- Grabar un arrastre en tiempo real y remuestrearlo como claves.
-- Aplicar la transformación al preview/export legacy.
+- Registrar piezas SVG sin duplicar dibujos y colocar sus pivotes.
+- Armar una jerarquía padre-hijo sin ciclos; la matriz mundial propaga
+  traslación, rotación y escala hasta las piezas descendientes.
+- Posar en FK y crear claves locales o una clave global de todo el personaje.
+- Crear una cadena IK consecutiva de dos huesos, arrastrar su objetivo, invertir
+  la flexión, fijar raíz y limitar ángulos. La pose IK clava ambos huesos y el
+  objetivo dentro de una sola operación de Undo.
+- Ver las articulaciones sobre la mesa, las claves en una pista Esqueleto de la
+  Timeline y manipular el rig con su panel o mesa desacoplados.
+- Reproducir, exportar, guardar, cerrar, reabrir y continuar: todo evalúa el
+  mismo `LowDoc.scene.rig`; la pose nunca se hornea accidentalmente al Drawing.
+- Grabar una actuación FK, remuestrearla a claves y suavizarla conservando X/Y
+  de escala independientes.
 
-Estas capacidades son reutilizables, pero no alcanzan para anunciar “rigging” comparable a una
-herramienta profesional.
+### Deuda que permanece
 
-### Por qué hoy se percibe como una función falsa
-
-1. El estado vive en `DZ.scene.rig` y calcula el cuadro desde `DZ.anim.frames`; no pertenece al
-   `LowDoc` canónico usado por XSheet, Timeline, exposiciones y guardado `.lowscene`.
-2. Las claves se aplican buscando nodos DOM por `id`. Renombrar, duplicar o reemplazar una pieza
-   puede dejar pistas huérfanas.
-3. No existe un modelo explícito `Peg/Bone/Constraint`; sólo transformaciones sueltas.
-4. No hay jerarquía padre-hijo de rig, propagación de transformaciones ni reparentado seguro.
-5. No hay IK, límites angulares, orientación, pinning, targets ni constraints.
-6. No hay deformadores de malla/curva para doblar una pieza: sólo transformación rígida del SVG.
-7. No existe Schematic ni Function Editor para inspeccionar conexiones y curvas.
-8. Crear, mover o borrar claves de rig no forma una transacción consistente en el Undo canónico.
-9. La grabación y `bake` todavía recorren/duplican frames legacy en disco.
-10. No hay tests del modelo de rig ni prueba guardar-cerrar-reabrir-continuar.
+1. Las piezas cut-out son rígidas: todavía no hay deformador por malla/curva ni pesos.
+2. La Timeline muestra las claves del esqueleto, pero falta selección/copy-paste
+   de claves y edición visual de curvas/easing por propiedad.
+3. Falta una vista Schematic del mismo grafo canónico.
+4. La captura de actuación funciona con FK; la manipulación IK simultánea y la
+   edición avanzada de trayectorias son trabajo posterior.
+5. Los IDs estables ya viven en el modelo y se conservan al guardar, pero la UI
+   todavía debe incorporar una operación explícita de renombrado de pieza.
 
 ### Arquitectura obligatoria para resolverlo
 
@@ -295,11 +296,9 @@ Sin crear una escena paralela, extender el modelo actual:
 
 ```text
 Scene
- ├── rigs: Rig[]
- │    ├── nodes: Peg | Bone | DrawingNode
- │    ├── parentId
- │    ├── pivot, restTransform
- │    └── constraints[]
+ ├── rig
+ │    ├── nodes[id]: DrawingNode { parentId, pivot, rest, limits, keys }
+ │    └── constraints[id]: IK2 { rootId, midId, effectorId, targetKeys }
  └── functionCurves[nodeId/property] → Keyframe[]
 ```
 
@@ -312,12 +311,18 @@ evaluación de escena.
 - **P0.1 — Canonizar: ✅ hecho.** `Scene.rig.nodes` guarda IDs estables, claves, rest pose y
   parenting; `LowDoc` serializa, migra `DZ.scene.rig` y registra crear/mover/borrar claves y
   jerarquía en el Undo compartido. La UI, playback y grabación ya leen/escriben ese estado.
-- **P0.2 — Peg hierarchy:** nodos padre-hijo, rest pose, pivotes y transformación mundial/local.
-- **P0.3 — Timeline/Function curves:** pistas visibles, selección múltiple de claves, copy/paste,
+- **P0.2 — Peg hierarchy: ✅ hecho.** Nodos padre-hijo, rest pose, pivotes y transformación mundial/local.
+- **P0.3 — Timeline/Function curves: ◐ pista hecha.** Pista Esqueleto visible y navegación;
+  faltan selección múltiple de claves, copy/paste,
   easing editable y navegación desde XSheet/Timeline.
-- **P0.4 — Bones + IK:** cadena de dos huesos, target, pin, límites angulares y flip controlado.
+- **P0.4 — Bones + IK: ✅ hecho para cut-out rígido.** Cadena de dos huesos, target animado,
+  raíz fijada, límites angulares, flip controlado y Undo transaccional.
 - **P0.5 — Deformación:** deformador por curva o malla con pesos persistentes y edición de rest pose.
 - **P0.6 — Schematic:** vista de conexiones que edita el mismo grafo, sin duplicar estado.
+
+Pruebas del modelo: **83/83**. Cubren jerarquía matricial, propagación de pose,
+creación y solución IK, límites, claves automáticas, Undo atómico, persistencia y
+limpieza de constraints al quitar piezas.
 - **P0.7 — Actuación:** grabación sobre las curvas canónicas, reducción configurable de claves y
   reproducción por reloj real.
 - **P0.8 — Export:** evaluación idéntica entre Viewer, playback y export; eliminar el bake basado

@@ -29,8 +29,9 @@
 
 ## Prioridad activa
 
-Resolver el rigging 2D superficial. La auditoría y los criterios obligatorios
-están en `docs/2D_REDESIGN.md`, sección **Rigging 2D: auditoría y deuda P0**.
+Completar sobre el rig cut-out rígido ya canónico: editor de curvas, Schematic
+y deformación flexible. La decisión de arquitectura está registrada en
+`docs/ADR_2D_CUTOUT_RIG.md` y el estado en `docs/2D_REDESIGN.md`.
 
 ## Últimos bloques 2D confirmados
 
@@ -42,5 +43,7 @@ están en `docs/2D_REDESIGN.md`, sección **Rigging 2D: auditoría y deuda P0**.
 - Mesa de dibujo editable en una ventana nativa para segundo monitor.
 - Paneles desacoplados con foto inicial validada: Dibujos del nivel conserva previews SVG,
   selección y exposición; la mesa separada no hereda el zoom/paneo CSS de la ventana principal.
-- Rig P0.1 canónico: nodos y claves dentro de `LowDoc.scene`, migración legacy,
-  serialización, parenting sin ciclos y Undo/Redo.
+- Rig cut-out rígido canónico: piezas y pivotes, jerarquía matricial real, FK,
+  IK de dos huesos, raíz fijada, límites, claves globales, Undo/Redo,
+  guardado/reapertura, pista en Timeline y panel/mesa separables con controles
+  de esqueleto para dos monitores. Validación automática actual: 83/83.
