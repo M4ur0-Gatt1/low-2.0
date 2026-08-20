@@ -70,3 +70,14 @@ por vistas. No llamar “rig completo” a controles que sólo modifican el DOM.
   `rig.nodes` queda sólo como adaptador en memoria para la interfaz v3. Undo,
   migración y diagnóstico se prueban en 118/118 casos del modelo. Un esqueleto
   puede existir sin arte y recibir slots/bindings después.
+- Armado gráfico v4 operativo: `Crear hueso` permite trazar cabeza→punta sobre
+  la mesa, continuar una cadena desde una punta existente, seleccionar huesos
+  aún sin arte y editar cabeza/longitud. Cada gesto es una sola operación de
+  historial; Undo/Redo fue comprobado en la interfaz. Al abrir otro SVG se debe
+  preservar siempre `#dzRigOverlay`: es infraestructura del editor, no arte.
+- El informe técnico de rigging queda incorporado como dirección de evolución,
+  no como promesa ya implementada: primero mallas 2D trianguladas + LBS y pesos
+  dispersos; BBW se evalúa en bind-time dentro de un Worker con benchmark y
+  fallback. Master Controllers y rigs 360° se apoyan en channels/actions. DQS
+  y winding numbers sólo entran si resuelven un caso 2D medido; no se arrastra
+  complejidad volumétrica 3D al núcleo 2D por marketing.

@@ -415,9 +415,17 @@
         !!serializedRig.bones.torso && serializedRig.nodes == null);
 
       const skeleton = new animation.LowDoc();
-      skeleton.ensureRigBone("root", { name: "Raíz", pivot: { x: 10, y: 20 } });
+      const skeletonHistory = new LOW.core.HistoryManager(); skeleton.setHistory(skeletonHistory);
+      skeleton.ensureRigBone("root", { name: "Raíz", head: { x: 10, y: 20 }, tail: { x: 80, y: 20 } });
       ok("un hueso puede existir sin pieza de arte ni slot",
         skeleton.scene.rigBone("root").elementId == null && Object.keys(skeleton.scene.rig.slots).length === 0);
+      skeletonHistory.clear();
+      skeleton.setRigBoneGeometry("root", { x: 20, y: 30 }, { x: 100, y: 30 });
+      ok("la geometría del hueso se edita en Armado",
+        skeleton.scene.rigBone("root").head.x === 20 && skeleton.scene.rigBone("root").tail.x === 100);
+      skeletonHistory.undo();
+      ok("undo restaura cabeza y punta del hueso juntas",
+        skeleton.scene.rigBone("root").head.x === 10 && skeleton.scene.rigBone("root").tail.x === 80);
       const skeletonSlot = skeleton.ensureRigSlot("root", { id: "body-slot" });
       const skeletonAttachment = skeleton.addRigAttachment(skeletonSlot,
         { id: "body-front", elementId: "svg_body_front" });

@@ -148,6 +148,9 @@
       const elementId = n.elementId || n.binding?.elementId || id;
       bones[id] = { id, type: "bone", name: n.name || id,
         parentId: n.parentId || null, pivot: n.pivot ? { x: +n.pivot.x || 0, y: +n.pivot.y || 0 } : null,
+        head: n.head ? { x: +n.head.x || 0, y: +n.head.y || 0 } :
+          (n.pivot ? { x: +n.pivot.x || 0, y: +n.pivot.y || 0 } : null),
+        tail: n.tail ? { x: +n.tail.x || 0, y: +n.tail.y || 0 } : null,
         rest: rigPoseData(n.rest), keys: clone(n.keys || {}), pinned: !!n.pinned,
         inherit: { translation: n.inherit?.translation !== false, rotation: n.inherit?.rotation !== false,
           scale: n.inherit?.scale !== false },
