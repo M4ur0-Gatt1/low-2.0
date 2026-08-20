@@ -940,11 +940,13 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-tool-cursor {
   --tool-size: 24px; position: absolute; z-index: 30; width: var(--tool-size); height: var(--tool-size);
   transform: translate(-50%,-50%); pointer-events: none; color: #111;
-  filter: drop-shadow(0 0 1px #fff) drop-shadow(0 1px 1px rgba(0,0,0,.45));
+  filter: drop-shadow(0 0 1px rgba(255,255,255,.9));
 }
 .dz-tool-cursor[hidden] { display: none; }
-.dz-tool-cursor-ring { position: absolute; inset: 0; border: 1.5px solid currentColor; border-radius: 50%; background: rgba(255,255,255,.08); }
+.dz-tool-cursor-ring { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; background: transparent; }
 .dz-tool-cursor .ico { position: absolute; width: 13px; height: 13px; left: 50%; top: 50%; transform: translate(-50%,-50%); fill: none; stroke-width: 1.8; }
+.dz-tool-cursor[data-tool="brush"] .ico,
+.dz-tool-cursor[data-tool="pencil"] .ico { display:none; }
 .dz-tool-cursor[data-tool="eraser"] .dz-tool-cursor-ring,
 .dz-tool-cursor[data-tool="bucket"] .dz-tool-cursor-ring { border-radius: 4px; }
 .dz-tool-cursor[data-tool="dropper"] .dz-tool-cursor-ring,
@@ -1043,13 +1045,13 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
    botones de acción — tienen que ocupar poco y leerse de un vistazo. */
 .dz-ws { display: flex; align-items: stretch; gap: 1px; margin-right: 10px; }
 .dz-ws-tab {
-  border: none; background: transparent; color: var(--fg2, #8a93a6);
-  font: 500 11px/1 Figtree, system-ui, sans-serif; letter-spacing: .2px;
-  padding: 0 10px; height: 100%; min-height: 26px; cursor: pointer;
+  border: none; background: transparent; color: var(--mut);
+  font: 550 12px/1 Figtree, system-ui, sans-serif; letter-spacing: .05px;
+  padding: 0 11px; height: 100%; min-height: 28px; cursor: pointer;
   border-bottom: 2px solid transparent; white-space: nowrap;
 }
-.dz-ws-tab:hover { color: var(--fg, #e6e9f0); background: rgba(255,255,255,.05); }
-.dz-ws-tab.active { color: var(--fg, #fff); border-bottom-color: var(--accent, #F0450E); }
+.dz-ws-tab:hover { color: var(--txt); background: var(--surface-hover); }
+.dz-ws-tab.active { color: var(--txt); border-bottom-color: var(--red); background: var(--redsoft); }
 .dz-menubar {
   flex: none; display: flex; align-items: center; gap: 2px;
   background: var(--panel2); border-bottom: 1px solid var(--line);
