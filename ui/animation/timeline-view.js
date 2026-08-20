@@ -210,6 +210,31 @@
       };
       luz.appendChild(luzTrack); cont.appendChild(luz);
 
+      // ── pista del esqueleto: una pose global reúne las claves de todas las
+      // piezas sin inventar otro timeline. Doble clic clava; Alt+clic borra.
+      const rigNodes = Object.values((sc.rig && sc.rig.nodes) || {});
+      if (rigNodes.length) {
+        const fila = document.createElement("div"); fila.className = "tl2-row tl2-rig";
+        const cab = document.createElement("div"); cab.className = "tl2-name";
+        const badge = document.createElement("span"); badge.textContent = "◇";
+        const nombreRig = document.createElement("span"); nombreRig.textContent = "Esqueleto";
+        cab.append(badge, nombreRig); fila.appendChild(cab);
+        const track = document.createElement("div"); track.className = "tl2-track";
+        for (let f = 1; f <= total; f++) {
+          const keyed = rigNodes.some(node => node.keys && node.keys[f]);
+          const c = document.createElement("i"); c.dataset.frame = String(f);
+          c.className = "tl2-cell rig" + (keyed ? " rigkey" : "") + (f === doc.frame ? " actual" : "");
+          c.title = keyed ? `Pose del esqueleto en F${f} · Alt+clic: borrar` : `F${f} · doble clic: crear pose global`;
+          c.onclick = e => { if (e.altKey && keyed) doc.deleteRigPoseKeys(null, f); else doc.goTo(f); };
+          c.ondblclick = () => {
+            const poses = Object.fromEntries(rigNodes.map(node => [node.id, sc.rigPose(node.id, f)]));
+            doc.setRigPoseKeys(poses, f, "Clave global del rig");
+          };
+          track.appendChild(c);
+        }
+        fila.appendChild(track); cont.appendChild(fila);
+      }
+
       // ── una fila por capa ──
       for (const ly of sc.layers) {
         const fila = document.createElement("div");

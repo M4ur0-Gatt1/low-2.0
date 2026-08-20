@@ -464,6 +464,7 @@ function bind() {
   $("#ctabRight").onclick = () => { $("#chatTabs").scrollBy({ left: 160, behavior: "smooth" }); setTimeout(updateChatNav, 260); };
   $("#chatTabs").addEventListener("scroll", updateChatNav);
   window.addEventListener("resize", updateChatNav);
+  window.addEventListener("resize", () => { if (DZ.rigMode) dzRigOverlayRender(); });
   $("#abSearch").onclick = () => $("#q").focus();
   $("#abGit").onclick = () => {
     const b = $("#branch").textContent;
@@ -820,6 +821,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#dzRigBtn").onclick = dzRigToggle;
   $("#dzRigClose").onclick = dzRigToggle;
   $("#dzRigHead").addEventListener("mousedown", (e) => {
+    if (window.LOW_PANEL_DOCKING || $("#dzRigPanel").closest("#dzAnimationDock")) return;
     if (e.target.id === "dzRigClose") return;
     e.preventDefault();
     const pnl = $("#dzRigPanel");
@@ -833,22 +835,22 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   });
+  $("#rigModeBuild").onclick = () => dzRigSetMode("build");
+  $("#rigModeFk").onclick = () => dzRigSetMode("fk");
+  $("#rigModeIk").onclick = () => dzRigSetMode("ik");
   $("#rigId").addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
-    e.preventDefault();
-    if (!DZ.sel) return dzSetStatus(" Seleccioná la pieza primero (flecha blanca D)");
-    const id = $("#rigId").value.trim().replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]/g, "_");
-    if (!id) return;
-    dzSnapshot(); DZ.sel.id = id; dzBuildLayers();
-    if (DZ.doc) DZ.doc.ensureRigNode(id, { elementId: id });
-    dzRigPanelSync();
-    dzSetStatus(" pieza «" + id + "» lista — posala y clavá con K");
+    e.preventDefault(); dzRigRegisterSelected();
   });
-  ["rigX", "rigY", "rigR", "rigS"].forEach(id => {
+  $("#rigAdd").onclick = dzRigRegisterSelected;
+  $("#rigRemove").onclick = dzRigRemoveSelected;
+  $("#rigPivotTool").onclick = () => { dzSetTool("pivot"); dzSetStatus("Pivote: hacé clic donde articula la pieza seleccionada"); };
+  $("#rigPin").onclick = dzRigTogglePin;
+  ["rigX", "rigY", "rigR", "rigSX", "rigSY"].forEach(id => {
     $("#" + id).addEventListener("input", () => {
       if (!DZ.sel || !DZ.sel.id) return;
       const k = dzRigReadPanel();
-      dzRigApplyTo(DZ.sel, k); dzPositionHandle();      // preview en vivo
+      dzRigApplyLive(dzRigCur(), { [DZ.sel.id]: k });
     });
     $("#" + id).addEventListener("change", () => {
       if (!DZ.sel || !DZ.sel.id) return dzSetStatus(" La pieza necesita nombre (id) — escribilo arriba y Enter");
@@ -856,19 +858,30 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       dzSetStatus(" clave en el cuadro " + dzRigCur());
     });
   });
+  ["rigMin", "rigMax"].forEach(id => $("#" + id).addEventListener("change", () => {
+    if (!DZ.doc || !DZ.sel?.id) return;
+    DZ.doc.setRigLimits(DZ.sel.id, +$("#rigMin").value, +$("#rigMax").value);
+    dzRigPanelSync(); dzRigOverlayRender();
+  }));
   $("#rigKey").onclick = () => {
     if (!DZ.sel || !DZ.sel.id) return dzSetStatus(" Seleccioná y nombrá la pieza primero");
     dzRigSetKey(DZ.sel.id, dzRigCur(), dzRigReadPanel());
     dzSetStatus(" pose clavada en el cuadro " + dzRigCur());
   };
+  $("#rigKeyAll").onclick = dzRigKeyAll;
   $("#rigDel").onclick = () => {
     if (DZ.sel && DZ.sel.id) dzRigDelKey(DZ.sel.id, dzRigCur());
   };
+  $("#rigReset").onclick = dzRigResetPose;
   $("#rigParent").onchange = e => {
     if (!DZ.doc || !DZ.sel || !DZ.sel.id) return;
     if (!DZ.doc.setRigParent(DZ.sel.id, e.target.value || null)) dzSetStatus(" No se puede crear un ciclo en la jerarquía");
-    else { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); }
+    else { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); }
   };
+  $("#rigIkCreate").onclick = dzRigCreateIK;
+  $("#rigIkDelete").onclick = dzRigDeleteIK;
+  $("#rigIkFlip").onclick = dzRigFlipIK;
+  $("#rigConstraint").onchange = e => { DZ.rigConstraintId = e.target.value || null; dzRigPanelSync(); dzRigOverlayRender(); };
   $("#perfRec").onclick = dzPerfRec;
   $("#perfPlay").onclick = dzPerfPlay;
   $("#perfSmooth").onclick = dzPerfSmooth;
@@ -2312,6 +2325,7 @@ if (window.LOW && LOW.workspace && LOW.workspace.panels) {
   panels.register("timeline", { dock: "bottom", element: "#dzTimeline", visible: false });
   panels.register("xsheet", { dock: "right", element: "#dzXsheet", visible: false });
   panels.register("camera", { dock: "overlay", element: "#dzCam", visible: false });
+  panels.register("rig", { dock: "right", element: "#dzRigPanel", visible: false });
   panels.subscribe(panel => {
     const node = panel?.element && document.querySelector(panel.element); if (!node) return;
     if (!panel.detached) node.hidden = !panel.visible;
@@ -2413,6 +2427,7 @@ function dzApplyZoom() {
   if (DZ.camMode) dzCamOverlay();                                    // y el encuadre
   if (DZ.rulers || DZ.grid || (DZ.guides && DZ.guides.length)) dzRulersRender();
   dzPivotMark();
+  if (DZ.rigMode) dzRigOverlayRender();
 }
 /* modo dibujo (Tab): oculta menús, paneles, timeline y dock — solo lienzo +
    herramientas, para dibujar sin distracción (como el Tab de Photoshop). */
@@ -2741,24 +2756,30 @@ function dzPivotClick(e) {
   if (target.tagName.toLowerCase() === "svg") return;
   dzSnapshot();
   if (e.altKey && target.hasAttribute("data-pivot")) {
+    const targetId = target.id;
     target.removeAttribute("data-pivot");
-    if (DZ.doc && target.id && DZ.doc.scene.rigNode(target.id)) DZ.doc.setRigPivot(target.id, null);
-    dzSelect(target); dzMarkDirty();
+    if (DZ.doc && targetId && DZ.doc.scene.rigNode(targetId)) DZ.doc.setRigPivot(targetId, null);
+    const live = targetId && $("#dzCanvas").querySelector(":scope > svg")?.querySelector("#" + CSS.escape(targetId));
+    dzSelect(live || target); dzMarkDirty();
     dzSetStatus(" Pivote quitado — la rotación vuelve al centro");
     return;
   }
   const p = dzToUser(e.clientX, e.clientY);
+  const targetId = target.id;
   target.setAttribute("data-pivot", `${Math.round(p.x)} ${Math.round(p.y)}`);
-  if (DZ.doc && target.id) { DZ.doc.ensureRigNode(target.id); DZ.doc.setRigPivot(target.id, p); }
-  dzSelect(target); dzMarkDirty();
+  if (DZ.doc && targetId) { DZ.doc.ensureRigNode(targetId); DZ.doc.setRigPivot(targetId, p); }
+  const live = targetId && $("#dzCanvas").querySelector(":scope > svg")?.querySelector("#" + CSS.escape(targetId));
+  dzSelect(live || target); dzMarkDirty();
+  if (DZ.rigMode) { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); }
   dzSetStatus(" Pivote fijado — rotá con la manija  y gira desde acá (hombro, codo, cadera…). Alt+clic lo quita.");
 }
 function dzPivotMark() {
   const m = $("#dzPivot");
   if (!m) return;
+  const nodePivot = DZ.doc && DZ.sel?.id && DZ.doc.scene.rigNode(DZ.sel.id)?.pivot;
   const pv = DZ.sel && DZ.sel.getAttribute && DZ.sel.getAttribute("data-pivot");
-  if (!pv || !$("#dzCanvas").querySelector(":scope > svg")) { m.hidden = true; return; }
-  const [px, py] = pv.split(/[\s,]+/).map(Number);
+  if ((!pv && !nodePivot) || !$("#dzCanvas").querySelector(":scope > svg")) { m.hidden = true; return; }
+  const [px, py] = nodePivot ? [nodePivot.x, nodePivot.y] : pv.split(/[\s,]+/).map(Number);
   const sp = dzToScreen(px, py);
   m.style.left = sp.x + "px"; m.style.top = sp.y + "px";
   m.hidden = false;
@@ -2844,7 +2865,7 @@ function dzFromUser(x, y) {
    valores del papel cebolla no cambian" + trazos fantasma) */
 const DZ_UI_SEL = ".dz-onionpanel,.dz-zpanel,.dz-xsheet,.dz-tlgrid,.dz-disc," +
   ".dz-pendbg,.dz3d-gizmo,.dz3d-zbar,.dz3d-zhandle,.dz3d-rothandle,.dz-rulers," +
-  ".dz-selbox,.dz-cam,#dzCam";
+  ".dz-selbox,.dz-cam,.dz-rig-overlay,#dzCam";
 function dzOnUiPanel(e) {
   return e.target && e.target.closest && e.target.closest(DZ_UI_SEL);
 }
@@ -2899,10 +2920,11 @@ function dzPointerDown(e) {
   //  modo rig + pieza con nombre: el arrastre POSA (clave), no toca el dibujo.
   // Grabando (🎥): el arrastre ES la actuación — se muestrea con su tiempo real.
   let rigDrag = null;
-  if (DZ.rigMode && pack.length === 1 && el.id) {
+  if (DZ.rigMode && DZ.rigSubmode === "fk" && pack.length === 1 && el.id) {
     const recNow = DZ.perf && DZ.perf.rec;
     const num = recNow ? 1 + (performance.now() - recNow.t0) / 1000 * recNow.fps : dzRigCur();
-    const pv = dzRigPivotOf(el);
+    const rigNode = DZ.doc && DZ.doc.scene.rigNode(el.id);
+    const pv = rigNode?.pivot ? DZ.doc.scene.rigWorldPoint(rigNode.id, num, rigNode.pivot) : dzRigPivotOf(el);
     rigDrag = { id: el.id, pv,
                 k0: dzRigLocalAt(el.id, num) || { x: 0, y: 0, r: 0, s: 1 },
                 a0: Math.atan2(start.y - pv.y, start.x - pv.x) };
@@ -2930,13 +2952,19 @@ function dzPointerDown(e) {
         const a = Math.atan2(p.y - rigDrag.pv.y, p.x - rigDrag.pv.x);
         pose = { ...rigDrag.k0, r: (rigDrag.k0.r || 0) + (a - rigDrag.a0) * 180 / Math.PI };
       } else {
-        pose = { ...rigDrag.k0, x: rigDrag.k0.x + dx, y: rigDrag.k0.y + dy };
+        const local = dzRigParentDelta(rigDrag.id, dx, dy, num);
+        pose = { ...rigDrag.k0, x: rigDrag.k0.x + local.x, y: rigDrag.k0.y + local.y };
       }
-      dzRigApplyTo(el, pose);
+      dzRigApplyLive(num, { [rigDrag.id]: pose });
       rigDrag.pose = pose;
       const rec = DZ.perf && DZ.perf.rec;
-      if (rec) rec.take[rigDrag.id].push({ t: (performance.now() - rec.t0) / 1000,
-                                           x: pose.x, y: pose.y, r: pose.r || 0, s: pose.s });
+      if (rec) {
+        rec.livePose = pose;
+        rec.take[rigDrag.id].push({ t: (performance.now() - rec.t0) / 1000,
+          x: pose.x, y: pose.y, r: pose.r || 0,
+          sx: pose.sx == null ? (pose.s == null ? 1 : pose.s) : pose.sx,
+          sy: pose.sy == null ? (pose.s == null ? 1 : pose.s) : pose.sy });
+      }
     } else {
       // GUÍAS DE ALINEACIÓN: si un borde o el centro de lo que arrastrás queda
       // casi a la altura del de otro objeto (o del lienzo), se imanta y se
@@ -2959,7 +2987,7 @@ function dzPointerDown(e) {
     document.removeEventListener("pointerup", up);
     document.removeEventListener("pointercancel", up);
     if (rigDrag && DZ.perf && DZ.perf.rec) {
-      DZ.perf.rec.active = null;               // la pieza vuelve al replay de su pista
+      DZ.perf.rec.active = null; DZ.perf.rec.livePose = null; // vuelve al replay de su pista
     } else if (moved && rigDrag && rigDrag.pose) {
       dzRigSetKey(rigDrag.id, dzRigCur(), rigDrag.pose);
       dzSetStatus(" pose clavada en el cuadro " + dzRigCur() + " (Shift al arrastrar = rotar)");
@@ -4289,7 +4317,7 @@ const DZ_KEY_DEFAULTS = {
   rect: "r", ellipse: "o", text: "t", line: "l",
   zoomin: "+", zoomout: "-", zoom100: "0", zoomfit: "f",
   rotl: "[", rotr: "]", mirror: "m",
-  prevframe: ",", nextframe: ".",
+  prevframe: ",", nextframe: ".", rigkey: "k",
 };
 const DZ_KEY_LABELS = {
   select: "Seleccionar (flecha)", hand: "Mano (navegar)", nodes: "Nodos (flecha blanca)",
@@ -4299,7 +4327,7 @@ const DZ_KEY_LABELS = {
   text: "Texto", line: "Línea", zoomin: "Acercar", zoomout: "Alejar",
   zoom100: "Zoom 100%", zoomfit: "Ajustar a pantalla", rotl: "Girar vista ",
   rotr: "Girar vista ", mirror: "Modo espejo", prevframe: "Cuadro anterior",
-  nextframe: "Cuadro siguiente",
+  nextframe: "Cuadro siguiente", rigkey: "Crear clave de rig",
 };
 function dzKeysLoad() {
   let saved = {};
@@ -4341,6 +4369,10 @@ function dzRunAction(act) {
   if (act === "rotl") return dzRotView(-15);
   if (act === "rotr") return dzRotView(15);
   if (act === "mirror") return dzMirrorToggle();
+  if (act === "rigkey" && DZ.rigMode) {
+    if (DZ.sel?.id && DZ.doc?.scene.rigNode(DZ.sel.id)) return dzRigSetKey(DZ.sel.id, dzRigCur(), dzRigLocalAt(DZ.sel.id, dzRigCur()));
+    return dzRigKeyAll();
+  }
   if (act === "prevframe" && DZ.anim) { dzAnimStopIf(); return dzGoFrame(Math.max(0, DZ.anim.idx - 1)); }
   if (act === "nextframe" && DZ.anim) { dzAnimStopIf(); return dzGoFrame(Math.min(DZ.anim.frames.length - 1, DZ.anim.idx + 1)); }
 }
@@ -6217,7 +6249,7 @@ function dzTimelineBadges() {
     const num = dzFrameNum(DZ.anim.frames[i]);
     const rig = dzRigTracks();
     const hasRig = Object.keys(rig).some(id => rig[id] && rig[id][num]);
-    let badge = (keys.includes(num) ? "🔑" : "") + (cams[num] ? "🎬" : "") + (hasRig ? "" : "");
+    let badge = (keys.includes(num) ? "◆" : "") + (cams[num] ? "●" : "") + (hasRig ? "◇" : "");
     if (badge) {
       const b = document.createElement("span");
       b.className = "tl-key"; b.textContent = badge;
@@ -6270,24 +6302,33 @@ function dzRigPivotOf(el) {
   catch (e) { return { x: 0, y: 0 }; }
 }
 function dzRigChunk(el, k) {
-  const pv = dzRigPivotOf(el);
+  const pv = dzRigPivotOf(el), p = k || {};
   let t = "";
-  if (k.x || k.y) t += `translate(${k.x.toFixed(1)} ${k.y.toFixed(1)}) `;
-  if (k.r) t += `rotate(${k.r.toFixed(2)} ${pv.x.toFixed(1)} ${pv.y.toFixed(1)}) `;
-  const sx = k.sx == null ? (k.s == null ? 1 : k.s) : k.sx;
-  const sy = k.sy == null ? (k.s == null ? 1 : k.s) : k.sy;
+  if (p.x || p.y) t += `translate(${(+p.x || 0).toFixed(1)} ${(+p.y || 0).toFixed(1)}) `;
+  if (p.r) t += `rotate(${(+p.r).toFixed(2)} ${pv.x.toFixed(1)} ${pv.y.toFixed(1)}) `;
+  const sx = p.sx == null ? (p.s == null ? 1 : p.s) : p.sx;
+  const sy = p.sy == null ? (p.s == null ? 1 : p.s) : p.sy;
   if (Math.abs(sx - 1) > 0.001 || Math.abs(sy - 1) > 0.001)
-    t += `translate(${pv.x.toFixed(1)} ${pv.y.toFixed(1)}) scale(${sx.toFixed(3)} ${sy.toFixed(3)}) translate(${(-pv.x).toFixed(1)} ${(-pv.y).toFixed(1)}) `;
+    t += `translate(${pv.x.toFixed(1)} ${pv.y.toFixed(1)}) scale(${(+sx).toFixed(3)} ${(+sy).toFixed(3)}) translate(${(-pv.x).toFixed(1)} ${(-pv.y).toFixed(1)}) `;
   return t.trim();
 }
+function dzRigMatrixChunk(matrix) {
+  if (!matrix || matrix.length !== 6) return "";
+  const m = matrix.map(n => Math.abs(n) < 1e-9 ? 0 : Math.round(n * 100000) / 100000);
+  const identity = Math.abs(m[0] - 1) < 1e-6 && !m[1] && !m[2] && Math.abs(m[3] - 1) < 1e-6 && !m[4] && !m[5];
+  return identity ? "" : `matrix(${m.join(" ")})`;
+}
 function dzRigApplyTo(el, k) {
-  if (!el.hasAttribute("data-rigbase"))
-    el.setAttribute("data-rigbase", el.getAttribute("transform") || "");
-  const base = el.getAttribute("data-rigbase");
-  const chunk = dzRigChunk(el, k);
+  if (!el.hasAttribute("data-rigbase")) el.setAttribute("data-rigbase", el.getAttribute("transform") || "");
+  const base = el.getAttribute("data-rigbase"), chunk = dzRigChunk(el, k);
   if (chunk) el.setAttribute("transform", chunk + (base ? " " + base : ""));
-  else if (base) el.setAttribute("transform", base);
-  else el.removeAttribute("transform");
+  else if (base) el.setAttribute("transform", base); else el.removeAttribute("transform");
+}
+function dzRigApplyMatrix(el, matrix) {
+  if (!el.hasAttribute("data-rigbase")) el.setAttribute("data-rigbase", el.getAttribute("transform") || "");
+  const base = el.getAttribute("data-rigbase"), chunk = dzRigMatrixChunk(matrix);
+  if (chunk) el.setAttribute("transform", chunk + (base ? " " + base : ""));
+  else if (base) el.setAttribute("transform", base); else el.removeAttribute("transform");
 }
 function dzRigStrip(root) {
   (root || document).querySelectorAll("[data-rigbase]").forEach(n => {
@@ -6296,110 +6337,239 @@ function dzRigStrip(root) {
     n.removeAttribute("data-rigbase");
   });
 }
-/* aplica las poses interpoladas de TODAS las piezas con claves, en el lienzo vivo */
-function dzRigApplyLive(num) {
+function dzRigApplyLive(num, overrides = {}) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   dzRigStrip(svg);
+  if (DZ.doc && DZ.doc.scene.rig) {
+    for (const node of Object.values(DZ.doc.scene.rig.nodes)) {
+      const el = svg.querySelector("#" + CSS.escape(node.elementId || node.id));
+      if (el) dzRigApplyMatrix(el, DZ.doc.scene.rigWorldMatrix(node.id, num, overrides));
+    }
+    dzPositionHandle(); dzRigOverlayRender(); return;
+  }
   const rig = dzRigTracks();
   for (const id of Object.keys(rig)) {
-    const el = svg.querySelector('[id="' + id.replace(/"/g, '') + '"]');
-    if (!el) continue;
-    const k = dzRigAt(id, num);
-    if (k) dzRigApplyTo(el, k);
+    const el = svg.querySelector('[id="' + id.replace(/"/g, '') + '"]'), k = dzRigAt(id, num);
+    if (el && k) dzRigApplyTo(el, k);
   }
   dzPositionHandle();
 }
-/* versión para reproducción/export: sobre el TEXTO del cuadro */
 function dzRigView(svgText, num) {
-  const rig = dzRigTracks();
-  const ids = Object.keys(rig);
-  if (!ids.length) return svgText;
+  const ids = Object.keys(dzRigTracks()); if (!ids.length) return svgText;
   const tmp = document.createElement("div"); tmp.innerHTML = svgText;
-  const svg = tmp.querySelector("svg");
-  if (!svg) return svgText;
+  const svg = tmp.querySelector("svg"); if (!svg) return svgText;
   for (const id of ids) {
-    const el = svg.querySelector('[id="' + id.replace(/"/g, '') + '"]');
-    if (!el) continue;
-    const k = dzRigAt(id, num);
-    if (!k) continue;
-    const chunk = dzRigChunk(el, k);
+    const node = DZ.doc && DZ.doc.scene.rigNode(id);
+    const el = svg.querySelector("#" + CSS.escape((node && node.elementId) || id)); if (!el) continue;
+    const chunk = node ? dzRigMatrixChunk(DZ.doc.scene.rigWorldMatrix(id, num)) : dzRigChunk(el, dzRigAt(id, num));
     if (!chunk) continue;
-    const base = el.getAttribute("transform") || "";
-    el.setAttribute("transform", chunk + (base ? " " + base : ""));
+    const base = el.getAttribute("transform") || ""; el.setAttribute("transform", chunk + (base ? " " + base : ""));
   }
   return svg.outerHTML;
 }
 function dzRigSetKey(id, num, k) {
-  if (DZ.doc) {
-    DZ.doc.setRigKey(id, num, k); dzTimelineBadges(); dzRigPanelSync(); return;
-  }
-  DZ.scene = DZ.scene || {};
-  DZ.scene.rig = DZ.scene.rig || {};
-  DZ.scene.rig[id] = DZ.scene.rig[id] || {};
+  if (DZ.doc) { DZ.doc.setRigKey(id, num, k); dzRigApplyLive(num); dzTimelineBadges(); dzRigPanelSync(); return; }
+  DZ.scene = DZ.scene || {}; DZ.scene.rig = DZ.scene.rig || {}; DZ.scene.rig[id] = DZ.scene.rig[id] || {};
   DZ.scene.rig[id][num] = { x: +k.x || 0, y: +k.y || 0, r: +k.r || 0, s: k.s == null ? 1 : +k.s };
   dzSceneSave(); dzTimelineBadges(); dzRigPanelSync();
 }
 function dzRigDelKey(id, num) {
-  if (DZ.doc) {
-    DZ.doc.deleteRigKey(id, num); dzTimelineBadges(); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); return;
-  }
-  const trk = dzRigTracks()[id];
-  if (!trk || !trk[num]) return;
-  delete trk[num];
-  if (!Object.keys(trk).length) delete DZ.scene.rig[id];
+  if (DZ.doc) { DZ.doc.deleteRigKey(id, num); dzTimelineBadges(); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); return; }
+  const trk = dzRigTracks()[id]; if (!trk || !trk[num]) return;
+  delete trk[num]; if (!Object.keys(trk).length) delete DZ.scene.rig[id];
   dzSceneSave(); dzTimelineBadges(); dzRigApplyLive(dzRigCur()); dzRigPanelSync();
 }
-/* ── panel: refleja la pieza seleccionada y su pose en el cuadro actual ── */
+function dzRigNodeElement(node) {
+  const svg = $("#dzCanvas")?.querySelector(":scope > svg");
+  return svg && node ? svg.querySelector("#" + CSS.escape(node.elementId || node.id)) : null;
+}
+function dzRigParentDelta(id, dx, dy, frame) {
+  const node = DZ.doc && DZ.doc.scene.rigNode(id);
+  if (!node?.parentId) return { x: dx, y: dy };
+  const m = DZ.doc.scene.rigWorldMatrix(node.parentId, frame), det = m[0] * m[3] - m[1] * m[2];
+  if (Math.abs(det) < 1e-9) return { x: dx, y: dy };
+  return { x: (m[3] * dx - m[2] * dy) / det, y: (-m[1] * dx + m[0] * dy) / det };
+}
+function dzRigSelectedNode() { return DZ.doc && DZ.sel?.id ? DZ.doc.scene.rigNode(DZ.sel.id) : null; }
+function dzRigRegisterSelected() {
+  if (!DZ.doc || !DZ.sel) return dzSetStatus("Seleccioná una pieza del personaje en la mesa");
+  let id = $("#rigId").value.trim().replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]/g, "_");
+  if (!id) id = DZ.sel.id || dzUniqueId("pieza");
+  const svg = $("#dzCanvas").querySelector(":scope > svg"), occupied = svg?.querySelector("#" + CSS.escape(id));
+  if (occupied && occupied !== DZ.sel) id = dzUniqueId(id + "_");
+  DZ.sel.id = id;
+  let pivot;
+  try { const b = DZ.sel.getBoundingClientRect(); pivot = dzToUser((b.left + b.right) / 2, (b.top + b.bottom) / 2); }
+  catch (_) { pivot = { x: 0, y: 0 }; }
+  DZ.sel.setAttribute("data-pivot", `${Math.round(pivot.x)} ${Math.round(pivot.y)}`);
+  // El ID une la pieza visual con el nodo canónico; tiene que entrar al Drawing
+  // antes de que el evento de rig vuelva a pintarlo.
+  dzDocCommit();
+  DZ.doc.ensureRigNode(id, { elementId: id, pivot });
+  dzMarkDirty(); dzBuildLayers(); dzRigSetMode("build"); dzRigPanelSync(); dzRigOverlayRender();
+  dzSetStatus(`Pieza «${id}» registrada · colocá su pivote y elegí el padre`);
+}
+function dzRigRemoveSelected() {
+  const node = dzRigSelectedNode(); if (!node) return;
+  if (DZ.doc.removeRigNode(node.id)) {
+    DZ.sel?.removeAttribute("data-pivot"); dzRigApplyLive(dzRigCur()); dzRigPanelSync();
+    dzSetStatus(`«${node.id}» salió del esqueleto; el dibujo permanece intacto`);
+  }
+}
+function dzRigTogglePin() {
+  const node = dzRigSelectedNode(); if (!node) return dzSetStatus("Elegí una pieza del esqueleto");
+  DZ.doc.setRigPinned(node.id, !node.pinned); dzRigPanelSync(); dzRigOverlayRender();
+}
+function dzRigSetMode(mode) {
+  DZ.rigSubmode = ["build", "fk", "ik"].includes(mode) ? mode : "build";
+  $("#dzRigPanel").dataset.mode = DZ.rigSubmode;
+  [["rigModeBuild", "build"], ["rigModeFk", "fk"], ["rigModeIk", "ik"]].forEach(([id, value]) =>
+    $("#" + id).classList.toggle("on", DZ.rigSubmode === value));
+  const hints = { build: "Armado: registrá cada pieza, colocá pivotes y vinculá desde el torso hacia las extremidades.",
+    fk: "FK: arrastrá para mover o Shift+arrastrá para rotar. Cada gesto crea una clave.",
+    ik: "IK: elegí una cadena y arrastrá el rombo. Ambos huesos se clavan en una sola operación." };
+  $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
+}
+function dzRigKeyAll() {
+  if (!DZ.doc) return;
+  const poses = Object.fromEntries(Object.keys(DZ.doc.scene.rig.nodes).map(id => [id, DZ.doc.scene.rigPose(id, dzRigCur())]));
+  if (DZ.doc.setRigPoseKeys(poses, dzRigCur(), "Clave global del rig")) {
+    dzRigApplyLive(dzRigCur()); dzTimelineBadges(); dzRigPanelSync(); dzSetStatus(`Pose global clavada en F${dzRigCur()}`);
+  }
+}
+function dzRigResetPose() {
+  const node = dzRigSelectedNode(); if (!node) return;
+  DZ.doc.setRigKey(node.id, dzRigCur(), { x: 0, y: 0, r: 0, sx: 1, sy: 1 });
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync();
+}
+function dzRigCreateIK() {
+  if (!DZ.doc) return;
+  const id = DZ.doc.createRigIK($("#rigIkRoot").value, $("#rigIkMid").value, $("#rigIkEnd").value);
+  if (!id) return dzSetStatus("IK necesita una cadena consecutiva con tres pivotes: hombro → codo → extremo");
+  DZ.rigConstraintId = id; dzRigSetMode("ik"); dzRigPanelSync(); dzRigOverlayRender();
+  dzSetStatus("Cadena IK creada · arrastrá el rombo verde para posar");
+}
+function dzRigDeleteIK() {
+  if (!DZ.doc || !DZ.rigConstraintId) return;
+  DZ.doc.deleteRigConstraint(DZ.rigConstraintId); DZ.rigConstraintId = null; dzRigPanelSync(); dzRigOverlayRender();
+}
+function dzRigFlipIK() {
+  if (!DZ.doc || !DZ.rigConstraintId) return;
+  const c = DZ.doc.scene.rigConstraint(DZ.rigConstraintId); if (!c) return;
+  DZ.doc.setRigIKBend(c.id, c.bend === -1 ? 1 : -1);
+  const target = DZ.doc.scene.rigTargetAt(c.id, dzRigCur()); if (target) DZ.doc.setRigIKTarget(c.id, dzRigCur(), target);
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync();
+}
+function dzRigIKDrag(e, constraintId) {
+  if (!DZ.doc) return;
+  e.preventDefault(); e.stopPropagation(); const pointerId = e.pointerId;
+  const preview = ev => {
+    if (ev.pointerId !== pointerId) return;
+    const target = dzToUser(ev.clientX, ev.clientY), solved = DZ.doc.scene.rigSolveIK(constraintId, dzRigCur(), target);
+    if (!solved) return;
+    DZ.rigIKPreview = { constraintId, target: solved.target, poses: solved.poses }; dzRigApplyLive(dzRigCur(), solved.poses);
+  };
+  const cancel = () => { DZ.rigIKPreview = null; dzRigApplyLive(dzRigCur()); };
+  const finish = ev => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", preview); document.removeEventListener("pointerup", finish); document.removeEventListener("pointercancel", cancel);
+    const value = DZ.rigIKPreview; DZ.rigIKPreview = null;
+    if (value && DZ.doc.setRigIKTarget(constraintId, dzRigCur(), value.target)) {
+      dzRigApplyLive(dzRigCur()); dzTimelineBadges(); dzRigPanelSync(); dzSetStatus(`Pose IK clavada en F${dzRigCur()}`);
+    }
+  };
+  document.addEventListener("pointermove", preview); document.addEventListener("pointerup", finish); document.addEventListener("pointercancel", cancel);
+}
+function dzRigOverlayRender() {
+  const overlay = $("#dzRigOverlay"), doc = DZ.doc;
+  if (!overlay || !DZ.rigMode || !doc || !Object.keys(doc.scene.rig.nodes).length) {
+    if (overlay) { overlay.hidden = true; overlay.innerHTML = ""; } return;
+  }
+  overlay.hidden = false; overlay.innerHTML = "";
+  const num = dzRigCur(), cv = $("#dzCanvas").getBoundingClientRect();
+  overlay.setAttribute("viewBox", `0 0 ${Math.max(1, cv.width)} ${Math.max(1, cv.height)}`);
+  const point = id => {
+    const node = doc.scene.rigNode(id); if (!node?.pivot) return null;
+    const p = doc.scene.rigWorldPoint(id, num, node.pivot, DZ.rigIKPreview?.poses || {}), s = dzFromUser(p.x, p.y);
+    return s && { x: s.x - cv.left, y: s.y - cv.top };
+  };
+  const ns = "http://www.w3.org/2000/svg", add = (tag, attrs, cls) => {
+    const el = document.createElementNS(ns, tag); if (cls) el.setAttribute("class", cls);
+    Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v)); overlay.appendChild(el); return el;
+  };
+  for (const node of Object.values(doc.scene.rig.nodes)) {
+    if (!node.parentId) continue; const a = point(node.parentId), b = point(node.id); if (!a || !b) continue;
+    add("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y }, "dz-rig-bone" + (DZ.sel?.id === node.id ? " active" : ""));
+  }
+  for (const node of Object.values(doc.scene.rig.nodes)) {
+    const p = point(node.id); if (!p) continue;
+    const joint = add("circle", { cx: p.x, cy: p.y, r: node.pinned ? 7 : 5, "data-id": node.id },
+      "dz-rig-joint" + (node.pinned ? " root" : "") + (DZ.sel?.id === node.id ? " selected" : ""));
+    joint.onpointerdown = e => { e.preventDefault(); e.stopPropagation(); const el = dzRigNodeElement(node); if (el) dzSelect(el); };
+    if (DZ.sel?.id === node.id) { const label = add("text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label"); label.textContent = node.id; }
+  }
+  for (const c of Object.values(doc.scene.rig.constraints || {})) {
+    const raw = DZ.rigIKPreview?.constraintId === c.id ? DZ.rigIKPreview.target : doc.scene.rigTargetAt(c.id, num); if (!raw) continue;
+    const s = dzFromUser(raw.x, raw.y); if (!s) continue; const x = s.x - cv.left, y = s.y - cv.top;
+    const target = add("path", { d: `M${x} ${y - 8}L${x + 8} ${y}L${x} ${y + 8}L${x - 8} ${y}Z`, "data-constraint": c.id },
+      "dz-rig-target" + (DZ.rigConstraintId === c.id ? " active" : ""));
+    target.onpointerdown = e => { DZ.rigConstraintId = c.id; dzRigIKDrag(e, c.id); };
+  }
+}
 function dzRigPanelSync() {
   if ($("#dzRigPanel").hidden) return;
-  const el = DZ.sel, num = dzRigCur();
-  $("#rigId").value = (el && el.id) || "";
-  $("#rigId").placeholder = el ? (el.id ? el.id : "sin nombre — escribí uno y Enter") : "seleccioná una pieza (D)";
-  const k = (el && el.id && dzRigLocalAt(el.id, num)) || { x: 0, y: 0, r: 0, s: 1 };
-  $("#rigX").value = Math.round(k.x); $("#rigY").value = Math.round(k.y);
-  $("#rigR").value = Math.round(k.r * 10) / 10; $("#rigS").value = Math.round((k.s == null ? (k.sx == null ? 1 : k.sx) : k.s) * 100) / 100;
-  const chips = $("#rigChips");
-  chips.innerHTML = "";
-  const trk = (el && el.id && dzRigTracks()[el.id]) || {};
-  const parent = $("#rigParent");
-  if (parent) {
-    const current = el && el.id && DZ.doc && DZ.doc.scene.rigNode(el.id);
-    parent.innerHTML = '<option value="">— raíz —</option>';
-    if (DZ.doc) Object.values(DZ.doc.scene.rig.nodes).filter(n => !current || n.id !== current.id).forEach(n => {
-      const o = document.createElement("option"); o.value = n.id; o.textContent = n.id;
-      o.selected = !!current && current.parentId === n.id; parent.appendChild(o);
-    });
-    parent.disabled = !current;
-  }
+  const el = DZ.sel, num = dzRigCur(), nodes = DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : [], current = dzRigSelectedNode();
+  $("#rigId").value = (el && el.id) || ""; $("#rigCount").textContent = nodes.length; $("#rigFrame").textContent = "F" + num;
+  const k = (el?.id && dzRigLocalAt(el.id, num)) || { x: 0, y: 0, r: 0, sx: 1, sy: 1 };
+  $("#rigX").value = Math.round(k.x); $("#rigY").value = Math.round(k.y); $("#rigR").value = Math.round(k.r * 10) / 10;
+  $("#rigSX").value = Math.round((k.sx == null ? (k.s == null ? 1 : k.s) : k.sx) * 100) / 100;
+  $("#rigSY").value = Math.round((k.sy == null ? (k.s == null ? 1 : k.s) : k.sy) * 100) / 100;
+  $("#rigMin").value = current?.limits?.min ?? -180; $("#rigMax").value = current?.limits?.max ?? 180;
+  $("#rigPin").classList.toggle("on", !!current?.pinned); $("#rigPin").textContent = current?.pinned ? "Raíz fijada" : "Fijar raíz";
+  const parent = $("#rigParent"); parent.innerHTML = '<option value="">— raíz —</option>';
+  nodes.filter(n => !current || n.id !== current.id).forEach(n => { const o = document.createElement("option"); o.value = n.id; o.textContent = n.id; o.selected = !!current && current.parentId === n.id; parent.appendChild(o); });
+  parent.disabled = !current;
+  const tree = $("#rigTree"); tree.innerHTML = "";
+  const drawBranch = (node, depth) => {
+    const row = document.createElement("div"); row.className = "rig2-node" + (!node.parentId ? " root" : "") + (current?.id === node.id ? " on" : "");
+    row.style.paddingLeft = (6 + depth * 14) + "px"; row.innerHTML = `<i></i><span></span><small>${node.pinned ? "fija" : ""}</small>`;
+    row.querySelector("span").textContent = node.id; row.onclick = () => { const target = dzRigNodeElement(node); if (target) dzSelect(target); };
+    tree.appendChild(row); nodes.filter(n => n.parentId === node.id).forEach(child => drawBranch(child, depth + 1));
+  };
+  nodes.filter(n => !n.parentId || !DZ.doc.scene.rigNode(n.parentId)).forEach(n => drawBranch(n, 0));
+  const chips = $("#rigChips"); chips.innerHTML = ""; const trk = (el?.id && dzRigTracks()[el.id]) || {};
   Object.keys(trk).map(Number).sort((a, b) => a - b).forEach(n => {
-    const c = document.createElement("span");
-    c.className = "dz-chip" + (n === num ? " on" : "");
-    c.textContent = " " + n;
-    c.title = "Ir al cuadro " + n + " · Alt+clic: borrar la clave";
-    c.onclick = (e) => {
-      if (e.altKey) { dzRigDelKey(el.id, n); return; }
-      const i = DZ.anim ? DZ.anim.frames.findIndex(f => dzFrameNum(f) === n) : -1;
-      if (i >= 0) dzGoFrame(i);
-    };
+    const c = document.createElement("span"); c.className = "dz-chip" + (n === num ? " on" : ""); c.textContent = " " + n;
+    c.title = "Ir a F" + n + " · Alt+clic: borrar"; c.onclick = e => { if (e.altKey) dzRigDelKey(el.id, n); else if (DZ.doc) DZ.doc.goTo(n); };
     chips.appendChild(c);
   });
+  ["rigIkRoot", "rigIkMid", "rigIkEnd"].forEach(id => {
+    const select = $("#" + id), old = select.value; select.innerHTML = '<option value="">— elegir —</option>';
+    nodes.forEach(n => { const o = document.createElement("option"); o.value = n.id; o.textContent = n.id; select.appendChild(o); });
+    if ([...select.options].some(o => o.value === old)) select.value = old;
+  });
+  if (current) {
+    $("#rigIkEnd").value = current.id; const mid = current.parentId && DZ.doc.scene.rigNode(current.parentId), root = mid?.parentId && DZ.doc.scene.rigNode(mid.parentId);
+    if (mid) $("#rigIkMid").value = mid.id; if (root) $("#rigIkRoot").value = root.id;
+  }
+  const constraints = Object.values(DZ.doc?.scene.rig.constraints || {}), cs = $("#rigConstraint"); cs.innerHTML = '<option value="">— ninguna —</option>';
+  constraints.forEach(c => { const o = document.createElement("option"); o.value = c.id; o.textContent = `${c.rootId} → ${c.effectorId}`; cs.appendChild(o); });
+  if (!DZ.rigConstraintId && constraints[0]) DZ.rigConstraintId = constraints[0].id;
+  if (constraints.some(c => c.id === DZ.rigConstraintId)) cs.value = DZ.rigConstraintId; else DZ.rigConstraintId = null;
+  const active = DZ.rigConstraintId && DZ.doc.scene.rigConstraint(DZ.rigConstraintId), target = active && DZ.doc.scene.rigTargetAt(active.id, num);
+  $("#rigIkStatus").textContent = active ? "activa" : "sin cadena"; $("#rigTarget").textContent = target ? `${Math.round(target.x)}, ${Math.round(target.y)}` : "—";
 }
 function dzRigReadPanel() {
-  return { x: +$("#rigX").value || 0, y: +$("#rigY").value || 0,
-           r: +$("#rigR").value || 0, s: +$("#rigS").value || 1 };
+  return { x: +$("#rigX").value || 0, y: +$("#rigY").value || 0, r: +$("#rigR").value || 0,
+    sx: +$("#rigSX").value || 1, sy: +$("#rigSY").value || 1 };
 }
 function dzRigToggle() {
-  if (!DZ.anim) { sysMsg(" Abrí la animación (🎞) primero — el rig anima entre cuadros."); return; }
-  DZ.rigMode = !DZ.rigMode;
-  $("#dzRigBtn").classList.toggle("active", DZ.rigMode);
-  $("#dzRigPanel").hidden = !DZ.rigMode;
-  if (DZ.rigMode) {
-    dzRigApplyLive(dzRigCur()); dzRigPanelSync();
-    dzSetStatus(" Rig: seleccioná una pieza (flecha blanca D), nombrala, posala (arrastrar/panel) y clavá con K");
-  } else {
-    dzRigStrip($("#dzCanvas").querySelector(":scope > svg"));
-  }
+  if (!DZ.anim) { sysMsg("Abrí una animación antes de armar el esqueleto."); return; }
+  DZ.rigMode = !DZ.rigMode; $("#dzRigBtn").classList.toggle("active", DZ.rigMode); $("#dzRigPanel").hidden = !DZ.rigMode;
+  $("#dzRigOverlay").hidden = !DZ.rigMode;
+  if (DZ.rigMode) { dzRigSetMode(DZ.rigSubmode || "build"); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzSetStatus("Esqueleto cut-out: registrá las piezas y armá la jerarquía desde la raíz"); }
+  else { $("#dzRigOverlay").innerHTML = ""; }
 }
 
 
@@ -6430,14 +6600,8 @@ function dzPerfRec() {
       if (t >= dur) { dzPerfRecEnd(); return; }
       // replay de las pistas ya grabadas (menos la pieza que estás actuando)
       const num = 1 + t * fps;
-      const svg = $("#dzCanvas").querySelector(":scope > svg");
-      const rig = dzRigTracks();
-      for (const id of Object.keys(rig)) {
-        if (id === DZ.perf.rec.active) continue;
-        const el2 = svg && svg.querySelector('[id="' + id.replace(/"/g, '') + '"]');
-        const k = el2 && dzRigAt(id, num);
-        if (k) dzRigApplyTo(el2, k);
-      }
+      const active = DZ.perf.rec.active, live = DZ.perf.rec.livePose;
+      dzRigApplyLive(num, active && live ? { [active]: live } : {});
       dzSetStatus("⏹ " + t.toFixed(1) + " / " + dur + "s — ¡actuá! (arrastrá la pieza · Shift rota)");
       DZ.perf.rec.raf = requestAnimationFrame(loop);
     };
@@ -6469,7 +6633,8 @@ function dzPerfRecEnd(early) {
         x: Math.round(dzLerp(a.x, b.x, u) * 10) / 10,
         y: Math.round(dzLerp(a.y, b.y, u) * 10) / 10,
         r: Math.round(dzLerp(a.r || 0, b.r || 0, u) * 10) / 10,
-        s: a.s == null ? 1 : a.s,
+        sx: dzLerp(a.sx == null ? 1 : a.sx, b.sx == null ? 1 : b.sx, u),
+        sy: dzLerp(a.sy == null ? 1 : a.sy, b.sy == null ? 1 : b.sy, u),
       };
     }
     if (DZ.doc) DZ.doc.replaceRigKeys(id, keys, "Grabar actuación");
@@ -6508,7 +6673,8 @@ function dzPerfSmooth() {
         x: Math.round((p.x + 2 * c.x + nx.x) / 4 * 10) / 10,
         y: Math.round((p.y + 2 * c.y + nx.y) / 4 * 10) / 10,
         r: Math.round(((p.r || 0) + 2 * (c.r || 0) + (nx.r || 0)) / 4 * 10) / 10,
-        s: c.s == null ? 1 : c.s,
+        sx: c.sx == null ? (c.s == null ? 1 : c.s) : c.sx,
+        sy: c.sy == null ? (c.s == null ? 1 : c.s) : c.sy,
       };
     }
     if (DZ.doc) DZ.doc.replaceRigKeys(id, rig[id], "Suavizar actuación");
@@ -7450,9 +7616,10 @@ async function dzPublishAnimationPanelState(perFrame, levels, displayCount) {
   if (!api || !DZ.anim) return;
   if (DZ.doc && DZ.doc.scene) {
     const doc = DZ.doc, scene = doc.scene, last = Math.max(1, scene.lastFrame());
+    const rigNodes = Object.values((scene.rig && scene.rig.nodes) || {});
     const total = Math.max(48, displayCount || 0, last + 24);
     const frames = Array.from({ length: total }, (_, i) => ({ index: i, number: i + 1,
-      exists: i < last, name: "F" + (i + 1), key: false,
+      exists: i < last, name: "F" + (i + 1), key: rigNodes.some(node => node.keys && node.keys[i + 1]),
       camera: !!(scene.camera && scene.camera.keys && scene.camera.keys[i + 1]) }));
     const state = dzAnimationPanelExtras({ frames, levels: scene.layers.map((ly) => ly.name),
       current: Math.max(0, doc.frame - 1), playing: !!(DZ.playback && DZ.playback.playing),
@@ -7507,7 +7674,7 @@ function dzPushAnimationPanelPlayback(index, playing) {
 /* ══ PANELES SEPARADOS (segundo monitor) ═════════════════════════════════
    Python hace de buzón entre la ventana principal y las auxiliares. Para la
    mesa publica el SVG canónico y devuelve trazos al mismo historial/documento. */
-const DZ_PANELS = ["viewer", "timeline", "xsheet", "layers", "tools", "color", "onion", "levelstrip"];
+const DZ_PANELS = ["viewer", "timeline", "xsheet", "layers", "tools", "color", "onion", "levelstrip", "rig"];
 DZ.detached = DZ.detached || new Set();
 
 /** Id estable para una capa: el panel remoto no puede mandar un nodo del DOM. */
@@ -7531,7 +7698,8 @@ function dzPanelSnapshot(kind) {
     return { schema: 2, kind, svg: new XMLSerializer().serializeToString(clone),
       viewBox: svg.getAttribute("viewBox") || `0 0 ${svg.getAttribute("width") || 1020} ${svg.getAttribute("height") || 1080}`,
       tool: DZ.tool || "pencil", color: DZ.drawColor || "#1a1a1a", width: DZ.drawW || 6,
-      frame: DZ.doc ? DZ.doc.frame : 1 };
+      frame: DZ.doc ? DZ.doc.frame : 1,
+      rig: DZ.doc ? dzPanelSnapshot("rig") : null };
   }
   if (kind === "levelstrip") {
     const lv = DZ.doc && DZ.doc.level;
@@ -7579,6 +7747,24 @@ function dzPanelSnapshot(kind) {
              stroke: dzHex(at("stroke", "#000000")),
              width: at("stroke-width", "1") };
   }
+  if (kind === "rig") {
+    const doc = DZ.doc, frame = doc ? doc.frame : 1;
+    const nodes = doc ? Object.values(doc.scene.rig.nodes).map(node => ({
+      id: node.id, elementId: node.elementId, parentId: node.parentId,
+      pivot: node.pivot, pinned: !!node.pinned, limits: node.limits,
+      pose: doc.scene.rigPose(node.id, frame), keyed: !!node.keys?.[frame],
+      worldPivot: node.pivot ? doc.scene.rigWorldPoint(node.id, frame, node.pivot) : null,
+      selected: DZ.sel?.id === node.id,
+    })) : [];
+    const constraints = doc ? Object.values(doc.scene.rig.constraints || {}).map(c => ({
+      id: c.id, rootId: c.rootId, midId: c.midId, effectorId: c.effectorId,
+      bend: c.bend, target: doc.scene.rigTargetAt(c.id, frame),
+      active: c.id === DZ.rigConstraintId,
+    })) : [];
+    return { schema: 2, kind, frame, mode: DZ.rigSubmode || "build", visible: !!DZ.rigMode,
+      selected: DZ.sel?.id || null, activeConstraint: DZ.rigConstraintId || null,
+      nodes, constraints };
+  }
   return DZ.animationPanelState || null;   // timeline / xsheet
 }
 
@@ -7593,6 +7779,7 @@ function dzPanelSnapshotValid(kind, state) {
   if (kind === "tools") return Array.isArray(state.tools);
   if (kind === "color") return typeof state.hasSelection === "boolean";
   if (kind === "onion") return !!state.cfg;
+  if (kind === "rig") return Array.isArray(state.nodes) && Array.isArray(state.constraints);
   return true;
 }
 
@@ -7626,6 +7813,11 @@ setInterval(() => { dzPanelsPublish(); }, 900);
 async function dzDetachPanel(kind) {
   if (!api || !DZ_PANELS.includes(kind)) return;
   if (kind === "timeline" || kind === "xsheet") return dzDetachAnimationPanel(kind);
+  if (kind === "rig" && !DZ.rigMode) {
+    if (!DZ.anim) await dzAnimToggle();
+    if (!DZ.anim) { dzSetStatus("Abrí una animación para separar el esqueleto"); return; }
+    dzRigToggle();
+  }
   // Cargar el buzón ANTES de crear la ventana evita el primer render vacío y
   // obliga a que todo panel nuevo cumpla el mismo contrato de estado.
   const initial = dzPanelSnapshot(kind);
@@ -7661,6 +7853,7 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
     const meta = LOW.workspace.PANEL_CATALOG[kind], panel = meta && document.querySelector(meta.element);
     if (panel) { panel.hidden = false; DZ.panelDock?.dock(panel, "right"); }
     LOW.workspace.panels?.dock(kind, "right");
+    if (kind === "rig") { DZ.rigMode = true; $("#dzRigBtn")?.classList.add("active"); dzRigPanelSync(); dzRigOverlayRender(); }
     return true;
   }
 
@@ -7685,6 +7878,16 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
       path.setAttribute("data-low", "viewer-stroke"); svg.appendChild(path);
       dzMarkDirty(); dzBuildLayers(); if (DZ.doc) dzDocCommit();
       return true;
+    }
+    if (action === "rig-select" && DZ.doc) {
+      const node = DZ.doc.scene.rigNode(payload.id), el = dzRigNodeElement(node);
+      if (el) dzSelect(el); return !!el;
+    }
+    if (action === "rig-target" && DZ.doc) {
+      const target = { x: +payload.x || 0, y: +payload.y || 0 };
+      if (!DZ.doc.setRigIKTarget(payload.id, DZ.doc.frame, target)) return false;
+      DZ.rigConstraintId = payload.id; dzRigApplyLive(DZ.doc.frame);
+      dzTimelineBadges(); dzRigPanelSync(); return true;
     }
   }
 
@@ -7751,6 +7954,32 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
     if (action === "fill" || action === "stroke") dzStyleApply(action, payload.value);
     else if (action === "width") dzStyleApply("stroke-width", payload.value);
     return true;
+  }
+  if (kind === "rig" && DZ.doc) {
+    const node = payload.id && DZ.doc.scene.rigNode(payload.id);
+    if (action === "select-node" && node) {
+      const el = dzRigNodeElement(node); if (el) dzSelect(el); return !!el;
+    }
+    if (action === "mode") { dzRigSetMode(payload.mode); return true; }
+    if (action === "key-all") { dzRigKeyAll(); return true; }
+    if (action === "key" && node) { dzRigSetKey(node.id, DZ.doc.frame, payload.pose || DZ.doc.scene.rigPose(node.id, DZ.doc.frame)); return true; }
+    if (action === "delete-key" && node) { dzRigDelKey(node.id, DZ.doc.frame); return true; }
+    if (action === "pose" && node) { dzRigSetKey(node.id, DZ.doc.frame, payload.pose || {}); return true; }
+    if (action === "pin" && node) { DZ.doc.setRigPinned(node.id, !node.pinned); dzRigPanelSync(); dzRigOverlayRender(); return true; }
+    if (action === "limits" && node) { DZ.doc.setRigLimits(node.id, payload.min, payload.max); return true; }
+    if (action === "constraint") { DZ.rigConstraintId = payload.id || null; dzRigSetMode("ik"); dzRigPanelSync(); dzRigOverlayRender(); return true; }
+    const constraint = payload.id && DZ.doc.scene.rigConstraint(payload.id);
+    if (action === "flip-ik" && constraint) {
+      DZ.rigConstraintId = constraint.id; dzRigFlipIK(); return true;
+    }
+    if (action === "delete-ik" && constraint) {
+      DZ.rigConstraintId = constraint.id; dzRigDeleteIK(); return true;
+    }
+    if (action === "create-ik") {
+      const id = DZ.doc.createRigIK(payload.rootId, payload.midId, payload.effectorId);
+      if (!id) return false;
+      DZ.rigConstraintId = id; dzRigSetMode("ik"); dzRigPanelSync(); dzRigOverlayRender(); return true;
+    }
   }
   return false;
 };
@@ -10131,6 +10360,10 @@ function dzCanvasInner() {
   if (!svg) return "";
   // se excluye lo que es asistencia visual, no dibujo
   const tmp = svg.cloneNode(true);
+  // La pose vive en Scene.rig. Guardar `data-rigbase` o la matriz de preview
+  // dentro del Drawing hornearía el muñeco y duplicaría la transformación al
+  // volver a abrirlo.
+  dzRigStrip(tmp);
   tmp.querySelectorAll("g.dz-onion, g.dz-penui").forEach((n) => n.remove());
   return tmp.innerHTML;
 }
@@ -10235,13 +10468,21 @@ async function dzDocInit() {
   DZ.doc.setHistory(DZ.history);
   DZ.doc.subscribe((doc, motivo) => {
     if (motivo === "frame") {
+      const selectedId = DZ.sel && DZ.sel.id;
       const drawing = doc.drawing;
       dzCanvasSet(drawing ? drawing.content : "");
       dzOnionRender();
+      const hasRig = Object.keys((doc.scene.rig && doc.scene.rig.nodes) || {}).length > 0;
+      if (hasRig) {
+        dzRigApplyLive(doc.frame);
+        const selected = selectedId && $("#dzCanvas").querySelector(":scope > svg")?.querySelector("#" + CSS.escape(selectedId));
+        if (DZ.rigMode && selected) dzSelect(selected); else if (DZ.rigMode) dzRigPanelSync();
+      }
     } else if (motivo === "onion") dzOnionRender();
     else if (motivo === "document") dzSyncCanvasDocument();
   });
   dzSyncCanvasDocument();
+  if (Object.keys((DZ.doc.scene.rig && DZ.doc.scene.rig.nodes) || {}).length) dzRigApplyLive(DZ.doc.frame);
   return DZ.doc;
 }
 
