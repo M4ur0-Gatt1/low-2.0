@@ -426,6 +426,44 @@
         `${reopened.scene.width}×${reopened.scene.height}`);
     }
 
+    // 18. Paletas y estilos: el color es material canónico y sobrevive a guardar/reabrir.
+    {
+      const sc = new Scene();
+      const lv = sc.addLevel("Personaje");
+      const pal = sc.addPalette("Piel");
+      sc.setLevelPalette(lv.id, pal.id);
+      ok("el nivel queda vinculado a su paleta", sc.levelPalette(lv.id) === pal);
+
+      const piel = pal.addStyle("Piel", "#f5c5a3", 1);
+      const linea = pal.addStyle("Línea", "#1a1a1a", 0.9);
+      ok("crear dos estilos los registra en la paleta", pal.styles.length === 2);
+      ok("el estilo normaliza el color hex a minúsculas", piel.color === "#f5c5a3");
+      ok("un estilo con nombre repetido no se duplica",
+        pal.addStyle("Piel", "#ffffff") === piel && pal.styles.length === 2);
+
+      linea.setColor("#000000").setOpacity(1);
+      ok("cambiar color y opacidad muta el MISMO estilo",
+        linea.color === "#000000" && linea.opacity === 1);
+
+      pal.locked = true;
+      ok("una paleta bloqueada no deja borrar estilos",
+        pal.removeStyle(piel.id) === null && pal.styles.length === 2);
+      pal.locked = false;
+
+      const roundtrip = new Scene(JSON.parse(JSON.stringify(sc.toJSON())));
+      ok("paleta y estilos se conservan al guardar/reabrir",
+        roundtrip.palettes.length === 1 &&
+        roundtrip.palette(sc.palettes[0].id).styles.length === 2);
+      ok("el vínculo nivel→paleta sobrevive",
+        roundtrip.levelPalette(roundtrip.levels[0].id)?.id === pal.id);
+
+      sc.setLevelPalette(lv.id, null);
+      ok("desvincular no borra la paleta",
+        sc.palette(pal.id) !== null && sc.levelPalette(lv.id) === null);
+      sc.setLevelPalette(lv.id, "no-existe");
+      ok("vincular a una paleta inexistente se rechaza", sc.levelPalette(lv.id) === null);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }
