@@ -150,6 +150,68 @@
     }
   }
 
+  /** Un estilo: un color con nombre y opacidad, referenciable desde el dibujo.
+   *  En OpenToonz es un "style" de la paleta: si cambia el estilo, cambian todos
+   *  los elementos que lo referencian. Acá es el registro canónico de ese color. */
+  class Style {
+    constructor(data = {}) {
+      this.id = data.id || uid("st");
+      this.name = data.name || "Estilo";
+      this.color = Style.normalizeColor(data.color);
+      this.opacity = Style.normalizeOpacity(data.opacity);
+      this.meta = clone(data.meta || {});
+    }
+    static normalizeColor(c) {
+      if (c == null || c === "") return "#000000";
+      const s = String(c).trim();
+      if (/^#?[0-9a-fA-F]{3}$/.test(s)) {
+        const h = s.replace("#", "");
+        return ("#" + h[0] + h[0] + h[1] + h[1] + h[2] + h[2]).toLowerCase();
+      }
+      if (/^#?[0-9a-fA-F]{6}$/.test(s)) return ("#" + s.replace("#", "")).toLowerCase();
+      return s; // color con nombre o rgb()/rgba(): se respeta tal cual
+    }
+    static normalizeOpacity(o) {
+      const n = Number(o);
+      if (o == null || !Number.isFinite(n)) return 1;
+      return Math.max(0, Math.min(1, n));
+    }
+    setColor(color) { this.color = Style.normalizeColor(color); return this; }
+    setOpacity(opacity) { this.opacity = Style.normalizeOpacity(opacity); return this; }
+    rename(name) { if (name) this.name = name; return this; }
+    toJSON() { return { id: this.id, name: this.name, color: this.color, opacity: this.opacity, meta: this.meta }; }
+  }
+
+  /** Una paleta: colección de estilos asociada a un Level. Un Level tiene a lo
+   *  sumo una paleta (por `paletteId`); la paleta puede ser compartida. */
+  class Palette {
+    constructor(data = {}) {
+      this.id = data.id || uid("pl");
+      this.name = data.name || "Paleta";
+      this.locked = !!data.locked;
+      this.styles = (data.styles || []).map((s) => new Style(s));
+    }
+    style(id) { return this.styles.find((s) => s.id === id) || null; }
+    styleByName(name) { return this.styles.find((s) => s.name === name) || null; }
+    /** Crea un estilo. Si el nombre ya existe, devuelve el que había: nunca se
+     *  pisan estilos en silencio. */
+    addStyle(name, color, opacity) {
+      const n = name || `Estilo ${this.styles.length + 1}`;
+      const ya = this.styleByName(n);
+      if (ya) return ya;
+      const s = new Style({ name: n, color, opacity });
+      this.styles.push(s);
+      return s;
+    }
+    removeStyle(id) {
+      if (this.locked) return null;
+      const i = this.styles.findIndex((s) => s.id === id);
+      if (i < 0) return null;
+      return this.styles.splice(i, 1)[0];
+    }
+    toJSON() { return { id: this.id, name: this.name, locked: this.locked, styles: this.styles.map((s) => s.toJSON()) }; }
+  }
+
   /** Una columna de la xsheet: qué dibujo se ve en cada frame.
    *  `cells` es disperso — índice = frame - 1; un hueco es una celda vacía. */
   class Layer {
@@ -219,6 +281,7 @@
       this.range = { in: Number(data.range?.in) || 1, out: Number(data.range?.out) || 0 };
       this.levels = (data.levels || []).map((l) => new Level(l));
       this.layers = (data.layers || []).map((l) => new Layer(l));
+      this.palettes = (data.palettes || []).map((p) => new Palette(p));
       this.camera = clone(data.camera || { keys: {} });
       this.audio = clone(data.audio || []);
       this.rig = rigData(data.rig);
@@ -243,6 +306,24 @@
     addLayer(levelId, name) {
       const l = new Layer({ levelId, name: name || `Capa ${this.layers.length + 1}` });
       this.layers.push(l); this.touch(); return l;
+    }
+
+    palette(id) { return this.palettes.find((p) => p.id === id) || null; }
+    addPalette(name) {
+      const p = new Palette({ name: name || `Paleta ${this.palettes.length + 1}` });
+      this.palettes.push(p); this.touch(); return p;
+    }
+    /** La paleta asociada a un nivel (por paletteId), o null. */
+    levelPalette(levelId) {
+      const lv = this.level(levelId);
+      return lv && lv.paletteId ? this.palette(lv.paletteId) : null;
+    }
+    /** Vincula un nivel a una paleta, o lo desvincula con null. */
+    setLevelPalette(levelId, paletteId) {
+      const lv = this.level(levelId);
+      if (!lv) return false;
+      if (paletteId != null && !this.palette(paletteId)) return false;
+      lv.paletteId = paletteId || null; this.touch(); return true;
     }
 
     /** Último frame con contenido en toda la escena. */
@@ -384,6 +465,7 @@
                width: this.width, height: this.height, range: this.range,
                levels: this.levels.map((l) => l.toJSON()),
                layers: this.layers.map((l) => l.toJSON()),
+               palettes: this.palettes.map((p) => p.toJSON()),
                camera: this.camera, audio: this.audio, rig: clone(this.rig), revision: this.revision };
     }
 
@@ -408,6 +490,8 @@
   animation.Level = Level;
   animation.Layer = Layer;
   animation.Drawing = Drawing;
+  animation.Palette = Palette;
+  animation.Style = Style;
   animation.clone = clone;
 
   // La clase History previa se conserva: la usa el resto del módulo.
