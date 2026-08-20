@@ -49,6 +49,9 @@
       this.frame0 = this.doc.frame >= out ? ini : this.doc.frame;
       this.t0 = (global.performance || Date).now();
       this._marcas = [];
+      // el audio arranca desde el MISMO frame: si no, cada vez que pausás y
+      // seguís, la imagen y el sonido quedan corridos
+      if (this.audio) this.audio.playFrom(this.frame0);
       this._emit();
       const paso = () => {
         if (!this.playing) return;
@@ -63,6 +66,11 @@
         if (f > z) {
           if (!this.loop) { this.stop(); this.doc.goTo(z); return; }
           f = a + ((f - a) % total);
+          // al dar la vuelta hay que reanclar el reloj Y el audio, si no el
+          // sonido sigue de largo mientras la imagen volvió al principio
+          this.frame0 = f;
+          this.t0 = ahora;
+          if (this.audio) this.audio.playFrom(f);
         }
         if (f !== this.doc.frame) {
           this.doc.goTo(f);
@@ -88,6 +96,7 @@
     stop() {
       if (!this.playing) return;
       this.playing = false;
+      if (this.audio) this.audio.stop();
       if (this.raf) global.clearTimeout(this.raf);
       this.raf = 0;
       this.medidoFps = 0;

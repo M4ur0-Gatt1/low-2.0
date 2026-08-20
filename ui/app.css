@@ -2379,3 +2379,12 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .tl2-tick, .tl2-cell { width: 16px; flex-basis: 16px; font-size: 10px; color: var(--mut); }
 .tl2-rulername, .ls2-head, .ls2-num, .ls2-empty { font-size: 11px; color: var(--mut); }
 .dz-timeline.xsheet-mode #tlXs { color: var(--txt); border-color: var(--red); background: var(--redsoft); }
+
+/* pista de audio en la timeline */
+.tl2-audio .tl2-name { color: var(--fg2, #8a93a6); }
+.tl2-wave { align-items: center; cursor: grab; }
+.tl2-wave:active { cursor: grabbing; }
+.tl2-peak { width: 13px; flex: 0 0 13px; height: 20px; display: grid; place-items: center; }
+.tl2-peak::before { content: ""; width: 7px; height: var(--h, 0%); min-height: 1px;
+  background: var(--cyan, #33B5E8); border-radius: 1px; opacity: .8; }
+.tl2-peak.actual::before { background: var(--accent, #F0450E); opacity: 1; }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="app.css?v=dev1787232053">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -343,6 +343,8 @@
       <span data-act="escena-guardar">Guardar escena <kbd>Ctrl+Shift+S</kbd></span>
       <span data-act="escena-guardar-como">Guardar escena como…</span>
       <span data-act="escena-abrir">Abrir escena…</span>
+      <hr><span data-act="audio-cargar">Cargar audio… <kbd>wav · mp3</kbd></span>
+      <span data-act="audio-quitar">Quitar el audio</span>
       <hr><span data-act="timeline">Línea de tiempo</span>
       <span data-act="cuadro">Duplicar cuadro al final</span>
       <span data-act="insertar">Insertar cuadro <kbd>Shift: en blanco</kbd></span>
@@ -720,6 +722,7 @@
        COLAPSABLE: ocupaba ~100 px fijos de alto en todo momento, aunque no se
        usara. Con las barras de arriba, la mitad de la pantalla era interfaz y
        no lienzo. Ahora se pliega a una línea y se abre con Ctrl+K o un clic. -->
+  <input type="file" id="dzAudioFile" accept="audio/*" hidden>
   <div class="dz-dock" id="dzDock">
     <button class="dz-dock-toggle" id="dzDockToggle" title="Pedirle un cambio a LOW (Ctrl+K)">
       <span>Pedile un cambio a LOW…</span><b>Ctrl+K</b></button>
@@ -742,16 +745,16 @@
 
 <div class="overlay" id="overlay" hidden><div class="modal" id="modal"></div></div>
 
-<script src="vendor/codemirror.min.js?v=3.29.37"></script>
-<script src="vendor/mode-python.min.js?v=3.29.37"></script>
-<script src="vendor/mode-javascript.min.js?v=3.29.37"></script>
-<script src="vendor/mode-shell.min.js?v=3.29.37"></script>
-<script src="vendor/mode-powershell.min.js?v=3.29.37"></script>
-<script src="vendor/mode-xml.min.js?v=3.29.37"></script>
-<script src="vendor/mode-css.min.js?v=3.29.37"></script>
-<script src="vendor/mode-htmlmixed.min.js?v=3.29.37"></script>
-<script src="vendor/addon-closebrackets.min.js?v=3.29.37"></script>
-<script src="vendor/addon-activeline.min.js?v=3.29.37"></script>
+<script src="vendor/codemirror.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-python.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-javascript.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-shell.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-powershell.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-xml.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-css.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
+<script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
+<script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
 <script src="mock-api.js?v=3.29.37"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
 <script src="core/history.js?v=3.29.37"></script>
@@ -762,6 +765,7 @@
 <script src="animation/xsheet-view.js?v=3.29.37"></script>
 <script src="animation/timeline-view.js?v=3.29.37"></script>
 <script src="animation/level-strip.js?v=3.29.37"></script>
+<script src="animation/audio.js?v=3.29.37"></script>
 <script src="animation/shortcuts.js?v=3.29.37"></script>
 <script src="animation/model-tests.js?v=3.29.37"></script>
 <script src="animation/timeline.js?v=3.29.37"></script>
