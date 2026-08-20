@@ -7520,18 +7520,26 @@ function dzPanelElId(el) {
 function dzPanelSnapshot(kind) {
   if (kind === "viewer") {
     const svg = $("#dzCanvas")?.querySelector(":scope > svg");
-    if (!svg) return { kind, svg: "", viewBox: "0 0 1920 1080" };
+    if (!svg) return { schema: 2, kind, svg: "", viewBox: "0 0 1020 1080" };
     const clone = svg.cloneNode(true);
     clone.querySelectorAll(".dz-onion,.dz-penui,.dz-node-overlay,.dz-vp-guides").forEach(el => el.remove());
-    return { kind, svg: new XMLSerializer().serializeToString(clone),
-      viewBox: svg.getAttribute("viewBox") || `0 0 ${svg.getAttribute("width") || 1920} ${svg.getAttribute("height") || 1080}`,
+    // El zoom/paneo pertenece a la ventana principal. Si viaja con el SVG, la
+    // mesa separada lo vuelve a aplicar y el dibujo queda fuera de pantalla.
+    ["transform", "width", "height", "max-width", "max-height", "aspect-ratio"]
+      .forEach(p => clone.style.removeProperty(p));
+    if (!clone.getAttribute("style")) clone.removeAttribute("style");
+    return { schema: 2, kind, svg: new XMLSerializer().serializeToString(clone),
+      viewBox: svg.getAttribute("viewBox") || `0 0 ${svg.getAttribute("width") || 1020} ${svg.getAttribute("height") || 1080}`,
       tool: DZ.tool || "pencil", color: DZ.drawColor || "#1a1a1a", width: DZ.drawW || 6,
       frame: DZ.doc ? DZ.doc.frame : 1 };
   }
   if (kind === "levelstrip") {
     const lv = DZ.doc && DZ.doc.level;
-    return { kind, level: lv ? lv.name : "", current: DZ.doc ? DZ.doc.cell : null,
+    const selected = DZ.lsView?.selected || new Set();
+    return { schema: 2, kind, level: lv ? lv.name : "", current: DZ.doc ? DZ.doc.cell : null,
+      width: DZ.doc?.scene?.width || 1020, height: DZ.doc?.scene?.height || 1080,
       drawings: lv ? lv.drawings.map(d => ({ number: d.number,
+        content: d.content || "", empty: d.isEmpty(), selected: selected.has(d.number),
         exposed: DZ.doc.scene.layers.some(ly => ly.levelId === lv.id && ly.cells.includes(d.number)) })) : [] };
   }
   if (kind === "layers") {
@@ -7540,7 +7548,7 @@ function dzPanelSnapshot(kind) {
     const svg = $("#dzCanvas") && $("#dzCanvas").querySelector(":scope > svg");
     const kids = svg ? [...svg.children].filter(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase())
       && !(n.classList && (n.classList.contains("dz-onion") || n.classList.contains("dz-penui")))) : [];
-    return { kind, layers: kids.slice().reverse().map(el => ({
+    return { schema: 2, kind, layers: kids.slice().reverse().map(el => ({
       id: dzPanelElId(el),
       name: el.id ? el.id : dzLayerLabel(el),
       hidden: el.getAttribute("display") === "none",
@@ -7552,26 +7560,40 @@ function dzPanelSnapshot(kind) {
   if (kind === "tools") {
     // DZ.tool arranca sin definir: en todo el editor "sin definir" es "select".
     const cur = DZ.tool || "select";
-    return { kind, tools: [...document.querySelectorAll(".dz-toolbtn")].map(b => ({
+    return { schema: 2, kind, tools: [...document.querySelectorAll(".dz-toolbtn")].map(b => ({
       id: b.dataset.tool, label: (b.title || b.dataset.tool || "").split(/[·(:]/)[0].trim(),
       active: b.dataset.tool === cur,
     })).filter(t => t.id) };
   }
   if (kind === "onion") {
     const cfg = dzOnionCfgActual();
-    return { kind, enabled: !!DZ.onionOn, frame: DZ.doc ? DZ.doc.frame : 1, cfg };
+    return { schema: 2, kind, enabled: !!DZ.onionOn, frame: DZ.doc ? DZ.doc.frame : 1, cfg };
   }
   if (kind === "color") {
     // se lee del elemento seleccionado, no de inputs del panel: esos se crean
     // dinámicamente y sus ids cambian según lo que haya elegido.
     const el = DZ.sel || (DZ.multi || [])[0] || null;
     const at = (a, d) => (el && el.getAttribute(a)) || d;
-    return { kind, hasSelection: !!el,
+    return { schema: 2, kind, hasSelection: !!el,
              fill: dzHex(at("fill", "#000000")),
              stroke: dzHex(at("stroke", "#000000")),
              width: at("stroke-width", "1") };
   }
   return DZ.animationPanelState || null;   // timeline / xsheet
+}
+
+/** Contrato común de las ventanas auxiliares. Evita abrir un panel con una
+ *  foto incompleta y volver a introducir variantes "sin preview". */
+function dzPanelSnapshotValid(kind, state) {
+  if (!state || state.kind !== kind) return false;
+  if (kind === "viewer") return typeof state.svg === "string" && typeof state.viewBox === "string";
+  if (kind === "levelstrip") return Array.isArray(state.drawings) && state.drawings.every(d =>
+    Number.isFinite(+d.number) && typeof d.content === "string");
+  if (kind === "layers") return Array.isArray(state.layers);
+  if (kind === "tools") return Array.isArray(state.tools);
+  if (kind === "color") return typeof state.hasSelection === "boolean";
+  if (kind === "onion") return !!state.cfg;
+  return true;
 }
 
 /** Publica el estado de los paneles separados (solo esos: si no hay ninguno
@@ -7587,6 +7609,9 @@ async function dzPanelsPublish() {
     for (const kind of DZ.detached) {
       if (kind === "timeline" || kind === "xsheet") continue;  // ya se publican solos
       const state = dzPanelSnapshot(kind);
+      if (!dzPanelSnapshotValid(kind, state)) {
+        console.warn("Panel separado sin estado válido:", kind); continue;
+      }
       const key = JSON.stringify(state);
       if (DZ["panelLast_" + kind] === key) continue;           // sin cambios: no molestar
       DZ["panelLast_" + kind] = key;
@@ -7601,6 +7626,14 @@ setInterval(() => { dzPanelsPublish(); }, 900);
 async function dzDetachPanel(kind) {
   if (!api || !DZ_PANELS.includes(kind)) return;
   if (kind === "timeline" || kind === "xsheet") return dzDetachAnimationPanel(kind);
+  // Cargar el buzón ANTES de crear la ventana evita el primer render vacío y
+  // obliga a que todo panel nuevo cumpla el mismo contrato de estado.
+  const initial = dzPanelSnapshot(kind);
+  if (!dzPanelSnapshotValid(kind, initial)) {
+    dzSetStatus(" No se pudo separar el panel: estado incompleto"); return;
+  }
+  try { await api.panel_state(kind, initial); }
+  catch (err) { dzSetStatus(" No se pudo preparar el panel separado"); return; }
   const call = api.open_panel ? api.open_panel(kind) : api.open_animation_panel(kind);
   const r = await call;
   // sin confirmación no se marca como separado: si no, la ventana principal
@@ -7656,10 +7689,29 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
   }
 
   if (kind === "tools" && action === "tool") { dzSetTool(payload.id); return true; }
-  if (kind === "levelstrip" && action === "drawing" && DZ.doc) {
-    const frame = DZ.doc.layer.cells.findIndex(n => n === +payload.number) + 1;
-    if (frame > 0) DZ.doc.setFrame(frame);
-    return true;
+  if (kind === "levelstrip" && DZ.doc) {
+    const number = +payload.number, lv = DZ.doc.level;
+    if (!lv || !lv.byNumber(number)) return false;
+    if (action === "expose-drawing") {
+      return DZ.doc.setCell(DZ.doc.frame, number);
+    }
+    if (action === "drawing") {
+      const strip = DZ.lsView;
+      if (strip) {
+        const order = lv.drawings.map(d => d.number);
+        if (payload.ctrlKey) {
+          strip.selected.has(number) ? strip.selected.delete(number) : strip.selected.add(number);
+          strip.anchor = number;
+        } else if (payload.shiftKey && strip.anchor != null) {
+          const a = order.indexOf(strip.anchor), b = order.indexOf(number);
+          strip.selected = new Set(order.slice(Math.min(a, b), Math.max(a, b) + 1));
+        } else { strip.selected = new Set([number]); strip.anchor = number; }
+        strip.render();
+      }
+      const frame = DZ.doc.frameOfDrawing(number);
+      if (frame && !payload.ctrlKey && !payload.shiftKey) DZ.doc.goTo(frame);
+      return true;
+    }
   }
 
   if (kind === "layers") {

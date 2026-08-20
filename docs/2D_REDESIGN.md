@@ -383,7 +383,26 @@ persistencia de resolución).
 
 ---
 
-## 7. Fuentes
+## 7. Paneles desacoplados: contrato de estado (pasada 2026-08-20)
+
+- Cada panel auxiliar recibe una foto inicial **antes** de abrir su ventana y sólo se publica si
+  cumple el contrato de su tipo. Así no aparece vacío durante el primer render ni quedan variantes
+  parciales al añadir otro panel.
+- Dibujos del nivel transmite el contenido SVG de cada `Drawing`, su selección y su estado de
+  exposición. La ventana separada renderiza miniaturas reales; seleccionar conserva la semántica
+  del Level Strip y el doble clic expone el dibujo en la celda actual con el mismo Undo canónico.
+- La mesa separada recibe el SVG canónico, pero no el `transform` CSS de zoom/paneo de la ventana
+  principal. Su tamaño y encuadre se recalculan en su propio monitor sin mover el arte ni alterar
+  la resolución del documento.
+- Capas, Herramientas, Color y Papel cebolla usan el mismo contrato validado. Timeline y XSheet
+  continúan compartiendo el estado canónico de animación y lo publican antes de crear la ventana.
+
+Prueba en navegador: miniaturas SVG reales, selección, mesa sin transformación heredada y contrato
+válido para los seis paneles auxiliares generales. Pruebas del modelo: **72/72**.
+
+---
+
+## 8. Fuentes
 
 - [Interface Overview — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/interface_overview.html)
 - [Working in Xsheet/Timeline — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/working_in_xsheet.html)
