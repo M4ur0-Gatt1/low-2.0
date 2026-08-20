@@ -2276,3 +2276,43 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 @media (prefers-reduced-motion: reduce) {
   .xs2 button, .tl2 button, .ls2 button, .onion2 button { transition: none; }
 }
+
+/* Workspace 2D estable: los paneles de animación ocupan una columna real y
+   nunca tapan el dibujo ni se desprenden por un arrastre accidental. */
+.dz-animation-dock {
+  width: 252px; flex: 0 0 252px; min-width: 0; overflow: hidden auto;
+  display: flex; flex-direction: column; background: var(--panel);
+  border-left: 1px solid var(--line2);
+}
+.dz-animation-dock[hidden] { display: none; }
+.dz-animation-dock .dz-onionpanel {
+  position: static; width: 100%; height: auto; min-height: 0; z-index: auto;
+  border: 0; border-bottom: 1px solid var(--line2); border-radius: 0;
+  box-shadow: none; overflow: visible; flex: 0 0 auto;
+}
+.dz-animation-dock .ls2panel { height: 270px; }
+.dz-animation-dock .dz-op-head { cursor: default; min-height: 34px; padding: 7px 10px; }
+.dz-animation-dock .dz-op-x { display: none; }
+
+/* Escala mínima de lectura. El azul queda reservado para guías y marcas del
+   lienzo; títulos, etiquetas y estados normales usan la escala neutra. */
+#designView { font-size: 13px; }
+#designView .dz-hint { font-size: 12px; color: var(--mut); }
+#designView .dz-field > label, #designView .dz-layers-h { font-size: 12px; color: var(--mut); }
+#designView .dz-toolopts { min-height: 30px; font-size: 12px; }
+#designView .ibtn .ico { width: 17px; height: 17px; stroke-width: 1.8; }
+.onion2 { font-size: 12px; padding-bottom: 10px; }
+.onion2 .dz-op-head { font-size: 11px; letter-spacing: .45px; }
+.onion2-side, .onion2-row, .onion2-fixed { gap: 8px; padding: 6px 10px; }
+.onion2-lbl { min-width: 62px; font-size: 12px; color: var(--txt); }
+.onion2-mode, .onion2-fixed button { font-size: 11px; min-height: 26px; color: var(--mut); }
+.onion2-val, .onion2-chips b { font-size: 11px; color: var(--mut); }
+.onion2-hint { font-size: 11px; line-height: 1.45; color: var(--mut); opacity: 1; padding: 7px 10px 2px; }
+.xs2 { font-size: 12px; }
+.xs2-col-head, .xs2-fnum, .xs2-op, .xs2-num, .xs2-tpinfo { font-size: 11px; color: var(--mut); }
+.xs2-row { height: 22px; }
+.tl2 { font-size: 12px; }
+.tl2-name, .tl2-tick, .tl2-cell { height: 24px; }
+.tl2-tick, .tl2-cell { width: 16px; flex-basis: 16px; font-size: 10px; color: var(--mut); }
+.tl2-rulername, .ls2-head, .ls2-num, .ls2-empty { font-size: 11px; color: var(--mut); }
+.dz-timeline.xsheet-mode #tlXs { color: var(--txt); border-color: var(--red); background: var(--redsoft); }
