@@ -96,6 +96,12 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
     solidos: number; trazos: number; rellenos: number; guias: number;
     triangulos: number; exportables: number; seleccion: number;
     aristasAbiertas: number; cerrada: boolean;
+    /** El panel NO se cierra al exportar: se queda esperando la respuesta del
+     *  host y termina mostrando la RUTA del archivo. Antes se cerraba al
+     *  instante y, si algo fallaba de ahi para abajo, el boton parecia no
+     *  hacer nada: ni archivo, ni error, ni idea de donde habia quedado. */
+    fase: 'informe' | 'guardando' | 'listo' | 'falla';
+    msg: string;
   }>(null);
 
   /** Abre el panel con el informe previo: un STL solo lleva triángulos, así que
@@ -105,32 +111,55 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
     const e = eng();
     if (!e) return;
     const rep = e.stlReport(false);
-    setStlPanel({ ...rep, seleccion: e.selectedCount() });
+    setStlPanel({ ...rep, seleccion: e.selectedCount(), fase: 'informe', msg: '' });
   };
 
   /** Escribe el STL. `soloSel` lo elige el usuario en el panel. */
   const hacerSTL = (soloSel: boolean) => {
-    const e = eng();
-    setStlPanel(null);
-    if (!e) return;
-    const r = e.exportSTL({ binary: true, scale: 10, onlySelection: soloSel });
-    if (!r) return;
-    const name = (projectId || 'modelo') + '.stl';
-    const bytes = r.data instanceof DataView
-      ? new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength)
-      : new TextEncoder().encode(String(r.data));
-    // Dentro de LOW el estudio corre en un iframe de pywebview, donde la
-    // descarga del navegador no hace nada: se le pasa al host en base64.
-    if (window.parent !== window) {
-      let bin = '';
-      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      window.parent.postMessage({ type: 'low:save-binary', name, base64: btoa(bin) }, '*');
-      return;
+    const fase = (f: 'guardando' | 'listo' | 'falla', msg: string) =>
+      setStlPanel((p) => (p ? { ...p, fase: f, msg } : p));
+    // TODO el cuerpo va en try/catch: este codigo corre dentro de un iframe que
+    // no tiene el puente de la app, asi que una excepcion aca no aparece en
+    // low.log ni en ningun lado. Sin esto, un error se ve igual que un boton
+    // muerto.
+    try {
+      const e = eng();
+      if (!e) { fase('falla', 'El motor 3D todavia no esta listo.'); return; }
+      const r = e.exportSTL({ binary: true, scale: 10, onlySelection: soloSel });
+      if (!r) { fase('falla', 'No habia nada exportable en la escena.'); return; }
+      const name = (projectId || 'modelo') + '.stl';
+      const bytes = r.data instanceof DataView
+        ? new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength)
+        : new TextEncoder().encode(String(r.data));
+      const kb = Math.max(1, Math.round(bytes.length / 1024));
+      // Dentro de LOW el estudio corre en un iframe de pywebview, donde la
+      // descarga del navegador no hace nada: se le pasa al host en base64 y el
+      // host contesta con low:saved-binary diciendo DONDE quedo.
+      if (window.parent !== window) {
+        let bin = '';
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        fase('guardando', `Generado: ${r.report.triangulos.toLocaleString('es-AR')} triangulos, ${kb} KB. Elegi donde guardarlo.`);
+        window.parent.postMessage(
+          { type: 'low:save-binary', name, base64: btoa(bin) }, '*');
+        return;
+      }
+      // Copia a un ArrayBuffer propio: TS 5.7 distingue ArrayBuffer de
+      // SharedArrayBuffer y no acepta el Uint8Array genérico como BlobPart.
+      const blobBytes = new Uint8Array(bytes.byteLength);
+      blobBytes.set(bytes);
+      const url = URL.createObjectURL(new Blob([blobBytes.buffer], { type: 'model/stl' }));
+      const link = document.createElement('a');
+      link.href = url; link.download = name; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      fase('listo', `Descargado ${name} (${kb} KB).`);
+    } catch (err) {
+      const detalle = err instanceof Error ? err.message : String(err);
+      fase('falla', 'No pude generar el STL: ' + detalle);
+      // que quede en low.log: el host si tiene puente con Python
+      try {
+        window.parent.postMessage({ type: 'low:log', text: 'STL: ' + detalle }, '*');
+      } catch { /* estamos en un navegador suelto */ }
     }
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'model/stl' }));
-    const link = document.createElement('a');
-    link.href = url; link.download = name; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const saveProject = (asNew = false) => {
@@ -171,8 +200,23 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   // respuestas del host: ruta con la que quedó el proyecto
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
-      const m = ev.data as { type?: string; path?: string; json?: string } | null;
+      const m = ev.data as {
+        type?: string; path?: string; json?: string;
+        bytes?: number; error?: string; cancelado?: boolean } | null;
       if (!m || typeof m !== 'object') return;
+      if (m.type === 'low:saved-binary') {
+        // el host ya escribio (o no): el panel muestra la RUTA real
+        setStlPanel((pnl) => {
+          if (!pnl) return pnl;
+          if (m.cancelado) return { ...pnl, fase: 'informe', msg: '' };
+          if (m.error) return { ...pnl, fase: 'falla', msg: 'No se pudo guardar: ' + m.error };
+          const kb = Math.max(1, Math.round((m.bytes || 0) / 1024));
+          return { ...pnl, fase: 'listo',
+                   msg: `Guardado (${kb} KB) en:
+${m.path || '(ruta desconocida)'}` };
+        });
+        return;
+      }
       if (m.type === 'low:saved') {
         if (m.path) projectPathRef.current = m.path;
         setSavedTick((n) => n + 1);
@@ -313,7 +357,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
         <div style={{
           position: 'absolute', inset: 0, zIndex: 90, display: 'grid', placeItems: 'center',
           background: 'rgba(0,0,0,.45)', pointerEvents: 'auto',
-        }} onClick={() => setStlPanel(null)}>
+        }} onClick={() => setStlPanel((p) => (p && p.fase === 'guardando' ? p : null))}>
           <div onClick={(ev) => ev.stopPropagation()} style={{
             width: 372, padding: 16, borderRadius: 10,
             background: dark ? '#1b1d23' : '#f4f6fa',
@@ -326,7 +370,26 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
                           textTransform: 'uppercase', opacity: .7, marginBottom: 10 }}>
               Exportar STL
             </div>
-            {stlPanel.exportables === 0 ? (
+            {stlPanel.fase !== 'informe' ? (
+              <div>
+                <div style={{ padding: '9px 10px', borderRadius: 6, whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  background: stlPanel.fase === 'falla' ? 'rgba(240,69,14,.14)'
+                    : stlPanel.fase === 'listo' ? 'rgba(30,132,73,.16)'
+                    : (dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)'),
+                  border: `1px solid ${stlPanel.fase === 'falla' ? 'rgba(240,69,14,.45)'
+                    : stlPanel.fase === 'listo' ? 'rgba(30,132,73,.5)'
+                    : (dark ? '#2a2d35' : '#d3d8e2')}` }}>
+                  {stlPanel.msg}
+                </div>
+                {stlPanel.fase === 'guardando' && (
+                  <div style={{ opacity: .7, marginTop: 8 }}>
+                    Se abrio el dialogo de la app para elegir la carpeta. Si no lo ves,
+                    puede estar detras de esta ventana.
+                  </div>
+                )}
+              </div>
+            ) : stlPanel.exportables === 0 ? (
               <div>
                 No hay nada sólido para exportar.
                 <div style={{ opacity: .7, marginTop: 8 }}>
@@ -372,23 +435,34 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button onClick={() => setStlPanel(null)} style={{
-                height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
-                border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
-                background: 'transparent', color: 'inherit', fontSize: 12,
-              }}>{stlPanel.exportables === 0 ? 'Cerrar' : 'Cancelar'}</button>
-              {stlPanel.exportables > 0 && stlPanel.seleccion > 0 && (
+              {stlPanel.fase === 'guardando' ? (
+                <span style={{ opacity: .6, alignSelf: 'center' }}>Esperando el dialogo…</span>
+              ) : (
+                <button onClick={() => setStlPanel(null)} style={{
+                  height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
+                  border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+                  background: 'transparent', color: 'inherit', fontSize: 12,
+                }}>{stlPanel.fase === 'informe' && stlPanel.exportables > 0 ? 'Cancelar' : 'Cerrar'}</button>
+              )}
+              {stlPanel.fase === 'informe' && stlPanel.exportables > 0 && stlPanel.seleccion > 0 && (
                 <button onClick={() => hacerSTL(true)} style={{
                   height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
                   border: `1px solid ${LOW_ACCENT}`, background: 'transparent',
                   color: LOW_ACCENT, fontSize: 12,
                 }}>Solo la selección ({stlPanel.seleccion})</button>
               )}
-              {stlPanel.exportables > 0 && (
+              {stlPanel.fase === 'informe' && stlPanel.exportables > 0 && (
                 <button onClick={() => hacerSTL(false)} style={{
                   height: 30, padding: '0 14px', borderRadius: 7, cursor: 'pointer',
                   border: 'none', background: LOW_ACCENT, color: '#fff', fontSize: 12, fontWeight: 600,
                 }}>Exportar</button>
+              )}
+              {stlPanel.fase === 'falla' && (
+                <button onClick={() => setStlPanel((pn) => (pn ? { ...pn, fase: 'informe', msg: '' } : pn))} style={{
+                  height: 30, padding: '0 14px', borderRadius: 7, cursor: 'pointer',
+                  border: `1px solid ${LOW_ACCENT}`, background: 'transparent',
+                  color: LOW_ACCENT, fontSize: 12,
+                }}>Volver a intentar</button>
               )}
             </div>
           </div>
