@@ -463,32 +463,80 @@
     }
 
     // ── rig canónico ────────────────────────────────────────────────────
+    _ensureRigBoneRecord(rig, data) {
+      const id = data.id;
+      if (!rig.bones[id]) rig.bones[id] = { id, type: "bone", name: data.name || id,
+        parentId: data.parentId || null,
+        pivot: data.pivot ? { x: +data.pivot.x || 0, y: +data.pivot.y || 0 } : null,
+        rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
+        pinned: !!data.pinned, inherit: { translation: true, rotation: true, scale: true },
+        limits: data.limits || { min: -180, max: 180 } };
+      const bone = rig.bones[id];
+      if (data.name) bone.name = data.name;
+      if (data.inherit) bone.inherit = { ...bone.inherit, ...data.inherit };
+      rig.nodes = rig.bones;
+      return bone;
+    }
+
+    _ensureRigArtLink(rig, data) {
+      const id = data.id, elementId = data.elementId || id;
+      const bone = this._ensureRigBoneRecord(rig, data);
+      bone.elementId = elementId;
+      bone.binding = { mode: data.binding?.mode || bone.binding?.mode || "rigid", elementId };
+      const slotId = data.slotId || `slot:${id}`, attachmentId = data.attachmentId || `attachment:${id}`,
+        bindingId = data.bindingId || `binding:${id}`;
+      rig.slots[slotId] ||= { id: slotId, name: data.name || id, boneId: id,
+        drawOrder: Object.keys(rig.slots).length, activeAttachmentId: attachmentId, visible: true };
+      rig.attachments[attachmentId] ||= { id: attachmentId, slotId, type: "drawing", elementId,
+        name: data.name || id, levelId: data.levelId || null, drawingNumber: data.drawingNumber ?? null };
+      rig.bindings[bindingId] ||= { id: bindingId, mode: bone.binding.mode, boneId: id,
+        slotId, attachmentId, elementId };
+      rig.nodes = rig.bones;
+      return bone;
+    }
+
+    _syncRigPoseChannels(rig, id, keys) {
+      for (const property of ["x", "y", "r", "sx", "sy"]) {
+        const path = animation.rigChannelPath(id, property), values = {};
+        for (const [frame, pose] of Object.entries(keys || {})) {
+          const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
+          const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
+          values[frame] = property === "sx" ? sx : property === "sy" ? sy : (+pose[property] || 0);
+        }
+        if (Object.keys(values).length) rig.channels[path] = animation.rigChannelData(path,
+          { ...(rig.channels[path] || {}), keys: values });
+        else delete rig.channels[path];
+      }
+    }
+
     _rigChange(label, mutate) {
-      const before = animation.clone(this.scene.rig);
+      const before = animation.rigToJSON(this.scene.rig);
       const result = mutate(this.scene.rig);
-      const after = animation.clone(this.scene.rig);
+      this.scene.rig.nodes = this.scene.rig.bones;
+      this.scene.rig.diagnostics = animation.rigDiagnostics(this.scene.rig);
+      const after = animation.rigToJSON(this.scene.rig);
       if (JSON.stringify(before) === JSON.stringify(after)) return result;
       this.touch(); this.emit("rig"); this.emit("frame");
       if (this.history) {
         const doc = this;
         this.history.push({ label, domain: "rig", before, after,
           apply: (_dir, value) => {
-            doc.scene.rig = animation.clone(value);
+            doc.scene.rig = animation.rigData(value);
             doc.touch(); doc.emit("rig"); doc.emit("frame");
           } });
       }
       return result;
     }
 
+    ensureRigBone(id, data = {}) {
+      if (!id) return null;
+      return this._rigChange("Crear hueso", (rig) => this._ensureRigBoneRecord(rig, { ...data, id }));
+    }
+
     ensureRigNode(id, data = {}) {
       if (!id) return null;
       return this._rigChange("Crear nodo de rig", (rig) => {
-        if (!rig.nodes[id]) rig.nodes[id] = { id, type: data.type || "drawing",
-          elementId: data.elementId || id, parentId: data.parentId || null,
-          binding: { mode: data.binding?.mode || "rigid", elementId: data.elementId || id },
-          pivot: data.pivot || null, rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 },
-          keys: {}, pinned: !!data.pinned, limits: data.limits || { min: -180, max: 180 } };
-        return rig.nodes[id];
+        return this._ensureRigArtLink(rig, { ...data, id });
       });
     }
 
@@ -500,21 +548,9 @@
       return this._rigChange(label, (rig) => {
         const created = new Set();
         for (const data of entries) {
-          if (!rig.nodes[data.id]) {
-            rig.nodes[data.id] = { id: data.id, type: data.type || "drawing",
-              elementId: data.elementId || data.id, parentId: null,
-              binding: { mode: data.binding?.mode || "rigid", elementId: data.elementId || data.id },
-              pivot: data.pivot ? { x: +data.pivot.x || 0, y: +data.pivot.y || 0 } : null,
-              rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
-              pinned: !!data.pinned, limits: data.limits || { min: -180, max: 180 } };
-            created.add(data.id);
-          } else {
-            const node = rig.nodes[data.id];
-            node.elementId = data.elementId || node.elementId || data.id;
-            node.binding = { mode: data.binding?.mode || node.binding?.mode || "rigid",
-              elementId: node.elementId };
-            if (!node.pivot && data.pivot) node.pivot = { x: +data.pivot.x || 0, y: +data.pivot.y || 0 };
-          }
+          if (!rig.bones[data.id]) created.add(data.id);
+          const node = this._ensureRigArtLink(rig, data);
+          if (!node.pivot && data.pivot) node.pivot = { x: +data.pivot.x || 0, y: +data.pivot.y || 0 };
         }
         for (const data of entries) {
           const node = rig.nodes[data.id];
@@ -530,14 +566,12 @@
     setRigKey(id, frame, pose) {
       if (!id) return false;
       return this._rigChange("Crear clave de rig", (rig) => {
-        const node = rig.nodes[id] || (rig.nodes[id] = { id, type: "drawing", elementId: id,
-          binding: { mode: "rigid", elementId: id },
-          parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
-          pinned: false, limits: { min: -180, max: 180 } });
+        const node = rig.nodes[id] || this._ensureRigArtLink(rig, { id });
         const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
         const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
         node.keys[Math.max(1, Math.round(frame))] = { x: +pose.x || 0, y: +pose.y || 0,
           r: +pose.r || 0, sx, sy };
+        this._syncRigPoseChannels(rig, id, node.keys);
         return true;
       });
     }
@@ -545,18 +579,16 @@
     replaceRigKeys(id, keys, label = "Editar claves de rig") {
       if (!id) return false;
       return this._rigChange(label, (rig) => {
-        const node = rig.nodes[id] || (rig.nodes[id] = { id, type: "drawing", elementId: id,
-          binding: { mode: "rigid", elementId: id },
-          parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
-          pinned: false, limits: { min: -180, max: 180 } });
-        node.keys = animation.clone(keys || {}); return true;
+        const node = rig.nodes[id] || this._ensureRigArtLink(rig, { id });
+        node.keys = animation.clone(keys || {});
+        this._syncRigPoseChannels(rig, id, node.keys); return true;
       });
     }
 
     deleteRigKey(id, frame) {
       return this._rigChange("Borrar clave de rig", (rig) => {
         const node = rig.nodes[id]; if (!node || !node.keys[frame]) return false;
-        delete node.keys[frame]; return true;
+        delete node.keys[frame]; this._syncRigPoseChannels(rig, id, node.keys); return true;
       });
     }
 
@@ -582,8 +614,21 @@
         if (!rig.nodes[id]) return false;
         delete rig.nodes[id];
         Object.values(rig.nodes).forEach((node) => { if (node.parentId === id) node.parentId = null; });
+        for (const [slotId, slot] of Object.entries(rig.slots || {})) if (slot.boneId === id) {
+          for (const [attachmentId, attachment] of Object.entries(rig.attachments || {}))
+            if (attachment.slotId === slotId) delete rig.attachments[attachmentId];
+          delete rig.slots[slotId];
+        }
+        for (const [bindingId, binding] of Object.entries(rig.bindings || {}))
+          if (binding.boneId === id || !rig.slots[binding.slotId] || !rig.attachments[binding.attachmentId])
+            delete rig.bindings[bindingId];
+        for (const path of Object.keys(rig.channels || {}))
+          if (path.startsWith(`bones/${encodeURIComponent(id)}/`)) delete rig.channels[path];
         for (const [constraintId, c] of Object.entries(rig.constraints || {}))
-          if ([c.rootId, c.midId, c.effectorId].includes(id)) delete rig.constraints[constraintId];
+          if ([c.rootId, c.midId, c.effectorId, c.targetBoneId, ...(c.reads || []), ...(c.writes || [])].includes(id)) {
+            delete rig.constraints[constraintId];
+            rig.constraintOrder = rig.constraintOrder.filter((entry) => entry !== constraintId);
+          }
         return true;
       });
     }
@@ -604,6 +649,106 @@
       });
     }
 
+    ensureRigSlot(boneId, data = {}) {
+      if (!boneId || !this.scene.rigNode(boneId)) return false;
+      return this._rigChange("Crear slot del rig", (rig) => {
+        const id = data.id || `slot:${boneId}`;
+        rig.slots[id] ||= { id, name: data.name || id, boneId,
+          drawOrder: Number.isFinite(+data.drawOrder) ? +data.drawOrder : Object.keys(rig.slots).length,
+          activeAttachmentId: null, visible: data.visible !== false };
+        return id;
+      });
+    }
+
+    addRigAttachment(slotId, data = {}) {
+      if (!this.scene.rigSlot(slotId)) return false;
+      return this._rigChange("Agregar sustitución del rig", (rig) => {
+        const id = data.id || `attachment:${slotId}:${Object.keys(rig.attachments).length + 1}`;
+        if (rig.attachments[id]) return id;
+        rig.attachments[id] = { id, slotId, type: data.type || "drawing",
+          name: data.name || id, elementId: data.elementId || null,
+          levelId: data.levelId || null, drawingNumber: data.drawingNumber ?? null,
+          meta: animation.clone(data.meta || {}) };
+        if (!rig.slots[slotId].activeAttachmentId) rig.slots[slotId].activeAttachmentId = id;
+        return id;
+      });
+    }
+
+    setRigBinding(data = {}) {
+      return this._rigChange("Vincular arte al rig", (rig) => {
+        const bone = rig.bones[data.boneId], slot = rig.slots[data.slotId],
+          attachment = rig.attachments[data.attachmentId];
+        if (!bone || !slot || !attachment || slot.boneId !== bone.id || attachment.slotId !== slot.id) return false;
+        const allowed = new Set(["rigid", "weightedMesh", "curve", "envelope", "warp"]);
+        const mode = allowed.has(data.mode) ? data.mode : "rigid";
+        const id = data.id || `binding:${attachment.id}`;
+        rig.bindings[id] = { ...animation.clone(data), id, mode, boneId: bone.id,
+          slotId: slot.id, attachmentId: attachment.id, elementId: attachment.elementId || null };
+        return id;
+      });
+    }
+
+    setRigActiveAttachment(slotId, attachmentId) {
+      return this._rigChange("Cambiar sustitución del rig", (rig) => {
+        const slot = rig.slots[slotId], attachment = rig.attachments[attachmentId];
+        if (!slot || !attachment || attachment.slotId !== slotId) return false;
+        slot.activeAttachmentId = attachmentId; return true;
+      });
+    }
+
+    setRigSlotOrder(slotIds) {
+      return this._rigChange("Cambiar orden visual del rig", (rig) => {
+        const requested = [...new Set(slotIds || [])];
+        if (requested.length !== Object.keys(rig.slots).length || requested.some((id) => !rig.slots[id])) return false;
+        requested.forEach((id, index) => { rig.slots[id].drawOrder = index; });
+        return true;
+      });
+    }
+
+    setRigChannelKey(path, frame, value, data = {}) {
+      if (!path) return false;
+      return this._rigChange(data.label || "Crear clave de propiedad", (rig) => {
+        const f = Math.max(1, Math.round(frame));
+        const match = /^bones\/([^/]+)\/pose\/(x|y|r|sx|sy)$/.exec(path);
+        const node = match ? rig.bones[decodeURIComponent(match[1])] : null;
+        if (match && !node) return false;
+        rig.channels[path] ||= animation.rigChannelData(path, data);
+        rig.channels[path].keys[f] = animation.clone(value);
+        if (match) {
+          const id = decodeURIComponent(match[1]), property = match[2];
+          node.keys[f] ||= animation.clone(this.scene.rigPose(id, f));
+          node.keys[f][property] = +value || 0;
+        }
+        return true;
+      });
+    }
+
+    upsertRigConstraint(data = {}) {
+      if (!data.id) return false;
+      return this._rigChange(data.label || "Editar constraint del rig", (rig) => {
+        const previous = rig.constraints[data.id], previousOrder = [...rig.constraintOrder];
+        rig.constraints[data.id] = animation.rigConstraintData(data.id, data,
+          previous ? previous.order : rig.constraintOrder.length);
+        if (!rig.constraintOrder.includes(data.id)) rig.constraintOrder.push(data.id);
+        rig.constraintOrder.sort((a, b) => rig.constraints[a].order - rig.constraints[b].order || a.localeCompare(b));
+        if (animation.rigConstraintHasCycle(rig)) {
+          if (previous) rig.constraints[data.id] = previous; else delete rig.constraints[data.id];
+          rig.constraintOrder = previousOrder; return false;
+        }
+        return data.id;
+      });
+    }
+
+    setRigConstraintOrder(ids) {
+      return this._rigChange("Ordenar constraints del rig", (rig) => {
+        const order = [...new Set(ids || [])];
+        if (order.length !== Object.keys(rig.constraints).length || order.some((id) => !rig.constraints[id])) return false;
+        rig.constraintOrder = order;
+        order.forEach((id, index) => { rig.constraints[id].order = index; });
+        return true;
+      });
+    }
+
     setRigPoseKeys(poses, frame, label = "Clavar pose del rig") {
       const f = Math.max(1, Math.round(frame));
       return this._rigChange(label, (rig) => {
@@ -613,6 +758,7 @@
           const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
           const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
           node.keys[f] = { x: +pose.x || 0, y: +pose.y || 0, r: +pose.r || 0, sx, sy };
+          this._syncRigPoseChannels(rig, id, node.keys);
           changed = true;
         }
         return changed;
@@ -624,7 +770,9 @@
       return this._rigChange(label, (rig) => {
         let changed = false;
         for (const [id, node] of Object.entries(rig.nodes)) {
-          if (wanted.has(id) && node.keys && node.keys[f]) { delete node.keys[f]; changed = true; }
+          if (wanted.has(id) && node.keys && node.keys[f]) {
+            delete node.keys[f]; this._syncRigPoseChannels(rig, id, node.keys); changed = true;
+          }
         }
         for (const c of Object.values(rig.constraints || {})) {
           if (c.targetKeys && c.targetKeys[f]) { delete c.targetKeys[f]; changed = true; }
@@ -645,7 +793,9 @@
         const id = data.id || `ik_${rootId}_${effectorId}`;
         rig.constraints[id] = { id, type: "ik2", rootId, midId, effectorId,
           enabled: true, bend: data.bend === -1 ? -1 : 1,
+          mix: 1, order: rig.constraintOrder.length, reads: [], writes: [rootId, midId], dependsOn: [],
           target: initialTarget || { x: end.pivot.x, y: end.pivot.y }, targetKeys: {} };
+        if (!rig.constraintOrder.includes(id)) rig.constraintOrder.push(id);
         return id;
       });
     }
@@ -653,7 +803,8 @@
     deleteRigConstraint(id) {
       return this._rigChange("Borrar cadena IK", (rig) => {
         if (!rig.constraints || !rig.constraints[id]) return false;
-        delete rig.constraints[id]; return true;
+        delete rig.constraints[id];
+        rig.constraintOrder = rig.constraintOrder.filter((entry) => entry !== id); return true;
       });
     }
 
@@ -676,6 +827,7 @@
           const node = rig.nodes[nodeId]; if (!node) continue;
           node.keys[f] = { x: +pose.x || 0, y: +pose.y || 0, r: +pose.r || 0,
             sx: pose.sx == null ? 1 : +pose.sx, sy: pose.sy == null ? 1 : +pose.sy };
+          this._syncRigPoseChannels(rig, nodeId, node.keys);
         }
         return true;
       });

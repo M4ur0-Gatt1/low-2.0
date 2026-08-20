@@ -419,3 +419,26 @@ válido para los seis paneles auxiliares generales. Pruebas del modelo: **72/72*
 - [Working in Xsheet/Timeline — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/working_in_xsheet.html)
 - [Drawing Animation Levels — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/drawing_animation_levels.html)
 - [Rooms — OpenToonz Wikia](https://opentoonz.fandom.com/wiki/Rooms)
+
+---
+
+## 9. Fundamento de rig profesional v4 (pasada 2026-08-20)
+
+- `Scene.rig` migra automáticamente rigs legacy, v3 y v4 al mismo contrato.
+- Bones contienen jerarquía y pose; slots contienen orden visual; attachments
+  contienen dibujos/sustituciones; bindings declaran cómo se vinculan.
+- Un esqueleto puede crearse sin arte y recibir slots, sustituciones y bindings
+  después; copiar o reutilizar la estructura no obliga a duplicar los dibujos.
+- `rig.nodes` comparte la referencia de `bones` sólo como adaptador temporal de
+  la interfaz existente y no se duplica en el archivo `.lowscene`.
+- Las claves de pose se reflejan en canales por propiedad con interpolación y
+  Undo, preparando Timeline y Function Editor sin romper las claves actuales.
+- Las constraints tienen orden persistente, `mix`, lecturas, escrituras y
+  dependencias. LOW rechaza ciclos antes de guardar el cambio y aplica orden
+  topológico estable cuando una preferencia manual contradice una dependencia.
+- El diagnóstico detecta jerarquías circulares y referencias rotas de slots,
+  attachments y bindings antes de exportar.
+
+Pruebas del modelo: **118/118**. Incluyen migración v3→v4, JSON sin estado
+duplicado, sustituciones y Undo, orden visual, canales, constraints ordenadas,
+rechazo atómico de ciclos, diagnóstico y reapertura.

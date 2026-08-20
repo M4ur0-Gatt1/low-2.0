@@ -29,13 +29,13 @@
 
 ## Prioridad activa
 
-Implementar incrementalmente el contrato v4 descrito en
-`docs/ADR_2D_PRO_RIG_ARCHITECTURE.md`. El próximo bloque es el fundamento:
-bones separados del arte, slots/attachments, canales por propiedad, constraints
-ordenadas con detección de ciclos y migración desde rig v3. Después siguen
-cut-out profesional, malla/pesos, controladores/acciones y rigs 360 por vistas.
-No llamar “rig completo” a un registro de formas ni a controles que sólo
-modifican el DOM.
+Continuar el contrato v4 descrito en `docs/ADR_2D_PRO_RIG_ARCHITECTURE.md`.
+El fundamento ya está implementado: bones separados del arte,
+slots/attachments, canales por propiedad, constraints ordenadas con detección
+de ciclos y migración desde rig v3. El próximo bloque es cut-out profesional:
+herramienta gráfica de huesos, IK/FK match, pole, pins, sustituciones visibles y
+Schematic básico. Después siguen malla/pesos, controladores/acciones y rigs 360
+por vistas. No llamar “rig completo” a controles que sólo modifican el DOM.
 
 ## Últimos bloques 2D confirmados
 
@@ -65,3 +65,8 @@ modifican el DOM.
   concurrentes de Claude `767f07e`, `bcb8f08` y `b474a19`; las pruebas
   automáticas pasaron y faltan la prueba manual final 3D, subir, etiquetar y
   publicar, en ese orden.
+- Fundamento `Scene.rig` v4 implementado sin arquitectura paralela. El JSON
+  canónico guarda bones, slots, attachments, bindings, channels y constraints;
+  `rig.nodes` queda sólo como adaptador en memoria para la interfaz v3. Undo,
+  migración y diagnóstico se prueban en 118/118 casos del modelo. Un esqueleto
+  puede existir sin arte y recibir slots/bindings después.
