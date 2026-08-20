@@ -42,6 +42,7 @@
       this.layerId = this.scene.layers[0] ? this.scene.layers[0].id : null;
       this.dirty = false;
       this.listeners = new Set();
+      this.cellSelection = null;
       this.path = null;            // archivo .lowscene, si ya se guardó
     }
 
@@ -151,6 +152,31 @@
       return f == null ? this.frame : this.goTo(f);
     }
     selectLayer(id) { if (this.scene.layer(id)) { this.layerId = id; this.emit("layer"); } }
+
+    selectCellRange(aLayer, aFrame, bLayer, bFrame) {
+      const layers = this.scene.layers;
+      const ai = layers.findIndex((l) => l.id === aLayer), bi = layers.findIndex((l) => l.id === bLayer);
+      if (ai < 0 || bi < 0) return null;
+      const left = Math.min(ai, bi), right = Math.max(ai, bi);
+      return this.cellSelection = { anchorLayerId: aLayer, anchorFrame: aFrame,
+        fromLayerId: layers[left].id, toLayerId: layers[right].id,
+        from: Math.min(aFrame, bFrame), to: Math.max(aFrame, bFrame) };
+    }
+
+    setLayerProperty(id, key, value, label) {
+      const ly = this.scene.layer(id);
+      if (!ly || !["name", "visible", "locked", "opacity", "z"].includes(key)) return false;
+      const before = ly[key];
+      if (before === value) return false;
+      ly[key] = value; this.touch(); this.emit("layers");
+      if (this.history) {
+        const doc = this;
+        this.history.push({ label: label || "Cambiar capa", domain: "anim", before, after: value,
+          apply: (_dir, next) => { const layer = doc.scene.layer(id); if (!layer) return;
+            layer[key] = next; doc.touch(); doc.emit("layers"); doc.emit("frame"); } });
+      }
+      return true;
+    }
 
     // ── edición ──────────────────────────────────────────────────────────
     /** Asegura que haya un dibujo en la celda actual y lo devuelve. Si la celda
@@ -398,6 +424,22 @@
       const ly = this.scene.addLayer(lv.id, nombre || `Capa ${this.scene.layers.length + 1}`);
       this.layerId = ly.id;
       this.touch(); this.emit("layers");
+      if (this.history) {
+        const doc = this, levelData = lv.toJSON(), layerData = ly.toJSON();
+        this.history.push({ label: "Agregar capa", domain: "anim", before: null, after: layerData,
+          apply: (dir) => {
+            if (dir === "undo") {
+              doc.scene.layers = doc.scene.layers.filter((x) => x.id !== layerData.id);
+              doc.scene.levels = doc.scene.levels.filter((x) => x.id !== levelData.id);
+              doc.layerId = doc.scene.layers[0] ? doc.scene.layers[0].id : null;
+            } else {
+              if (!doc.scene.level(levelData.id)) doc.scene.levels.push(new animation.Level(levelData));
+              if (!doc.scene.layer(layerData.id)) doc.scene.layers.push(new animation.Layer(layerData));
+              doc.layerId = layerData.id;
+            }
+            doc.touch(); doc.emit("layers"); doc.emit("frame");
+          } });
+      }
       return ly;
     }
 

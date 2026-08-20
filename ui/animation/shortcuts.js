@@ -63,7 +63,12 @@
         case "End":        if (pb) pb.last(); else doc.goTo(doc.scene.lastFrame() || 1); break;
         case " ":          if (pb) pb.toggle(); break;
         case "Insert":     doc.apply("insert", doc.frame, 1); break;
-        case "Delete":     doc.apply("clear", doc.frame, doc.frame); break;
+        case "Delete": {
+          const selected = opts.getSelection && opts.getSelection();
+          if (selected) doc.clearCells(selected, "Vaciar rango");
+          else doc.apply("clear", doc.frame, doc.frame);
+          break;
+        }
         case ".":          doc.apply("stepChange", doc.frame, +1); break;
         case ",":          doc.apply("stepChange", doc.frame, -1); break;
         default: manejado = false;

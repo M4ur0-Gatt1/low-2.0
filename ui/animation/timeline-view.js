@@ -15,6 +15,7 @@
   "use strict";
   const LOW = global.LOW = global.LOW || {};
   const animation = LOW.animation = LOW.animation || {};
+  const icon = (id) => `<svg class="ico"><use href="#${id}"/></svg>`;
 
   const ANCHO = 13;        // px por frame
   const EXTRA = 24;        // frames de más al final, para seguir armando
@@ -24,15 +25,25 @@
       this.host = typeof host === "string" ? document.querySelector(host) : host;
       this.doc = doc;
       this.playback = null;
-      this._desuscribir = doc ? doc.subscribe(() => this.render()) : null;
+      this._desuscribir = doc ? doc.subscribe((_d, reason) => this._docChanged(reason)) : null;
     }
     setDoc(doc) {
       if (this._desuscribir) this._desuscribir();
       this.doc = doc;
-      this._desuscribir = doc ? doc.subscribe(() => this.render()) : null;
+      this._desuscribir = doc ? doc.subscribe((_d, reason) => this._docChanged(reason)) : null;
       this.render();
     }
     dispose() { if (this._desuscribir) this._desuscribir(); if (this.host) this.host.innerHTML = ""; }
+    _docChanged(reason) { if (reason === "frame") this._updateCursor(); else this.render(); }
+    _updateCursor() {
+      if (!this.host || !this.doc) return;
+      this.host.querySelectorAll(".actual").forEach((n) => n.classList.remove("actual"));
+      this.host.querySelectorAll(`[data-frame="${this.doc.frame}"]`).forEach((n) => n.classList.add("actual"));
+      const label = this.host.querySelector(".tl2-rulername");
+      if (label) label.textContent = `${this.doc.frame} / ${this.doc.scene.playRange().out}`;
+      const active = this.host.querySelector(`.tl2-cell[data-layer-id="${this.doc.layerId}"][data-frame="${this.doc.frame}"]`);
+      if (active && active.scrollIntoView) active.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
 
     _frames() {
       const doc = this.doc;
@@ -43,6 +54,7 @@
       if (!this.host || !this.doc) return;
       const doc = this.doc, sc = doc.scene;
       const total = this._frames();
+      const cameraKeys = (sc.camera && sc.camera.keys) || {};
       const cont = document.createElement("div");
       cont.className = "tl2";
 
@@ -57,7 +69,10 @@
       pista.className = "tl2-track";
       for (let f = 1; f <= total; f++) {
         const t = document.createElement("i");
-        t.className = "tl2-tick" + (f % 6 === 1 ? " seg" : "") + (f === doc.frame ? " actual" : "");
+        t.className = "tl2-tick" + (f % 6 === 1 ? " seg" : "") + (f === doc.frame ? " actual" : "")
+          + (cameraKeys[f] ? " camkey" : "");
+        if (cameraKeys[f]) t.title = `Clave de camara en el frame ${f}`;
+        t.dataset.frame = String(f);
         // el número solo cada 6: con uno por frame no se lee nada
         if (f % 6 === 1) t.textContent = String(f);
         // SCRUBBING: arrastrar por la regla recorre la animación con la mano.
@@ -95,10 +110,18 @@
         ojo.className = "tl2-eye";
         ojo.textContent = ly.visible ? "◉" : "◌";
         ojo.title = ly.visible ? "Ocultar la capa" : "Mostrar la capa";
-        ojo.onclick = (e) => { e.stopPropagation(); ly.visible = !ly.visible; doc.touch(); doc.emit("layers"); };
+        ojo.innerHTML = icon(ly.visible ? "i-eye" : "i-eye-off");
+        ojo.setAttribute("aria-label", ojo.title);
+        ojo.onclick = (e) => { e.stopPropagation(); doc.setLayerProperty(ly.id, "visible", !ly.visible,
+          ly.visible ? "Ocultar capa" : "Mostrar capa"); };
+        const lock = document.createElement("button");
+        lock.className = "tl2-eye"; lock.innerHTML = icon(ly.locked ? "i-lock" : "i-unlock");
+        lock.title = ly.locked ? "Desbloquear capa" : "Bloquear capa"; lock.setAttribute("aria-label", lock.title);
+        lock.onclick = (e) => { e.stopPropagation(); doc.setLayerProperty(ly.id, "locked", !ly.locked,
+          ly.locked ? "Desbloquear capa" : "Bloquear capa"); };
         const txt = document.createElement("span");
         txt.textContent = ly.name;
-        cab.append(ojo, txt);
+        cab.append(ojo, lock, txt);
         cab.onclick = () => doc.selectLayer(ly.id);
         fila.appendChild(cab);
 
@@ -109,12 +132,19 @@
           const hold = ly.isHold(f);
           const inicio = v != null && !hold;
           const c = document.createElement("i");
+          c.dataset.frame = String(f); c.dataset.layerId = ly.id;
           c.className = "tl2-cell" + (v == null ? "" : " llena")
             + (inicio ? " inicio" : "") + (hold ? " hold" : "")
+            + (this._inSelection(ly.id, f) ? " rango" : "")
             + (f === doc.frame ? " actual" : "");
           if (inicio) c.textContent = String(v);
           c.title = v == null ? `Frame ${f}` : `Frame ${f} · dibujo ${v}${hold ? " (sostenido)" : ""}`;
-          c.onclick = () => { doc.selectLayer(ly.id); doc.goTo(f); };
+          c.onclick = (e) => {
+            const prior = doc.cellSelection;
+            if (e.shiftKey && prior) doc.selectCellRange(prior.anchorLayerId, prior.anchorFrame, ly.id, f);
+            else doc.selectCellRange(ly.id, f, ly.id, f);
+            doc.selectLayer(ly.id); doc.goTo(f); this.render();
+          };
           // arrastrar un bloque de exposición a otro frame
           if (inicio) {
             c.draggable = true;
@@ -144,6 +174,13 @@
       // seguir el cursor de reproducción sin marear
       const act = cont.querySelector(".tl2-cell.actual") || cont.querySelector(".tl2-tick.actual");
       if (act && act.scrollIntoView) act.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
+    _inSelection(layerId, frame) {
+      const s = this.doc && this.doc.cellSelection;
+      if (!s) return false;
+      const layers = this.doc.scene.layers, i = layers.findIndex((l) => l.id === layerId);
+      const a = layers.findIndex((l) => l.id === s.fromLayerId), b = layers.findIndex((l) => l.id === s.toLayerId);
+      return i >= a && i <= b && frame >= s.from && frame <= s.to;
     }
   }
 

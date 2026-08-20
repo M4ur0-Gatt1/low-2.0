@@ -5809,9 +5809,19 @@ function dzCamDefault() {
   const vb = dzVB();
   return { cx: vb[0] + vb[2] / 2, cy: vb[1] + vb[3] / 2, w: vb[2], rot: 0 };
 }
+function dzCamFrame() { return DZ.doc ? DZ.doc.frame : dzFrameNum(DZ.path); }
+function dzCamKeys() {
+  if (DZ.doc) {
+    DZ.doc.scene.camera = DZ.doc.scene.camera || { keys: {} };
+    DZ.doc.scene.camera.keys = DZ.doc.scene.camera.keys || {};
+    return DZ.doc.scene.camera.keys;
+  }
+  DZ.scene = DZ.scene || {}; DZ.scene.cam = DZ.scene.cam || {};
+  return DZ.scene.cam;
+}
 /* cámara interpolada en el cuadro `num` (entre claves, con la curva elegida) */
 function dzCamAt(num) {
-  const cams = (DZ.scene && DZ.scene.cam) || {};
+  const cams = dzCamKeys();
   const ks = Object.keys(cams).map(Number).sort((a, b) => a - b);
   if (!ks.length) return dzCamDefault();
   if (cams[num]) return { ...cams[num] };
@@ -5868,7 +5878,7 @@ function dzCamView(svgText, cam) {
   out.appendChild(g);
   return out.outerHTML;
 }
-function dzHasCam() { return !!(DZ.scene && DZ.scene.cam && Object.keys(DZ.scene.cam).length); }
+function dzHasCam() { return Object.keys(dzCamKeys()).length > 0; }
 
 /* ── overlay del encuadre: arrastrar = mover · esquina = zoom ·  = rotar ──
    AUTO-KEY: cualquier edición deja una clave de cámara en el cuadro actual. */
@@ -5881,10 +5891,10 @@ function dzCamToggle() {
   dzSetStatus(DZ.camMode ?
     "🎬 Cámara: arrastrá el encuadre (mover), la esquina (zoom),  (rotar) — cada cambio deja CLAVE en este cuadro. El play y el export salen por acá." : "");
 }
-function dzCamCur() { return DZ.camDrag || dzCamAt(dzFrameNum(DZ.path)); }
+function dzCamCur() { return DZ.camDrag || dzCamAt(dzCamFrame()); }
 function dzCamOverlay() {
   const box = $("#dzCam");
-  if (!DZ.camMode || !DZ.path || !$("#dzCanvas").querySelector(":scope > svg")) { box.hidden = true; return; }
+  if (!DZ.camMode || (!DZ.path && !DZ.doc) || !$("#dzCanvas").querySelector(":scope > svg")) { box.hidden = true; return; }
   const cam = dzCamCur();
   const vb = dzVB();
   const h = cam.w * (vb[3] / vb[2]);
@@ -5895,31 +5905,32 @@ function dzCamOverlay() {
   box.style.width = pw + "px"; box.style.height = ph + "px";
   box.style.left = (c.x - pw / 2) + "px"; box.style.top = (c.y - ph / 2) + "px";
   box.style.transform = `rotate(${cam.rot || 0}deg)`;
-  const num = dzFrameNum(DZ.path);
+  const num = dzCamFrame();
   $("#dzCamTag").textContent = "🎬 cámara · cuadro " + num +
     (DZ.scene && DZ.scene.cam && DZ.scene.cam[num] ? " 🔑" : " (interpolada)");
   box.hidden = false;
+  if (DZ.doc) $("#dzCamTag").textContent = `Camara 2D Â· frame ${num} Â· ${dzCamKeys()[num] ? "clave" : "interpolada"}`;
 }
 function dzCamSetKey(cam) {
-  DZ.scene = DZ.scene || {};
-  DZ.scene.cam = DZ.scene.cam || {};
-  DZ.scene.cam[dzFrameNum(DZ.path)] = {
+  const cams = dzCamKeys();
+  cams[dzCamFrame()] = {
     cx: Math.round(cam.cx * 10) / 10, cy: Math.round(cam.cy * 10) / 10,
     w: Math.round(cam.w * 10) / 10, rot: Math.round((cam.rot || 0) * 10) / 10 };
-  dzSceneSave(); dzCamOverlay(); dzTimelineBadges();
+  if (DZ.doc) { DZ.doc.touch(); DZ.doc.emit("camera"); } else dzSceneSave();
+  dzCamOverlay(); dzTimelineBadges();
 }
 function dzCamKeyToggle() {
   if (!DZ.camMode) return;
-  DZ.scene = DZ.scene || {}; DZ.scene.cam = DZ.scene.cam || {};
-  const num = dzFrameNum(DZ.path);
-  if (DZ.scene.cam[num]) {
-    delete DZ.scene.cam[num];
+  const cams = dzCamKeys(), num = dzCamFrame();
+  if (cams[num]) {
+    delete cams[num];
     dzSetStatus("🎬 Clave de cámara del cuadro " + num + " borrada");
   } else {
-    DZ.scene.cam[num] = dzCamCur();
+    cams[num] = dzCamCur();
     dzSetStatus("🎬🔑 Clave de cámara en el cuadro " + num);
   }
-  dzSceneSave(); dzCamOverlay(); dzTimelineBadges();
+  if (DZ.doc) { DZ.doc.touch(); DZ.doc.emit("camera"); } else dzSceneSave();
+  dzCamOverlay(); dzTimelineBadges();
 }
 /* ── interacción de cámara — v2, predecible ──────────────────────────────
    Durante el arrastre se muestra un PREVIEW en vivo (DZ.camDrag) SIN tocar la
@@ -5932,7 +5943,7 @@ function dzCamCommit() {
 function dzCamDrag(e) {
   if (e.target.id === "dzCamSize" || e.target.id === "dzCamRot") return;
   e.preventDefault(); e.stopPropagation();
-  const cam0 = dzCamAt(dzFrameNum(DZ.path));
+  const cam0 = dzCamAt(dzCamFrame());
   const start = dzToUser(e.clientX, e.clientY);
   const move = (ev) => {
     const p = dzToUser(ev.clientX, ev.clientY);
@@ -5946,7 +5957,7 @@ function dzCamDrag(e) {
 }
 function dzCamResize(e) {
   e.preventDefault(); e.stopPropagation();
-  const cam0 = dzCamAt(dzFrameNum(DZ.path));
+  const cam0 = dzCamAt(dzCamFrame());
   const start = dzToUser(e.clientX, e.clientY);
   // zoom proporcional a la distancia al centro (alejar la esquina = achicar zoom)
   const d0 = Math.max(1, Math.hypot(start.x - cam0.cx, start.y - cam0.cy));
@@ -5964,7 +5975,7 @@ function dzCamResize(e) {
 }
 function dzCamRotate(e) {
   e.preventDefault(); e.stopPropagation();
-  const cam0 = dzCamAt(dzFrameNum(DZ.path));
+  const cam0 = dzCamAt(dzCamFrame());
   const c = dzToScreen(cam0.cx, cam0.cy);
   const cv = $("#dzCanvas").getBoundingClientRect();
   const a0 = Math.atan2(e.clientY - cv.top - c.y, e.clientX - cv.left - c.x);
@@ -9050,8 +9061,16 @@ async function dzTlMount() {
   const host = $("#dzTlgRows");
   if (!host || !LOW.animation.TimelineView) return;
   await dzDocInit();
+  if (!DZ.playback) {
+    DZ.playback = new LOW.animation.Playback(DZ.doc);
+    DZ.playback.subscribe(() => {
+      if (DZ.xsView) DZ.xsView.render();
+      if (DZ.tlView) DZ.tlView.render();
+    });
+  } else DZ.playback.setDoc(DZ.doc);
   if (!DZ.tlView) DZ.tlView = new LOW.animation.TimelineView(host, DZ.doc);
   else DZ.tlView.setDoc(DZ.doc);
+  DZ.tlView.playback = DZ.playback;
   // el encabezado de la vieja sobra: la nueva trae su propia regla de frames
   const head = document.querySelector("#dzTlGrid .dz-tlg-head");
   if (head) head.hidden = true;
@@ -9102,8 +9121,13 @@ async function dzSceneOpen() {
 /** Pone un documento en uso y reengancha todo lo que depende de él. */
 function dzDocUse(doc) {
   DZ.doc = doc;
+  if (!DZ.history) DZ.history = new LOW.core.HistoryManager({ limit: 180 });
+  else DZ.history.clear();
+  doc.setHistory(DZ.history);
   if (DZ.playback) DZ.playback.setDoc(doc);
   if (DZ.xsView) DZ.xsView.setDoc(doc);
+  if (DZ.tlView) DZ.tlView.setDoc(doc);
+  if (DZ.lsView) DZ.lsView.setDoc(doc);
   doc.subscribe((d, motivo) => {
     if (motivo === "frame") { const dw = d.drawing; dzCanvasSet(dw ? dw.content : ""); dzOnionRender(); }
     else if (motivo === "onion") dzOnionRender();
@@ -9178,6 +9202,8 @@ function dzOnion2Render() {
   if (sa) sa.style.background = cfg.colorAfter;
   const pw = $("#onOn");
   if (pw) pw.classList.toggle("on", !!DZ.onionOn);
+  const lines = $("#onLines");
+  if (lines) lines.classList.toggle("on", !!cfg.linesOnly);
   // marcadores fijos: cada uno se saca con un clic
   const box = $("#onFixed");
   if (box) {
@@ -9202,10 +9228,15 @@ function dzOnion2Wire() {
     DZ.onionCfg2 = { ...LOW.animation.onion.DEFAULTS, ...guardado };
   } catch (_) { DZ.onionCfg2 = { ...LOW.animation.onion.DEFAULTS }; }
   const on = (id, ev, fn) => { const e = $(id); if (e) e[ev] = fn; };
+  const power = $("#onOn");
+  if (power) { power.innerHTML = '<svg class="ico"><use href="#i-onion"/></svg>'; power.setAttribute("aria-label", "Activar papel cebolla"); }
+  const detach = $("#dzOnionDetach");
+  if (detach) { detach.innerHTML = '<svg class="ico"><use href="#i-ext"/></svg>'; detach.setAttribute("aria-label", "Separar papel cebolla"); }
   on("#onColorB", "oninput", (e) => dzOnionCfgSet({ colorBefore: e.target.value }));
   on("#onColorA", "oninput", (e) => dzOnionCfgSet({ colorAfter: e.target.value }));
   on("#onAlpha", "oninput", (e) => dzOnionCfgSet({ alpha: +e.target.value / 100 }));
   on("#onFall", "oninput", (e) => dzOnionCfgSet({ falloff: +e.target.value / 100 }));
+  on("#onLines", "onclick", () => dzOnionCfgSet({ linesOnly: !dzOnionCfgActual().linesOnly }));
   on("#onOn", "onclick", () => { DZ.onionOn = !DZ.onionOn; dzOnion2Render(); dzOnionRender(); });
   on("#onFixAdd", "onclick", () => {
     const f = DZ.doc ? DZ.doc.frame : 1;
@@ -9273,7 +9304,8 @@ function dzOnionRender() {
     g.innerHTML = c.drawing.content || "";
     // teñir: todo el fantasma del color de su lado del tiempo
     g.querySelectorAll("*").forEach((n) => {
-      if (n.getAttribute("fill") && n.getAttribute("fill") !== "none") n.setAttribute("fill", c.color);
+      if (cfg.linesOnly && n.getAttribute("fill") && n.getAttribute("fill") !== "none") n.setAttribute("fill", "none");
+      else if (n.getAttribute("fill") && n.getAttribute("fill") !== "none") n.setAttribute("fill", c.color);
       if (n.getAttribute("stroke") && n.getAttribute("stroke") !== "none") n.setAttribute("stroke", c.color);
     });
     svg.insertBefore(g, svg.firstChild);
@@ -9347,7 +9379,7 @@ async function dzXsMount() {
   dzLsMount();
   // atajos de animación: navegar por frames y por DIBUJOS, timing y celdas
   LOW.animation.shortcuts.wire(() => DZ.doc, () => DZ.playback, {
-    getSelection: () => DZ.xsView && DZ.xsView.sel,
+    getSelection: () => DZ.doc && DZ.doc.cellSelection,
     status: (m) => dzSetStatus(" " + m),
     toggleOnion: () => { DZ.onionOn = !DZ.onionOn; dzOnion2Render(); dzOnionRender(); },
   });
