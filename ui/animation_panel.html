@@ -10,7 +10,8 @@
 body{display:flex;flex-direction:column}.top{height:48px;flex:none;display:flex;align-items:center;gap:5px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden}
 .brand{font-weight:800;letter-spacing:.08em}.mode{color:var(--mut);font-size:11px;font-weight:650;letter-spacing:.06em;white-space:nowrap}.spacer{flex:1;min-width:10px}button{height:32px;min-width:32px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--mut);cursor:pointer;font-size:13px;white-space:nowrap}button:hover{background:var(--hover);color:var(--txt)}button.primary{padding:0 12px;background:rgba(223,108,72,.14);color:var(--orange)}button.on{border-color:rgba(223,108,72,.45);background:rgba(223,108,72,.16);color:#f3a086}.fps{font-size:11px;color:var(--mut);white-space:nowrap}
 .field{height:32px;display:flex;align-items:center;gap:4px;padding:0 7px;border:1px solid var(--line);border-radius:7px;color:var(--mut);font-size:11px;white-space:nowrap}.field input{width:42px;border:0;outline:0;background:transparent;color:var(--txt);font:12px/1 Consolas,monospace}.field input.range{width:35px}.sep{width:1px;height:22px;background:var(--line);margin:0 2px;flex:none}
-.commands{height:42px;flex:none;display:flex;align-items:center;gap:4px;padding:5px 10px;background:#181716;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden}.commands button{height:30px;padding:0 9px;font-size:12px}.commands .danger{color:#d88b82}.commands .group{display:flex;align-items:center;gap:3px;padding-right:6px;margin-right:2px;border-right:1px solid var(--line)}
+.commands{height:34px;flex:none;display:flex;align-items:center;gap:3px;padding:3px 6px;background:#181716;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden}.commands button{width:26px;min-width:26px;height:26px;padding:0;display:inline-grid;place-items:center;border-radius:4px}.commands .danger{color:#d88b82}.commands .group{display:flex;align-items:center;gap:1px;padding-right:4px;margin-right:1px;border-right:1px solid var(--line)}
+.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.icon-sprite{position:absolute;width:0;height:0;overflow:hidden}.short{font:700 9px/1 "Segoe UI",sans-serif;letter-spacing:-.02em}.commands button:focus-visible{outline:2px solid var(--orange);outline-offset:-2px}.commands button.on{color:var(--orange);border-color:rgba(223,108,72,.45);background:rgba(223,108,72,.16)}
 .viewport{flex:1;overflow:auto;position:relative}.timeline{min-width:max-content}.head,.row{display:flex;min-height:var(--cell)}.head{position:sticky;top:0;z-index:4;background:var(--panel2)}
 .label{position:sticky;left:0;z-index:3;width:190px;flex:none;padding:6px 10px;background:var(--panel);border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.head .label{z-index:6;background:var(--panel2);font-weight:700}
 .cell{width:var(--cell);height:var(--cell);flex:none;border-right:1px solid #24242a;border-bottom:1px solid #24242a;position:relative;text-align:center;font:10px/26px Consolas,monospace;color:var(--mut);cursor:pointer}.cell:hover{background:#26262c}.cell.selected{outline:1px solid rgba(223,108,72,.72);outline-offset:-2px;background:rgba(223,108,72,.12)}.cell.current{box-shadow:inset 1px 0 var(--orange),inset -1px 0 var(--orange);background:#311911;color:#fff}.cell.start{background:var(--cyan);color:#071014}.cell.hold::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:2px solid rgba(51,181,232,.55)}.cell.future{opacity:.42}.cell.key::before{content:"◆";color:#ffad32;font-size:7px}.cell.camera::after{content:"●";color:var(--cyan);font-size:7px;position:absolute;bottom:-7px;left:10px}
@@ -42,6 +43,40 @@ body{display:flex;flex-direction:column}.top{height:48px;flex:none;display:flex;
 </style>
 </head>
 <body>
+<svg class="icon-sprite" aria-hidden="true"><defs>
+  <symbol id="p-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14M3 10h5M3 14h5M16 10h5M16 14h5"/></symbol>
+  <symbol id="p-xsheet" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M3 9h18M3 15h18M10 3v18"/></symbol>
+  <symbol id="p-undo" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5M5 12h8a6 6 0 016 6"/></symbol>
+  <symbol id="p-redo" viewBox="0 0 24 24"><path d="M15 7l5 5-5 5M19 12h-8a6 6 0 00-6 6"/></symbol>
+  <symbol id="p-new" viewBox="0 0 24 24"><rect x="3" y="4" width="14" height="16" rx="2"/><path d="M17 11h5M19.5 8.5v5"/></symbol>
+  <symbol id="p-level" viewBox="0 0 24 24"><rect x="4" y="3" width="14" height="14" rx="1.5"/><path d="M8 7h6M8 11h6M8 21h12V9"/></symbol>
+  <symbol id="p-cut" viewBox="0 0 24 24"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/><path d="M9.5 9.5l5 5M10 7l8 8M7 10l8 8"/></symbol>
+  <symbol id="p-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 00-2-2H5a2 2 0 00-2 2v9a2 2 0 002 2h3"/></symbol>
+  <symbol id="p-paste" viewBox="0 0 24 24"><path d="M9 5h6v3H9zM8 6H5v15h14V6h-3M9 12h6M9 16h5"/></symbol>
+  <symbol id="p-eraser" viewBox="0 0 24 24"><path d="M16 3l5 5L10 19H5l-2-2zM12.5 6.5l5 5M10 21h11"/></symbol>
+  <symbol id="p-less" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 12h10"/></symbol>
+  <symbol id="p-more" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 12h10M12 7v10"/></symbol>
+  <symbol id="p-auto" viewBox="0 0 24 24"><path d="M3 5h6v5H3zM9 10h6v5H9zM15 15h6v5h-6zM5 17h5M8 14l3 3-3 3"/></symbol>
+  <symbol id="p-dedupe" viewBox="0 0 24 24"><path d="M4 4h16v4H4zM4 10h16v4H4zM4 16h16v4H4zM12 2v20"/></symbol>
+  <symbol id="p-loop" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 013-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 01-3 3H3"/></symbol>
+  <symbol id="p-reverse" viewBox="0 0 24 24"><path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></symbol>
+  <symbol id="p-swing" viewBox="0 0 24 24"><path d="M4 8h12a4 4 0 010 8H8M7 5L4 8l3 3M11 13l-3 3 3 3"/></symbol>
+  <symbol id="p-onion" viewBox="0 0 24 24"><circle cx="9.5" cy="12" r="6.5"/><circle cx="14.5" cy="12" r="6.5" opacity=".55"/></symbol>
+  <symbol id="p-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.5"/><path d="M11.5 12H21M18 12v3.5M14.8 12v2.5"/></symbol>
+  <symbol id="p-cam" viewBox="0 0 24 24"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="M15 10.5l7-3.5v10l-7-3.5"/></symbol>
+  <symbol id="p-camkey" viewBox="0 0 24 24"><rect x="2" y="5" width="11" height="10" rx="2"/><path d="M13 8.5l6-3v9l-6-3"/><circle cx="16.5" cy="19" r="2"/><path d="M18.5 19H23"/></symbol>
+  <symbol id="p-insert" viewBox="0 0 24 24"><path d="M12 3v9M8.5 8.5L12 12l3.5-3.5M4 16v4h16v-4"/></symbol>
+  <symbol id="p-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/></symbol>
+  <symbol id="p-wand" viewBox="0 0 24 24"><path d="M4 20L14 10M17 3l.9 2.6 2.6.9-2.6.9L17 10l-.9-2.6-2.6-.9 2.6-.9z"/></symbol>
+  <symbol id="p-motion" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.2"/><path d="M8 12h13M16.5 7.5L21 12l-4.5 4.5"/></symbol>
+  <symbol id="p-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="p-puppet" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v7M7 10l5 3 5-3M9 21l3-7 3 7"/></symbol>
+  <symbol id="p-walk" viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M11 8l3 4-2 4M14 12l4 2M12 16l-4 5M12 16l5 5"/></symbol>
+  <symbol id="p-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+  <symbol id="p-audio" viewBox="0 0 24 24"><path d="M4 10h4l5-4v12l-5-4H4zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></symbol>
+  <symbol id="p-mute" viewBox="0 0 24 24"><path d="M4 10h4l5-4v12l-5-4H4zM16 9l5 6M21 9l-5 6"/></symbol>
+  <symbol id="p-export" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M4 14v7h16v-7"/></symbol>
+</defs></svg>
 <div class="top">
   <span class="brand">LOW</span><span class="mode" id="mode"></span>
   <span class="sep" data-anim></span>
@@ -50,7 +85,7 @@ body{display:flex;flex-direction:column}.top{height:48px;flex:none;display:flex;
   <button id="play" data-anim title="Reproducir / detener">▶</button>
   <button id="next" data-anim title="Fotograma siguiente">▶</button>
   <button id="last" data-anim title="Último fotograma">▶|</button>
-  <button id="loop" data-anim title="Repetir reproducción">Loop</button>
+  <button id="loop" data-anim title="Repetir reproducción"><svg class="ico" aria-hidden="true"><use href="#p-loop"/></svg></button>
   <label class="field" data-anim>FPS <input id="fpsInput" type="number" min="1" max="60" value="12"></label>
   <label class="field" data-anim>In <input class="range" id="rangeIn" type="number" min="1" value="1"></label>
   <label class="field" data-anim>Out <input class="range" id="rangeOut" type="number" min="0" value="0"></label>
@@ -59,58 +94,59 @@ body{display:flex;flex-direction:column}.top{height:48px;flex:none;display:flex;
 </div>
 <div class="commands" id="commands">
   <span class="group">
-    <button id="viewTimeline" title="Vista Timeline horizontal">Timeline</button>
-    <button id="viewXsheet" title="Vista X-sheet vertical">X-sheet</button>
+    <button id="viewTimeline" title="Vista Timeline horizontal"><svg class="ico" aria-hidden="true"><use href="#p-film"/></svg></button>
+    <button id="viewXsheet" title="Vista X-sheet vertical"><svg class="ico" aria-hidden="true"><use href="#p-xsheet"/></svg></button>
   </span>
   <span class="group">
-    <button id="undo" title="Deshacer">Deshacer</button><button id="redo" title="Rehacer">Rehacer</button>
+    <button id="undo" title="Deshacer"><svg class="ico" aria-hidden="true"><use href="#p-undo"/></svg></button><button id="redo" title="Rehacer"><svg class="ico" aria-hidden="true"><use href="#p-redo"/></svg></button>
   </span>
   <span class="group">
-    <button id="newDrawing" title="Crear un dibujo en la celda actual">Dibujo nuevo</button>
-    <button id="newLevel" title="Crear un nivel y una columna">Nivel nuevo</button>
-    <button id="cutCells" title="Cortar el rango seleccionado">Cortar</button>
-    <button id="copyCells" title="Copiar el rango seleccionado">Copiar</button>
-    <button id="pasteCells" title="Pegar en la celda actual">Pegar</button>
-    <button id="clearCells" title="Vaciar celdas sin borrar los dibujos">Vaciar</button>
-    <button id="shorter" title="Acortar exposición">− exposición</button>
-    <button id="longer" title="Extender exposición">+ exposición</button>
-    <button id="step1" title="Trabajar en unos">1s</button><button id="step2" title="Trabajar en doses">2s</button><button id="step3" title="Trabajar en treses">3s</button>
-    <button id="autoexpose" title="Completar huecos sosteniendo el dibujo anterior">Autoexponer</button>
-    <button id="dedupe" title="Quitar holds del rango">Quitar holds</button>
-    <button id="repeatCells" title="Repetir rango">Repetir</button>
-    <button id="reverseCells" title="Invertir rango">Invertir</button>
-    <button id="swingCells" title="Ida y vuelta">Ida y vuelta</button>
+    <button id="newDrawing" title="Crear un dibujo en la celda actual"><svg class="ico" aria-hidden="true"><use href="#p-new"/></svg></button>
+    <button id="newLevel" title="Crear un nivel y una columna"><svg class="ico" aria-hidden="true"><use href="#p-level"/></svg></button>
+    <button id="cutCells" title="Cortar el rango seleccionado"><svg class="ico" aria-hidden="true"><use href="#p-cut"/></svg></button>
+    <button id="copyCells" title="Copiar el rango seleccionado"><svg class="ico" aria-hidden="true"><use href="#p-copy"/></svg></button>
+    <button id="pasteCells" title="Pegar en la celda actual"><svg class="ico" aria-hidden="true"><use href="#p-paste"/></svg></button>
+    <button id="clearCells" title="Vaciar celdas sin borrar los dibujos"><svg class="ico" aria-hidden="true"><use href="#p-eraser"/></svg></button>
+    <button id="shorter" title="Acortar exposición"><svg class="ico" aria-hidden="true"><use href="#p-less"/></svg></button>
+    <button id="longer" title="Extender exposición"><svg class="ico" aria-hidden="true"><use href="#p-more"/></svg></button>
+    <button id="step1" class="short" title="Trabajar en unos">1s</button><button id="step2" class="short" title="Trabajar en doses">2s</button><button id="step3" class="short" title="Trabajar en treses">3s</button>
+    <button id="autoexpose" title="Completar huecos sosteniendo el dibujo anterior"><svg class="ico" aria-hidden="true"><use href="#p-auto"/></svg></button>
+    <button id="dedupe" title="Quitar holds del rango"><svg class="ico" aria-hidden="true"><use href="#p-dedupe"/></svg></button>
+    <button id="repeatCells" title="Repetir rango"><svg class="ico" aria-hidden="true"><use href="#p-loop"/></svg></button>
+    <button id="reverseCells" title="Invertir rango"><svg class="ico" aria-hidden="true"><use href="#p-reverse"/></svg></button>
+    <button id="swingCells" title="Ida y vuelta"><svg class="ico" aria-hidden="true"><use href="#p-swing"/></svg></button>
   </span>
   <span class="group">
-    <button id="onion" title="Mostrar u ocultar papel cebolla">Papel cebolla</button>
-    <button id="key" title="Marcar el dibujo actual como fotograma clave">Clave</button>
-    <button id="camera" title="Editar cámara 2D">Cámara</button>
-    <button id="cameraKey" title="Agregar o quitar clave de cámara">Clave cámara</button>
+    <button id="onion" title="Mostrar u ocultar papel cebolla"><svg class="ico" aria-hidden="true"><use href="#p-onion"/></svg></button>
+    <button id="key" title="Marcar el dibujo actual como fotograma clave"><svg class="ico" aria-hidden="true"><use href="#p-key"/></svg></button>
+    <button id="camera" title="Editar cámara 2D"><svg class="ico" aria-hidden="true"><use href="#p-cam"/></svg></button>
+    <button id="cameraKey" title="Agregar o quitar clave de cámara"><svg class="ico" aria-hidden="true"><use href="#p-camkey"/></svg></button>
   </span>
   <span class="group">
-    <button id="add" title="Duplicar el dibujo actual al final">Duplicar</button>
-    <button id="blank" title="Insertar un dibujo vacío">Vacío</button>
-    <button id="insert" title="Insertar una copia después del fotograma actual">Insertar</button>
-    <button id="delete" class="danger" title="Borrar los fotogramas seleccionados">Borrar</button>
+    <button id="add" title="Duplicar el dibujo actual al final"><svg class="ico" aria-hidden="true"><use href="#p-copy"/></svg></button>
+    <button id="blank" title="Insertar un dibujo vacío"><svg class="ico" aria-hidden="true"><use href="#p-new"/></svg></button>
+    <button id="insert" title="Insertar una copia después del fotograma actual"><svg class="ico" aria-hidden="true"><use href="#p-insert"/></svg></button>
+    <button id="delete" class="danger" title="Borrar los fotogramas seleccionados"><svg class="ico" aria-hidden="true"><use href="#p-trash"/></svg></button>
   </span>
   <span class="group">
-    <button id="tween" title="Crear intercalado">Intercalar</button>
-    <button id="move" title="Interpolar movimiento">Movimiento</button>
-    <button id="record" title="Grabar un movimiento en vivo">Grabar</button>
-    <button id="puppet" title="Grabar actuación de títere">Títere</button>
-    <button id="walk" title="Generar ciclo de caminata">Caminata</button>
-    <button id="ai" title="Asistente de claves">Claves IA</button>
+    <button id="tween" title="Crear intercalado"><svg class="ico" aria-hidden="true"><use href="#p-wand"/></svg></button>
+    <button id="move" title="Interpolar movimiento"><svg class="ico" aria-hidden="true"><use href="#p-motion"/></svg></button>
+    <button id="record" title="Grabar un movimiento en vivo"><svg class="ico" aria-hidden="true"><use href="#p-rec"/></svg></button>
+    <button id="puppet" title="Grabar actuación de títere"><svg class="ico" aria-hidden="true"><use href="#p-puppet"/></svg></button>
+    <button id="walk" title="Generar ciclo de caminata"><svg class="ico" aria-hidden="true"><use href="#p-walk"/></svg></button>
+    <button id="ai" title="Asistente de claves"><svg class="ico" aria-hidden="true"><use href="#p-sparkle"/></svg></button>
   </span>
   <span class="group">
-    <button id="audio" title="Cargar una pista de audio">Audio</button>
-    <button id="audioMute" title="Silenciar o activar la pista de audio">Silencio</button>
-    <button id="audioRemove" class="danger" title="Quitar la pista de audio">Quitar audio</button>
-    <button id="export" title="Exportar la animación">Exportar</button>
+    <button id="audio" title="Cargar una pista de audio"><svg class="ico" aria-hidden="true"><use href="#p-audio"/></svg></button>
+    <button id="audioMute" title="Silenciar o activar la pista de audio"><svg class="ico" aria-hidden="true"><use href="#p-mute"/></svg></button>
+    <button id="audioRemove" class="danger" title="Quitar la pista de audio"><svg class="ico" aria-hidden="true"><use href="#p-trash"/></svg></button>
+    <button id="export" title="Exportar la animación"><svg class="ico" aria-hidden="true"><use href="#p-export"/></svg></button>
   </span>
 </div>
 <div class="viewport"><div id="content" class="timeline"><div class="empty">Conectando con el editor…</div></div></div>
 <script>
 const KINDS={viewer:'MESA DE DIBUJO',timeline:'TIMELINE',xsheet:'X-SHEET',layers:'CAPAS',tools:'HERRAMIENTAS',color:'COLOR',onion:'PAPEL CEBOLLA',levelstrip:'DIBUJOS DEL NIVEL'};
+document.querySelectorAll('button[title]').forEach(b=>b.setAttribute('aria-label',b.title));
 // el kind llega por FRAGMENTO (#kind=...): sobre file:// la query se pierde
 // (WebView2 la toma como parte del nombre del archivo). Se acepta ?kind= igual,
 // para cuando el panel se abre desde un servidor durante las pruebas.
