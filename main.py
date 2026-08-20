@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.37"
+LOW_VERSION = "3.29.39"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -1903,25 +1903,45 @@ class Api:
     def save_binary(s, base64_data, filename="modelo.stl"):
         """Guarda un archivo BINARIO que viene del estudio 3D (por ejemplo un
         STL). No se puede reusar save_file: ese escribe texto UTF-8 y un binario
-        pasado por ahí sale corrupto."""
+        pasado por ahí sale corrupto.
+
+        Devuelve SIEMPRE un dict que dice qué pasó — {path}, {cancelado} o
+        {error} —, nunca None: el estudio corre en un iframe sin puente con
+        Python, así que si acá no se contesta, del otro lado no se distingue
+        "cancelé", "falló" y "el botón está roto". Y si el diálogo nativo no
+        puede abrirse, el archivo se escribe igual en una carpeta conocida
+        antes que perderse: el trabajo del usuario no se tira."""
         import base64 as _b64
         try:
             datos = _b64.b64decode(base64_data or "")
         except Exception as e:
+            log(f"save_binary: base64 ilegible: {e}")
             return {"error": f"datos ilegibles: {e}"}
         if not datos:
             return {"error": "no llegó nada para guardar"}
-        r = s._window.create_file_dialog(webview.SAVE_DIALOG,
-                                        directory=s.ws or "",
-                                        save_filename=filename)
-        if not r:
-            return None
-        ruta = Path(r[0] if isinstance(r, (list, tuple)) else str(r))
+
+        ruta = None
+        try:
+            r = s._window.create_file_dialog(webview.SAVE_DIALOG,
+                                             directory=s.ws or "",
+                                             save_filename=filename)
+            if not r:
+                return {"cancelado": True}
+            ruta = Path(r[0] if isinstance(r, (list, tuple)) else str(r))
+        except Exception as e:
+            # el diálogo no abrió (pasa si se lo pide desde el hilo equivocado):
+            # se guarda en el workspace o en Documentos y se avisa dónde quedó
+            log(f"save_binary: falló el diálogo ({e}) — guardo en carpeta por defecto")
+            base = Path(s.ws) if s.ws else (Path.home() / "Documents")
+            ruta = base / filename
+
         try:
             ruta.parent.mkdir(parents=True, exist_ok=True)
             ruta.write_bytes(datos)
         except OSError as e:
+            log(f"save_binary: no pude escribir {ruta}: {e}")
             return {"error": str(e)}
+        log(f"save_binary: {ruta} ({len(datos)} bytes)")
         return {"path": str(ruta), "name": ruta.name, "bytes": len(datos)}
 
     def save_file(s, path, content, filename="codigo.py"):

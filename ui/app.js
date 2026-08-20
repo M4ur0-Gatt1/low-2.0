@@ -2198,16 +2198,45 @@ window.addEventListener("message", async (event) => {
   // STL y otros binarios del estudio 3D: no pueden ir por save_file, que
   // escribe texto UTF-8 y corrompería el archivo.
   if (msg.type === "low:save-binary" && typeof msg.base64 === "string") {
+    // Siempre se le CONTESTA al estudio: está en un iframe sin puente con
+    // Python, así que sin respuesta no puede distinguir "cancelaste" de
+    // "falló" ni mostrar dónde quedó el archivo. Sin esto, el botón Exportar
+    // parecía no hacer nada.
+    const responder = (d) => frame.contentWindow &&
+      frame.contentWindow.postMessage(Object.assign({ type: "low:saved-binary" }, d), "*");
     try {
+      if (typeof api.save_binary !== "function") {
+        // el main.py que está corriendo es anterior a save_binary
+        api.log_js && api.log_js("save-binary: la app no expone save_binary");
+        responder({ error: "esta versión de LOW no puede guardar binarios — reiniciá la app" });
+        return;
+      }
       const r = await api.save_binary(msg.base64, msg.name || "modelo.stl");
       if (r && r.path) {
         setStatus(" " + (r.name || "archivo") + " guardado (" +
                   Math.round((r.bytes || 0) / 1024) + " KB)");
-      } else if (r && r.error) setStatus(" No pude guardar: " + r.error);
+        responder({ path: r.path, name: r.name, bytes: r.bytes });
+      } else if (r && r.cancelado) {
+        setStatus("Exportación cancelada");
+        responder({ cancelado: true });
+      } else {
+        // sin path, sin error y sin cancelado: la app contestó cualquier cosa.
+        // Pasa si el main.py que está corriendo es viejo, así que hay que
+        // decir eso y no un "algo falló" que no lleva a ninguna parte.
+        const e = (r && r.error) ||
+          "la app no devolvió el archivo — si LOW quedó abierto de antes, cerralo y volvé a abrirlo";
+        setStatus(" No pude guardar: " + e);
+        responder({ error: e });
+      }
     } catch (err) {
       setStatus("No pude guardar el archivo");
       api.log_js && api.log_js("save-binary error: " + err);
+      responder({ error: String((err && err.message) || err) });
     }
+  }
+  // el estudio 3D no tiene puente con Python: sus errores llegan por acá
+  if (msg.type === "low:log" && typeof msg.text === "string") {
+    api.log_js && api.log_js("[estudio3d] " + msg.text);
   }
   if (msg.type === "low:open-project") {
     try {
