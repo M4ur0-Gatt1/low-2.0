@@ -9114,7 +9114,7 @@ function dzDragOutAll() {
 function dzAnimationDock(visible) {
   dzPanelDockSetup();
   document.querySelectorAll(".dz-animation-dock").forEach(dock => {
-    const panels = Array.from(dock.children).filter(el => !el.classList.contains("dz-dock-resizer"));
+    const panels = Array.from(dock.children).filter(el => !el.matches(".dz-dock-resizer,.dz-panel-splitter"));
     dock.hidden = !visible || !panels.length;
   });
   const view = $("#designView");
@@ -9193,21 +9193,57 @@ function dzPanelDockSetup() {
     saved[panel.id] = { place, ...(rect || {}) };
     localStorage.setItem("low.2d.panelLayout", JSON.stringify(saved));
   };
+  const panelSizes = (() => { try { return JSON.parse(localStorage.getItem("low.2d.panelSizes") || "{}"); } catch (_) { return {}; } })();
+  const refreshPanelSplitters = dock => {
+    dock.querySelectorAll(":scope > .dz-panel-splitter").forEach(el => el.remove());
+    const panels = Array.from(dock.children).filter(el => !el.matches(".dz-dock-resizer,.dz-panel-splitter"));
+    if (dock.dataset.zone === "bottom") panels.forEach(panel => {
+      if (panelSizes[panel.id]?.w) panel.style.width = panelSizes[panel.id].w + "px";
+    });
+    else panels.forEach(panel => {
+      if (panelSizes[panel.id]?.h) panel.style.height = panel.style.flexBasis = panelSizes[panel.id].h + "px";
+    });
+    panels.slice(0, -1).forEach(panel => {
+      const split = document.createElement("div");
+      split.className = "dz-panel-splitter"; split.setAttribute("role", "separator");
+      split.title = dock.dataset.zone === "bottom" ? "Arrastrá para cambiar el ancho del panel" : "Arrastrá para cambiar la altura del panel";
+      panel.after(split);
+      split.addEventListener("pointerdown", e => {
+        if (DZ.workspaceLocked || e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const horizontal = dock.dataset.zone === "bottom";
+        const start = horizontal ? panel.getBoundingClientRect().width : panel.getBoundingClientRect().height;
+        const origin = horizontal ? e.clientX : e.clientY;
+        const move = ev => {
+          const value = Math.max(horizontal ? 220 : 110, Math.min(horizontal ? 720 : 620,
+            start + (horizontal ? ev.clientX : ev.clientY) - origin));
+          if (horizontal) panel.style.width = panel.style.flexBasis = value + "px";
+          else panel.style.height = panel.style.flexBasis = value + "px";
+        };
+        const up = () => {
+          document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
+          panelSizes[panel.id] = horizontal ? { w: panel.offsetWidth } : { h: panel.offsetHeight };
+          localStorage.setItem("low.2d.panelSizes", JSON.stringify(panelSizes));
+        };
+        document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+      });
+    });
+  };
   const updateDocks = () => Object.values(docks).forEach(d => {
-    const panels = Array.from(d.children).filter(el => !el.classList.contains("dz-dock-resizer"));
+    const panels = Array.from(d.children).filter(el => !el.matches(".dz-dock-resizer,.dz-panel-splitter"));
     d.hidden = !panels.length || !DZ.anim;
   });
   const dockPanel = (panel, zone) => {
     panel.classList.remove("dz-panel-floating");
     panel.style.left = panel.style.top = panel.style.right = panel.style.bottom = panel.style.width = panel.style.height = "";
-    docks[zone].appendChild(panel); save(panel, zone); updateDocks();
+    docks[zone].appendChild(panel); save(panel, zone); refreshPanelSplitters(docks[zone]); updateDocks();
   };
   const floatPanel = (panel, x, y, w, h) => {
     panel.classList.add("dz-panel-floating"); document.body.appendChild(panel);
     const leftPx = Math.max(8, Math.min(innerWidth - w - 8, x));
     const topPx = Math.max(8, Math.min(innerHeight - 80, y));
     Object.assign(panel.style, { left: leftPx + "px", top: topPx + "px", width: w + "px", height: h + "px" });
-    save(panel, "float", { x: leftPx, y: topPx, w, h }); updateDocks();
+    save(panel, "float", { x: leftPx, y: topPx, w, h }); Object.values(docks).forEach(refreshPanelSplitters); updateDocks();
   };
   const overlay = document.createElement("div"); overlay.className = "dz-dock-overlay"; overlay.hidden = true;
   overlay.innerHTML = '<i data-zone="left">Izquierda</i><i data-zone="right">Derecha</i><i data-zone="bottom">Abajo</i>';

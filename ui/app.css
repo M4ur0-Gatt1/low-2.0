@@ -2346,6 +2346,11 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .dz-animation-dock[data-zone="bottom"] > .dz-dock-resizer::after { left:0; right:0; top:3px; height:1px; }
 .dz-dock-resizer:hover::after, .dz-resizing-dock .dz-dock-resizer::after { background:var(--accent, #F0450E); }
 .dz-resizing-dock { cursor: col-resize; user-select:none; }
+.dz-panel-splitter { flex:0 0 7px; position:relative; z-index:11; cursor:row-resize; background:var(--panel); }
+.dz-panel-splitter::after { content:""; position:absolute; left:12px; right:12px; top:3px; height:1px; background:var(--line2); }
+.dz-panel-splitter:hover::after { background:var(--accent, #F0450E); }
+.dz-animation-dock[data-zone="bottom"] > .dz-panel-splitter { width:7px; height:auto; cursor:col-resize; }
+.dz-animation-dock[data-zone="bottom"] > .dz-panel-splitter::after { top:12px; bottom:12px; left:3px; width:1px; height:auto; right:auto; }
 .dz-inspector { position: relative; z-index: 2; order: 6; }
 .dz-animation-dock .dz-op-head, .dz-panel-floating .dz-op-head { touch-action: none; user-select: none; }
 .dz-panel-floating .dz-op-head { position: sticky; top: 0; z-index: 3; cursor: grab; }
