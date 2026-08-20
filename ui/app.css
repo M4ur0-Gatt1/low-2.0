@@ -2332,6 +2332,20 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   box-shadow: 0 18px 55px rgba(0,0,0,.58) !important; resize: both; overflow: auto !important;
 }
 .dz-animation-dock[data-zone="right"] { position: relative; z-index: 5; order: 5; }
+.dz-dock-resizer {
+  position: absolute; z-index: 12; background: transparent; touch-action: none;
+}
+.dz-animation-dock[data-zone="left"] { position: relative; }
+.dz-animation-dock[data-zone="left"] > .dz-dock-resizer { top: 0; right: -3px; bottom: 0; width: 7px; cursor: col-resize; }
+.dz-animation-dock[data-zone="right"] > .dz-dock-resizer { top: 0; left: -3px; bottom: 0; width: 7px; cursor: col-resize; }
+.dz-animation-dock[data-zone="bottom"] { position: relative; }
+.dz-animation-dock[data-zone="bottom"] > .dz-dock-resizer { top: -3px; left: 0; right: 0; height: 7px; cursor: row-resize; }
+.dz-dock-resizer::after { content:""; position:absolute; background:transparent; transition:background .12s ease; }
+.dz-animation-dock[data-zone="left"] > .dz-dock-resizer::after,
+.dz-animation-dock[data-zone="right"] > .dz-dock-resizer::after { top:0; bottom:0; left:3px; width:1px; }
+.dz-animation-dock[data-zone="bottom"] > .dz-dock-resizer::after { left:0; right:0; top:3px; height:1px; }
+.dz-dock-resizer:hover::after, .dz-resizing-dock .dz-dock-resizer::after { background:var(--accent, #F0450E); }
+.dz-resizing-dock { cursor: col-resize; user-select:none; }
 .dz-inspector { position: relative; z-index: 2; order: 6; }
 .dz-animation-dock .dz-op-head, .dz-panel-floating .dz-op-head { touch-action: none; user-select: none; }
 .dz-panel-floating .dz-op-head { position: sticky; top: 0; z-index: 3; cursor: grab; }
