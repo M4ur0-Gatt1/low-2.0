@@ -612,21 +612,29 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   });
   // animación
   $("#dzAnim").onclick = dzAnimToggle;
-  $("#tlPlay").onclick = dzAnimPlay;
+  $("#tlPlay").onclick = dzPlayToggle;
   $("#tlLoop").onclick = () => {
-    if (!DZ.anim) return;
-    DZ.anim.loop = !(DZ.anim.loop !== false);   // toggle (default true)
-    $("#tlLoop").classList.toggle("active", DZ.anim.loop);
-    dzSetStatus(DZ.anim.loop ? " Loop activado" : " Reproducción única (sin loop)");
+    if (!DZ.anim && !DZ.playback) return;
+    const loop = DZ.playback ? !DZ.playback.loop : !(DZ.anim.loop !== false);
+    if (DZ.anim) DZ.anim.loop = loop;
+    if (DZ.playback) DZ.playback.setLoop(loop);
+    $("#tlLoop").classList.toggle("active", loop);
+    dzSetStatus(loop ? " Loop activado" : " Reproducción única (sin loop)");
   };
+  $("#tlFps").onchange = (e) => { if (DZ.playback) DZ.playback.setFps(+e.target.value); };
+  const syncPlayRange = () => {
+    if (DZ.playback) DZ.playback.setRange(+$("#tlIn").value || 1, +$("#tlOut").value || 0);
+  };
+  $("#tlIn").onchange = syncPlayRange;
+  $("#tlOut").onchange = syncPlayRange;
   // modo dibujo (zen): pantalla limpia, solo lienzo + herramientas
   $("#dzZen").onclick = dzZenToggle;
   $("#tlAdd").onclick = dzFrameAdd;
   $("#tlBlank").onclick = () => dzFrameInsert(true);
-  $("#tlFirst").onclick = () => { dzAnimStopIf(); dzGoFrame(0); };
-  $("#tlPrev").onclick = () => { dzAnimStopIf(); dzGoFrame(Math.max(0, (DZ.anim ? DZ.anim.idx : 0) - 1)); };
-  $("#tlNext").onclick = () => { dzAnimStopIf(); dzGoFrame(Math.min((DZ.anim ? DZ.anim.frames.length : 1) - 1, (DZ.anim ? DZ.anim.idx : 0) + 1)); };
-  $("#tlLast").onclick = () => { dzAnimStopIf(); dzGoFrame((DZ.anim ? DZ.anim.frames.length : 1) - 1); };
+  $("#tlFirst").onclick = () => { if (DZ.playback) DZ.playback.first(); else { dzAnimStopIf(); dzGoFrame(0); } };
+  $("#tlPrev").onclick = () => { if (DZ.playback) DZ.playback.step(-1); else { dzAnimStopIf(); dzGoFrame(Math.max(0, (DZ.anim ? DZ.anim.idx : 0) - 1)); } };
+  $("#tlNext").onclick = () => { if (DZ.playback) DZ.playback.step(1); else { dzAnimStopIf(); dzGoFrame(Math.min((DZ.anim ? DZ.anim.frames.length : 1) - 1, (DZ.anim ? DZ.anim.idx : 0) + 1)); } };
+  $("#tlLast").onclick = () => { if (DZ.playback) DZ.playback.last(); else { dzAnimStopIf(); dzGoFrame((DZ.anim ? DZ.anim.frames.length : 1) - 1); } };
   $("#tlDel").onclick = async () => {
     if (!DZ.anim) return;
     if (!confirm("¿Borrar este cuadro? (no se puede deshacer)")) return;
@@ -5811,18 +5819,31 @@ async function dzFrameAdd() {
 function dzOnionClear() {
   document.querySelectorAll("#dzCanvas svg g.dz-onion").forEach(n => n.remove());
 }
+/* Los SVG históricos de LOW guardan una capa blanca de página como un rect.
+   Al teñir un fantasma esa página se convertía en una placa roja/verde. Se
+   elimina solo de la COPIA usada por papel cebolla: el dibujo real no cambia. */
+function dzOnionStripPage(root, viewBox) {
+  if (!root) return;
+  const vb = String(viewBox || "0 0 1080 1080").trim().split(/[ ,]+/).map(Number);
+  const pageArea = Math.max(1, Math.abs((vb[2] || 1080) * (vb[3] || 1080)));
+  root.querySelectorAll("rect").forEach((rect) => {
+    const width = Math.abs(parseFloat(rect.getAttribute("width")) || 0);
+    const height = Math.abs(parseFloat(rect.getAttribute("height")) || 0);
+    const fill = String(rect.getAttribute("fill") || "").trim().toLowerCase().replace(/\s+/g, "");
+    const stroke = String(rect.getAttribute("stroke") || "none").trim().toLowerCase();
+    const white = fill === "white" || fill === "#fff" || fill === "#ffffff"
+      || fill === "rgb(255,255,255)" || fill === "rgba(255,255,255,1)";
+    const pageLike = width * height >= pageArea * .20;
+    if (pageLike && white && (stroke === "" || stroke === "none" || stroke === "transparent")) rect.remove();
+  });
+}
 function dzOnionGhost(svgText, tintId, rgb, opacity) {
   const tmp = document.createElement("div"); tmp.innerHTML = svgText;
   const psvg = tmp.querySelector("svg");
   if (!psvg) return null;
   // sacarle el fondo al fantasma: un rect que cubre ~todo el lienzo tapa el
   // cuadro actual — solo queremos las líneas/formas (como niveles de OpenToonz)
-  const vb = (psvg.getAttribute("viewBox") || "0 0 1080 1080").split(/\s+/).map(Number);
-  const area = (vb[2] || 1) * (vb[3] || 1);
-  [...psvg.querySelectorAll("rect")].forEach(rc => {
-    const a = (+rc.getAttribute("width") || 0) * (+rc.getAttribute("height") || 0);
-    if (a >= area * 0.9) rc.remove();
-  });
+  dzOnionStripPage(psvg, psvg.getAttribute("viewBox"));
   const g = document.createElementNS(SVGNS, "g");
   g.setAttribute("class", "dz-onion");
   g.setAttribute("opacity", String(opacity));
@@ -7637,14 +7658,14 @@ window.lowAnimationPanelCommand = async ({ action, payload }) => {
   if (!DZ.anim && action !== "open") await dzAnimToggle();
   if (!DZ.anim) return false;
   const index = Math.max(0, +(payload && payload.index) || 0);
-  if (action === "play") await dzAnimPlay();
-  else if (action === "stop") dzAnimStopIf();
+  if (action === "play") await dzPlayToggle();
+  else if (action === "stop") { if (DZ.playback) DZ.playback.stop(); else dzAnimStopIf(); }
   else if (action === "frame") await dzTimelineCellActivate(index, false, payload || null);
   else if (action === "create-frame") await dzTimelineCellActivate(index, true, payload || null);
-  else if (action === "first") { dzAnimStopIf(); await dzGoFrame(0); }
-  else if (action === "previous") await dzGoFrame(Math.max(0, DZ.anim.idx - 1));
-  else if (action === "next") await dzGoFrame(Math.min(DZ.anim.frames.length - 1, DZ.anim.idx + 1));
-  else if (action === "last") { dzAnimStopIf(); await dzGoFrame(Math.max(0, DZ.anim.frames.length - 1)); }
+  else if (action === "first") { if (DZ.playback) DZ.playback.first(); else { dzAnimStopIf(); await dzGoFrame(0); } }
+  else if (action === "previous") { if (DZ.playback) DZ.playback.step(-1); else await dzGoFrame(Math.max(0, DZ.anim.idx - 1)); }
+  else if (action === "next") { if (DZ.playback) DZ.playback.step(1); else await dzGoFrame(Math.min(DZ.anim.frames.length - 1, DZ.anim.idx + 1)); }
+  else if (action === "last") { if (DZ.playback) DZ.playback.last(); else { dzAnimStopIf(); await dzGoFrame(Math.max(0, DZ.anim.frames.length - 1)); } }
   else if (action === "toggle-loop") {
     DZ.anim.loop = !(DZ.anim.loop !== false);
     $("#tlLoop")?.classList.toggle("active", DZ.anim.loop);
@@ -7654,13 +7675,15 @@ window.lowAnimationPanelCommand = async ({ action, payload }) => {
   else if (action === "set-fps") {
     const fps = Math.max(1, Math.min(60, Math.round(+(payload && payload.value) || 12)));
     if ($("#tlFps")) $("#tlFps").value = fps;
-    if (DZ.doc) { DZ.doc.scene.fps = fps; DZ.doc.touch(); }
+    if (DZ.playback) DZ.playback.setFps(fps);
+    else if (DZ.doc) { DZ.doc.scene.fps = fps; DZ.doc.touch(); }
   }
   else if (action === "set-range") {
     const input = payload && payload.edge === "out" ? $("#tlOut") : $("#tlIn");
     if (input) input.value = payload && payload.edge === "out"
       ? Math.max(0, Math.round(+payload.value || 0))
       : Math.max(1, Math.round(+payload.value || 1));
+    if (DZ.playback) DZ.playback.setRange(+$("#tlIn").value || 1, +$("#tlOut").value || 0);
   }
   else if (action === "add") await dzFrameAdd();
   else if (action === "add-blank") await dzFrameInsert(true);
@@ -7715,7 +7738,7 @@ window.lowAnimationPanelCommand = async ({ action, payload }) => {
 
 async function dzTimelineCellActivate(index, createFuture, event=null) {
   if (!DZ.anim) return;
-  dzAnimStopIf();
+  if (DZ.playback) DZ.playback.stop(); else dzAnimStopIf();
   const previous = DZ.timelineSelection || { anchor: DZ.anim.idx, from: DZ.anim.idx, to: DZ.anim.idx };
   if (event && event.shiftKey) {
     const anchor = previous.anchor == null ? DZ.anim.idx : previous.anchor;
@@ -7858,6 +7881,32 @@ function dzSetPlayButton(playing) {
   if (!button) return;
   button.innerHTML = `<svg class="ico ico-fill"><use href="#${playing ? "i-pause" : "i-play"}"/></svg>`;
   button.title = playing ? "Pausar" : "Reproducir";
+}
+async function dzPlayToggle() {
+  // Desde la migración a Scene/Document, la reproducción profesional vive en
+  // Playback. El transporte superior debe manejar el mismo estado que X-sheet
+  // y Timeline; el reproductor de SVG sueltos queda solo para escenas legacy.
+  if (DZ.doc) {
+    if (!DZ.playback) await dzTlMount();
+    if (DZ.playback) {
+      if (!DZ.playback.playing) dzDocCommit();
+      dzPlaybackBindUI(); DZ.playback.toggle(); return;
+    }
+  }
+  return dzAnimPlay();
+}
+
+function dzPlaybackBindUI() {
+  if (!DZ.playback || DZ.playbackUiBound === DZ.playback) return;
+  if (DZ.playbackUiUnsub) DZ.playbackUiUnsub();
+  DZ.playbackUiBound = DZ.playback;
+  DZ.playbackUiUnsub = DZ.playback.subscribe((playback) => {
+    dzSetPlayButton(playback.playing);
+    const index = Math.max(0, (playback.doc ? playback.doc.frame : 1) - 1);
+    dzPlaybackHead(index);
+    dzPushAnimationPanelPlayback(index, playback.playing);
+  });
+  dzSetPlayButton(DZ.playback.playing);
 }
 async function dzAnimPlay() {
   if (!DZ.anim) return;
@@ -9694,6 +9743,7 @@ async function dzTlMount() {
       if (DZ.tlView) DZ.tlView.render();
     });
   } else DZ.playback.setDoc(DZ.doc);
+  dzPlaybackBindUI();
   if (!DZ.tlView) DZ.tlView = new LOW.animation.TimelineView(host, DZ.doc);
   else DZ.tlView.setDoc(DZ.doc);
   DZ.tlView.playback = DZ.playback;
@@ -9987,6 +10037,7 @@ function dzOnionRender() {
     g.setAttribute("opacity", String(c.opacity));
     g.setAttribute("pointer-events", "none");
     g.innerHTML = c.drawing.content || "";
+    dzOnionStripPage(g, svg.getAttribute("viewBox"));
     // teñir: todo el fantasma del color de su lado del tiempo
     g.querySelectorAll("*").forEach((n) => {
       if (cfg.linesOnly && n.getAttribute("fill") && n.getAttribute("fill") !== "none") n.setAttribute("fill", "none");
@@ -10037,7 +10088,13 @@ async function dzDocInit() {
   // último que hiciste, sea un trazo o un cambio de timing, en el orden real.
   if (!DZ.history) DZ.history = new LOW.core.HistoryManager({ limit: 180 });
   DZ.doc.setHistory(DZ.history);
-  DZ.doc.subscribe((doc, motivo) => { if (motivo === "frame" || motivo === "onion") dzOnionRender(); });
+  DZ.doc.subscribe((doc, motivo) => {
+    if (motivo === "frame") {
+      const drawing = doc.drawing;
+      dzCanvasSet(drawing ? drawing.content : "");
+      dzOnionRender();
+    } else if (motivo === "onion") dzOnionRender();
+  });
   return DZ.doc;
 }
 
@@ -10059,6 +10116,7 @@ async function dzXsMount() {
     // el transporte se redibuja al reproducir/parar para reflejar el estado
     DZ.playback.subscribe(() => { if (DZ.xsView) DZ.xsView.render(); });
   } else DZ.playback.setDoc(DZ.doc);
+  dzPlaybackBindUI();
   if (!DZ.xsView) DZ.xsView = new LOW.animation.XsheetView(host, DZ.doc);
   else DZ.xsView.setDoc(DZ.doc);
   DZ.xsView.playback = DZ.playback;
@@ -10077,10 +10135,6 @@ async function dzXsMount() {
     status: (m) => dzSetStatus(" " + m),
     toggleOnion: () => { DZ.onionOn = !DZ.onionOn; dzOnion2Render(); dzOnionRender(); },
   });
-  // navegar desde la planilla cambia el dibujo del lienzo
-  DZ.doc.subscribe((doc, motivo) => { if (motivo === "frame") {
-    const d = doc.drawing; dzCanvasSet(d ? d.content : ""); dzOnionRender();
-  } });
   DZ.xsView.render();
 }
 
