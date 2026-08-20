@@ -48,21 +48,25 @@
       const nodes = {};
       for (const [id, raw] of Object.entries(data.nodes)) {
         const n = raw || {};
-        nodes[id] = { id, type: n.type || "drawing", elementId: n.elementId || id,
+        const elementId = n.elementId || n.binding?.elementId || id;
+        nodes[id] = { id, type: n.type || "drawing", elementId,
+          binding: { mode: n.binding?.mode || "rigid", elementId },
           parentId: n.parentId || null, pivot: n.pivot ? { x: +n.pivot.x || 0, y: +n.pivot.y || 0 } : null,
           rest: rigPoseData(n.rest), keys: clone(n.keys || {}), pinned: !!n.pinned,
           limits: { min: Number.isFinite(+n.limits?.min) ? +n.limits.min : -180,
             max: Number.isFinite(+n.limits?.max) ? +n.limits.max : 180 } };
       }
-      return { version: 2, nodes, constraints: clone(data.constraints || {}) };
+      return { version: 3, setup: { mode: data.setup?.mode || "cutout" },
+        nodes, constraints: clone(data.constraints || {}) };
     }
     const nodes = {};
     for (const [elementId, keys] of Object.entries(data || {})) {
       nodes[elementId] = { id: elementId, type: "drawing", elementId,
+        binding: { mode: "rigid", elementId },
         parentId: null, pivot: null, rest: rigPoseData(), keys: clone(keys || {}), pinned: false,
         limits: { min: -180, max: 180 } };
     }
-    return { version: 2, nodes, constraints: {} };
+    return { version: 3, setup: { mode: "cutout" }, nodes, constraints: {} };
   }
 
   // Matrices afines SVG [a,b,c,d,e,f]. El rig de recortes conserva las piezas

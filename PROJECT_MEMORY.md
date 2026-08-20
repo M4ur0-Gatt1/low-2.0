@@ -29,8 +29,10 @@
 
 ## Prioridad activa
 
-Completar sobre el rig cut-out rígido ya canónico: editor de curvas, Schematic
-y deformación flexible. La decisión de arquitectura está registrada en
+Completar sobre el rig cut-out rígido ya canónico: controles IK persistentes,
+editor de curvas, Schematic y deformación flexible. No llamar “rig completo” a
+un registro automático de formas: el armado profesional separa piezas/arte,
+esqueleto o pegs, binding y controles de animación. La decisión está registrada en
 `docs/ADR_2D_CUTOUT_RIG.md` y el estado en `docs/2D_REDESIGN.md`.
 
 ## Últimos bloques 2D confirmados
@@ -46,4 +48,11 @@ y deformación flexible. La decisión de arquitectura está registrada en
 - Rig cut-out rígido canónico: piezas y pivotes, jerarquía matricial real, FK,
   IK de dos huesos, raíz fijada, límites, claves globales, Undo/Redo,
   guardado/reapertura, pista en Timeline y panel/mesa separables con controles
-  de esqueleto para dos monitores. Validación automática actual: 83/83.
+  de esqueleto para dos monitores.
+- Corrección de armado: `Registrar piezas` ya no inventa el torso por área ni
+  cuelga todo de una raíz falsa. Las piezas nacen sin padre; en la mesa el
+  círculo mueve el pivote y el cuadrado crea o rompe el vínculo hijo→padre.
+  El overlay ocupa el viewer completo y acepta puntero realmente. Esquema rig
+  v3 con binding rígido explícito y migración desde escenas anteriores.
+- Validación automática actual: 98/98, más prueba E2E de registro sin jerarquía,
+  arrastre de pivote, vinculación gráfica y Undo.

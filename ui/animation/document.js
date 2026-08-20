@@ -485,6 +485,7 @@
       return this._rigChange("Crear nodo de rig", (rig) => {
         if (!rig.nodes[id]) rig.nodes[id] = { id, type: data.type || "drawing",
           elementId: data.elementId || id, parentId: data.parentId || null,
+          binding: { mode: data.binding?.mode || "rigid", elementId: data.elementId || id },
           pivot: data.pivot || null, rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 },
           keys: {}, pinned: !!data.pinned, limits: data.limits || { min: -180, max: 180 } };
         return rig.nodes[id];
@@ -502,6 +503,7 @@
           if (!rig.nodes[data.id]) {
             rig.nodes[data.id] = { id: data.id, type: data.type || "drawing",
               elementId: data.elementId || data.id, parentId: null,
+              binding: { mode: data.binding?.mode || "rigid", elementId: data.elementId || data.id },
               pivot: data.pivot ? { x: +data.pivot.x || 0, y: +data.pivot.y || 0 } : null,
               rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
               pinned: !!data.pinned, limits: data.limits || { min: -180, max: 180 } };
@@ -509,6 +511,8 @@
           } else {
             const node = rig.nodes[data.id];
             node.elementId = data.elementId || node.elementId || data.id;
+            node.binding = { mode: data.binding?.mode || node.binding?.mode || "rigid",
+              elementId: node.elementId };
             if (!node.pivot && data.pivot) node.pivot = { x: +data.pivot.x || 0, y: +data.pivot.y || 0 };
           }
         }
@@ -527,6 +531,7 @@
       if (!id) return false;
       return this._rigChange("Crear clave de rig", (rig) => {
         const node = rig.nodes[id] || (rig.nodes[id] = { id, type: "drawing", elementId: id,
+          binding: { mode: "rigid", elementId: id },
           parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
           pinned: false, limits: { min: -180, max: 180 } });
         const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
@@ -541,6 +546,7 @@
       if (!id) return false;
       return this._rigChange(label, (rig) => {
         const node = rig.nodes[id] || (rig.nodes[id] = { id, type: "drawing", elementId: id,
+          binding: { mode: "rigid", elementId: id },
           parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
           pinned: false, limits: { min: -180, max: 180 } });
         node.keys = animation.clone(keys || {}); return true;

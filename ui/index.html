@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=dev1787252000">
+<link rel="stylesheet" href="app.css?v=dev1787254000">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -565,12 +565,13 @@
           <button id="rigModeIk" title="Mover un extremo y resolver la cadena">IK</button>
         </div>
         <section class="rig2-section" data-rig-section="build">
-          <div class="rig2-title"><b>Piezas</b><span id="rigCount">0</span></div>
-          <div class="rig2-actions rig2-prepare"><button class="primary" id="rigAuto" title="Registra las capas dibujables, elige una raíz y crea una jerarquía inicial funcional">Preparar dibujo</button></div>
+          <div class="rig2-title"><b>Cut-out por piezas</b><span id="rigCount">0</span></div>
+          <div class="rig2-flow"><span>1 Piezas</span><i>›</i><span>2 Pivotes</span><i>›</i><span>3 Vínculos</span><i>›</i><span>4 Pose</span></div>
+          <div class="rig2-actions rig2-prepare"><button class="primary" id="rigAuto" title="Registra las piezas dibujables sin inventar una anatomía ni una jerarquía">Registrar piezas del dibujo</button></div>
           <div class="rig2-row rig2-wide"><input type="text" id="rigId" placeholder="nombre de la pieza" title="ID estable de la pieza">
             <button id="rigAdd" title="Registrar la selección como pieza del esqueleto">Añadir</button>
             <button id="rigRemove" title="Quitar la pieza seleccionada del esqueleto">Quitar</button></div>
-          <label class="rig2-field"><span>Padre</span><select id="rigParent"><option value="">— raíz —</option></select></label>
+          <label class="rig2-field"><span>Vínculo</span><select id="rigParent"><option value="">— sin padre —</option></select></label>
           <div class="rig2-actions">
             <button id="rigPivotTool" title="Colocar el pivote de la pieza en la mesa">Pivote</button>
             <button id="rigPin" title="Fijar o liberar esta pieza como raíz">Fijar raíz</button>
@@ -614,7 +615,7 @@
           <div class="rig2-actions"><button id="perfRec">Actuar</button><button id="perfPlay">Ver</button>
             <button id="perfSmooth">Suavizar</button><button id="perfBake">Generar</button></div>
         </details>
-        <div class="rig2-hint" id="rigHint">Armado: registrá cada pieza, colocá pivotes y vinculá desde el torso hacia las extremidades.</div>
+        <div class="rig2-hint" id="rigHint">Armado: registrá las piezas. En la mesa, arrastrá un círculo para colocar su pivote y el cuadrado para vincular esa pieza con su padre.</div>
       </div>
       <div class="dz-pin" id="dzPin" hidden>💬</div>
     </div>
@@ -793,16 +794,16 @@
 <script src="mock-api.js?v=dev1787240000"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
 <script src="core/history.js?v=3.29.40"></script>
-<script src="animation/scene-model.js?v=dev1787248000"></script>
+<script src="animation/scene-model.js?v=dev1787254000"></script>
 <script src="animation/exposures.js?v=3.29.40"></script>
 <script src="animation/onion.js?v=3.29.40"></script>
-<script src="animation/document.js?v=dev1787253000"></script>
+<script src="animation/document.js?v=dev1787254000"></script>
 <script src="animation/xsheet-view.js?v=3.29.40"></script>
 <script src="animation/timeline-view.js?v=dev1787248000"></script>
 <script src="animation/level-strip.js?v=3.29.40"></script>
 <script src="animation/audio.js?v=3.29.40"></script>
 <script src="animation/shortcuts.js?v=3.29.40"></script>
-<script src="animation/model-tests.js?v=dev1787253000"></script>
+<script src="animation/model-tests.js?v=dev1787254000"></script>
 <script src="animation/timeline.js?v=3.29.40"></script>
 <script src="animation/xsheet.js?v=3.29.40"></script>
 <script src="animation/playback.js?v=3.29.40"></script>
@@ -819,6 +820,6 @@
 <script src="ai/commands.js?v=3.29.40"></script>
 <script src="ai/task-runner.js?v=3.29.40"></script>
 <script src="ai/recovery.js?v=3.29.40"></script>
-<script src="app.js?v=dev1787253000"></script>
+<script src="app.js?v=dev1787254000"></script>
 </body>
 </html>
