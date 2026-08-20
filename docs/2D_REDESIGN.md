@@ -347,6 +347,12 @@ seguir trabajando donde se dejó.
 
 Mientras alguna de esas operaciones falle o sea incoherente, la fase no está terminada.
 
+La arquitectura siguiente del rig —bones, slots, attachments, bindings,
+constraints, controladores, acciones, mallas/pesos y vistas 360— está fijada en
+[`ADR_2D_PRO_RIG_ARCHITECTURE.md`](ADR_2D_PRO_RIG_ARCHITECTURE.md). Ese ADR
+corrige la aplicación directa de técnicas 3D al dominio 2D y mantiene todo en
+el mismo `LowDoc.scene.rig`.
+
 ---
 
 ## 5. Timeline desacoplada y mesa de luz (pasada 2026-08-20)
