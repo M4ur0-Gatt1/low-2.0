@@ -365,7 +365,25 @@ guardar/reabrir y dibujo directo sobre una celda vacía.
 
 ---
 
-## 6. Fuentes
+## 6. Resolución canónica de la mesa de dibujo (pasada 2026-08-20)
+
+- Una escena nueva parte de **1020×1080 px**. Archivo → Documento permite elegir ese formato,
+  HD, Full HD horizontal/vertical, 4K, cuadrado, cine e impresión, o escribir una medida propia.
+- `Scene.width/height` son la única resolución del documento de animación y se guardan dentro de
+  `.lowscene`. Cambiar el tamaño de un panel, acoplarlo, moverlo a otro monitor o ajustar la vista
+  sólo cambia el zoom CSS; no toca la resolución ni las coordenadas del dibujo.
+- La raíz SVG mantiene sincronizados `viewBox`, `width`, `height` y `preserveAspectRatio` al abrir,
+  cambiar de Drawing, recuperar una escena y deshacer/rehacer el cambio de documento.
+- Los SVG anteriores conservan el tamaño que ya tenían durante la migración. El nuevo valor
+  1020×1080 es el predeterminado para archivos nuevos, no una conversión destructiva.
+- Cambiar tamaño y fondo forma una única operación de Undo, y guardar/reabrir conserva el formato.
+
+Pruebas del modelo: **72/72** tras esta pasada (incluyen valor inicial, preset, Undo/Redo y
+persistencia de resolución).
+
+---
+
+## 7. Fuentes
 
 - [Interface Overview — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/interface_overview.html)
 - [Working in Xsheet/Timeline — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/working_in_xsheet.html)

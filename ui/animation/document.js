@@ -135,6 +135,24 @@
     emit(motivo) { this.listeners.forEach((fn) => { try { fn(this, motivo); } catch (_) { /* un oyente roto no frena al resto */ } }); }
     touch() { this.dirty = true; this.scene.touch(); return this; }
 
+    /** Cambia la resolución lógica del archivo. El tamaño del panel o monitor
+     *  jamás llama a este método: esas variaciones pertenecen al zoom. */
+    setSize(width, height, { history = true } = {}) {
+      const before = { width: this.scene.width, height: this.scene.height };
+      if (!this.scene.setSize(width, height)) return false;
+      const after = { width: this.scene.width, height: this.scene.height };
+      this.dirty = true; this.emit("document");
+      if (history && this.history) {
+        const doc = this;
+        this.history.push({ label: "Cambiar tamaño del documento", domain: "document",
+          before, after, apply: (_direction, value) => {
+            doc.scene.setSize(value.width, value.height);
+            doc.dirty = true; doc.emit("document");
+          } });
+      }
+      return true;
+    }
+
     // ── navegación ───────────────────────────────────────────────────────
     goTo(frame) {
       const f = Math.max(1, Math.round(frame) || 1);

@@ -914,7 +914,11 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
   background-size: 22px 22px; background-position: 0 0,0 11px,11px -11px,-11px 0;
 }
 .dz-canvas { position: relative; }
-.dz-canvas svg { max-width: 100%; max-height: 100%; box-shadow: 0 6px 40px rgba(0,0,0,.5); background: #fff; transform-origin: center; }
+.dz-canvas > svg {
+  position: absolute; left: 50%; top: 50%; max-width: none; max-height: none;
+  box-shadow: 0 6px 40px rgba(0,0,0,.5); background: #fff;
+  transform-origin: center; flex: none;
+}
 .dz-procreate-bar {
   position: absolute; z-index: 20; right: 22px; top: 18px; display: flex; gap: 5px;
   padding: 7px; border: 1px solid rgba(255,255,255,.13); border-radius: 18px;

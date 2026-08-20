@@ -339,6 +339,27 @@
       }
     }
 
+    // 16. La mesa tiene una resolución canónica independiente de la ventana.
+    {
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      ok("la resolución inicial de LOW es 1020×1080",
+        doc.scene.width === 1020 && doc.scene.height === 1080,
+        `${doc.scene.width}×${doc.scene.height}`);
+      doc.setSize(1920, 1080);
+      ok("un formato de pantalla cambia el documento canónico",
+        doc.scene.width === 1920 && doc.scene.height === 1080);
+      history.undo();
+      ok("undo restaura juntas las dos dimensiones",
+        doc.scene.width === 1020 && doc.scene.height === 1080,
+        `${doc.scene.width}×${doc.scene.height}`);
+      history.redo();
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("la resolución definida se conserva al guardar y reabrir",
+        reopened.scene.width === 1920 && reopened.scene.height === 1080,
+        `${reopened.scene.width}×${reopened.scene.height}`);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }
