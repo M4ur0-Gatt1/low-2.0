@@ -485,7 +485,8 @@
       return this._rigChange("Crear nodo de rig", (rig) => {
         if (!rig.nodes[id]) rig.nodes[id] = { id, type: data.type || "drawing",
           elementId: data.elementId || id, parentId: data.parentId || null,
-          pivot: data.pivot || null, rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {} };
+          pivot: data.pivot || null, rest: data.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 },
+          keys: {}, pinned: !!data.pinned, limits: data.limits || { min: -180, max: 180 } };
         return rig.nodes[id];
       });
     }
@@ -494,7 +495,8 @@
       if (!id) return false;
       return this._rigChange("Crear clave de rig", (rig) => {
         const node = rig.nodes[id] || (rig.nodes[id] = { id, type: "drawing", elementId: id,
-          parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {} });
+          parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
+          pinned: false, limits: { min: -180, max: 180 } });
         const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
         const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
         node.keys[Math.max(1, Math.round(frame))] = { x: +pose.x || 0, y: +pose.y || 0,
@@ -507,7 +509,8 @@
       if (!id) return false;
       return this._rigChange(label, (rig) => {
         const node = rig.nodes[id] || (rig.nodes[id] = { id, type: "drawing", elementId: id,
-          parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {} });
+          parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: {},
+          pinned: false, limits: { min: -180, max: 180 } });
         node.keys = animation.clone(keys || {}); return true;
       });
     }
@@ -533,6 +536,110 @@
       return this._rigChange("Cambiar pivote del rig", (rig) => {
         const node = rig.nodes[id]; if (!node) return false;
         node.pivot = pivot ? { x: +pivot.x || 0, y: +pivot.y || 0 } : null; return true;
+      });
+    }
+
+    removeRigNode(id) {
+      return this._rigChange("Quitar pieza del rig", (rig) => {
+        if (!rig.nodes[id]) return false;
+        delete rig.nodes[id];
+        Object.values(rig.nodes).forEach((node) => { if (node.parentId === id) node.parentId = null; });
+        for (const [constraintId, c] of Object.entries(rig.constraints || {}))
+          if ([c.rootId, c.midId, c.effectorId].includes(id)) delete rig.constraints[constraintId];
+        return true;
+      });
+    }
+
+    setRigPinned(id, pinned) {
+      return this._rigChange(pinned ? "Fijar pieza del rig" : "Liberar pieza del rig", (rig) => {
+        const node = rig.nodes[id]; if (!node) return false;
+        node.pinned = !!pinned; return true;
+      });
+    }
+
+    setRigLimits(id, min, max) {
+      return this._rigChange("Cambiar límites del hueso", (rig) => {
+        const node = rig.nodes[id]; if (!node) return false;
+        const lo = Math.max(-360, Math.min(360, +min || 0));
+        const hi = Math.max(-360, Math.min(360, +max || 0));
+        node.limits = { min: Math.min(lo, hi), max: Math.max(lo, hi) }; return true;
+      });
+    }
+
+    setRigPoseKeys(poses, frame, label = "Clavar pose del rig") {
+      const f = Math.max(1, Math.round(frame));
+      return this._rigChange(label, (rig) => {
+        let changed = false;
+        for (const [id, pose] of Object.entries(poses || {})) {
+          const node = rig.nodes[id]; if (!node) continue;
+          const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
+          const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
+          node.keys[f] = { x: +pose.x || 0, y: +pose.y || 0, r: +pose.r || 0, sx, sy };
+          changed = true;
+        }
+        return changed;
+      });
+    }
+
+    deleteRigPoseKeys(ids, frame, label = "Borrar pose global del rig") {
+      const f = Math.max(1, Math.round(frame)), wanted = new Set(ids || Object.keys(this.scene.rig.nodes));
+      return this._rigChange(label, (rig) => {
+        let changed = false;
+        for (const [id, node] of Object.entries(rig.nodes)) {
+          if (wanted.has(id) && node.keys && node.keys[f]) { delete node.keys[f]; changed = true; }
+        }
+        for (const c of Object.values(rig.constraints || {})) {
+          if (c.targetKeys && c.targetKeys[f]) { delete c.targetKeys[f]; changed = true; }
+        }
+        return changed;
+      });
+    }
+
+    createRigIK(rootId, midId, effectorId, data = {}) {
+      const effector = this.scene.rigNode(effectorId);
+      const initialTarget = data.target || (effector && effector.pivot
+        ? this.scene.rigWorldPoint(effectorId, this.frame, effector.pivot) : null);
+      return this._rigChange("Crear cadena IK", (rig) => {
+        const root = rig.nodes[rootId], mid = rig.nodes[midId], end = rig.nodes[effectorId];
+        if (!root || !mid || !end || mid.parentId !== rootId || end.parentId !== midId ||
+            !root.pivot || !mid.pivot || !end.pivot) return false;
+        rig.constraints = rig.constraints || {};
+        const id = data.id || `ik_${rootId}_${effectorId}`;
+        rig.constraints[id] = { id, type: "ik2", rootId, midId, effectorId,
+          enabled: true, bend: data.bend === -1 ? -1 : 1,
+          target: initialTarget || { x: end.pivot.x, y: end.pivot.y }, targetKeys: {} };
+        return id;
+      });
+    }
+
+    deleteRigConstraint(id) {
+      return this._rigChange("Borrar cadena IK", (rig) => {
+        if (!rig.constraints || !rig.constraints[id]) return false;
+        delete rig.constraints[id]; return true;
+      });
+    }
+
+    setRigIKBend(id, bend) {
+      return this._rigChange("Invertir flexión IK", (rig) => {
+        const c = rig.constraints && rig.constraints[id]; if (!c) return false;
+        c.bend = bend === -1 ? -1 : 1; return true;
+      });
+    }
+
+    setRigIKTarget(id, frame, target) {
+      const solved = this.scene.rigSolveIK(id, frame, target);
+      if (!solved) return false;
+      const f = Math.max(1, Math.round(frame));
+      return this._rigChange("Posar cadena IK", (rig) => {
+        const c = rig.constraints && rig.constraints[id]; if (!c) return false;
+        c.targetKeys = c.targetKeys || {};
+        c.targetKeys[f] = { x: solved.target.x, y: solved.target.y };
+        for (const [nodeId, pose] of Object.entries(solved.poses)) {
+          const node = rig.nodes[nodeId]; if (!node) continue;
+          node.keys[f] = { x: +pose.x || 0, y: +pose.y || 0, r: +pose.r || 0,
+            sx: pose.sx == null ? 1 : +pose.sx, sy: pose.sy == null ? 1 : +pose.sy };
+        }
+        return true;
       });
     }
 

@@ -324,7 +324,58 @@
       ok("pivote pertenece al nodo canónico", doc.scene.rigNode("brazo").pivot.x === 12);
     }
 
-    // 15. El transporte visible controla el reproductor del documento único.
+    // 15. Cut-out completo: matriz jerárquica, IK, límites, Undo y persistencia.
+    {
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      doc.ensureRigNode("brazo", { pivot: { x: 0, y: 0 }, pinned: true });
+      doc.ensureRigNode("antebrazo", { pivot: { x: 100, y: 0 } });
+      doc.ensureRigNode("mano", { pivot: { x: 200, y: 0 } });
+      doc.setRigParent("antebrazo", "brazo"); doc.setRigParent("mano", "antebrazo");
+      doc.setRigKey("brazo", 1, { x: 0, y: 0, r: 90, s: 1 });
+      const handAfterParent = doc.scene.rigWorldPoint("mano", 1, { x: 200, y: 0 });
+      ok("la matriz jerárquica mueve la mano alrededor del hombro",
+        Math.round(handAfterParent.x) === 0 && Math.round(handAfterParent.y) === 200,
+        JSON.stringify(handAfterParent));
+      const ik = doc.createRigIK("brazo", "antebrazo", "mano");
+      ok("se crea IK sólo sobre una cadena válida", typeof ik === "string");
+      const initialTarget = doc.scene.rigTargetAt(ik, 1);
+      ok("crear IK conserva el extremo donde estaba, sin salto",
+        Math.round(initialTarget.x) === 0 && Math.round(initialTarget.y) === 200,
+        JSON.stringify(initialTarget));
+      history.clear();
+      doc.setRigIKTarget(ik, 5, { x: 100, y: 100 });
+      const reached = doc.scene.rigWorldPoint("mano", 5, { x: 200, y: 0 });
+      ok("IK de dos huesos alcanza el objetivo", Math.abs(reached.x - 100) < 0.01 && Math.abs(reached.y - 100) < 0.01,
+        JSON.stringify(reached));
+      ok("IK clava las dos rotaciones implicadas en una pose",
+        !!doc.scene.rigNode("brazo").keys[5] && !!doc.scene.rigNode("antebrazo").keys[5]);
+      ok("el objetivo IK queda animado por frame", doc.scene.rigTargetAt(ik, 5).y === 100);
+      history.undo();
+      ok("undo de IK restaura cadena y objetivo juntos",
+        !doc.scene.rigNode("brazo").keys[5] && !doc.scene.rigConstraint(ik).targetKeys[5]);
+      history.redo();
+      doc.setRigKey("antebrazo", 7, { x: 10, y: 0, r: 0, sx: 1, sy: 1 });
+      doc.setRigKey("mano", 7, { x: 5, y: 0, r: 0, sx: 1, sy: 1 });
+      doc.setRigIKTarget(ik, 7, { x: 120, y: 120 });
+      const reachedAfterFk = doc.scene.rigWorldPoint("mano", 7, { x: 200, y: 0 });
+      ok("pasar de FK trasladado a IK no hace saltar la cadena",
+        Math.abs(reachedAfterFk.x - 120) < 0.01 && Math.abs(reachedAfterFk.y - 120) < 0.01,
+        JSON.stringify(reachedAfterFk));
+      doc.setRigLimits("antebrazo", -20, 45);
+      doc.setRigIKTarget(ik, 9, { x: 20, y: 120 });
+      ok("los límites angulares restringen el solver IK",
+        doc.scene.rigNode("antebrazo").keys[9].r <= 45.001);
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("cadena, límites, claves y objetivo IK sobreviven guardar/reabrir",
+        reopened.scene.rigConstraint(ik).targetKeys[9].y === 120 &&
+        reopened.scene.rigNode("antebrazo").limits.max === 45);
+      doc.removeRigNode("antebrazo");
+      ok("quitar una pieza limpia constraints rotos y libera hijos",
+        !doc.scene.rigConstraint(ik) && doc.scene.rigNode("mano").parentId == null);
+    }
+
+    // 16. El transporte visible controla el reproductor del documento único.
     {
       ok("reproductor canonico disponible", typeof animation.Playback === "function");
       if (animation.Playback) {
@@ -339,7 +390,7 @@
       }
     }
 
-    // 16. La mesa tiene una resolución canónica independiente de la ventana.
+    // 17. La mesa tiene una resolución canónica independiente de la ventana.
     {
       const doc = new animation.LowDoc();
       const history = new LOW.core.HistoryManager(); doc.setHistory(history);

@@ -38,15 +38,57 @@
   let seq = 0;
   const uid = (p) => `${p}_${(seq++).toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
+  const rigPoseData = (pose = {}) => ({ x: +pose.x || 0, y: +pose.y || 0,
+    r: +pose.r || 0,
+    sx: pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx,
+    sy: pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy });
+
   function rigData(data) {
-    if (data && data.nodes) return { version: 1, nodes: clone(data.nodes) };
+    if (data && data.nodes) {
+      const nodes = {};
+      for (const [id, raw] of Object.entries(data.nodes)) {
+        const n = raw || {};
+        nodes[id] = { id, type: n.type || "drawing", elementId: n.elementId || id,
+          parentId: n.parentId || null, pivot: n.pivot ? { x: +n.pivot.x || 0, y: +n.pivot.y || 0 } : null,
+          rest: rigPoseData(n.rest), keys: clone(n.keys || {}), pinned: !!n.pinned,
+          limits: { min: Number.isFinite(+n.limits?.min) ? +n.limits.min : -180,
+            max: Number.isFinite(+n.limits?.max) ? +n.limits.max : 180 } };
+      }
+      return { version: 2, nodes, constraints: clone(data.constraints || {}) };
+    }
     const nodes = {};
     for (const [elementId, keys] of Object.entries(data || {})) {
       nodes[elementId] = { id: elementId, type: "drawing", elementId,
-        parentId: null, pivot: null, rest: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, keys: clone(keys || {}) };
+        parentId: null, pivot: null, rest: rigPoseData(), keys: clone(keys || {}), pinned: false,
+        limits: { min: -180, max: 180 } };
     }
-    return { version: 1, nodes };
+    return { version: 2, nodes, constraints: {} };
   }
+
+  // Matrices afines SVG [a,b,c,d,e,f]. El rig de recortes conserva las piezas
+  // como hermanas en el dibujo y compone acá la jerarquía sin reescribir el SVG.
+  const matIdentity = () => [1, 0, 0, 1, 0, 0];
+  const matMul = (a, b) => [
+    a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1],
+    a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3],
+    a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]
+  ];
+  const matPoint = (m, p) => ({ x: m[0] * p.x + m[2] * p.y + m[4],
+    y: m[1] * p.x + m[3] * p.y + m[5] });
+  const matInverse = (m) => {
+    const d = m[0] * m[3] - m[1] * m[2];
+    if (Math.abs(d) < 1e-9) return matIdentity();
+    return [m[3] / d, -m[1] / d, -m[2] / d, m[0] / d,
+      (m[2] * m[5] - m[3] * m[4]) / d, (m[1] * m[4] - m[0] * m[5]) / d];
+  };
+  const matPose = (pose, pivot) => {
+    const p = rigPoseData(pose), pv = pivot || { x: 0, y: 0 };
+    const rad = p.r * Math.PI / 180, c = Math.cos(rad), s = Math.sin(rad);
+    const rs = [c * p.sx, s * p.sx, -s * p.sy, c * p.sy, 0, 0];
+    const around = matMul([1, 0, 0, 1, pv.x, pv.y],
+      matMul(rs, [1, 0, 0, 1, -pv.x, -pv.y]));
+    return matMul([1, 0, 0, 1, p.x, p.y], around);
+  };
 
   /** Un dibujo: contenido + su número dentro del nivel. El número es lo que se
    *  escribe en la celda de la xsheet, y es renumerable sin perder el dibujo. */
@@ -225,13 +267,13 @@
     rigNode(id) { return this.rig.nodes[id] || null; }
     rigPose(id, frame) {
       const node = this.rigNode(id), keys = node && node.keys;
-      if (!keys) return null;
+      if (!node) return null;
       const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
-      if (!frames.length) return null;
+      if (!frames.length) return clone(node.rest || rigPoseData());
       const f = Number(frame) || 1;
-      if (keys[f]) return clone(keys[f]);
-      if (f <= frames[0]) return clone(keys[frames[0]]);
-      if (f >= frames.at(-1)) return clone(keys[frames.at(-1)]);
+      if (keys[f]) return rigPoseData(keys[f]);
+      if (f <= frames[0]) return rigPoseData(keys[frames[0]]);
+      if (f >= frames.at(-1)) return rigPoseData(keys[frames.at(-1)]);
       let a = frames[0], b = frames.at(-1);
       for (const k of frames) { if (k <= f) a = k; else { b = k; break; } }
       const t = (f - a) / (b - a), p = keys[a], q = keys[b];
@@ -255,6 +297,74 @@
         y: parent.y + lx * Math.sin(rad) + ly * Math.cos(rad), r: (parent.r || 0) + (local.r || 0),
         sx: (parent.sx == null ? 1 : parent.sx) * (local.sx == null ? 1 : local.sx),
         sy: (parent.sy == null ? 1 : parent.sy) * (local.sy == null ? 1 : local.sy) };
+    }
+
+    /** Matriz completa de una pieza. A diferencia de `rigWorldPose`, aplica la
+     * jerarquía alrededor de pivotes reales, que es lo que necesita un muñeco
+     * cut-out para que antebrazo y mano sigan al brazo. */
+    rigWorldMatrix(id, frame, overrides = {}, seen = new Set()) {
+      const node = this.rigNode(id);
+      if (!node || seen.has(id)) return matIdentity();
+      seen.add(id);
+      const local = matPose(overrides[id] || this.rigPose(id, frame), node.pivot);
+      if (!node.parentId) return local;
+      return matMul(this.rigWorldMatrix(node.parentId, frame, overrides, seen), local);
+    }
+
+    rigWorldPoint(id, frame, point, overrides = {}) {
+      return matPoint(this.rigWorldMatrix(id, frame, overrides), point || { x: 0, y: 0 });
+    }
+
+    rigConstraint(id) { return (this.rig.constraints || {})[id] || null; }
+
+    rigTargetAt(id, frame) {
+      const c = this.rigConstraint(id), keys = c && c.targetKeys;
+      if (!c) return null;
+      const frames = Object.keys(keys || {}).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!frames.length) return clone(c.target || null);
+      const f = Number(frame) || 1;
+      if (keys[f]) return clone(keys[f]);
+      if (f <= frames[0]) return clone(keys[frames[0]]);
+      if (f >= frames.at(-1)) return clone(keys[frames.at(-1)]);
+      let a = frames[0], b = frames.at(-1);
+      for (const k of frames) { if (k <= f) a = k; else { b = k; break; } }
+      const t = (f - a) / (b - a), p = keys[a], q = keys[b];
+      return { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t };
+    }
+
+    /** Solver analítico de dos huesos para una cadena root→mid→effector.
+     * Devuelve poses locales; LowDoc decide cuándo convertirlas en claves. */
+    rigSolveIK(id, frame, target) {
+      const c = this.rigConstraint(id);
+      if (!c || c.type !== "ik2" || c.enabled === false) return null;
+      const root = this.rigNode(c.rootId), mid = this.rigNode(c.midId), end = this.rigNode(c.effectorId);
+      if (!root || !mid || !end || mid.parentId !== root.id || end.parentId !== mid.id ||
+          !root.pivot || !mid.pivot || !end.pivot) return null;
+      const wanted = target || this.rigTargetAt(id, frame) || end.pivot;
+      const parentMatrix = root.parentId ? this.rigWorldMatrix(root.parentId, frame) : matIdentity();
+      const localTarget = matPoint(matInverse(parentMatrix), wanted);
+      const rootPose = rigPoseData(this.rigPose(root.id, frame));
+      const midPose = rigPoseData(this.rigPose(mid.id, frame));
+      const endPose = rigPoseData(this.rigPose(end.id, frame));
+      const a = { x: root.pivot.x + rootPose.x, y: root.pivot.y + rootPose.y };
+      // Las traslaciones FK existentes forman parte de la geometría actual de
+      // la cadena. Si se ignoraran, pasar de FK a IK haría saltar el brazo.
+      const b = { x: mid.pivot.x + midPose.x, y: mid.pivot.y + midPose.y };
+      const e = { x: end.pivot.x + endPose.x, y: end.pivot.y + endPose.y };
+      const l1 = Math.max(0.001, Math.hypot(b.x - root.pivot.x, b.y - root.pivot.y));
+      const l2 = Math.max(0.001, Math.hypot(e.x - mid.pivot.x, e.y - mid.pivot.y));
+      const dx = localTarget.x - a.x, dy = localTarget.y - a.y;
+      const distance = Math.max(0.001, Math.min(l1 + l2 - 0.001, Math.hypot(dx, dy)));
+      const cosJoint = Math.max(-1, Math.min(1, (distance * distance - l1 * l1 - l2 * l2) / (2 * l1 * l2)));
+      const joint = Math.acos(cosJoint) * (c.bend === -1 ? -1 : 1);
+      const rootAngle = Math.atan2(dy, dx) - Math.atan2(l2 * Math.sin(joint), l1 + l2 * Math.cos(joint));
+      const base1 = Math.atan2(b.y - root.pivot.y, b.x - root.pivot.x);
+      const base2 = Math.atan2(e.y - b.y, e.x - b.x);
+      const clamp = (value, node) => Math.max(node.limits?.min ?? -180, Math.min(node.limits?.max ?? 180, value));
+      const rootRotation = clamp((rootAngle - base1) * 180 / Math.PI, root);
+      const midRotation = clamp((joint - (base2 - base1)) * 180 / Math.PI, mid);
+      return { target: { x: +wanted.x || 0, y: +wanted.y || 0 },
+        poses: { [root.id]: { ...rootPose, r: rootRotation }, [mid.id]: { ...midPose, r: midRotation } } };
     }
 
     /** Expone un dibujo en un frame. Si el dibujo no existe en el nivel, lo
