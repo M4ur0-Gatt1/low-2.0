@@ -7234,11 +7234,9 @@ function dzPushAnimationPanelPlayback(index, playing) {
 }
 
 /* ══ PANELES SEPARADOS (segundo monitor) ═════════════════════════════════
-   El lienzo se queda en la ventana principal; lo que se puede mandar al otro
-   monitor son los paneles de apoyo. Python hace de buzón: acá publicamos una
-   FOTO chica del panel y ejecutamos los comandos que llegan de vuelta.
-   El lienzo no está en la lista a propósito: es el centro del trabajo. */
-const DZ_PANELS = ["timeline", "xsheet", "layers", "tools", "color", "onion", "levelstrip"];
+   Python hace de buzón entre la ventana principal y las auxiliares. Para la
+   mesa publica el SVG canónico y devuelve trazos al mismo historial/documento. */
+const DZ_PANELS = ["viewer", "timeline", "xsheet", "layers", "tools", "color", "onion", "levelstrip"];
 DZ.detached = DZ.detached || new Set();
 
 /** Id estable para una capa: el panel remoto no puede mandar un nodo del DOM. */
@@ -7249,6 +7247,16 @@ function dzPanelElId(el) {
 
 /** Foto chica del panel pedido (lo mínimo para dibujarlo del otro lado). */
 function dzPanelSnapshot(kind) {
+  if (kind === "viewer") {
+    const svg = $("#dzCanvas")?.querySelector(":scope > svg");
+    if (!svg) return { kind, svg: "", viewBox: "0 0 1920 1080" };
+    const clone = svg.cloneNode(true);
+    clone.querySelectorAll(".dz-onion,.dz-penui,.dz-node-overlay,.dz-vp-guides").forEach(el => el.remove());
+    return { kind, svg: new XMLSerializer().serializeToString(clone),
+      viewBox: svg.getAttribute("viewBox") || `0 0 ${svg.getAttribute("width") || 1920} ${svg.getAttribute("height") || 1080}`,
+      tool: DZ.tool || "pencil", color: DZ.drawColor || "#1a1a1a", width: DZ.drawW || 6,
+      frame: DZ.doc ? DZ.doc.frame : 1 };
+  }
   if (kind === "layers") {
     // mismo filtro y mismo nombre que dzBuildLayers: si no, el panel separado
     // lista cosas que el panel de adentro no muestra (cebolla, UI de la pluma).
@@ -7348,6 +7356,30 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
     if (panel) { panel.hidden = false; DZ.panelDock?.dock(panel, "right"); }
     LOW.workspace.panels?.dock(kind, "right");
     return true;
+  }
+
+  if (kind === "viewer") {
+    if (action === "undo") { dzUndo(); return true; }
+    if (action === "redo") { dzRedo(); return true; }
+    if (action === "tool" && ["pencil", "brush", "eraser", "hand"].includes(payload.id)) {
+      dzSetTool(payload.id); return true;
+    }
+    if (action === "stroke" && Array.isArray(payload.points) && payload.points.length > 1) {
+      const svg = $("#dzCanvas")?.querySelector(":scope > svg"); if (!svg) return false;
+      dzSnapshot();
+      const points = payload.points.slice(0, 10000).map(p => [+p[0] || 0, +p[1] || 0, Math.max(0, Math.min(1, +p[2] || .5))]);
+      const path = document.createElementNS(SVGNS, "path");
+      path.setAttribute("d", dzSmoothPath(dzRefineStroke(points)));
+      const pressure = points.reduce((sum, p) => sum + p[2], 0) / points.length;
+      const baseWidth = Math.max(.5, Math.min(200, +payload.width || DZ.drawW || 6));
+      const width = payload.tool === "brush" ? baseWidth * (.25 + pressure * .75) : baseWidth;
+      path.setAttribute("fill", "none"); path.setAttribute("stroke", payload.color || DZ.drawColor || "#1a1a1a");
+      path.setAttribute("stroke-width", String(width));
+      path.setAttribute("stroke-linecap", "round"); path.setAttribute("stroke-linejoin", "round");
+      path.setAttribute("data-low", "viewer-stroke"); svg.appendChild(path);
+      dzMarkDirty(); dzBuildLayers(); if (DZ.doc) dzDocCommit();
+      return true;
+    }
   }
 
   if (kind === "tools" && action === "tool") { dzSetTool(payload.id); return true; }
