@@ -697,6 +697,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   });
   $("#dzXsClose").onclick = () => dzAnimSetView("timeline");
   $("#dzXsHead").addEventListener("mousedown", (e) => {
+    if (window.LOW_PANEL_DOCKING) return;
     if ($("#dzXsheet").classList.contains("docked") || $("#dzCanvas").classList.contains("xsheet-open")) return;
     if (e.target.id === "dzXsClose") return;
     e.preventDefault();
@@ -751,6 +752,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   });
   $("#dzOpHead").addEventListener("mousedown", (e) => {
+    if (window.LOW_PANEL_DOCKING) return;
     if ($("#dzOnionPanel").closest("#dzAnimationDock")) return;
     if (e.target.id === "dzOpClose") return;
     e.preventDefault();
@@ -5245,6 +5247,7 @@ async function dzAnimToggle() {
     dzAnimStop(); bar.hidden = true; DZ.anim = null; dzOnionClear();
     dzXsSetVisible(false);
     $("#dzOnionPanel").hidden = true;
+    $("#dzLevelStrip").hidden = true;
     $("#dzTlGrid").hidden = true;   // el grid de capas vive con la timeline
     dzAnimationDock(false);
     if (DZ.camMode) { DZ.camMode = false; $("#dzCamBtn").classList.remove("active"); $("#dzCam").hidden = true; $("#tlCamKey").hidden = true; }
@@ -6809,15 +6812,14 @@ function dzXsSetVisible(show) {
   if (show) dzXsMount();          // planilla sobre el modelo (fase 3)
   if (button) button.classList.toggle("active", show);
   if (timeline) timeline.classList.toggle("xsheet-mode", show);
-  if (canvas) canvas.classList.toggle("xsheet-open", show);
-  // borrar posiciones inline de la versión flotante: la X-sheet vuelve siempre
-  // a su dock derecho y no puede quedar perdida fuera de la pantalla.
-  if (show) {
+  if (canvas) canvas.classList.toggle("xsheet-open", show && panel.parentElement === canvas);
+  // Un panel acoplado no conserva coordenadas flotantes.
+  if (show && !panel.classList.contains("dz-panel-floating")) {
     panel.style.left = "";
     panel.style.top = "";
     panel.style.right = "";
-    dzXsRender();
   }
+  if (show) dzXsRender();
 }
 function dzAnimSetView(mode) {
   const xsheet = mode === "xsheet";
@@ -8994,17 +8996,103 @@ function dzDragOutAll() {
 }
 
 function dzAnimationDock(visible) {
-  const dock = $("#dzAnimationDock");
-  if (!dock) return;
-  for (const id of ["#dzLevelStrip", "#dzOnionPanel"]) {
-    const panel = $(id);
-    if (!panel) continue;
-    if (panel.parentElement !== dock) dock.appendChild(panel);
-    panel.style.left = panel.style.right = panel.style.top = panel.style.bottom = "";
-  }
-  dock.hidden = !visible;
+  dzPanelDockSetup();
+  document.querySelectorAll(".dz-animation-dock").forEach(dock => {
+    dock.hidden = !visible || !dock.children.length;
+  });
   const view = $("#designView");
   if (view) view.classList.toggle("animation-workspace", !!visible);
+}
+
+function dzPanelDockSetup() {
+  if (window.LOW_PANEL_DOCKING) return;
+  window.LOW_PANEL_DOCKING = true;
+  const view = $("#designView"), body = view && view.querySelector(".dz-body");
+  const right = $("#dzAnimationDock"), canvas = $("#dzCanvas"), timeline = $("#dzTimeline");
+  if (!view || !body || !right || !canvas || !timeline) return;
+  right.dataset.zone = "right";
+  const makeDock = (zone, before, parent) => {
+    const dock = document.createElement(zone === "bottom" ? "section" : "aside");
+    dock.className = "dz-animation-dock"; dock.dataset.zone = zone; dock.hidden = true;
+    dock.setAttribute("aria-label", "Acople " + zone);
+    parent.insertBefore(dock, before); return dock;
+  };
+  const left = makeDock("left", canvas, body);
+  const bottom = makeDock("bottom", timeline, view);
+  const docks = { left, right, bottom };
+  const saved = (() => { try { return JSON.parse(localStorage.getItem("low.2d.panelLayout") || "{}"); } catch (_) { return {}; } })();
+  const save = (panel, place, rect) => {
+    saved[panel.id] = { place, ...(rect || {}) };
+    localStorage.setItem("low.2d.panelLayout", JSON.stringify(saved));
+  };
+  const updateDocks = () => Object.values(docks).forEach(d => d.hidden = !d.children.length || !DZ.anim);
+  const dockPanel = (panel, zone) => {
+    panel.classList.remove("dz-panel-floating");
+    panel.style.left = panel.style.top = panel.style.right = panel.style.bottom = panel.style.width = panel.style.height = "";
+    docks[zone].appendChild(panel); save(panel, zone); updateDocks();
+  };
+  const floatPanel = (panel, x, y, w, h) => {
+    panel.classList.add("dz-panel-floating"); document.body.appendChild(panel);
+    const leftPx = Math.max(8, Math.min(innerWidth - w - 8, x));
+    const topPx = Math.max(8, Math.min(innerHeight - 80, y));
+    Object.assign(panel.style, { left: leftPx + "px", top: topPx + "px", width: w + "px", height: h + "px" });
+    save(panel, "float", { x: leftPx, y: topPx, w, h }); updateDocks();
+  };
+  const overlay = document.createElement("div"); overlay.className = "dz-dock-overlay"; overlay.hidden = true;
+  overlay.innerHTML = '<i data-zone="left">Izquierda</i><i data-zone="right">Derecha</i><i data-zone="bottom">Abajo</i>';
+  document.body.appendChild(overlay);
+  const targetAt = (x, y) => {
+    const r = view.getBoundingClientRect();
+    if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
+    if (y > r.bottom - Math.max(150, r.height * .24)) return "bottom";
+    if (x < r.left + Math.max(170, r.width * .18)) return "left";
+    if (x > r.right - Math.max(170, r.width * .18)) return "right";
+    return null;
+  };
+  const wire = (panel, head) => {
+    if (!panel || !head || head.dataset.dockWire) return;
+    head.dataset.dockWire = "1";
+    head.title = "Arrastrá para mover · soltá sobre una zona resaltada para acoplar";
+    const redock = document.createElement("button");
+    redock.className = "dz-redock"; redock.type = "button"; redock.textContent = "Acoplar";
+    redock.title = "Volver a acoplar a la derecha";
+    redock.onclick = e => { e.stopPropagation(); dockPanel(panel, "right"); };
+    head.insertBefore(redock, head.querySelector(".dz-op-x"));
+    head.addEventListener("pointerdown", e => {
+      if (e.button !== 0 || e.target.closest("button,input,.dz-op-x")) return;
+      e.preventDefault(); e.stopPropagation();
+      const r = panel.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      let moved = false, zone = null;
+      const move = ev => {
+        if (!moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 5) return;
+        if (!moved) { moved = true; floatPanel(panel, r.left, r.top, Math.max(220, r.width), Math.max(150, r.height)); overlay.hidden = false; }
+        panel.style.left = (ev.clientX - dx) + "px"; panel.style.top = (ev.clientY - dy) + "px";
+        zone = targetAt(ev.clientX, ev.clientY);
+        overlay.querySelectorAll("i").forEach(i => i.classList.toggle("active", i.dataset.zone === zone));
+      };
+      const up = ev => {
+        document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
+        overlay.hidden = true;
+        if (!moved) return;
+        if (zone) dockPanel(panel, zone);
+        else save(panel, "float", { x: parseInt(panel.style.left), y: parseInt(panel.style.top), w: panel.offsetWidth, h: panel.offsetHeight });
+      };
+      document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+    });
+    head.addEventListener("dblclick", () => { if (panel.classList.contains("dz-panel-floating")) dockPanel(panel, "right"); });
+    if (window.ResizeObserver) new ResizeObserver(() => {
+      if (!panel.classList.contains("dz-panel-floating")) return;
+      save(panel, "float", { x: panel.offsetLeft, y: panel.offsetTop, w: panel.offsetWidth, h: panel.offsetHeight });
+    }).observe(panel);
+  };
+  for (const [id, headId] of [["dzLevelStrip","dzLsHead"],["dzOnionPanel","dzOpHead"],["dzXsheet","dzXsHead"]]) {
+    const panel = $("#" + id), head = $("#" + headId); if (!panel) continue;
+    const cfg = saved[id];
+    if (cfg && cfg.place === "float") floatPanel(panel, cfg.x || 80, cfg.y || 80, cfg.w || 260, cfg.h || 260);
+    else dockPanel(panel, cfg && docks[cfg.place] ? cfg.place : "right");
+    wire(panel, head);
+  }
+  updateDocks();
 }
 
 /* ══ TIRA DE DIBUJOS DEL NIVEL ══════════════════════════════════════════
