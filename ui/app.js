@@ -2187,6 +2187,20 @@ window.addEventListener("message", async (event) => {
       api.log_js && api.log_js("save-3d error: " + err);
     }
   }
+  // STL y otros binarios del estudio 3D: no pueden ir por save_file, que
+  // escribe texto UTF-8 y corrompería el archivo.
+  if (msg.type === "low:save-binary" && typeof msg.base64 === "string") {
+    try {
+      const r = await api.save_binary(msg.base64, msg.name || "modelo.stl");
+      if (r && r.path) {
+        setStatus(" " + (r.name || "archivo") + " guardado (" +
+                  Math.round((r.bytes || 0) / 1024) + " KB)");
+      } else if (r && r.error) setStatus(" No pude guardar: " + r.error);
+    } catch (err) {
+      setStatus("No pude guardar el archivo");
+      api.log_js && api.log_js("save-binary error: " + err);
+    }
+  }
   if (msg.type === "low:open-project") {
     try {
       const r = await api.open_dialog();
@@ -3526,8 +3540,8 @@ function dzToolCursorMove(e) {
   cursor.style.top = (e.clientY - rect.top + cv.scrollTop) + "px";
   const pressure = e.pointerType === "pen" && e.pressure > 0 ? e.pressure : 1;
   const brushSize = tool === "brush" ? (DZ.drawW || 6) * pressure * (DZ.zoom || 1) :
-                    tool === "pencil" ? Math.max(2, (DZ.drawW || 2) * .55 * (DZ.zoom || 1)) : 10;
-  cursor.style.setProperty("--tool-size", Math.max(20, Math.min(64, brushSize + 16)) + "px");
+                    tool === "pencil" ? Math.max(1, (DZ.drawW || 2) * .55 * (DZ.zoom || 1)) : 10;
+  cursor.style.setProperty("--tool-size", Math.max(8, Math.min(18, brushSize)) + "px");
   cursor.dataset.tool = tool;
   const use = $("#dzToolCursorUse");
   if (use) { use.setAttribute("href", "#" + icon); use.setAttribute("xlink:href", "#" + icon); }
