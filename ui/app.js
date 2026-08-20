@@ -4146,6 +4146,10 @@ function dzRunAction(act) {
     if (kind === "info") return dzSetStatus(" Cada panel separado recuerda en qué monitor y con qué tamaño quedó");
     return dzDetachPanel(kind);
   }
+  if (act === "ws-save") return dzWsSaveCurrent();
+  if (act === "ws-duplicate") return dzWsDuplicateCurrent();
+  if (act === "ws-lock") return dzWsSetLocked(!DZ.workspaceLocked);
+  if (act === "ws-reset") return dzWsResetCurrent();
   if (act === "zoom100") { DZ.zoom = 1; DZ.panX = DZ.panY = 0; DZ.viewRot = 0; return dzApplyZoom(); }
   if (act === "zoomfit") return dzFitView();
   if (act === "rotl") return dzRotView(-15);
@@ -5864,10 +5868,12 @@ function dzHasCam() { return Object.keys(dzCamKeys()).length > 0; }
    AUTO-KEY: cualquier edición deja una clave de cámara en el cuadro actual. */
 function dzCamToggle() {
   DZ.camMode = !DZ.camMode;
+  DZ.tool = DZ.camMode ? "camera" : "select";
   $("#dzCamBtn").classList.toggle("active", DZ.camMode);
   $("#tlCamKey").hidden = !DZ.camMode;
   if (DZ.camMode && !DZ.anim) { dzAnimToggle(); }   // la cámara vive en la timeline
   dzCamOverlay();
+  dzToolOptsRender(); dzSbTool();
   dzSetStatus(DZ.camMode ?
     "🎬 Cámara: arrastrá el encuadre (mover), la esquina (zoom),  (rotar) — cada cambio deja CLAVE en este cuadro. El play y el export salen por acá." : "");
 }
@@ -5886,10 +5892,9 @@ function dzCamOverlay() {
   box.style.left = (c.x - pw / 2) + "px"; box.style.top = (c.y - ph / 2) + "px";
   box.style.transform = `rotate(${cam.rot || 0}deg)`;
   const num = dzCamFrame();
-  $("#dzCamTag").textContent = "🎬 cámara · cuadro " + num +
-    (DZ.scene && DZ.scene.cam && DZ.scene.cam[num] ? " 🔑" : " (interpolada)");
+  $("#dzCamTag").textContent = "Cámara 2D · F" + String(num).padStart(3, "0") +
+    (dzCamKeys()[num] ? " · CLAVE" : " · interpolada");
   box.hidden = false;
-  if (DZ.doc) $("#dzCamTag").textContent = `Camara 2D Â· frame ${num} Â· ${dzCamKeys()[num] ? "clave" : "interpolada"}`;
 }
 function dzCamSetKey(cam) {
   const cams = dzCamKeys();
@@ -6628,10 +6633,11 @@ function dzZPanelRender() {
 const DZ_TOOL_NAMES = { select: "seleccionar", hand: "mano", nodes: "nodos",
   pencil: "lápiz", brush: "pincel", pen: "pluma", eraser: "borrador",
   dropper: "cuentagotas", bucket: "balde", pivot: "pivote de rig", ruler: "regla",
-  inflator: "inflador", handler: "manejador", iron: "plancha", pliers: "pinza", magnet: "imán" };
+  inflator: "inflador", handler: "manejador", iron: "plancha", pliers: "pinza", magnet: "imán",
+  camera: "cámara 2D" };
 function dzMenuAction(act) {
   // menú Ventana: comparte implementación con dzRunAction (atajos de teclado)
-  if (act && act.startsWith("win-")) return dzRunAction(act);
+  if (act && (act.startsWith("win-") || act.startsWith("ws-"))) return dzRunAction(act);
   const A = {
     nuevo: () => api.new_design().then(r => { if (r && r.path) openDesign(r.path); }),
     documento: dzDocModal, guardar: () => dzSave(), importar: dzImportImage,
@@ -6759,6 +6765,14 @@ function dzToolOptsRender() {
     html += `<span class="dz-hint">clic fija el eje de rotación de la pieza (hombro, codo…) · Alt+clic lo quita</span>`;
   } else if (t === "hand") {
     html += `<span class="dz-hint">arrastrá para navegar · también espacio+arrastrar o botón del medio</span>`;
+  } else if (t === "camera") {
+    const cam = dzCamCur(), vb = dzVB(), zoom = Math.round(vb[2] / cam.w * 100);
+    html += `<label>X <input type="number" id="toCamX" value="${cam.cx.toFixed(1)}" class="dz-win"></label>
+      <label>Y <input type="number" id="toCamY" value="${cam.cy.toFixed(1)}" class="dz-win"></label>
+      <label>Zoom <input type="number" id="toCamZoom" min="5" max="2000" value="${zoom}" class="dz-win">%</label>
+      <label>Rotación <input type="number" id="toCamRot" step="0.1" value="${(cam.rot || 0).toFixed(1)}" class="dz-win">°</label>
+      <button class="ghost" id="toCamKey">${dzCamKeys()[dzCamFrame()] ? "Quitar clave" : "Crear clave"}</button>
+      <button class="ghost" id="toCamReset">Restablecer</button>`;
   } else {
     html += `<span class="dz-hint">clic selecciona · arrastrá mueve · Shift+clic suma a la selección · Alt+clic entra al grupo</span>`;
   }
@@ -7183,7 +7197,7 @@ function dzPushAnimationPanelPlayback(index, playing) {
    monitor son los paneles de apoyo. Python hace de buzón: acá publicamos una
    FOTO chica del panel y ejecutamos los comandos que llegan de vuelta.
    El lienzo no está en la lista a propósito: es el centro del trabajo. */
-const DZ_PANELS = ["timeline", "xsheet", "layers", "tools", "color", "onion"];
+const DZ_PANELS = ["timeline", "xsheet", "layers", "tools", "color", "onion", "levelstrip"];
 DZ.detached = DZ.detached || new Set();
 
 /** Id estable para una capa: el panel remoto no puede mandar un nodo del DOM. */
@@ -7268,7 +7282,16 @@ async function dzDetachPanel(kind) {
     dzSetStatus(" No se pudo separar el panel" + (r && r.error ? ": " + r.error : ""));
     return;
   }
+  if (kind === "levelstrip") {
+    const lv = DZ.doc && DZ.doc.level;
+    return { kind, level: lv ? lv.name : "", current: DZ.doc ? DZ.doc.cell : null,
+      drawings: lv ? lv.drawings.map(d => ({ number: d.number, exposed: DZ.doc.scene.layers.some(ly => ly.levelId === lv.id && ly.cells.includes(d.number)) })) : [] };
+  }
   DZ.detached.add(kind);
+  const meta = LOW.workspace.PANEL_CATALOG[kind];
+  const panel = meta && document.querySelector(meta.element);
+  if (panel) panel.hidden = true;
+  LOW.workspace.panels?.detach(kind);
   DZ["panelLast_" + kind] = "";        // forzar una primera publicación
   dzPanelsPublish();
   dzSetStatus(" Panel separado: arrastralo al otro monitor (vuelve solo la próxima vez)");
@@ -7278,9 +7301,20 @@ async function dzDetachPanel(kind) {
 window.lowPanelCommand = async ({ kind, action, payload }) => {
   payload = payload || {};
   if (kind === "timeline" || kind === "xsheet") return window.lowAnimationPanelCommand({ action, payload });
-  if (action === "dock") { DZ.detached.delete(kind); return true; }
+  if (action === "dock") {
+    DZ.detached.delete(kind);
+    const meta = LOW.workspace.PANEL_CATALOG[kind], panel = meta && document.querySelector(meta.element);
+    if (panel) { panel.hidden = false; DZ.panelDock?.dock(panel, "right"); }
+    LOW.workspace.panels?.dock(kind, "right");
+    return true;
+  }
 
   if (kind === "tools" && action === "tool") { dzSetTool(payload.id); return true; }
+  if (kind === "levelstrip" && action === "drawing" && DZ.doc) {
+    const frame = DZ.doc.layer.cells.findIndex(n => n === +payload.number) + 1;
+    if (frame > 0) DZ.doc.setFrame(frame);
+    return true;
+  }
 
   if (kind === "layers") {
     const el = payload.id && document.getElementById(payload.id);
@@ -9017,6 +9051,17 @@ function dzPanelDockSetup() {
     dock.setAttribute("aria-label", "Acople " + zone);
     parent.insertBefore(dock, before); return dock;
   };
+  const camFields = ["toCamX", "toCamY", "toCamZoom", "toCamRot"];
+  if (camFields.some(id => $("#" + id))) {
+    const apply = () => {
+      const vb = dzVB(), base = dzCamCur();
+      dzCamSetKey({ ...base, cx: +$("#toCamX").value, cy: +$("#toCamY").value,
+        w: vb[2] / Math.max(.05, +$("#toCamZoom").value / 100), rot: +$("#toCamRot").value });
+    };
+    camFields.forEach(id => { const el = $("#" + id); if (el) el.onchange = apply; });
+    $("#toCamKey").onclick = () => { dzCamKeyToggle(); dzToolOptsRender(); };
+    $("#toCamReset").onclick = () => { dzCamSetKey(dzCamDefault()); dzToolOptsRender(); };
+  }
   const left = makeDock("left", canvas, body);
   const bottom = makeDock("bottom", timeline, view);
   const docks = { left, right, bottom };
@@ -9058,7 +9103,14 @@ function dzPanelDockSetup() {
     redock.title = "Volver a acoplar a la derecha";
     redock.onclick = e => { e.stopPropagation(); dockPanel(panel, "right"); };
     head.insertBefore(redock, head.querySelector(".dz-op-x"));
+    const external = document.createElement("button");
+    external.className = "dz-external"; external.type = "button"; external.textContent = "Otra pantalla";
+    external.title = "Abrir como ventana nativa para llevar a otro monitor";
+    const panelKind = panel.id === "dzLevelStrip" ? "levelstrip" : panel.id === "dzOnionPanel" ? "onion" : "xsheet";
+    external.onclick = e => { e.stopPropagation(); dzDetachPanel(panelKind); };
+    head.insertBefore(external, head.querySelector(".dz-op-x"));
     head.addEventListener("pointerdown", e => {
+      if (DZ.workspaceLocked) { dzSetStatus(" Disposición bloqueada · Ventana → Desbloquear disposición"); return; }
       if (e.button !== 0 || e.target.closest("button,input,.dz-op-x")) return;
       e.preventDefault(); e.stopPropagation();
       const r = panel.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
@@ -9066,7 +9118,9 @@ function dzPanelDockSetup() {
       const move = ev => {
         if (!moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 5) return;
         if (!moved) { moved = true; floatPanel(panel, r.left, r.top, Math.max(220, r.width), Math.max(150, r.height)); overlay.hidden = false; }
-        panel.style.left = (ev.clientX - dx) + "px"; panel.style.top = (ev.clientY - dy) + "px";
+        const nx = Math.max(8, Math.min(innerWidth - panel.offsetWidth - 8, ev.clientX - dx));
+        const ny = Math.max(8, Math.min(innerHeight - 56, ev.clientY - dy));
+        panel.style.left = nx + "px"; panel.style.top = ny + "px";
         zone = targetAt(ev.clientX, ev.clientY);
         overlay.querySelectorAll("i").forEach(i => i.classList.toggle("active", i.dataset.zone === zone));
       };
@@ -9093,6 +9147,7 @@ function dzPanelDockSetup() {
     wire(panel, head);
   }
   updateDocks();
+  DZ.panelDock = { dock: dockPanel, float: floatPanel, docks, update: updateDocks };
 }
 
 /* ══ TIRA DE DIBUJOS DEL NIVEL ══════════════════════════════════════════
@@ -9477,6 +9532,10 @@ function dzWsAplicar(ws) {
     } else {
       el.hidden = oculto;
     }
+    if (!oculto && DZ.panelDock && ["xsheet", "onion", "levelstrip"].includes(id)) {
+      if (["left", "right", "bottom"].includes(cfg.dock)) DZ.panelDock.dock(el, cfg.dock);
+      else if (cfg.dock === "detached") setTimeout(() => dzDetachPanel(id), 0);
+    }
     // NO imponer tamaños. Al hacerlo (tools 56px, inspector 250px, timeline
     // 92px) la barra de herramientas no entraba en su ancho, el lienzo quedaba
     // aplastado y aparecían márgenes enormes por todos lados: el workspace
@@ -9525,9 +9584,47 @@ function dzWsRender() {
   }
 }
 
+function dzWsCapture() {
+  return Object.entries(LOW.workspace.PANEL_CATALOG).map(([id, meta]) => {
+    const el = document.querySelector(meta.element);
+    if (!el) return { id, hidden: true };
+    const dock = el.closest(".dz-animation-dock");
+    const detached = DZ.detached && DZ.detached.has(id);
+    const cfg = { id, hidden: !!el.hidden, dock: detached ? "detached" :
+      (el.classList.contains("dz-panel-floating") ? "float" : (dock?.dataset.zone || "center")) };
+    if (cfg.dock === "left" || cfg.dock === "right") cfg.userSize = Math.round(el.getBoundingClientRect().width);
+    if (cfg.dock === "bottom") cfg.userSize = Math.round(el.getBoundingClientRect().height);
+    return cfg;
+  });
+}
+function dzWsSaveCurrent() {
+  const W = LOW.workspace.workspaces, id = W.activeId || W.lastUsed(), ws = W.get(id);
+  W.save(id, dzWsCapture(), ws?.name || id); dzWsRender();
+  dzSetStatus(" Disposición guardada en «" + (ws?.name || id) + "»");
+}
+function dzWsDuplicateCurrent() {
+  const W = LOW.workspace.workspaces, id = W.activeId || W.lastUsed();
+  const nombre = prompt("Nombre del nuevo espacio de trabajo:", (W.get(id)?.name || "Espacio") + " · personalizado");
+  if (!nombre) return;
+  W.save(id, dzWsCapture(), W.get(id)?.name || id);
+  const copy = W.duplicate(id, nombre); if (copy) W.activate(copy.id, dzWsAplicar);
+}
+function dzWsSetLocked(value) {
+  DZ.workspaceLocked = !!value;
+  localStorage.setItem("low.workspace.locked", DZ.workspaceLocked ? "1" : "0");
+  $("#designView")?.classList.toggle("workspace-locked", DZ.workspaceLocked);
+  dzSetStatus(DZ.workspaceLocked ? " Disposición bloqueada" : " Disposición desbloqueada");
+}
+function dzWsResetCurrent() {
+  const W = LOW.workspace.workspaces, id = W.activeId || W.lastUsed();
+  const ws = W.reset(id); if (ws) W.activate(ws.id, dzWsAplicar);
+}
+
 function dzWsInit() {
   if (!window.LOW || !LOW.workspace || !LOW.workspace.workspaces) return;
   dzDragOutAll();
+  dzPanelDockSetup();
+  dzWsSetLocked(localStorage.getItem("low.workspace.locked") === "1");
   dzWsRender();
   LOW.workspace.workspaces.activate(LOW.workspace.workspaces.lastUsed(), dzWsAplicar);
 }

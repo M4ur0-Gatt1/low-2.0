@@ -38,7 +38,7 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;
 </div>
 <div class="viewport"><div id="content" class="timeline"><div class="empty">Conectando con el editor…</div></div></div>
 <script>
-const KINDS={timeline:'TIMELINE',xsheet:'X-SHEET',layers:'CAPAS',tools:'HERRAMIENTAS',color:'COLOR',onion:'PAPEL CEBOLLA'};
+const KINDS={timeline:'TIMELINE',xsheet:'X-SHEET',layers:'CAPAS',tools:'HERRAMIENTAS',color:'COLOR',onion:'PAPEL CEBOLLA',levelstrip:'DIBUJOS DEL NIVEL'};
 // el kind llega por FRAGMENTO (#kind=...): sobre file:// la query se pierde
 // (WebView2 la toma como parte del nombre del archivo). Se acepta ?kind= igual,
 // para cuando el panel se abre desde un servidor durante las pruebas.
@@ -121,6 +121,12 @@ function renderColor(s){
  w.oninput=e=>command('width',{value:e.target.value});
  root.append(fila('Relleno',f),fila('Trazo',st),fila('Grosor',w));return root;
 }
+function renderLevelStrip(s){
+ const root=document.createElement('div');root.className='timeline grid';
+ (s.drawings||[]).forEach(d=>{const b=document.createElement('button');b.className='tool'+(d.number===s.current?' on':'');
+  b.textContent='Dibujo '+d.number+(d.exposed?'':' · sin exponer');b.onclick=()=>command('drawing',{number:d.number});root.appendChild(b)});
+ if(!(s.drawings||[]).length)root.innerHTML='<div class="empty">El nivel todavía no tiene dibujos</div>';return root;
+}
 /* PAPEL CEBOLLA en su propia ventana: los mismos controles que adentro, para
    dejarlo abierto en el segundo monitor mientras se dibuja en el primero. */
 function renderOnion(s){
@@ -156,6 +162,7 @@ function renderFor(s){
  if(kind==='tools')return renderTools(s);
  if(kind==='color')return renderColor(s);
  if(kind==='onion')return renderOnion(s);
+ if(kind==='levelstrip')return renderLevelStrip(s);
  return kind==='xsheet'?renderXsheet(s):renderTimeline(s);
 }
 async function refresh(){if(!api)return;try{const s=await (api.panel_state?api.panel_state(kind):api.animation_panel_state());const key=JSON.stringify(s);if(key===last)return;last=key;if(isAnim){document.getElementById('fps').textContent=(s.fps||12)+' FPS · '+(s.frames?s.frames.filter(f=>f.exists).length:0)+' frames';document.getElementById('play').textContent=s.playing?'Ⅱ':'▶';}const content=document.getElementById('content');const next=renderFor(s);next.id='content';content.replaceWith(next)}catch(e){}}
