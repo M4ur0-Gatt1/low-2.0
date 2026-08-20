@@ -44,6 +44,7 @@
       this.listeners = new Set();
       this.cellSelection = null;
       this.path = null;            // archivo .lowscene, si ya se guardó
+      this.onionCfg = animation.onion ? animation.onion.config() : {};
     }
 
     // ── estado actual ────────────────────────────────────────────────────
@@ -524,7 +525,8 @@
                // la ONDA se guarda con la escena: así se sigue viendo al
                // reabrir aunque el archivo de audio no esté a mano, y no hay
                // que volver a decodificarlo
-               audio: this.audio ? this.audio.toJSON() : null };
+               audio: this.audio ? this.audio.toJSON() : null,
+               onion: this.onionCfg ? JSON.parse(JSON.stringify(this.onionCfg)) : null };
     }
     static fromJSON(data) {
       const d = (typeof data === "string") ? JSON.parse(data) : data;
@@ -535,6 +537,7 @@
       if (d.audio && animation.AudioTrack) {
         doc.audio = new animation.AudioTrack(doc).fromJSON(d.audio);
       }
+      if (d.onion) doc.onionCfg = animation.onion ? animation.onion.config(d.onion) : d.onion;
       doc.dirty = false;
       return doc;
     }

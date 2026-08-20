@@ -2111,17 +2111,38 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   color: var(--fg2, #8a93a6); font: 600 10px/1 Figtree, sans-serif; cursor: pointer; }
 .xs2-op:hover { color: var(--fg, #fff); border-color: var(--accent, #F0450E); }
 
-/* ══ PAPEL CEBOLLA ═════════════════════════════════════════════════════════
-   Panel de trabajo, no un formulario: los controles que se tocan cada minuto
-   (cuántos dibujos antes y después) son puntos de un clic, no campos numéricos
-   donde hay que apuntar y escribir. */
-.onion2 { width: 214px; padding: 0 0 6px; }
+/* ══ PAPEL CEBOLLA · MESA DE LUZ ════════════════════════════════════════════
+   Veinte canales temporales con opacidad independiente: se lee y se opera
+   como un pequeño mezclador, no como un formulario de opciones. */
+.onion2 { width: min(500px, calc(100vw - 28px)); max-width: 100%; min-width: 0; padding: 0 0 8px; }
 .onion2 .dz-op-head { display: flex; align-items: center; gap: 6px; padding: 5px 7px;
   font: 600 9px/1 Figtree, sans-serif; letter-spacing: .8px; }
 .onion2-title { flex: 1; opacity: .75; }
 .onion2-power { width: 18px; height: 18px; border: none; border-radius: 4px; cursor: pointer;
   background: transparent; color: var(--fg2, #8a93a6); font-size: 11px; line-height: 1; }
 .onion2-power.on { background: var(--accent, #F0450E); color: #fff; }
+
+.onion2-mixer { display: flex; align-items: flex-end; gap: 2px; min-height: 142px;
+  padding: 9px 9px 5px; overflow-x: auto; border-top: 1px solid var(--line, #2a2d35);
+  border-bottom: 1px solid var(--line, #2a2d35); background: rgba(0,0,0,.12); }
+.onion2-channel { width: 21px; min-width: 21px; display: grid; grid-template-rows: 16px 96px 15px;
+  justify-items: center; align-items: center; gap: 2px; }
+.onion2-channel.current { width: 27px; min-width: 27px; }
+.onion2-channel label { font: 600 9px/1 "JetBrains Mono", monospace; color: var(--mut, #8a93a6); }
+.onion2-channel output { font: 500 8px/1 "JetBrains Mono", monospace; color: var(--mut, #8a93a6); }
+.onion2-channel.current i { display: block; width: 5px; height: 82px; border-radius: 3px;
+  background: var(--accent, #F0450E); opacity: .9; box-shadow: 0 0 0 1px rgba(255,255,255,.10); }
+.onion2-channel input[type=range] { width: 20px; height: 94px; margin: 0; padding: 0;
+  writing-mode: vertical-lr; direction: rtl; appearance: slider-vertical; accent-color: var(--channel, #c0392b); cursor: ns-resize; }
+.onion2-legend, .onion2-presets { display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 6px 10px; }
+.onion2-legend label { display: flex; align-items: center; gap: 6px; color: var(--mut); font-size: 10px; }
+.onion2-legend b { color: var(--txt); font-size: 10px; font-weight: 600; }
+.onion2-legend input[type=color] { width: 24px; height: 20px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.onion2-presets { justify-content: flex-start; border-bottom: 1px solid var(--line, #2a2d35); }
+.onion2-presets button { height: 25px; padding: 0 9px; border: 1px solid var(--line, #2a2d35);
+  border-radius: 5px; background: transparent; color: var(--mut); font-size: 10px; cursor: pointer; }
+.onion2-presets button:hover { color: var(--txt); border-color: var(--accent, #F0450E); }
 
 .onion2-side, .onion2-row, .onion2-fixed {
   display: flex; align-items: center; gap: 6px; padding: 3px 8px; }
@@ -2213,6 +2234,26 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   color: var(--fg, #e6e9f0); background: var(--panel, #17181c); user-select: none; }
 .tl2-ruler { display: flex; position: sticky; top: 0; z-index: 2;
   background: var(--panel2, #1e2026); border-bottom: 1px solid var(--line, #2a2d35); }
+.tl2-tools { min-height: 35px; display: flex; align-items: center; gap: 5px; padding: 4px 7px;
+  overflow-x: auto; background: var(--panel, #191a1f); border-bottom: 1px solid var(--line, #2a2d35); }
+.tl2-toolgroup { display: flex; align-items: center; gap: 3px; padding-right: 6px;
+  border-right: 1px solid var(--line, #2a2d35); }
+.tl2-tools button, .tl2-lighttable button { height: 26px; padding: 0 8px; border: 1px solid transparent;
+  border-radius: 4px; background: transparent; color: var(--mut, #a8a49c); font: 500 11px/1 Figtree, sans-serif; cursor: pointer; white-space: nowrap; }
+.tl2-tools button:hover, .tl2-lighttable button:hover { background: rgba(255,255,255,.06); color: var(--txt, #eee); }
+.tl2-tools button.on { color: var(--accent, #F0450E); border-color: rgba(240,69,14,.4); background: rgba(240,69,14,.10); }
+.tl2-lighttable { display: flex; border-bottom: 1px solid var(--line2, #23252c); background: rgba(0,0,0,.10); }
+.tl2-lighttable .tl2-name { justify-content: space-between; color: var(--mut, #a8a49c); }
+.tl2-lighttable button { height: 20px; padding: 0 5px; font-size: 9px; }
+.tl2-lightcell { width: 13px; flex: 0 0 13px; height: 20px; position: relative; cursor: pointer;
+  border-right: 1px solid rgba(255,255,255,.025); }
+.tl2-lightcell::after { content: ""; position: absolute; width: 6px; height: 6px; border-radius: 50%;
+  left: 50%; top: 50%; transform: translate(-50%,-50%); border: 1px solid rgba(255,255,255,.14); }
+.tl2-lightcell.marked.before::after { background: #c9483d; border-color: #ed776d; }
+.tl2-lightcell.marked.after::after { background: #31965b; border-color: #60bd82; }
+.tl2-lightcell.current::after { background: var(--accent, #F0450E); border-color: #ff9a78; border-radius: 2px; }
+.tl2-lightcell.empty { opacity: .25; cursor: default; }
+.tl2-lightcell:not(.empty):hover { background: rgba(255,255,255,.06); }
 .tl2-row { display: flex; border-bottom: 1px solid var(--line2, #23252c); }
 .tl2-row.sel .tl2-name { color: var(--fg, #fff); box-shadow: inset 2px 0 0 var(--accent, #F0450E); }
 .tl2-name { width: 128px; flex: 0 0 128px; display: flex; align-items: center; gap: 5px;
@@ -2395,7 +2436,7 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .xs2-row { height: 22px; }
 .tl2 { font-size: 12px; }
 .tl2-name, .tl2-tick, .tl2-cell { height: 24px; }
-.tl2-tick, .tl2-cell { width: 16px; flex-basis: 16px; font-size: 10px; color: var(--mut); }
+.tl2-tick, .tl2-cell, .tl2-lightcell { width: 16px; flex-basis: 16px; font-size: 10px; color: var(--mut); }
 .tl2-rulername, .ls2-head, .ls2-num, .ls2-empty { font-size: 11px; color: var(--mut); }
 .dz-timeline.xsheet-mode #tlXs { color: var(--txt); border-color: var(--red); background: var(--redsoft); }
 

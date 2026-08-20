@@ -505,7 +505,7 @@
           <span class="dz-op-x" id="dzXsClose" title="Cerrar">×</span></div>
         <div class="dz-xs-rows" id="dzXsRows"></div>
       </div>
-      <!-- papel cebolla: panel chico, personalizable y ARRASTRABLE -->
+      <!-- papel cebolla: mesa de luz personalizable, acoplable y separable -->
       <div class="dz-onionpanel ls2panel" id="dzLevelStrip" hidden>
         <div class="dz-op-head" id="dzLsHead"><svg class="ico"><use href="#i-level"/></svg> DIBUJOS DEL NIVEL
           <span class="dz-op-x" id="dzLsClose" title="Cerrar">×</span></div>
@@ -517,31 +517,17 @@
           <span class="onion2-title">PAPEL CEBOLLA</span>
           <span class="dz-op-x" id="dzOpClose" title="Cerrar">×</span>
         </div>
-        <!-- ANTES / DESPUÉS: cuántos DIBUJOS (no frames) mostrar de cada lado.
-             Los puntos hacen de selector rápido, que es como se usa: se cambia
-             de 1 a 3 constantemente mientras se anima. -->
-        <div class="onion2-side" data-side="before">
-          <i class="onion2-swatch" id="onSwB"></i>
-          <span class="onion2-lbl">Antes</span>
-          <div class="onion2-dots" id="onDotsB"></div>
-          <input type="color" id="onColorB" value="#c0392b" title="Color de los dibujos anteriores">
+        <div class="onion2-mixer" id="onMixer" aria-label="Opacidad por fotograma"></div>
+        <div class="onion2-legend">
+          <label><input type="color" id="onColorB" value="#c0392b" title="Color de dibujos anteriores"><span>anteriores</span></label>
+          <b>fotograma actual</b>
+          <label><span>posteriores</span><input type="color" id="onColorA" value="#1e8449" title="Color de dibujos posteriores"></label>
         </div>
-        <div class="onion2-side" data-side="after">
-          <i class="onion2-swatch" id="onSwA"></i>
-          <span class="onion2-lbl">Después</span>
-          <div class="onion2-dots" id="onDotsA"></div>
-          <input type="color" id="onColorA" value="#1e8449" title="Color de los dibujos siguientes">
-        </div>
-        <div class="onion2-row">
-          <span class="onion2-lbl">Opacidad</span>
-          <input type="range" id="onAlpha" min="5" max="80" value="38">
-          <b class="onion2-val" id="onAlphaVal">38%</b>
-        </div>
-        <div class="onion2-row">
-          <span class="onion2-lbl">Desvanece</span>
-          <input type="range" id="onFall" min="20" max="100" value="55"
-                 title="Cuánto se apaga cada dibujo más lejano">
-          <b class="onion2-val" id="onFallVal">55%</b>
+        <div class="onion2-presets">
+          <span class="onion2-lbl">Perfil</span>
+          <button id="onCurve" title="Más opaco cerca del actual y más tenue lejos">Curva</button>
+          <button id="onFlat" title="La misma opacidad en todos los canales activos">Uniforme</button>
+          <button id="onClear" title="Apagar todos los canales">Limpiar</button>
         </div>
         <div class="onion2-row">
           <span class="onion2-lbl">Vista</span>
@@ -552,7 +538,7 @@
           <span class="onion2-chips" id="onFixed"></span>
           <button id="onFixAdd" title="Fijar el frame actual como referencia permanente">+ acá</button>
         </div>
-        <div class="onion2-hint">Trabaja sobre DIBUJOS: dentro de un hold no repite el mismo.</div>
+        <div class="onion2-hint">Cada fader controla un dibujo distinto; los holds no se repiten. Doble clic restablece un canal.</div>
       </div>
       <div class="dz-onionpanel" id="dzRigPanel" hidden>
         <div class="dz-op-head" id="dzRigHead"> rig <span class="dz-op-x" id="dzRigClose" title="Cerrar">×</span></div>

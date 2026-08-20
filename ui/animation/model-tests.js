@@ -130,6 +130,23 @@
          n2.includes(1) && n2.includes(3), JSON.stringify(n2));
       const conColor = r2.every((s) => s.color && s.opacity > 0);
       ok("cada uno viene con color y opacidad", conColor);
+      const mezclado = onion.resolve(sc, ly.id, 4, {
+        beforeOpacity: [.81, 0, 0], afterOpacity: [.17, 0, 0]
+      });
+      const anterior = mezclado.find((s) => s.tipo === "before");
+      const posterior = mezclado.find((s) => s.tipo === "after");
+      ok("la mesa de luz controla la opacidad de cada lado por separado",
+        anterior && posterior && anterior.opacity === .81 && posterior.opacity === .17,
+        JSON.stringify(mezclado.map((s) => [s.tipo, s.opacity])));
+      const apagado = onion.resolve(sc, ly.id, 4, {
+        beforeOpacity: Array(10).fill(0), afterOpacity: Array(10).fill(0)
+      });
+      ok("un canal de la mesa de luz en cero queda realmente apagado", apagado.length === 0);
+      const docLuz = new animation.LowDoc(sc);
+      docLuz.onionCfg = onion.config({ beforeOpacity: [.7, .3, 0], afterOpacity: [.2, 0] });
+      const luzReabierta = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(docLuz.toJSON())));
+      ok("el perfil completo de la mesa de luz se guarda con la escena",
+        luzReabierta.onionCfg.beforeOpacity[1] === .3 && luzReabierta.onionCfg.afterOpacity[0] === .2);
     }
 
     // ── 8. Fill handle: repetir y continuar progresiones ──
@@ -211,6 +228,11 @@
       ok("se puede seguir dibujando sobre lo recuperado",
          doc2.level.byNumber(2).content.includes("M7 7"));
       ok("y sin crear dibujos de más", doc2.level.drawings.length === 3);
+      doc2.goTo(20);
+      ok("seleccionar una celda vacía la deja lista para dibujar", doc2.cell == null);
+      doc2.writeDrawing("<path d='M20 20'/>");
+      ok("el primer trazo en esa celda crea y expone el dibujo automáticamente",
+        doc2.cell != null && doc2.drawing.content.includes("M20 20"));
     }
 
     // 11. Rangos rectangulares: copiar/cortar/pegar entre varias columnas.
