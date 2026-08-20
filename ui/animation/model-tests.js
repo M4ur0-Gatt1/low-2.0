@@ -275,6 +275,27 @@
       ok("las claves de camara se guardan en la escena", reopened.scene.camera.keys[5].w === 640);
     }
 
+    // 14. Rig canónico: claves, jerarquía, Undo, migración y reapertura.
+    {
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      doc.ensureRigNode("torso"); doc.ensureRigNode("brazo"); history.clear();
+      doc.setRigParent("brazo", "torso");
+      doc.setRigKey("brazo", 1, { x: 0, y: 0, r: 0, s: 1 });
+      doc.setRigKey("brazo", 13, { x: 24, y: 10, r: 90, s: 1 });
+      const mid = doc.scene.rigPose("brazo", 7);
+      ok("rig interpola claves desde el modelo", mid.x === 12 && mid.r === 45, JSON.stringify(mid));
+      history.undo();
+      ok("undo borra la ultima clave de rig", !doc.scene.rigNode("brazo").keys[13]);
+      history.redo();
+      ok("redo recupera la clave de rig", doc.scene.rigNode("brazo").keys[13].r === 90);
+      ok("rig impide ciclos de parenting", doc.setRigParent("torso", "brazo") === false);
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("rig se conserva al guardar y reabrir", reopened.scene.rigNode("brazo").parentId === "torso" && reopened.scene.rigNode("brazo").keys[13].r === 90);
+      const migrated = new animation.Scene({ rig: { mano: { 1: { x: 3, y: 4, r: 5, s: 1 } } } });
+      ok("rig legacy migra a nodos canónicos", migrated.rigNode("mano").keys[1].x === 3);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }
