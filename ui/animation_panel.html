@@ -7,12 +7,15 @@
 <style>
 :root{--bg:#151514;--panel:#1b1a19;--panel2:#232220;--hover:#302f2c;--line:rgba(255,248,235,.075);--txt:#eeeae2;--mut:#aaa59c;--orange:#df6c48;--cyan:#67aeb6;--cell:28px}
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:"Segoe UI Variable","Segoe UI",Arial,sans-serif;font-size:13px}
-body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;align-items:center;gap:6px;padding:9px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
-.brand{font-weight:800;letter-spacing:.08em}.mode{color:var(--mut);font-size:11px;font-weight:650;letter-spacing:.06em}.spacer{flex:1}button{height:36px;min-width:36px;border:0;border-radius:10px;background:transparent;color:var(--mut);cursor:pointer;font-size:14px}button:hover{background:var(--hover);color:var(--txt)}button.primary{padding:0 12px;background:rgba(223,108,72,.14);color:var(--orange)}.fps{font-size:11px;color:var(--mut)}
+body{display:flex;flex-direction:column}.top{height:48px;flex:none;display:flex;align-items:center;gap:5px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden}
+.brand{font-weight:800;letter-spacing:.08em}.mode{color:var(--mut);font-size:11px;font-weight:650;letter-spacing:.06em;white-space:nowrap}.spacer{flex:1;min-width:10px}button{height:32px;min-width:32px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--mut);cursor:pointer;font-size:13px;white-space:nowrap}button:hover{background:var(--hover);color:var(--txt)}button.primary{padding:0 12px;background:rgba(223,108,72,.14);color:var(--orange)}button.on{border-color:rgba(223,108,72,.45);background:rgba(223,108,72,.16);color:#f3a086}.fps{font-size:11px;color:var(--mut);white-space:nowrap}
+.field{height:32px;display:flex;align-items:center;gap:4px;padding:0 7px;border:1px solid var(--line);border-radius:7px;color:var(--mut);font-size:11px;white-space:nowrap}.field input{width:42px;border:0;outline:0;background:transparent;color:var(--txt);font:12px/1 Consolas,monospace}.field input.range{width:35px}.sep{width:1px;height:22px;background:var(--line);margin:0 2px;flex:none}
+.commands{height:42px;flex:none;display:flex;align-items:center;gap:4px;padding:5px 10px;background:#181716;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden}.commands button{height:30px;padding:0 9px;font-size:12px}.commands .danger{color:#d88b82}.commands .group{display:flex;align-items:center;gap:3px;padding-right:6px;margin-right:2px;border-right:1px solid var(--line)}
 .viewport{flex:1;overflow:auto;position:relative}.timeline{min-width:max-content}.head,.row{display:flex;min-height:var(--cell)}.head{position:sticky;top:0;z-index:4;background:var(--panel2)}
 .label{position:sticky;left:0;z-index:3;width:190px;flex:none;padding:6px 10px;background:var(--panel);border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.head .label{z-index:6;background:var(--panel2);font-weight:700}
-.cell{width:var(--cell);height:var(--cell);flex:none;border-right:1px solid #24242a;border-bottom:1px solid #24242a;position:relative;text-align:center;font:10px/26px Consolas,monospace;color:var(--mut);cursor:pointer}.cell:hover{background:#26262c}.cell.current{box-shadow:inset 1px 0 var(--orange),inset -1px 0 var(--orange);background:#311911;color:#fff}.cell.start{background:var(--cyan);color:#071014}.cell.hold::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:2px solid rgba(51,181,232,.55)}.cell.future{opacity:.42}.cell.key::before{content:"◆";color:#ffad32;font-size:7px}.cell.camera::after{content:"●";color:var(--cyan);font-size:7px;position:absolute;bottom:-7px;left:10px}
+.cell{width:var(--cell);height:var(--cell);flex:none;border-right:1px solid #24242a;border-bottom:1px solid #24242a;position:relative;text-align:center;font:10px/26px Consolas,monospace;color:var(--mut);cursor:pointer}.cell:hover{background:#26262c}.cell.selected{outline:1px solid rgba(223,108,72,.72);outline-offset:-2px;background:rgba(223,108,72,.12)}.cell.current{box-shadow:inset 1px 0 var(--orange),inset -1px 0 var(--orange);background:#311911;color:#fff}.cell.start{background:var(--cyan);color:#071014}.cell.hold::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:2px solid rgba(51,181,232,.55)}.cell.future{opacity:.42}.cell.key::before{content:"◆";color:#ffad32;font-size:7px}.cell.camera::after{content:"●";color:var(--cyan);font-size:7px;position:absolute;bottom:-7px;left:10px}
 .xsheet .row{min-height:30px}.xsheet .cell{width:92px;height:30px;line-height:30px}.xsheet .label{width:64px;text-align:right;font-family:Consolas,monospace}.empty{padding:30px;color:var(--mut)}
+.references .cell::after{content:"";position:absolute;width:7px;height:7px;border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%);border:1px solid rgba(255,255,255,.16)}.references .cell.before::after{background:#c9483d}.references .cell.after::after{background:#31965b}.references .cell.current::after{background:var(--orange);border-radius:2px}.references .cell.future{cursor:default;opacity:.22}
 .lst{display:flex;flex-direction:column}
 .lpc{font-size:10px;opacity:.55;min-width:32px;text-align:right}
 .lrow{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);cursor:pointer}
@@ -27,6 +30,12 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;
 .frow{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .frow label{color:var(--mut)}.frow input[type=color]{width:60px;height:30px;border:0;background:none}
 .frow input[type=number]{width:80px;height:30px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:0 8px}
+.onion-mixer{display:flex;align-items:flex-end;gap:3px;min-width:max-content;padding:16px 12px 8px;border-bottom:1px solid var(--line);background:rgba(0,0,0,.12)}
+.onion-channel{width:25px;display:grid;grid-template-rows:18px 132px 16px;justify-items:center;align-items:center;gap:3px}.onion-channel.current{width:34px}
+.onion-channel label,.onion-channel output{font:10px/1 Consolas,monospace;color:var(--mut)}.onion-channel output{font-size:9px}
+.onion-channel input{width:22px;height:128px;margin:0;writing-mode:vertical-lr;direction:rtl;appearance:slider-vertical;accent-color:var(--channel);cursor:ns-resize}
+.onion-channel.current i{display:block;width:6px;height:112px;border-radius:4px;background:var(--orange)}
+.onion-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px}.onion-controls label{display:flex;align-items:center;gap:5px;color:var(--mut)}.onion-controls input[type=color]{width:28px;height:25px;padding:0;border:0;background:none}.onion-controls .tool{width:auto}
 .viewerdesk{position:absolute;inset:0;overflow:hidden;background:#10100f;touch-action:none;cursor:crosshair}
 .viewerdesk svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 .viewerdesk .live{pointer-events:none}.viewer-tools{display:flex;gap:3px}.viewer-tools button.on{background:rgba(223,108,72,.18);color:var(--orange)}
@@ -35,9 +44,69 @@ body{display:flex;flex-direction:column}.top{height:54px;flex:none;display:flex;
 <body>
 <div class="top">
   <span class="brand">LOW</span><span class="mode" id="mode"></span>
-  <button id="prev" title="Anterior">◀</button><button id="play" title="Reproducir">▶</button><button id="next" title="Siguiente">▶|</button><button id="add" title="Duplicar frame">＋</button><button id="blank" title="Agregar frame vacío">□＋</button>
+  <span class="sep" data-anim></span>
+  <button id="first" data-anim title="Primer fotograma">|◀</button>
+  <button id="prev" data-anim title="Fotograma anterior">◀</button>
+  <button id="play" data-anim title="Reproducir / detener">▶</button>
+  <button id="next" data-anim title="Fotograma siguiente">▶</button>
+  <button id="last" data-anim title="Último fotograma">▶|</button>
+  <button id="loop" data-anim title="Repetir reproducción">Loop</button>
+  <label class="field" data-anim>FPS <input id="fpsInput" type="number" min="1" max="60" value="12"></label>
+  <label class="field" data-anim>In <input class="range" id="rangeIn" type="number" min="1" value="1"></label>
+  <label class="field" data-anim>Out <input class="range" id="rangeOut" type="number" min="0" value="0"></label>
   <span class="spacer"></span><span class="fps" id="fps"></span>
   <button class="primary" id="dock" title="Volver a acoplar este panel en LOW — o arrastrá esta ventana encima de LOW, como en Photoshop">Acoplar</button>
+</div>
+<div class="commands" id="commands">
+  <span class="group">
+    <button id="viewTimeline" title="Vista Timeline horizontal">Timeline</button>
+    <button id="viewXsheet" title="Vista X-sheet vertical">X-sheet</button>
+  </span>
+  <span class="group">
+    <button id="undo" title="Deshacer">Deshacer</button><button id="redo" title="Rehacer">Rehacer</button>
+  </span>
+  <span class="group">
+    <button id="newDrawing" title="Crear un dibujo en la celda actual">Dibujo nuevo</button>
+    <button id="newLevel" title="Crear un nivel y una columna">Nivel nuevo</button>
+    <button id="cutCells" title="Cortar el rango seleccionado">Cortar</button>
+    <button id="copyCells" title="Copiar el rango seleccionado">Copiar</button>
+    <button id="pasteCells" title="Pegar en la celda actual">Pegar</button>
+    <button id="clearCells" title="Vaciar celdas sin borrar los dibujos">Vaciar</button>
+    <button id="shorter" title="Acortar exposición">− exposición</button>
+    <button id="longer" title="Extender exposición">+ exposición</button>
+    <button id="step1" title="Trabajar en unos">1s</button><button id="step2" title="Trabajar en doses">2s</button><button id="step3" title="Trabajar en treses">3s</button>
+    <button id="autoexpose" title="Completar huecos sosteniendo el dibujo anterior">Autoexponer</button>
+    <button id="dedupe" title="Quitar holds del rango">Quitar holds</button>
+    <button id="repeatCells" title="Repetir rango">Repetir</button>
+    <button id="reverseCells" title="Invertir rango">Invertir</button>
+    <button id="swingCells" title="Ida y vuelta">Ida y vuelta</button>
+  </span>
+  <span class="group">
+    <button id="onion" title="Mostrar u ocultar papel cebolla">Papel cebolla</button>
+    <button id="key" title="Marcar el dibujo actual como fotograma clave">Clave</button>
+    <button id="camera" title="Editar cámara 2D">Cámara</button>
+    <button id="cameraKey" title="Agregar o quitar clave de cámara">Clave cámara</button>
+  </span>
+  <span class="group">
+    <button id="add" title="Duplicar el dibujo actual al final">Duplicar</button>
+    <button id="blank" title="Insertar un dibujo vacío">Vacío</button>
+    <button id="insert" title="Insertar una copia después del fotograma actual">Insertar</button>
+    <button id="delete" class="danger" title="Borrar los fotogramas seleccionados">Borrar</button>
+  </span>
+  <span class="group">
+    <button id="tween" title="Crear intercalado">Intercalar</button>
+    <button id="move" title="Interpolar movimiento">Movimiento</button>
+    <button id="record" title="Grabar un movimiento en vivo">Grabar</button>
+    <button id="puppet" title="Grabar actuación de títere">Títere</button>
+    <button id="walk" title="Generar ciclo de caminata">Caminata</button>
+    <button id="ai" title="Asistente de claves">Claves IA</button>
+  </span>
+  <span class="group">
+    <button id="audio" title="Cargar una pista de audio">Audio</button>
+    <button id="audioMute" title="Silenciar o activar la pista de audio">Silencio</button>
+    <button id="audioRemove" class="danger" title="Quitar la pista de audio">Quitar audio</button>
+    <button id="export" title="Exportar la animación">Exportar</button>
+  </span>
 </div>
 <div class="viewport"><div id="content" class="timeline"><div class="empty">Conectando con el editor…</div></div></div>
 <script>
@@ -52,14 +121,45 @@ document.getElementById('mode').textContent=KINDS[kind];
 const isAnim=kind==='timeline'||kind==='xsheet';
 const isViewer=kind==='viewer';
 // los controles de reproducción solo tienen sentido en timeline/x-sheet
-if(!isAnim)['prev','play','next','add','blank'].forEach(id=>document.getElementById(id).style.display='none');
-let api=null,last='';
+if(!isAnim){document.querySelectorAll('[data-anim]').forEach(el=>el.style.display='none');document.getElementById('commands').style.display='none'}
+let api=null,last='',panelState=null,remoteMode=kind==='xsheet'?'xsheet':'timeline';
 const command=(action,payload={})=>api&&(api.panel_command?api.panel_command(kind,action,payload):api.animation_panel_command(action,payload));
+document.getElementById('first').onclick=()=>command('first');
 document.getElementById('prev').onclick=()=>command('previous');
-document.getElementById('play').onclick=()=>command('play');
+document.getElementById('play').onclick=()=>command(panelState&&panelState.playing?'stop':'play');
 document.getElementById('next').onclick=()=>command('next');
+document.getElementById('last').onclick=()=>command('last');
+document.getElementById('loop').onclick=()=>command('toggle-loop');
+document.getElementById('fpsInput').onchange=e=>command('set-fps',{value:+e.target.value});
+document.getElementById('rangeIn').onchange=e=>command('set-range',{edge:'in',value:+e.target.value});
+document.getElementById('rangeOut').onchange=e=>command('set-range',{edge:'out',value:+e.target.value});
 document.getElementById('add').onclick=()=>command('add');
 document.getElementById('blank').onclick=()=>command('add-blank');
+document.getElementById('insert').onclick=e=>command('insert',{blank:e.shiftKey});
+document.getElementById('onion').onclick=()=>command('onion');
+document.getElementById('key').onclick=()=>command('key');
+document.getElementById('camera').onclick=()=>command('camera');
+document.getElementById('cameraKey').onclick=()=>command('camera-key');
+document.getElementById('tween').onclick=()=>command('tween');
+document.getElementById('move').onclick=()=>command('move');
+document.getElementById('record').onclick=()=>command('record');
+document.getElementById('puppet').onclick=()=>command('puppet');
+document.getElementById('walk').onclick=()=>command('walk');
+document.getElementById('ai').onclick=()=>command('ai');
+document.getElementById('delete').onclick=()=>command('delete');
+document.getElementById('audio').onclick=()=>command('audio-load');
+document.getElementById('audioMute').onclick=()=>command('audio-mute');
+document.getElementById('audioRemove').onclick=()=>command('audio-remove');
+document.getElementById('export').onclick=()=>command('export');
+document.getElementById('undo').onclick=()=>command('undo');
+document.getElementById('redo').onclick=()=>command('redo');
+['newDrawing','newLevel','cutCells','copyCells','pasteCells','clearCells','shorter','longer','step1','step2','step3','autoexpose','dedupe','repeatCells','reverseCells','swingCells'].forEach(id=>{
+ const actions={newDrawing:'new-drawing',newLevel:'new-level',cutCells:'cut-cells',copyCells:'copy-cells',pasteCells:'paste-cells',clearCells:'clear-cells',shorter:'shorter-exposure',longer:'longer-exposure',step1:'step-1',step2:'step-2',step3:'step-3',autoexpose:'autoexpose',dedupe:'dedupe',repeatCells:'repeat-cells',reverseCells:'reverse-cells',swingCells:'swing-cells'};
+ document.getElementById(id).onclick=()=>command(actions[id]);
+});
+const setRemoteMode=mode=>{remoteMode=mode;last='';if(panelState)paint(panelState)};
+document.getElementById('viewTimeline').onclick=()=>setRemoteMode('timeline');
+document.getElementById('viewXsheet').onclick=()=>setRemoteMode('xsheet');
 document.getElementById('dock').onclick=async()=>{
  // window.close() NO cierra una ventana de pywebview: por eso "Acoplar" no
  // hacía nada. La cierra Python con close_panel(); el window.close() queda
@@ -73,18 +173,22 @@ document.getElementById('dock').onclick=async()=>{
 };
 function cell(frame,classes='',text=''){
  const c=document.createElement('div');c.className='cell '+classes;c.textContent=text;
- c.onclick=()=>command('frame',{index:frame.index});c.ondblclick=()=>{if(!frame.exists)command('create-frame',{index:frame.index})};return c;
+ c.onclick=e=>command('frame',{index:frame.index,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey||e.metaKey});
+ c.ondblclick=e=>{if(!frame.exists)command('create-frame',{index:frame.index,shiftKey:e.shiftKey})};return c;
 }
 function renderTimeline(s){
  const root=document.createElement('div');root.className='timeline';
  const head=document.createElement('div');head.className='head';head.innerHTML='<div class="label">Niveles ↓ · Fotogramas →</div>';
- s.frames.forEach(f=>head.appendChild(cell(f,(f.index===s.current?'current ':'')+(f.exists?'':'future'),f.number%5===0||f.index===s.current?f.number:'')));root.appendChild(head);
- (s.levels||[]).forEach((level,li)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('div');label.className='label';label.textContent=level;row.appendChild(label);let prev=false;s.frames.forEach((f,i)=>{const on=!!(s.exposures[li]&&s.exposures[li][i]);row.appendChild(cell(f,(i===s.current?'current ':'')+(on?(prev?'hold':'start'):'')+(f.exists?'':' future')));prev=on});root.appendChild(row)});
- const cam=document.createElement('div');cam.className='row';cam.innerHTML='<div class="label">Cámara</div>';s.frames.forEach(f=>cam.appendChild(cell(f,(f.index===s.current?'current ':'')+(f.camera?'camera ':'')+(f.exists?'':'future'))));root.appendChild(cam);return root;
+ const selected=i=>!!s.selection&&i>=s.selection.from&&i<=s.selection.to;
+ s.frames.forEach(f=>head.appendChild(cell(f,(f.index===s.current?'current ':'')+(selected(f.index)?'selected ':'')+(f.exists?'':'future'),f.number%5===0||f.index===s.current?f.number:'')));root.appendChild(head);
+ const refs=document.createElement('div');refs.className='row references';refs.innerHTML='<div class="label">Referencias de mesa de luz</div>';const fixed=new Set((s.onionFixed||[]).map(Number));s.frames.forEach(f=>{const c=document.createElement('div');c.className='cell '+(f.index===s.current?'current ':'')+(fixed.has(f.number)?(f.index<s.current?'before ':'after '):'')+(f.exists?'':'future');c.title=f.exists?(fixed.has(f.number)?'Quitar referencia del fotograma '+f.number:'Fijar fotograma '+f.number+' como referencia'):'Sin dibujo';if(f.exists&&f.index!==s.current)c.onclick=()=>command('toggle-onion-fixed',{frame:f.number});refs.appendChild(c)});root.appendChild(refs);
+ (s.levels||[]).forEach((level,li)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('div');label.className='label';label.textContent=level;row.appendChild(label);let prev=false;s.frames.forEach((f,i)=>{const on=!!(s.exposures[li]&&s.exposures[li][i]);row.appendChild(cell(f,(i===s.current?'current ':'')+(selected(i)?'selected ':'')+(on?(prev?'hold':'start'):'')+(f.exists?'':' future')));prev=on});root.appendChild(row)});
+ const cam=document.createElement('div');cam.className='row';cam.innerHTML='<div class="label">Cámara</div>';s.frames.forEach(f=>cam.appendChild(cell(f,(f.index===s.current?'current ':'')+(selected(f.index)?'selected ':'')+(f.camera?'camera ':'')+(f.exists?'':'future'))));root.appendChild(cam);return root;
 }
 function renderXsheet(s){
  const root=document.createElement('div');root.className='timeline xsheet';const head=document.createElement('div');head.className='head';head.innerHTML='<div class="label">F</div>'+(s.levels||[]).map(x=>'<div class="cell">'+x.replace(/^#/,'')+'</div>').join('');root.appendChild(head);
- s.frames.filter(f=>f.exists).forEach((f,i)=>{const row=document.createElement('div');row.className='row';const label=document.createElement('div');label.className='label';label.textContent=f.number;row.appendChild(label);(s.levels||[]).forEach((level,li)=>{const on=s.exposures[li]&&s.exposures[li][i],prev=i&&s.exposures[li]&&s.exposures[li][i-1];row.appendChild(cell(f,(i===s.current?'current ':'')+(on?(prev?'hold':'start'):''),on&&!prev?f.number:''))});root.appendChild(row)});return root;
+ const selected=i=>!!s.selection&&i>=s.selection.from&&i<=s.selection.to;
+ s.frames.filter(f=>f.exists).forEach(f=>{const i=f.index,row=document.createElement('div');row.className='row';const label=document.createElement('div');label.className='label';label.textContent=f.number;row.appendChild(label);(s.levels||[]).forEach((level,li)=>{const on=s.exposures[li]&&s.exposures[li][i],prev=i&&s.exposures[li]&&s.exposures[li][i-1];row.appendChild(cell(f,(i===s.current?'current ':'')+(selected(i)?'selected ':'')+(on?(prev?'hold':'start'):''),on&&!prev?f.number:''))});root.appendChild(row)});return root;
 }
 function renderLayers(s){
  const root=document.createElement('div');root.className='timeline lst';
@@ -134,31 +238,28 @@ function renderLevelStrip(s){
 /* PAPEL CEBOLLA en su propia ventana: los mismos controles que adentro, para
    dejarlo abierto en el segundo monitor mientras se dibuja en el primero. */
 function renderOnion(s){
- const root=document.createElement('div');root.className='timeline pad';
+ const root=document.createElement('div');root.className='timeline';
  if(!s||!s.cfg){root.innerHTML='<div class="empty">Abrí una animación en LOW</div>';return root}
- const c=s.cfg;
- const fila=(txt,el)=>{const d=document.createElement('div');d.className='frow';
-  const l=document.createElement('label');l.textContent=txt;d.append(l,el);return d};
- const lado=(txt,valor,color,key)=>{
-  const box=document.createElement('div');box.style.cssText='display:flex;gap:4px';
-  for(let i=1;i<=4;i++){const b=document.createElement('button');
-   b.textContent=i;b.className='tool'+(i<=valor?' on':'');
-   b.style.cssText='min-width:26px;padding:3px 0';
-   b.onclick=()=>command('onion',{key,value:valor===i?i-1:i});box.appendChild(b)}
-  const sw=document.createElement('i');
-  sw.style.cssText=`width:4px;border-radius:2px;background:${color}`;
-  box.prepend(sw);
-  return fila(txt,box)};
- root.append(lado('Antes',c.before,c.colorBefore,'before'));
- root.append(lado('Después',c.after,c.colorAfter,'after'));
- const op=document.createElement('input');op.type='range';op.min=5;op.max=80;
- op.value=Math.round(c.alpha*100);
- op.oninput=e=>command('onion',{key:'alpha',value:+e.target.value/100});
- root.append(fila('Opacidad',op));
+ const c=s.cfg,slots=10;
+ const profile=side=>{const key=side==='before'?'beforeOpacity':'afterOpacity';if(Array.isArray(c[key]))return Array.from({length:slots},(_,i)=>Math.max(0,Math.min(1,+c[key][i]||0)));const count=+c[side]||0;return Array.from({length:slots},(_,i)=>i<count?(+c.alpha||.38)*Math.pow(+c.falloff||.55,i):0)};
+ const mixer=document.createElement('div');mixer.className='onion-mixer';
+ const channel=(side,distance,value,color,label)=>{const wrap=document.createElement('div');wrap.className='onion-channel';const l=document.createElement('label');l.textContent=label;const input=document.createElement('input');input.type='range';input.min=0;input.max=100;input.value=Math.round(value*100);input.style.setProperty('--channel',color);const out=document.createElement('output');out.textContent=input.value+'%';input.oninput=()=>{out.textContent=input.value+'%';command('onion-mixer',{side,distance,value:+input.value/100,live:true})};input.onchange=()=>command('onion-mixer',{side,distance,value:+input.value/100});wrap.append(l,input,out);mixer.appendChild(wrap)};
+ const before=profile('before'),after=profile('after');for(let d=slots;d>=1;d--)channel('before',d,before[d-1],c.colorBefore,'−'+d);
+ const current=document.createElement('div');current.className='onion-channel current';current.innerHTML='<label>0</label><i></i><output>actual</output>';mixer.appendChild(current);
+ for(let d=1;d<=slots;d++)channel('after',d,after[d-1],c.colorAfter,'+'+d);root.appendChild(mixer);
+ const controls=document.createElement('div');controls.className='onion-controls';
+ const color=(label,value,key)=>{const l=document.createElement('label'),input=document.createElement('input');input.type='color';input.value=value;input.oninput=()=>command('onion',{key,value:input.value});l.append(input,document.createTextNode(label));return l};
+ controls.append(color('Anteriores',c.colorBefore,'colorBefore'));
+ ['curve','flat','clear'].forEach((id,i)=>{const b=document.createElement('button');b.className='tool';b.textContent=['Curva','Uniforme','Limpiar'][i];b.onclick=()=>command('onion-preset',{kind:id});controls.appendChild(b)});
+ controls.append(color('Posteriores',c.colorAfter,'colorAfter'));
  const on=document.createElement('button');on.className='tool'+(s.enabled?' on':'');
  on.textContent=s.enabled?'Activado':'Desactivado';
  on.onclick=()=>command('onion',{key:'enabled',value:!s.enabled});
- root.append(fila('Estado',on));
+ controls.appendChild(on);
+ const lines=document.createElement('button');lines.className='tool'+(c.linesOnly?' on':'');lines.textContent='Solo línea';lines.onclick=()=>command('onion',{key:'linesOnly',value:!c.linesOnly});controls.appendChild(lines);
+ const fixed=document.createElement('button');fixed.className='tool';fixed.textContent=(c.fixed||[]).includes(s.frame)?'Quitar fijo actual':'Fijar actual';fixed.onclick=()=>command('onion-fixed',{frame:s.frame});controls.appendChild(fixed);
+ (c.fixed||[]).forEach(frame=>{const b=document.createElement('button');b.className='mini';b.textContent='F'+frame+' ×';b.title='Quitar referencia fija';b.onclick=()=>command('onion-fixed',{frame});controls.appendChild(b)});
+ root.appendChild(controls);
  return root;
 }
 let viewerState=null,viewerTool='pencil';
@@ -185,7 +286,7 @@ function renderFor(s){
  if(kind==='color')return renderColor(s);
  if(kind==='onion')return renderOnion(s);
  if(kind==='levelstrip')return renderLevelStrip(s);
- return kind==='xsheet'?renderXsheet(s):renderTimeline(s);
+ return remoteMode==='xsheet'?renderXsheet(s):renderTimeline(s);
 }
 if(isViewer){
  const tools=document.createElement('div');tools.className='viewer-tools';
@@ -194,7 +295,25 @@ if(isViewer){
  const redo=document.createElement('button');redo.textContent='↷';redo.title='Rehacer';redo.onclick=()=>command('redo');tools.appendChild(redo);
  document.querySelector('.top').insertBefore(tools,document.querySelector('.spacer'));
 }
-async function refresh(){if(!api)return;try{const s=await (api.panel_state?api.panel_state(kind):api.animation_panel_state());const key=JSON.stringify(s);if(key===last)return;last=key;if(isAnim){document.getElementById('fps').textContent=(s.fps||12)+' FPS · '+(s.frames?s.frames.filter(f=>f.exists).length:0)+' frames';document.getElementById('play').textContent=s.playing?'Ⅱ':'▶';}const content=document.getElementById('content');const next=renderFor(s);next.id='content';content.replaceWith(next)}catch(e){}}
+function active(id,on){const el=document.getElementById(id);if(el)el.classList.toggle('on',!!on)}
+function paint(s){
+ panelState=s||{};
+ if(isAnim){
+  const count=s.frames?s.frames.filter(f=>f.exists).length:0;
+  document.getElementById('fps').textContent=count+' fotogramas';
+  document.getElementById('play').textContent=s.playing?'Ⅱ':'▶';
+  [['fpsInput',s.fps||12],['rangeIn',s.rangeIn||1],['rangeOut',s.rangeOut||0]].forEach(([id,value])=>{const el=document.getElementById(id);if(document.activeElement!==el)el.value=value});
+  active('loop',s.loop);active('onion',s.onion);active('key',s.currentKey);
+  active('camera',s.cameraMode);active('cameraKey',s.currentCamera);
+  active('move',s.moving);active('record',s.recording);active('puppet',s.puppeteering);
+  active('viewTimeline',remoteMode==='timeline');active('viewXsheet',remoteMode==='xsheet');
+  const audio=document.getElementById('audio'),mute=document.getElementById('audioMute'),remove=document.getElementById('audioRemove');
+  audio.textContent=s.audio?(s.audio.name||'Audio'):'Audio';audio.title=s.audio?'Pista: '+(s.audio.name||'Audio'):'Cargar una pista de audio';
+  mute.disabled=!s.audio;remove.disabled=!s.audio;active('audioMute',s.audio&&s.audio.muted);
+ }
+ const content=document.getElementById('content'),next=renderFor(s);next.id='content';content.replaceWith(next);
+}
+async function refresh(){if(!api)return;try{const s=await (api.panel_state?api.panel_state(kind):api.animation_panel_state());const key=JSON.stringify(s);if(key===last)return;if(document.activeElement&&document.activeElement.type==='range')return;last=key;paint(s)}catch(e){}}
 window.addEventListener('pywebviewready',()=>{api=window.pywebview.api;refresh();setInterval(refresh,350)});
 </script>
 </body>

@@ -33,7 +33,26 @@
     colorAfter: "#1e8449",    // verde: lo que viene
     fixed: [],            // frames marcados (modo fijo)
     linesOnly: false,     // mostrar solo la línea, sin rellenos
+    // Perfiles opcionales de mesa de luz. Cada posición es la opacidad del
+    // dibujo a esa distancia; null conserva el formato histórico alpha/falloff.
+    beforeOpacity: null,
+    afterOpacity: null,
   };
+  const MAX_SLOTS = 10;
+
+  function opacityAt(c, tipo, distancia) {
+    const perfil = tipo === "before" ? c.beforeOpacity : c.afterOpacity;
+    if (Array.isArray(perfil)) return Math.max(0, Math.min(1, Number(perfil[distancia - 1]) || 0));
+    return c.alpha * Math.pow(c.falloff, distancia - 1);
+  }
+
+  function visibleCount(c, tipo) {
+    const perfil = tipo === "before" ? c.beforeOpacity : c.afterOpacity;
+    if (!Array.isArray(perfil)) return Math.max(0, Number(c[tipo]) || 0);
+    let ultimo = 0;
+    perfil.slice(0, MAX_SLOTS).forEach((v, i) => { if (Number(v) > 0.005) ultimo = i + 1; });
+    return ultimo;
+  }
 
   /** Frames de los N dibujos distintos anteriores/posteriores a `frame`.
    *  Devuelve los frames DONDE EMPIEZA cada exposición, para que el dibujo que
@@ -57,7 +76,7 @@
   }
 
   const onion = {
-    DEFAULTS,
+    DEFAULTS, MAX_SLOTS,
 
     config(parcial) { return { ...DEFAULTS, ...(parcial || {}) }; },
 
@@ -83,12 +102,13 @@
         if (!d || d.isEmpty()) return;
         // cada dibujo más lejano se ve más tenue: da sensación de profundidad
         // temporal, que es para lo que sirve el papel cebolla
-        const op = c.alpha * Math.pow(c.falloff, info.distancia - 1);
-        salida.push({ drawing: d, frame: info.frame, color, opacity: Math.max(0.04, op), tipo });
+        const op = opacityAt(c, tipo, info.distancia);
+        if (op <= 0.005) return;
+        salida.push({ drawing: d, frame: info.frame, color, opacity: Math.max(0.01, op), tipo });
       };
 
-      neighbours(layer, frame, c.before, -1).forEach((i) => agregar(i, c.colorBefore, "before"));
-      neighbours(layer, frame, c.after, +1).forEach((i) => agregar(i, c.colorAfter, "after"));
+      neighbours(layer, frame, visibleCount(c, "before"), -1).forEach((i) => agregar(i, c.colorBefore, "before"));
+      neighbours(layer, frame, visibleCount(c, "after"), +1).forEach((i) => agregar(i, c.colorAfter, "after"));
 
       // FIJOS: se muestran siempre, sin importar dónde estés parado. Se pintan
       // con el color según queden antes o después del frame actual.

@@ -17,7 +17,7 @@
   const animation = LOW.animation = LOW.animation || {};
   const icon = (id) => `<svg class="ico"><use href="#${id}"/></svg>`;
 
-  const ANCHO = 13;        // px por frame
+  const ANCHO = 16;        // px por frame; coincide con la escala legible del tema
   const EXTRA = 24;        // frames de más al final, para seguir armando
 
   class TimelineView {
@@ -25,6 +25,11 @@
       this.host = typeof host === "string" ? document.querySelector(host) : host;
       this.doc = doc;
       this.playback = null;
+      this.onionEnabled = true;
+      this.toggleOnion = null;
+      this.openOnion = null;
+      this.loadAudio = null;
+      this.status = null;
       this._desuscribir = doc ? doc.subscribe((_d, reason) => this._docChanged(reason)) : null;
     }
     setDoc(doc) {
@@ -57,6 +62,52 @@
       const cameraKeys = (sc.camera && sc.camera.keys) || {};
       const cont = document.createElement("div");
       cont.className = "tl2";
+
+      // ── herramientas de celdas ──
+      const tools = document.createElement("div"); tools.className = "tl2-tools";
+      const group = () => { const g = document.createElement("span"); g.className = "tl2-toolgroup"; tools.appendChild(g); return g; };
+      const button = (host, text, title, action, active=false) => {
+        const b = document.createElement("button"); b.textContent = text; b.title = title;
+        b.className = active ? "on" : ""; b.onclick = action; host.appendChild(b); return b;
+      };
+      const selected = () => doc.cellSelection || { fromLayerId: doc.layerId, toLayerId: doc.layerId,
+        anchorLayerId: doc.layerId, anchorFrame: doc.frame, from: doc.frame, to: doc.frame };
+      const edit = group();
+      button(edit, "Dibujo nuevo", "Crear un dibujo vacío en la celda actual", () => {
+        if (doc.cell == null) doc.ensureDrawing();
+        else { const d = doc.duplicateDrawing(doc.cell); if (d) doc.setCell(doc.frame, d.number); }
+        doc.emit("frame");
+      });
+      button(edit, "Nivel nuevo", "Crear un nivel y una columna", () => { doc.addLayer(); doc.emit("frame"); });
+      const clipboard = group(), clip = animation.shortcuts && animation.shortcuts.clip;
+      button(clipboard, "Cortar", "Cortar las celdas seleccionadas", () => {
+        if (!clip) return; clip.range = doc.readCells(selected()); doc.clearCells(selected(), "Cortar rango");
+      });
+      button(clipboard, "Copiar", "Copiar las celdas seleccionadas", () => {
+        if (!clip) return; clip.range = doc.readCells(selected()); if (this.status) this.status("Celdas copiadas");
+      });
+      button(clipboard, "Pegar", "Pegar desde la celda actual", () => {
+        if (clip && clip.range) doc.pasteCells(clip.range, doc.layerId, doc.frame, { label: "Pegar rango" });
+      });
+      const timing = group();
+      button(timing, "Insertar", "Insertar una celda antes del fotograma actual", () => doc.apply("insert", doc.frame, 1));
+      button(timing, "Vaciar", "Vaciar las celdas sin borrar sus dibujos", () => doc.clearCells(selected(), "Vaciar rango"));
+      button(timing, "− exposición", "Acortar la exposición actual", () => doc.apply("stepChange", doc.frame, -1));
+      button(timing, "+ exposición", "Extender la exposición actual", () => doc.apply("stepChange", doc.frame, +1));
+      const sequence = group();
+      button(sequence, "1s", "Exponer cada dibujo por un fotograma", () => { const s = selected(); doc.apply("step", s.from, s.to, 1); });
+      button(sequence, "2s", "Exponer cada dibujo por dos fotogramas", () => { const s = selected(); doc.apply("step", s.from, s.to, 2); });
+      button(sequence, "3s", "Exponer cada dibujo por tres fotogramas", () => { const s = selected(); doc.apply("step", s.from, s.to, 3); });
+      button(sequence, "Autoexponer", "Completar los huecos sosteniendo el dibujo anterior", () => { const s = selected(); doc.apply("autoexpose", s.from, s.to); });
+      button(sequence, "Quitar holds", "Dejar una celda por dibujo", () => { const s = selected(); doc.apply("dedupe", s.from, s.to); });
+      button(sequence, "Repetir", "Repetir el rango seleccionado", () => { const s = selected(); doc.apply("repeat", s.from, s.to, 1); });
+      button(sequence, "Invertir", "Invertir el orden del rango seleccionado", () => { const s = selected(); doc.apply("reverse", s.from, s.to); });
+      button(sequence, "Ida y vuelta", "Crear un ciclo ping-pong con el rango", () => { const s = selected(); doc.apply("swing", s.from, s.to); });
+      const media = group();
+      button(media, "Mesa de luz", "Activar el papel cebolla", () => { if (this.toggleOnion) this.toggleOnion(); }, this.onionEnabled);
+      button(media, "Mezclador…", "Abrir los faders de papel cebolla", () => { if (this.openOnion) this.openOnion(); });
+      button(media, "Audio…", "Cargar una pista de audio", () => { if (this.loadAudio) this.loadAudio(); });
+      cont.appendChild(tools);
 
       // ── regla de frames ──
       const regla = document.createElement("div");
@@ -102,6 +153,58 @@
       }
       regla.appendChild(pista);
       cont.appendChild(regla);
+
+      // ── mesa de luz rápida ──
+      // Los marcadores se fijan sin mover el playhead: sirven para calcar una
+      // pose lejana mientras se dibuja en el fotograma actual.
+      const luz = document.createElement("div"); luz.className = "tl2-lighttable";
+      const luzNombre = document.createElement("div"); luzNombre.className = "tl2-name";
+      luzNombre.textContent = "Referencias";
+      const limpiar = document.createElement("button"); limpiar.textContent = "Limpiar";
+      limpiar.title = "Quitar todas las referencias fijas";
+      limpiar.onclick = () => { doc.onionCfg = { ...(doc.onionCfg || {}), fixed: [] };
+        doc.touch(); doc.emit("onion"); };
+      luzNombre.appendChild(limpiar); luz.appendChild(luzNombre);
+      const luzTrack = document.createElement("div"); luzTrack.className = "tl2-track";
+      const cfg = animation.onion.config(doc.onionCfg);
+      const fixed = new Set((cfg.fixed || []).map(Number));
+      for (let f = 1; f <= total; f++) {
+        const c = document.createElement("i"), drawing = doc.layer && doc.layer.cellAt(f);
+        c.className = "tl2-lightcell" + (fixed.has(f) ? " marked " + (f < doc.frame ? "before" : "after") : "")
+          + (f === doc.frame ? " current" : "") + (drawing == null ? " empty" : "");
+        c.dataset.frame = String(f);
+        c.title = drawing == null ? `Frame ${f}: no hay dibujo para fijar` :
+          (fixed.has(f) ? `Quitar referencia fija del frame ${f}` : `Fijar el frame ${f} como referencia`);
+        luzTrack.appendChild(c);
+      }
+      // Clic y arrastre pinta o borra una serie de referencias, igual que los
+      // marcadores de la barra de tiempo de OpenToonz.
+      luzTrack.onpointerdown = (event) => {
+        if (event.button !== 0) return;
+        const start = event.target.closest && event.target.closest(".tl2-lightcell");
+        if (!start || start.classList.contains("empty") || start.classList.contains("current")) return;
+        event.preventDefault();
+        const values = new Set((cfg.fixed || []).map(Number));
+        const turnOn = !values.has(+start.dataset.frame);
+        const painted = new Set();
+        const paint = (cell) => {
+          if (!cell || cell.classList.contains("empty") || cell.classList.contains("current")) return;
+          const frame = +cell.dataset.frame; if (painted.has(frame)) return; painted.add(frame);
+          if (turnOn) values.add(frame); else values.delete(frame);
+          cell.classList.toggle("marked", turnOn);
+          cell.classList.toggle("before", turnOn && frame < doc.frame);
+          cell.classList.toggle("after", turnOn && frame > doc.frame);
+        };
+        paint(start);
+        const move = (e) => paint(document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".tl2-lightcell"));
+        const up = () => {
+          document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
+          doc.onionCfg = { ...cfg, fixed: [...values].sort((a, b) => a - b) };
+          doc.touch(); doc.emit("onion");
+        };
+        document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+      };
+      luz.appendChild(luzTrack); cont.appendChild(luz);
 
       // ── una fila por capa ──
       for (const ly of sc.layers) {

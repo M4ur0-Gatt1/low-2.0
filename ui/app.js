@@ -6966,7 +6966,7 @@ function dzAnimSetView(mode) {
   const layers = $("#tlLayers"), xs = $("#tlXs");
   if (layers) layers.classList.toggle("active", !xsheet);
   if (xs) xs.classList.toggle("active", xsheet);
-  if (!xsheet) dzTlGridRender();
+  if (!xsheet) void dzTlMount().then(() => dzPublishAnimationPanelState([], [], 0));
 }
 async function dzDetachAnimationPanel(kind) {
   if (!DZ.anim) await dzAnimToggle();
@@ -7164,6 +7164,13 @@ function dzTlKeysOf(svgText) {
 async function dzTlGridRender() {
   const g = $("#dzTlGrid");
   if (!g || g.hidden || !DZ.anim) return;
+  // La vista canónica es la dueña del panel principal. El render legacy queda
+  // como adaptador solo mientras todavía no se migró una escena.
+  if (DZ.doc && DZ.tlView) {
+    DZ.tlView.render();
+    await dzPublishAnimationPanelState([], [], 0);
+    return;
+  }
   const svgs = await dzTlFrameSvgs();
   const perFrame = svgs.map(dzTlKeysOf);
   const order = [];
@@ -7269,17 +7276,57 @@ async function dzTlGridRender() {
   dzPublishAnimationPanelState(perFrame, order, displayCount);
 }
 
+function dzAnimationPanelExtras(state) {
+  const audio = DZ.doc && DZ.doc.audio;
+  const cellSelection = DZ.doc && DZ.doc.cellSelection;
+  const selection = cellSelection ? { anchor: Math.max(0, cellSelection.anchorFrame - 1),
+    from: Math.max(0, cellSelection.from - 1), to: Math.max(0, cellSelection.to - 1) } :
+    (DZ.timelineSelection || null);
+  const current = Math.max(0, Math.min((state.frames || []).length - 1, +state.current || 0));
+  const currentFrame = (state.frames || [])[current] || {};
+  return Object.assign(state, {
+    loop: !DZ.anim || DZ.anim.loop !== false,
+    rangeIn: Math.max(1, parseInt($("#tlIn")?.value || "1", 10)),
+    rangeOut: Math.max(0, parseInt($("#tlOut")?.value || "0", 10)),
+    onion: !!(DZ.anim && DZ.anim.onion),
+    onionFixed: [...(dzOnionCfgActual().fixed || [])],
+    cameraMode: !!DZ.camMode,
+    currentKey: !!currentFrame.key,
+    currentCamera: !!currentFrame.camera,
+    recording: !!DZ.rec,
+    puppeteering: !!(DZ.pup && (DZ.pup.recording || DZ.pup.counting)),
+    moving: !!DZ.moveT,
+    selection: selection ? { anchor: selection.anchor, from: selection.from, to: selection.to } : null,
+    audio: audio ? { name: audio.name || "Audio", muted: !!audio.muted,
+      volume: audio.volume == null ? 1 : audio.volume, offset: audio.offset || 0 } : null
+  });
+}
+
 async function dzPublishAnimationPanelState(perFrame, levels, displayCount) {
   if (!api || !DZ.anim) return;
+  if (DZ.doc && DZ.doc.scene) {
+    const doc = DZ.doc, scene = doc.scene, last = Math.max(1, scene.lastFrame());
+    const total = Math.max(48, displayCount || 0, last + 24);
+    const frames = Array.from({ length: total }, (_, i) => ({ index: i, number: i + 1,
+      exists: i < last, name: "F" + (i + 1), key: false,
+      camera: !!(scene.camera && scene.camera.keys && scene.camera.keys[i + 1]) }));
+    const state = dzAnimationPanelExtras({ frames, levels: scene.layers.map((ly) => ly.name),
+      current: Math.max(0, doc.frame - 1), playing: !!(DZ.playback && DZ.playback.playing),
+      fps: Math.max(1, +(scene.fps || $("#tlFps").value || 12)),
+      exposures: scene.layers.map((ly) => frames.map((f) => ly.cellAt(f.number) != null)) });
+    DZ.animationPanelState = state;
+    try { await api.animation_panel_state(state); } catch (err) { /* ventana auxiliar opcional */ }
+    return;
+  }
   const cams = (DZ.scene && DZ.scene.cam) || {};
   const keys = (DZ.scene && DZ.scene.keys) || [];
   const timelineCore = window.LOW && LOW.animation && LOW.animation.timeline;
   if (timelineCore) {
     const playbackIndex = DZ.anim.playing && Number.isInteger(DZ.anim.previewIdx) ? DZ.anim.previewIdx : DZ.anim.idx;
-    const state = timelineCore.buildPanelState({ frames: DZ.anim.frames, levels,
+    const state = dzAnimationPanelExtras(timelineCore.buildPanelState({ frames: DZ.anim.frames, levels,
       current: playbackIndex, playing: DZ.anim.playing,
       fps: Math.max(1, +($("#tlFps").value || 12)), perFrame,
-      camera: cams, keys, displayCount });
+      camera: cams, keys, displayCount }));
     DZ.animationPanelState = state;
     try { await api.animation_panel_state(state); } catch (err) { /* ventana auxiliar opcional */ }
     return;
@@ -7293,12 +7340,12 @@ async function dzPublishAnimationPanelState(perFrame, levels, displayCount) {
     camera: i < DZ.anim.frames.length && !!cams[dzFrameNum(DZ.anim.frames[i])]
   }));
   const playbackIndex = DZ.anim.playing && Number.isInteger(DZ.anim.previewIdx) ? DZ.anim.previewIdx : DZ.anim.idx;
-  const state = {
+  const state = dzAnimationPanelExtras({
     frames, levels, current: playbackIndex, playing: !!DZ.anim.playing,
     fps: Math.max(1, +($("#tlFps").value || 12)),
     exposures: (levels || []).map(level => frames.map((f, i) =>
       !!(f.exists && perFrame[i] && perFrame[i].has(level))))
-  };
+  });
   DZ.animationPanelState = state;
   try { await api.animation_panel_state(state); } catch (err) { /* ventana auxiliar opcional */ }
 }
@@ -7498,6 +7545,10 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
       if (payload.key === "enabled") { DZ.onionOn = !!payload.value; dzOnion2Render(); dzOnionRender(); }
       else dzOnionCfgSet({ [payload.key]: payload.value });
     }
+    else if (action === "onion-mixer") dzOnionMixerSet(payload.side, +payload.distance, +payload.value, !!payload.live);
+    else if (action === "onion-preset") dzOnionMixerPreset(payload.kind);
+    else if (action === "onion-fixed") dzOnionCfgSet(
+      LOW.animation.onion.toggleFixed(dzOnionCfgActual(), +payload.frame || (DZ.doc ? DZ.doc.frame : 1)));
     return true;
   }
   if (kind === "color") {
@@ -7508,18 +7559,102 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
   return false;
 };
 
+function dzPanelCellSelection() {
+  if (!DZ.doc) return null;
+  return DZ.doc.cellSelection || { fromLayerId: DZ.doc.layerId, toLayerId: DZ.doc.layerId,
+    anchorLayerId: DZ.doc.layerId, anchorFrame: DZ.doc.frame,
+    from: DZ.doc.frame, to: DZ.doc.frame };
+}
+function dzPanelCellCommand(action) {
+  const doc = DZ.doc, selection = dzPanelCellSelection();
+  if (!doc || !selection) { dzSetStatus("Abrí una escena de animación para editar celdas"); return false; }
+  const clip = LOW.animation.shortcuts && LOW.animation.shortcuts.clip;
+  if (action === "new-drawing") {
+    if (doc.cell == null) doc.ensureDrawing();
+    else { const drawing = doc.duplicateDrawing(doc.cell); if (drawing) doc.setCell(doc.frame, drawing.number); }
+    doc.emit("frame");
+  } else if (action === "new-level") { doc.addLayer(); doc.emit("frame"); }
+  else if (action === "copy-cells" && clip) {
+    clip.range = doc.readCells(selection); dzSetStatus(`${clip.range.width} × ${clip.range.height} celdas copiadas`);
+  } else if (action === "cut-cells" && clip) {
+    clip.range = doc.readCells(selection); doc.clearCells(selection, "Cortar rango");
+  } else if (action === "paste-cells" && clip && clip.range) {
+    doc.pasteCells(clip.range, doc.layerId, doc.frame, { label: "Pegar rango" });
+  } else if (action === "clear-cells") doc.clearCells(selection, "Vaciar rango");
+  else if (action === "shorter-exposure") doc.apply("stepChange", doc.frame, -1);
+  else if (action === "longer-exposure") doc.apply("stepChange", doc.frame, +1);
+  else if (/^step-[123]$/.test(action)) doc.apply("step", selection.from, selection.to, +action.slice(-1));
+  else if (action === "autoexpose") doc.apply("autoexpose", selection.from, selection.to);
+  else if (action === "dedupe") doc.apply("dedupe", selection.from, selection.to);
+  else if (action === "repeat-cells") doc.apply("repeat", selection.from, selection.to, 1);
+  else if (action === "reverse-cells") doc.apply("reverse", selection.from, selection.to);
+  else if (action === "swing-cells") doc.apply("swing", selection.from, selection.to);
+  else return false;
+  return true;
+}
+
 window.lowAnimationPanelCommand = async ({ action, payload }) => {
   if (!DZ.anim && action !== "open") await dzAnimToggle();
   if (!DZ.anim) return false;
   const index = Math.max(0, +(payload && payload.index) || 0);
   if (action === "play") await dzAnimPlay();
   else if (action === "stop") dzAnimStopIf();
-  else if (action === "frame") await dzTimelineCellActivate(index, false);
-  else if (action === "create-frame") await dzTimelineCellActivate(index, true);
+  else if (action === "frame") await dzTimelineCellActivate(index, false, payload || null);
+  else if (action === "create-frame") await dzTimelineCellActivate(index, true, payload || null);
+  else if (action === "first") { dzAnimStopIf(); await dzGoFrame(0); }
   else if (action === "previous") await dzGoFrame(Math.max(0, DZ.anim.idx - 1));
   else if (action === "next") await dzGoFrame(Math.min(DZ.anim.frames.length - 1, DZ.anim.idx + 1));
+  else if (action === "last") { dzAnimStopIf(); await dzGoFrame(Math.max(0, DZ.anim.frames.length - 1)); }
+  else if (action === "toggle-loop") {
+    DZ.anim.loop = !(DZ.anim.loop !== false);
+    $("#tlLoop")?.classList.toggle("active", DZ.anim.loop);
+    if (DZ.playback) DZ.playback.setLoop(DZ.anim.loop);
+    dzSetStatus(DZ.anim.loop ? "Loop activado" : "Reproducción única");
+  }
+  else if (action === "set-fps") {
+    const fps = Math.max(1, Math.min(60, Math.round(+(payload && payload.value) || 12)));
+    if ($("#tlFps")) $("#tlFps").value = fps;
+    if (DZ.doc) { DZ.doc.scene.fps = fps; DZ.doc.touch(); }
+  }
+  else if (action === "set-range") {
+    const input = payload && payload.edge === "out" ? $("#tlOut") : $("#tlIn");
+    if (input) input.value = payload && payload.edge === "out"
+      ? Math.max(0, Math.round(+payload.value || 0))
+      : Math.max(1, Math.round(+payload.value || 1));
+  }
   else if (action === "add") await dzFrameAdd();
   else if (action === "add-blank") await dzFrameInsert(true);
+  else if (action === "insert") await dzFrameInsert(!!(payload && payload.blank));
+  else if (action === "onion") $("#tlOnion")?.click();
+  else if (action === "key") dzKeyToggle();
+  else if (action === "tween") dzTweenModal();
+  else if (action === "move") await dzMoveTween();
+  else if (action === "record") dzRecToggle();
+  else if (action === "puppet") dzPuppetToggle();
+  else if (action === "walk") dzWalkCycleModal();
+  else if (action === "ai") dzAIKeyModal();
+  else if (action === "delete") await dzDeleteFrameSelection();
+  else if (action === "camera") dzCamToggle();
+  else if (action === "camera-key") dzCamKeyToggle();
+  else if (action === "export") dzExportModal();
+  else if (action === "audio-load") dzAudioCargar();
+  else if (action === "audio-remove") dzAudioQuitar();
+  else if (action === "audio-mute") {
+    const track = DZ.doc && DZ.doc.audio;
+    if (track) track.setMuted(!track.muted);
+  }
+  else if (["new-drawing", "new-level", "cut-cells", "copy-cells", "paste-cells", "clear-cells",
+    "shorter-exposure", "longer-exposure", "step-1", "step-2", "step-3", "autoexpose", "dedupe",
+    "repeat-cells", "reverse-cells", "swing-cells"].includes(action)) {
+    dzPanelCellCommand(action);
+  }
+  else if (action === "toggle-onion-fixed") {
+    const frame = Math.max(1, Math.round(+(payload && payload.frame) || 1));
+    dzOnionCfgSet(LOW.animation.onion.toggleFixed(dzOnionCfgActual(), frame));
+    DZ.onionOn = true; if (DZ.anim) DZ.anim.onion = true;
+  }
+  else if (action === "undo") dzUndo();
+  else if (action === "redo") dzRedo();
   else if (action === "dock") {
     const kind = payload && payload.kind === "xsheet" ? "xsheet" : "timeline";
     DZ.detachedAnimationPanels = DZ.detachedAnimationPanels || new Set();
@@ -7547,6 +7682,13 @@ async function dzTimelineCellActivate(index, createFuture, event=null) {
     DZ.timelineSelection = { anchor, from: Math.min(anchor, index), to: Math.max(anchor, index) };
   } else {
     DZ.timelineSelection = { anchor: index, from: index, to: index };
+  }
+  if (DZ.doc) {
+    const s = DZ.timelineSelection;
+    DZ.doc.selectCellRange(DZ.doc.layerId, s.from + 1, DZ.doc.layerId, s.to + 1);
+    DZ.doc.goTo(index + 1);
+    if (createFuture) { DZ.doc.ensureDrawing(); DZ.doc.emit("frame"); }
+    return;
   }
   if (index < DZ.anim.frames.length) { await dzGoFrame(index); return; }
   if (!createFuture) {
@@ -9516,6 +9658,21 @@ async function dzTlMount() {
   else DZ.tlView.setDoc(DZ.doc);
   DZ.tlView.playback = DZ.playback;
   DZ.tlView.audio = (DZ.doc && DZ.doc.audio) || null;
+  DZ.tlView.onionEnabled = !!DZ.onionOn;
+  DZ.tlView.toggleOnion = () => {
+    DZ.onionOn = !DZ.onionOn;
+    if (DZ.anim) DZ.anim.onion = DZ.onionOn;
+    $("#tlOnion")?.classList.toggle("active", DZ.onionOn);
+    dzOnion2Render(); dzOnionRender();
+    DZ.tlView.onionEnabled = DZ.onionOn; DZ.tlView.render();
+  };
+  DZ.tlView.openOnion = () => {
+    if (dzIsPanelDetached("onion")) return dzSetStatus("La mesa de luz está separada en otra ventana");
+    DZ.onionOn = true; if (DZ.anim) DZ.anim.onion = true;
+    dzOnionPanelSet(true); dzOnion2Render(); dzOnionRender();
+  };
+  DZ.tlView.loadAudio = dzAudioCargar;
+  DZ.tlView.status = (message) => dzSetStatus(" " + message);
   // el encabezado de la vieja sobra: la nueva trae su propia regla de frames
   const head = document.querySelector("#dzTlGrid .dz-tlg-head");
   if (head) head.hidden = true;
@@ -9602,49 +9759,77 @@ function dzSceneRecovered() {
 }
 
 /* ══ PANEL DE PAPEL CEBOLLA ══════════════════════════════════════════════
-   Los controles que se tocan a cada rato (cuántos dibujos antes y después) son
-   puntos de un clic. Escribe en la config del documento, que es la que usa
+   Mesa de luz: diez dibujos distintos antes y diez después, cada uno con su
+   propio fader. Escribe en la config del documento, que es la que usa
    `animation/onion.js` para resolver QUÉ dibujos mostrar. */
 function dzOnionCfgActual() {
   const base = LOW.animation.onion.DEFAULTS;
   if (DZ.doc) return { ...base, ...(DZ.doc.onionCfg || {}) };
   return { ...base, ...(DZ.onionCfg2 || {}) };
 }
-function dzOnionCfgSet(patch) {
+function dzOnionCfgSet(patch, options=null) {
   const cfg = { ...dzOnionCfgActual(), ...patch };
-  if (DZ.doc) DZ.doc.onionCfg = cfg; else DZ.onionCfg2 = cfg;
+  if (DZ.doc) { DZ.doc.onionCfg = cfg; DZ.doc.touch(); DZ.doc.emit("onion"); }
+  else DZ.onionCfg2 = cfg;
   try { localStorage.setItem("low.onion.v2", JSON.stringify(cfg)); } catch (_) { /* noop */ }
-  dzOnion2Render();
-  dzOnionRender();
+  if (!options || !options.live) dzOnion2Render();
+  if (!DZ.doc) dzOnionRender();
+}
+function dzOnionProfile(cfg, side) {
+  const key = side === "before" ? "beforeOpacity" : "afterOpacity";
+  const slots = LOW.animation.onion.MAX_SLOTS || 10;
+  if (Array.isArray(cfg[key])) return Array.from({ length: slots }, (_, i) =>
+    Math.max(0, Math.min(1, Number(cfg[key][i]) || 0)));
+  const count = Math.max(0, Number(cfg[side]) || 0);
+  return Array.from({ length: slots }, (_, i) => i < count
+    ? Math.max(0, Math.min(1, cfg.alpha * Math.pow(cfg.falloff, i))) : 0);
+}
+function dzOnionMixerSet(side, distance, value, live=false) {
+  const cfg = dzOnionCfgActual();
+  const key = side === "before" ? "beforeOpacity" : "afterOpacity";
+  const profile = dzOnionProfile(cfg, side);
+  profile[distance - 1] = Math.max(0, Math.min(1, Number(value) || 0));
+  let count = 0;
+  profile.forEach((v, i) => { if (v > .005) count = i + 1; });
+  dzOnionCfgSet({ [key]: profile, [side]: count }, { live });
+}
+function dzOnionMixerPreset(kind) {
+  const slots = LOW.animation.onion.MAX_SLOTS || 10;
+  const curve = Array.from({ length: slots }, (_, i) => Math.max(.02, .48 * Math.pow(.72, i)));
+  let beforeOpacity, afterOpacity;
+  if (kind === "clear") beforeOpacity = afterOpacity = Array(slots).fill(0);
+  else if (kind === "flat") beforeOpacity = afterOpacity = Array(slots).fill(.24);
+  else { beforeOpacity = curve.slice(); afterOpacity = curve.slice(); }
+  dzOnionCfgSet({ beforeOpacity, afterOpacity,
+    before: kind === "clear" ? 0 : slots, after: kind === "clear" ? 0 : slots });
 }
 function dzOnion2Render() {
   const cfg = dzOnionCfgActual();
-  const puntos = (host, valor, color, key) => {
-    const box = $(host);
-    if (!box) return;
-    box.innerHTML = "";
-    for (let i = 1; i <= 4; i++) {
-      const d = document.createElement("i");
-      d.className = i <= valor ? "on" : "";
-      d.style.background = i <= valor ? color : "transparent";
-      d.title = `${i} dibujo${i > 1 ? "s" : ""}`;
-      // volver a tocar el punto encendido más alto apaga ese lado: sin esto
-      // no había forma rápida de dejar solo los anteriores
-      d.onclick = () => dzOnionCfgSet({ [key]: (valor === i ? i - 1 : i) });
-      box.appendChild(d);
-    }
-  };
-  puntos("#onDotsB", cfg.before, cfg.colorBefore, "before");
-  puntos("#onDotsA", cfg.after, cfg.colorAfter, "after");
+  const mixer = $("#onMixer");
+  if (mixer) {
+    mixer.innerHTML = "";
+    const channel = (side, distance, value, color, label) => {
+      const wrap = document.createElement("div"); wrap.className = "onion2-channel";
+      const top = document.createElement("label"); top.textContent = label;
+      const input = document.createElement("input"); input.type = "range"; input.min = 0; input.max = 100;
+      input.value = Math.round(value * 100); input.style.setProperty("--channel", color);
+      input.title = `${label}: ${input.value}%`;
+      const out = document.createElement("output"); out.textContent = input.value + "%";
+      input.oninput = () => { out.textContent = input.value + "%"; input.title = `${label}: ${input.value}%`;
+        dzOnionMixerSet(side, distance, +input.value / 100, true); };
+      input.onchange = () => dzOnionMixerSet(side, distance, +input.value / 100, false);
+      input.ondblclick = () => dzOnionMixerSet(side, distance,
+        Math.max(.02, cfg.alpha * Math.pow(cfg.falloff, distance - 1)), false);
+      wrap.append(top, input, out); mixer.appendChild(wrap);
+    };
+    const before = dzOnionProfile(cfg, "before"), after = dzOnionProfile(cfg, "after");
+    for (let d = before.length; d >= 1; d--) channel("before", d, before[d - 1], cfg.colorBefore, "−" + d);
+    const current = document.createElement("div"); current.className = "onion2-channel current";
+    current.innerHTML = "<label>0</label><i></i><output>actual</output>"; mixer.appendChild(current);
+    for (let d = 1; d <= after.length; d++) channel("after", d, after[d - 1], cfg.colorAfter, "+" + d);
+  }
   const set = (id, v) => { const e = $(id); if (e) e.value = v; };
   set("#onColorB", cfg.colorBefore); set("#onColorA", cfg.colorAfter);
-  set("#onAlpha", Math.round(cfg.alpha * 100)); set("#onFall", Math.round(cfg.falloff * 100));
-  const txt = (id, v) => { const e = $(id); if (e) e.textContent = v; };
-  txt("#onAlphaVal", Math.round(cfg.alpha * 100) + "%");
-  txt("#onFallVal", Math.round(cfg.falloff * 100) + "%");
-  const sb = $("#onSwB"), sa = $("#onSwA");
-  if (sb) sb.style.background = cfg.colorBefore;
-  if (sa) sa.style.background = cfg.colorAfter;
   const pw = $("#onOn");
   if (pw) pw.classList.toggle("on", !!DZ.onionOn);
   const lines = $("#onLines");
@@ -9693,8 +9878,9 @@ function dzOnion2Wire() {
   if (power) { power.innerHTML = '<svg class="ico"><use href="#i-onion"/></svg>'; power.setAttribute("aria-label", "Activar papel cebolla"); }
   on("#onColorB", "oninput", (e) => dzOnionCfgSet({ colorBefore: e.target.value }));
   on("#onColorA", "oninput", (e) => dzOnionCfgSet({ colorAfter: e.target.value }));
-  on("#onAlpha", "oninput", (e) => dzOnionCfgSet({ alpha: +e.target.value / 100 }));
-  on("#onFall", "oninput", (e) => dzOnionCfgSet({ falloff: +e.target.value / 100 }));
+  on("#onCurve", "onclick", () => dzOnionMixerPreset("curve"));
+  on("#onFlat", "onclick", () => dzOnionMixerPreset("flat"));
+  on("#onClear", "onclick", () => dzOnionMixerPreset("clear"));
   on("#onLines", "onclick", () => dzOnionCfgSet({ linesOnly: !dzOnionCfgActual().linesOnly }));
   on("#onOn", "onclick", () => { DZ.onionOn = !DZ.onionOn; dzOnion2Render(); dzOnionRender(); });
   on("#onFixAdd", "onclick", () => {

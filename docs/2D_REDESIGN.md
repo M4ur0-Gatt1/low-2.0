@@ -344,7 +344,28 @@ Mientras alguna de esas operaciones falle o sea incoherente, la fase no está te
 
 ---
 
-## 5. Fuentes
+## 5. Timeline desacoplada y mesa de luz (pasada 2026-08-20)
+
+- Timeline y XSheet separados son vistas movidas del mismo estado; **Acoplar** devuelve la vista
+  original y no deja una copia detrás.
+- La Timeline separada conserva transporte, loop, FPS, rango In/Out, selección, cámara, claves,
+  audio, exportación y las operaciones canónicas de celdas (cortar/copiar/pegar, vaciar,
+  exposiciones, 1s/2s/3s, autoexponer, quitar holds, repetir, invertir e ida-vuelta).
+- La Timeline principal monta `TimelineView` canónica; el render de archivos legacy queda como
+  adaptador de migración y no vuelve a reemplazarla.
+- La fila **Referencias** encima del tiempo fija dibujos lejanos con clic o clic-arrastre, sin mover
+  el cabezal. Son referencias absolutas y se guardan con la escena.
+- El panel de papel cebolla es una mesa de luz de 20 canales: 10 dibujos anteriores y 10
+  posteriores, opacidad independiente, perfiles rápidos, colores por lado y modo sólo línea.
+- Seleccionar una celda vacía y empezar a dibujar crea y expone el Drawing automáticamente; el
+  usuario no necesita crear un archivo o dibujo manualmente antes del primer trazo.
+
+Pruebas del modelo: **65/65**. Incluyen perfiles independientes, canales apagados, persistencia
+guardar/reabrir y dibujo directo sobre una celda vacía.
+
+---
+
+## 6. Fuentes
 
 - [Interface Overview — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/interface_overview.html)
 - [Working in Xsheet/Timeline — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/working_in_xsheet.html)
