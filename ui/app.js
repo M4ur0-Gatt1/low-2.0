@@ -644,11 +644,11 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     if (!DZ.anim) return;
     DZ.anim.onion = !DZ.anim.onion;
     $("#tlOnion").classList.toggle("active", DZ.anim.onion);
-    $("#dzOnionPanel").hidden = !DZ.anim.onion;
+    dzOnionPanelSet(DZ.anim.onion);
     dzOnionUpdate();
   };
   dzOnion2Wire();     // panel de papel cebolla (sobre el modelo de dibujos)
-  $("#dzOpClose").onclick = () => { $("#dzOnionPanel").hidden = true; };
+  $("#dzOpClose").onclick = () => dzOnionPanelSet(false);
   // chrome de estudio: menubar, splitter, opciones de herramienta, statusbar
   dzMenubarWire();
   dzSplitWire();
@@ -6667,7 +6667,7 @@ function dzMenuAction(act) {
     rotl: () => dzRotView(-15), rotr: () => dzRotView(15),
     enderezar: () => { DZ.viewRot = 0; dzApplyZoom(); },
     diorama: dzZPanelToggle, profundidad: dzZPanelToggle,
-    cebolla: () => { const p = $("#dzOnionPanel"); p.hidden = !p.hidden; },
+    cebolla: dzOnionPanelToggle,
     xsheet: dzXsToggle, codigo: dzToggleCode,
     alfrente: () => { if (!DZ.sel) return dzSetStatus("Seleccioná un elemento primero");
       dzSnapshot(); DZ.sel.parentNode.appendChild(DZ.sel); dzMarkDirty(); dzBuildLayers(); },
@@ -9392,6 +9392,22 @@ function dzOnion2Render() {
       box.appendChild(s);
     }
   }
+}
+function dzOnionPanelSet(show) {
+  const panel = $("#dzOnionPanel"); if (!panel) return;
+  panel.hidden = !show;
+  const dock = panel.closest(".dz-animation-dock");
+  if (show && dock) dock.hidden = false;
+  else DZ.panelDock?.update();
+  if ($("#tlOnion")) $("#tlOnion").classList.toggle("active", !!show);
+}
+async function dzOnionPanelToggle() {
+  if (!DZ.anim) await dzAnimToggle();
+  if (!DZ.anim) return;
+  const show = $("#dzOnionPanel").hidden;
+  DZ.anim.onion = show;
+  dzOnionPanelSet(show);
+  if (show) { DZ.onionOn = true; dzOnion2Render(); dzOnionUpdate(); }
 }
 function dzOnion2Wire() {
   try {
