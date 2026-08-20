@@ -4172,7 +4172,7 @@ export class WebGLDesign3D {
    *  avisarlo. */
   stlReport(soloSeleccion = false): {
     solidos: number; trazos: number; rellenos: number; guias: number;
-    triangulos: number; exportables: number;
+    triangulos: number; exportables: number; aristasAbiertas: number; cerrada: boolean;
   } {
     const recs = soloSeleccion && this.selected.size ? [...this.selected] : this.strokes;
     let solidos = 0, trazos = 0, rellenos = 0, triangulos = 0;
@@ -4190,10 +4190,54 @@ export class WebGLDesign3D {
         else if (pos) triangulos += pos.count / 3;
       });
     }
+    const abiertas = this.stlOpenEdges(recs);
     return {
       solidos, trazos, rellenos, guias: this.guides.length,
       triangulos: Math.round(triangulos), exportables: solidos + trazos,
+      aristasAbiertas: abiertas, cerrada: abiertas === 0,
     };
+  }
+
+  /** Cuántas aristas quedan SIN cerrar. Para imprimir es el dato que importa:
+   *  una malla abierta puede fallar o salir rara en el slicer.
+   *
+   *  Los VOLÚMENES (Ctrl+E) cierran solos. Los TRAZOS no: el tubo y sus tapas
+   *  esféricas se fusionan en una sola malla pero sin soldar vértices — se ven
+   *  macizos y andan perfecto para mirar, pero como sólido quedan abiertos.
+   *  Se mide de verdad en vez de suponerlo, y se avisa antes de exportar. */
+  private stlOpenEdges(recs: StrokeRecord[]): number {
+    // Se mide OBJETO POR OBJETO. Contarlos todos en una sola bolsa daba
+    // resultados falsos: dos sólidos idénticos y superpuestos hacían que cada
+    // arista apareciera 4 veces (≠ 2) y el informe decía "abierta" una malla
+    // que cerraba perfecto. Cada sólido tiene que cerrar por sí mismo.
+    const k = (pos: THREE.BufferAttribute, i: number, m: THREE.Matrix4) => {
+      const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(m);
+      return `${v.x.toFixed(4)},${v.y.toFixed(4)},${v.z.toFixed(4)}`;
+    };
+    let abiertas = 0;
+    for (const rec of recs) {
+      if (rec.kind === 'guide' || rec.fill) continue;
+      rec.object.updateMatrixWorld(true);
+      const aristas = new Map<string, number>();
+      rec.object.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !m.geometry) return;
+        const g = m.geometry.getIndex() ? m.geometry.toNonIndexed() : m.geometry;
+        const pos = g.getAttribute('position') as THREE.BufferAttribute;
+        if (!pos) return;
+        for (let i = 0; i + 2 < pos.count; i += 3) {
+          const v = [k(pos, i, m.matrixWorld), k(pos, i + 1, m.matrixWorld), k(pos, i + 2, m.matrixWorld)];
+          for (let j = 0; j < 3; j++) {
+            const a = v[j], b = v[(j + 1) % 3];
+            const c = a < b ? `${a}|${b}` : `${b}|${a}`;
+            aristas.set(c, (aristas.get(c) || 0) + 1);
+          }
+        }
+        if (g !== m.geometry) g.dispose();
+      });
+      for (const n of aristas.values()) if (n !== 2) abiertas++;
+    }
+    return abiertas;
   }
 
   /** Genera el STL. Devuelve el texto (ASCII) o el DataView (binario), listo
@@ -4225,8 +4269,14 @@ export class WebGLDesign3D {
         g.applyMatrix4(m.matrixWorld);
         if (escala !== 1) g.scale(escala, escala, escala);
         // sin índice y con normales, que es lo que espera un STL
-        const plana = g.getIndex() ? g.toNonIndexed() : g;
+        let plana = g.getIndex() ? g.toNonIndexed() : g;
         if (plana !== g) g.dispose();
+        // soldar los vértices que coinciden: la teselación repite muchos, y un
+        // STL con vértices sueltos pesa más y deja aristas abiertas de gusto
+        try {
+          const soldada = BufferGeometryUtils.mergeVertices(plana, 1e-4);
+          if (soldada && soldada !== plana) { plana.dispose(); plana = soldada.toNonIndexed(); soldada.dispose(); }
+        } catch (_) { /* si no se puede soldar, se exporta igual */ }
         plana.computeVertexNormals();
         geos.push(plana);
         lote.add(new THREE.Mesh(plana, new THREE.MeshBasicMaterial()));

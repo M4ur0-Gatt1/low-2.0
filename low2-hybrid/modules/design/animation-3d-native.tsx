@@ -88,42 +88,33 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   // solo para "Guardar como…" o para el primer guardado de un proyecto nuevo.
   const projectPathRef = useRef<string>('');
   const [savedTick, setSavedTick] = useState(0);
-  /** Exportar STL. Antes de escribir nada dice QUÉ va a salir y qué queda
-   *  afuera: un STL solo lleva triángulos, así que las guías (que son andamio)
-   *  y los rellenos (caras sin espesor, no imprimibles) no entran. Enterarse
-   *  después, con el archivo abierto en el slicer, es mucho peor. */
-  const exportSTL = () => {
+  /** Estado del panel de exportación STL. Antes esto era window.confirm(), y
+   *  dentro de pywebview los diálogos nativos del navegador NO responden: el
+   *  botón "no hacía nada". Ahora el aviso es DOM propio del estudio, que
+   *  funciona igual en la app y en el navegador. */
+  const [stlPanel, setStlPanel] = useState<null | {
+    solidos: number; trazos: number; rellenos: number; guias: number;
+    triangulos: number; exportables: number; seleccion: number;
+    aristasAbiertas: number; cerrada: boolean;
+  }>(null);
+
+  /** Abre el panel con el informe previo: un STL solo lleva triángulos, así que
+   *  hay que decir QUÉ entra y QUÉ queda afuera ANTES de escribir el archivo.
+   *  Enterarse después, con el archivo ya en el slicer, es mucho peor. */
+  const pedirSTL = () => {
     const e = eng();
     if (!e) return;
-    const NL = String.fromCharCode(10);
-    const sel = e.selectedCount();
-    const soloSel = sel > 0 && window.confirm(
-      'Hay ' + sel + ' objeto(s) seleccionado(s). ¿Exportar SOLO la selección?' + NL +
-      'Cancelar = exportar toda la escena.');
-    const previo = e.stlReport(soloSel);
-    if (!previo.exportables) {
-      window.alert('No hay nada sólido para exportar.' + NL + NL +
-        'Un STL solo lleva triángulos: sirven los trazos (que son tubos cerrados) y los ' +
-        'volúmenes (Ctrl+E). Las guías son andamio y los rellenos son caras sin espesor, ' +
-        'así que no se pueden imprimir.');
-      return;
-    }
-    const partes = [
-      'Se exportan ' + previo.exportables + ' objeto(s): ' + previo.solidos +
-        ' volumen(es) y ' + previo.trazos + ' trazo(s).',
-      previo.triangulos.toLocaleString('es-AR') + ' triángulos.',
-    ];
-    if (previo.rellenos) {
-      partes.push(NL + 'Quedan afuera ' + previo.rellenos + ' relleno(s): son caras sin espesor.');
-    }
-    if (previo.guias) {
-      partes.push(NL + 'Quedan afuera ' + previo.guias + ' guía(s): son andamio, no geometría.');
-    }
-    partes.push(NL + 'Escala: 1 unidad de LOW = 10 mm.');
-    if (!window.confirm(partes.join(' ') + NL + NL + '¿Exportar?')) return;
+    const rep = e.stlReport(false);
+    setStlPanel({ ...rep, seleccion: e.selectedCount() });
+  };
 
+  /** Escribe el STL. `soloSel` lo elige el usuario en el panel. */
+  const hacerSTL = (soloSel: boolean) => {
+    const e = eng();
+    setStlPanel(null);
+    if (!e) return;
     const r = e.exportSTL({ binary: true, scale: 10, onlySelection: soloSel });
-    if (!r) { window.alert('No pude generar el STL.'); return; }
+    if (!r) return;
     const name = (projectId || 'modelo') + '.stl';
     const bytes = r.data instanceof DataView
       ? new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength)
@@ -273,7 +264,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
               : 'Guardar proyecto LOW 3D (Ctrl+S)')}
           {barBtn('Guardar como…', () => saveProject(true), false,
             'Guardar en otro archivo (Ctrl+Shift+S)')}
-          {barBtn('STL', exportSTL, false,
+          {barBtn('STL', pedirSTL, false,
             'Exportar como STL para impresión 3D — dice antes qué entra y qué queda afuera')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
           {/* vistas abreviadas: el nombre completo queda en el tooltip */}
@@ -318,6 +309,92 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
       <Panel3D title="Pincel / Superficie" initial={{ right: 14, top: 60 }} width={220}>
         <PropertiesPanel3D />
       </Panel3D>
+      {stlPanel && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 90, display: 'grid', placeItems: 'center',
+          background: 'rgba(0,0,0,.45)', pointerEvents: 'auto',
+        }} onClick={() => setStlPanel(null)}>
+          <div onClick={(ev) => ev.stopPropagation()} style={{
+            width: 372, padding: 16, borderRadius: 10,
+            background: dark ? '#1b1d23' : '#f4f6fa',
+            border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+            boxShadow: '0 24px 60px rgba(0,0,0,.5)',
+            color: dark ? '#e6e9f0' : '#23272f',
+            font: '400 12px/1.5 Figtree, system-ui, sans-serif',
+          }}>
+            <div style={{ font: '600 11px/1 Figtree, sans-serif', letterSpacing: .8,
+                          textTransform: 'uppercase', opacity: .7, marginBottom: 10 }}>
+              Exportar STL
+            </div>
+            {stlPanel.exportables === 0 ? (
+              <div>
+                No hay nada sólido para exportar.
+                <div style={{ opacity: .7, marginTop: 8 }}>
+                  Un STL solo lleva triángulos: sirven los trazos (que son tubos cerrados) y los
+                  volúmenes (<b>Ctrl+E</b>). Las guías son andamio y los rellenos son caras sin
+                  espesor, así que no se pueden imprimir.
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div>
+                  Se exportan <b>{stlPanel.exportables}</b> objeto(s): {stlPanel.solidos} volumen(es)
+                  y {stlPanel.trazos} trazo(s), <b>{stlPanel.triangulos.toLocaleString('es-AR')}</b> triángulos.
+                </div>
+                {(stlPanel.rellenos > 0 || stlPanel.guias > 0) && (
+                  <div style={{ opacity: .7, marginTop: 8 }}>
+                    Quedan afuera
+                    {stlPanel.rellenos > 0 && ` ${stlPanel.rellenos} relleno(s) — caras sin espesor`}
+                    {stlPanel.rellenos > 0 && stlPanel.guias > 0 && ' y'}
+                    {stlPanel.guias > 0 && ` ${stlPanel.guias} guía(s) — son andamio`}.
+                  </div>
+                )}
+                <div style={{ opacity: .7, marginTop: 8 }}>
+                  Escala: 1 unidad de LOW = 10 mm.
+                </div>
+                {/* Para imprimir, que la malla CIERRE es el dato que importa.
+                    Los volúmenes cierran; los trazos quedan abiertos porque el
+                    tubo y sus tapas no están soldados. Decirlo antes evita la
+                    sorpresa en el slicer. */}
+                <div style={{ marginTop: 10, padding: '7px 9px', borderRadius: 6,
+                  background: stlPanel.cerrada ? 'rgba(30,132,73,.16)' : 'rgba(240,69,14,.14)',
+                  border: `1px solid ${stlPanel.cerrada ? 'rgba(30,132,73,.5)' : 'rgba(240,69,14,.45)'}` }}>
+                  {stlPanel.cerrada ? (
+                    <span>La malla <b>cierra</b>: lista para imprimir.</span>
+                  ) : (
+                    <span>
+                      La malla <b>no cierra</b> ({stlPanel.aristasAbiertas} aristas abiertas).
+                      Se exporta igual y la mayoría de los slicers la repara al abrirla.
+                      {stlPanel.trazos > 0 && ' Los trazos quedan abiertos: para un sólido cerrado, convertilos en volumen con Ctrl+E.'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button onClick={() => setStlPanel(null)} style={{
+                height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
+                border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+                background: 'transparent', color: 'inherit', fontSize: 12,
+              }}>{stlPanel.exportables === 0 ? 'Cerrar' : 'Cancelar'}</button>
+              {stlPanel.exportables > 0 && stlPanel.seleccion > 0 && (
+                <button onClick={() => hacerSTL(true)} style={{
+                  height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
+                  border: `1px solid ${LOW_ACCENT}`, background: 'transparent',
+                  color: LOW_ACCENT, fontSize: 12,
+                }}>Solo la selección ({stlPanel.seleccion})</button>
+              )}
+              {stlPanel.exportables > 0 && (
+                <button onClick={() => hacerSTL(false)} style={{
+                  height: 30, padding: '0 14px', borderRadius: 7, cursor: 'pointer',
+                  border: 'none', background: LOW_ACCENT, color: '#fff', fontSize: 12, fontWeight: 600,
+                }}>Exportar</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <Panel3D title="Objetos" initial={{ right: 14, bottom: 14 }} width={230}>
         <ObjectList3D engine={engineRef} />
       </Panel3D>
