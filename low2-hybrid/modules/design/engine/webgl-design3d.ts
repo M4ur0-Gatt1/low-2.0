@@ -216,6 +216,11 @@ export class WebGLDesign3D {
     /** Superficie/malla fijada al comenzar el gesto. Evita que el raycast
      *  cambie a otra guía, stroke o primitiva mientras el usuario dibuja. */
     drawTarget?: THREE.Object3D;
+    /** Id de la superficie CURVA de apoyo, si el gesto se apoya en una. Se usa
+     *  al cerrar el trazo para volver a pegar los puntos a su piel: el
+     *  remuestreo interpola en línea recta y el suavizado promedia, y las dos
+     *  cosas cortan la cuerda del arco y hunden el trazo bajo la superficie. */
+    surfaceId?: string;
     /** true si el primer punto se resolvió contra el plano de fallback
      *  genérico (sin guía ni superficie real de apoyo) — dispara la
      *  auto-creación de guía al cerrar el trazo, ver commitStroke(). */
@@ -2118,6 +2123,10 @@ export class WebGLDesign3D {
       // profundidad a mitad de camino (líneas que "no respetan" la guía).
       drawPlane: hit.plane?.clone()
         ?? new THREE.Plane().setFromNormalAndCoplanarPoint(hit.normal.clone(), hit.point.clone()),
+      surfaceId: (() => {
+        const act = this.activeSurfaceObj();
+        return act && act.type !== 'plane' && hit.target === act.mesh ? act.id : undefined;
+      })(),
       // el snap a un vértice existente SÍ cuenta como soporte real (ese
       // vértice pertenece a un trazo/guía ya apoyado), aunque `surf` haya
       // caído en el plano de fallback antes de encontrar el snap.
@@ -2854,7 +2863,7 @@ export class WebGLDesign3D {
       (l.material as THREE.Material).dispose();
     }
     let { points, pressures } = this.current;
-    const { kind, baseNormal, noSupport } = this.current;
+    const { kind, baseNormal, noSupport, surfaceId } = this.current;
     this.current = null;
     if (points.length < 2) return;
 
@@ -2875,6 +2884,16 @@ export class WebGLDesign3D {
     }
     ({ points, pressures } = this.resamplePoints(points, pressures));
     ({ points, pressures } = this.refineStroke(points, pressures));
+    // Trazo apoyado en una superficie curva: vuelve a la piel. El remuestreo
+    // interpola en RECTA entre puntos y el suavizado promedia de a tres, así que
+    // los dos cortan la cuerda del arco; medido sobre una esfera de radio 1.4,
+    // el trazo quedaba hasta 0.026 hundido. Suavizar está bien, hundirse no.
+    if (surfaceId) {
+      const sup = this.surfaces.find((x) => x.id === surfaceId);
+      if (sup) {
+        points = points.map((q) => this.pegarASuperficie(sup, q)?.point ?? q);
+      }
+    }
     const group = new THREE.Group();
     const a = this.buildTube(points, pressures);
     if (a) group.add(a);
@@ -4365,6 +4384,10 @@ export class WebGLDesign3D {
       rec.object.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh || !m.geometry) return;
+        // la cara de una figura rellena no se escribe en el STL: contarla acá
+        // hacía que el informe anunciara 2 triángulos más de los que salían en
+        // el archivo (medido: informe 582, archivo 580)
+        if (m.userData.esRelleno) return;
         const g = m.geometry;
         const idx = g.getIndex();
         const pos = g.getAttribute('position');
