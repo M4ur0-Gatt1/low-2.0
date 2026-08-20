@@ -92,8 +92,14 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
    *  dentro de pywebview los diálogos nativos del navegador NO responden: el
    *  botón "no hacía nada". Ahora el aviso es DOM propio del estudio, que
    *  funciona igual en la app y en el navegador. */
+  /** "Nuevo proyecto" preguntaba con window.confirm, que dentro de pywebview no
+   *  responde: el botón no hacía absolutamente nada (mismo problema que tenía
+   *  el de STL). El aviso es DOM propio del estudio. */
+  const [confirmNuevo, setConfirmNuevo] = useState(false);
+  /** Avisos que antes iban por window.alert y tampoco se veían. */
+  const [aviso, setAviso] = useState('');
   const [stlPanel, setStlPanel] = useState<null | {
-    solidos: number; trazos: number; rellenos: number; guias: number;
+    solidos: number; trazos: number; rellenos: number; guias: number; caras: number;
     triangulos: number; exportables: number; seleccion: number;
     aristasAbiertas: number; cerrada: boolean;
     /** El panel NO se cierra al exportar: se queda esperando la respuesta del
@@ -192,7 +198,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
       // el navegador no da la ruta real del archivo: a partir de acá Guardar
       // vuelve a preguntar dónde, que es lo correcto (no sabemos de dónde vino)
       projectPathRef.current = '';
-    } catch (error) { window.alert(error instanceof Error ? error.message : 'No se pudo abrir el proyecto'); }
+    } catch (error) { setAviso(error instanceof Error ? error.message : 'No se pudo abrir el proyecto'); }
   };
   /** Abrir por la app (pywebview): así SÍ queda la ruta y Guardar sobrescribe. */
   const openProjectViaHost = () => window.parent.postMessage({ type: 'low:open-project' }, '*');
@@ -224,7 +230,7 @@ ${m.path || '(ruta desconocida)'}` };
         try {
           eng()?.importProject(JSON.parse(m.json));
           projectPathRef.current = m.path || '';
-        } catch { window.alert('No se pudo abrir el proyecto'); }
+        } catch { setAviso('No se pudo abrir el proyecto'); }
       }
     };
     window.addEventListener('message', onMsg);
@@ -297,7 +303,7 @@ ${m.path || '(ruta desconocida)'}` };
           {barBtn('⟳', () => eng()?.redo(), false, 'Rehacer (Ctrl+Alt+Z / Ctrl+Shift+Z)')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
           {barBtn('Nuevo', () => {
-            if (window.confirm('¿Empezar un proyecto nuevo? Se descarta el dibujo actual.')) eng()?.newProject();
+            setConfirmNuevo(true);
           }, false, 'Nuevo proyecto (descarta el dibujo actual)')}
           {barBtn('Abrir', () => {
             if (window.parent !== window) openProjectViaHost(); else fileInputRef.current?.click();
@@ -353,6 +359,43 @@ ${m.path || '(ruta desconocida)'}` };
       <Panel3D title="Pincel / Superficie" initial={{ right: 14, top: 60 }} width={220}>
         <PropertiesPanel3D />
       </Panel3D>
+      {(confirmNuevo || aviso) && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 91, display: 'grid', placeItems: 'center',
+          background: 'rgba(0,0,0,.45)', pointerEvents: 'auto',
+        }} onClick={() => { setConfirmNuevo(false); setAviso(''); }}>
+          <div onClick={(ev) => ev.stopPropagation()} style={{
+            width: 340, padding: 16, borderRadius: 10,
+            background: dark ? '#1b1d23' : '#f4f6fa',
+            border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+            boxShadow: '0 24px 60px rgba(0,0,0,.5)',
+            color: dark ? '#e6e9f0' : '#23272f',
+            font: '400 12px/1.5 Figtree, system-ui, sans-serif',
+          }}>
+            <div style={{ font: '600 11px/1 Figtree, sans-serif', letterSpacing: .8,
+                          textTransform: 'uppercase', opacity: .7, marginBottom: 10 }}>
+              {confirmNuevo ? 'Proyecto nuevo' : 'Aviso'}
+            </div>
+            <div>{confirmNuevo
+              ? 'Se descarta el dibujo actual. Si querés conservarlo, cancelá y guardalo primero.'
+              : aviso}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setConfirmNuevo(false); setAviso(''); }} style={{
+                height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
+                border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+                background: 'transparent', color: 'inherit', fontSize: 12,
+              }}>{confirmNuevo ? 'Cancelar' : 'Cerrar'}</button>
+              {confirmNuevo && (
+                <button onClick={() => { setConfirmNuevo(false); eng()?.newProject(); }} style={{
+                  height: 30, padding: '0 14px', borderRadius: 7, cursor: 'pointer',
+                  border: 'none', background: LOW_ACCENT, color: '#fff', fontSize: 12, fontWeight: 600,
+                }}>Empezar de nuevo</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {stlPanel && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 90, display: 'grid', placeItems: 'center',
@@ -404,6 +447,12 @@ ${m.path || '(ruta desconocida)'}` };
                   Se exportan <b>{stlPanel.exportables}</b> objeto(s): {stlPanel.solidos} volumen(es)
                   y {stlPanel.trazos} trazo(s), <b>{stlPanel.triangulos.toLocaleString('es-AR')}</b> triángulos.
                 </div>
+                {stlPanel.caras > 0 && (
+                  <div style={{ opacity: .7, marginTop: 8 }}>
+                    De {stlPanel.caras} figura(s) va el contorno, no la cara: una cara
+                    no tiene espesor. Para imprimirla, convertila en volumen con <b>Ctrl+E</b>.
+                  </div>
+                )}
                 {(stlPanel.rellenos > 0 || stlPanel.guias > 0) && (
                   <div style={{ opacity: .7, marginTop: 8 }}>
                     Quedan afuera

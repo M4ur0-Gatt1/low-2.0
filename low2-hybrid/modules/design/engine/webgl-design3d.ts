@@ -52,6 +52,10 @@ interface StrokeRecord {
    *  las herramientas de figuras. Solo sirve para nombrarla en la lista de
    *  objetos: por dentro es un trazo cerrado más. */
   shape?: 'rect' | 'circle' | 'poly';
+  /** La figura lleva una cara sólida además del contorno. Distinto de `fill`,
+   *  que marca un relleno SUELTO (el balde): acá el contorno y su cara son una
+   *  sola pieza, se mueven juntas y el contorno sigue exportándose a STL. */
+  filled?: boolean;
   /** Id del GRUPO al que pertenece (Ctrl+G). No cambia la jerarquía de la
    *  escena: los objetos siguen colgando de `strokesGroup`. Solo dice que
    *  elegir uno elige a todos, para poder moverlos y deformarlos en bloque.
@@ -108,6 +112,8 @@ export interface Low3DProject {
     /** true = volumen: se reconstruye con buildSolidMesh a partir de `points`. */
     solid?: boolean;
     shape?: 'rect' | 'circle' | 'poly';
+    /** true = la figura lleva cara sólida ADEMÁS del contorno (una sola pieza). */
+    filled?: boolean;
   }>;
   /** Nombre de cada grupo (Ctrl+G), por id. Sin esto, al reabrir el proyecto
    *  los objetos perdían su nombre y volvían a ser "Objeto 1, 2, 3…". */
@@ -2682,6 +2688,12 @@ export class WebGLDesign3D {
 
   /** Lados del polígono regular (herramienta 'poly'). */
   private polySides = 6;
+  /** Qué produce la herramienta de figuras: solo el contorno, solo la cara
+   *  sólida, o las dos cosas. Antes solo hacía contorno, así que para tener una
+   *  forma plana rellena había que dibujarla y después pasarle el balde. */
+  private shapeStyle: 'stroke' | 'fill' | 'both' = 'both';
+  setShapeStyle(v: 'stroke' | 'fill' | 'both'): void { this.shapeStyle = v; }
+  getShapeStyle(): 'stroke' | 'fill' | 'both' { return this.shapeStyle; }
   setPolySides(n: number): void { this.polySides = Math.max(3, Math.min(24, Math.round(n))); }
   getPolySides(): number { return this.polySides; }
 
@@ -2727,8 +2739,22 @@ export class WebGLDesign3D {
   }
 
   private beginShape(e: PointerEvent): void {
-    const hit = this.resolveHit();
-    if (!hit) { this.canvas.title = 'Elegí una vista o una superficie para apoyar la figura'; return; }
+    // Una figura PLANA no es ambigua como un trazo libre: si no hay guía ni
+    // superficie de apoyo, se usa el plano de la vista (perpendicular a la
+    // cámara, pasando por el centro de órbita). Antes acá se cortaba con
+    // "elegí una vista o una superficie" y no se podía dibujar una forma sin
+    // fabricar antes una guía.
+    let hit = this.resolveHit();
+    if (!hit) {
+      const camDir = new THREE.Vector3();
+      (this.camera as THREE.Camera).getWorldDirection(camDir);
+      const pl = new THREE.Plane().setFromNormalAndCoplanarPoint(
+        camDir.clone().negate(), this.controls.target);
+      const p = new THREE.Vector3();
+      this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+      if (!this.raycaster.ray.intersectPlane(pl, p)) return;
+      hit = { point: p, normal: pl.normal.clone(), plane: pl.clone(), kind: 'fallback' };
+    }
     const n = hit.normal.clone().normalize();
     const u = new THREE.Vector3(1, 0, 0);
     if (Math.abs(n.dot(u)) > 0.9) u.set(0, 1, 0);
@@ -2781,14 +2807,31 @@ export class WebGLDesign3D {
 
     const pressures = pts.map(() => 1);
     const group = new THREE.Group();
-    const tube = this.buildTube(pts, pressures, this.brush, true);
-    if (tube) group.add(tube);
-    for (const variant of this.mirroredVariants(pts)) {
-      const b = this.buildTube(variant, pressures, this.brush, true); if (b) group.add(b);
+    const conContorno = this.shapeStyle !== 'fill';
+    const conRelleno = this.shapeStyle !== 'stroke';
+    if (conContorno) {
+      const tube = this.buildTube(pts, pressures, this.brush, true);
+      if (tube) group.add(tube);
+      for (const variant of this.mirroredVariants(pts)) {
+        const b = this.buildTube(variant, pressures, this.brush, true); if (b) group.add(b);
+      }
     }
+    if (conRelleno) {
+      const cara = this.buildFillMesh(pts, this.brush);
+      if (cara) { cara.userData.esRelleno = true; group.add(cara); }
+      for (const variant of this.mirroredVariants(pts)) {
+        const c2 = this.buildFillMesh(variant, this.brush);
+        if (c2) { c2.userData.esRelleno = true; group.add(c2); }
+      }
+    }
+    if (!group.children.length) return;
     const rec: StrokeRecord = {
       id: `stroke-${this.seq++}`, object: group, points: pts, pressures, kind: 'stroke',
       shape: kind,
+      // solo relleno = una cara suelta, igual que la del balde: se marca `fill`
+      // para que el STL no la cuente como cuerpo
+      fill: conContorno ? undefined : true,
+      filled: conRelleno && conContorno ? true : undefined,
       layerId: this.activeLayerId(), baseOpacity: this.brush.opacity, brush: { ...this.brush },
     };
     group.userData.strokeId = rec.id;
@@ -2874,6 +2917,16 @@ export class WebGLDesign3D {
     if (a) rec.object.add(a);
     for (const variant of this.mirroredVariants(rec.points)) {
       const b = this.buildTube(variant, rec.pressures, rec.brush, !!rec.shape); if (b) rec.object.add(b);
+    }
+    // figura con cara sólida: la cara se reconstruye junto al contorno, si no
+    // al reabrir el proyecto (o al cambiar el color) la forma quedaba hueca
+    if (rec.filled) {
+      const cara = this.buildFillMesh(rec.points, rec.brush);
+      if (cara) { cara.userData.esRelleno = true; rec.object.add(cara); }
+      for (const variant of this.mirroredVariants(rec.points)) {
+        const c2 = this.buildFillMesh(variant, rec.brush);
+        if (c2) { c2.userData.esRelleno = true; rec.object.add(c2); }
+      }
     }
   }
 
@@ -3624,8 +3677,10 @@ export class WebGLDesign3D {
         const nombreFigura = { rect: 'Rectángulo', circle: 'Círculo', poly: 'Polígono' };
         sueltos.push({
           id: rec.id,
+          // "Rectángulo relleno" vs "Rectángulo": en la lista los dos se veían
+          // idénticos y no había forma de saber cuál llevaba cara sólida
           name: rec.solid ? 'Volumen' : rec.fill ? 'Relleno'
-            : rec.shape ? nombreFigura[rec.shape] : 'Línea',
+            : rec.shape ? nombreFigura[rec.shape] + (rec.filled ? ' relleno' : '') : 'Línea',
           kind: rec.solid ? 'solid' : rec.fill ? 'fill' : 'stroke', count: 1, selected: sel,
         });
       }
@@ -4272,6 +4327,9 @@ export class WebGLDesign3D {
     this.gizmo?.detach();
     this.undoStack = [];
     this.redoStack = [];
+    // la lista de objetos vive en el store: sin esto la escena quedaba vacía
+    // pero el panel seguía mostrando todo lo borrado
+    this.publishObjects();
   }
 
   /** "Nuevo proyecto": vacía la escena y deja el store coherente (si no, el
@@ -4292,14 +4350,17 @@ export class WebGLDesign3D {
    *  un plano de espesor cero no se puede imprimir, y callarlo es peor que
    *  avisarlo. */
   stlReport(soloSeleccion = false): {
-    solidos: number; trazos: number; rellenos: number; guias: number;
+    solidos: number; trazos: number; rellenos: number; guias: number; caras: number;
     triangulos: number; exportables: number; aristasAbiertas: number; cerrada: boolean;
   } {
     const recs = soloSeleccion && this.selected.size ? [...this.selected] : this.strokes;
-    let solidos = 0, trazos = 0, rellenos = 0, triangulos = 0;
+    let solidos = 0, trazos = 0, rellenos = 0, caras = 0, triangulos = 0;
     for (const rec of recs) {
       if (rec.kind === 'guide') continue;
       if (rec.fill) { rellenos++; continue; }
+      // la figura sí se exporta (su contorno es un tubo), pero su cara no: es
+      // una superficie sin espesor y hay que decirlo
+      if (rec.filled) caras++;
       if (rec.solid) solidos++; else trazos++;
       rec.object.traverse((o) => {
         const m = o as THREE.Mesh;
@@ -4314,6 +4375,7 @@ export class WebGLDesign3D {
     const abiertas = this.stlOpenEdges(recs);
     return {
       solidos, trazos, rellenos, guias: this.guides.length,
+      caras,
       triangulos: Math.round(triangulos), exportables: solidos + trazos,
       aristasAbiertas: abiertas, cerrada: abiertas === 0,
     };
@@ -4343,6 +4405,7 @@ export class WebGLDesign3D {
       rec.object.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh || !m.geometry) return;
+        if (m.userData.esRelleno) return;   // cara sin espesor: no es cuerpo
         const g = m.geometry.getIndex() ? m.geometry.toNonIndexed() : m.geometry;
         const pos = g.getAttribute('position') as THREE.BufferAttribute;
         if (!pos) return;
@@ -4386,6 +4449,7 @@ export class WebGLDesign3D {
       rec.object.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh || !m.geometry) return;
+        if (m.userData.esRelleno) return;   // cara sin espesor: no se imprime
         const g = m.geometry.clone();
         g.applyMatrix4(m.matrixWorld);
         if (escala !== 1) g.scale(escala, escala, escala);
@@ -4433,7 +4497,7 @@ export class WebGLDesign3D {
         points: rec.points.map((p) => p.toArray()), pressures: [...rec.pressures],
         baseOpacity: rec.baseOpacity, position: rec.object.position.toArray(),
         quaternion: rec.object.quaternion.toArray(), scale: rec.object.scale.toArray(),
-        brush: { ...rec.brush }, fill: rec.fill || undefined,
+        brush: { ...rec.brush }, fill: rec.fill || undefined, filled: rec.filled || undefined,
         groupId: rec.groupId || undefined, solid: rec.solid || undefined,
         shape: rec.shape || undefined,
       })),
@@ -4502,6 +4566,7 @@ export class WebGLDesign3D {
       };
       group.userData.strokeId = rec.id;
       rec.fill = item.fill || undefined;
+      rec.filled = item.filled || undefined;
       rec.solid = item.solid || undefined;
       rec.shape = item.shape || undefined;
       rec.groupId = item.groupId || undefined;
