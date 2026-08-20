@@ -100,24 +100,34 @@
             const a = drawings.indexOf(this.anchor), b = drawings.indexOf(d.number);
             this.selected = new Set(drawings.slice(Math.min(a, b), Math.max(a, b) + 1));
           } else { this.selected = new Set([d.number]); this.anchor = d.number; }
+          // Seleccionar material no altera el timing. Exponer es una accion
+          // separada (doble clic, menu contextual o drag hacia la XSheet).
           const f = doc.frameOfDrawing(d.number);
-          if (f) doc.goTo(f); else doc.setCell(doc.frame, d.number);
+          if (f && !(e.ctrlKey || e.metaKey || e.shiftKey)) doc.goTo(f);
           this.render();
+        };
+        cel.ondblclick = (e) => {
+          e.preventDefault(); e.stopPropagation();
+          doc.setCell(doc.frame, d.number);
         };
         cel.draggable = true;
         cel.ondragstart = (e) => {
           if (!this.selected.has(d.number)) this.selected = new Set([d.number]);
           const numbers = lv.drawings.map((x) => x.number).filter((n) => this.selected.has(n));
+          animation.levelDrag = { levelId: lv.id, numbers };
           e.dataTransfer.effectAllowed = "copyMove";
           e.dataTransfer.setData("application/x-low-level-drawings",
             JSON.stringify({ levelId: lv.id, numbers }));
           e.dataTransfer.setData("text/plain", numbers.join(", "));
           cel.classList.add("dragging");
         };
-        cel.ondragend = () => cel.classList.remove("dragging");
+        cel.ondragend = () => { cel.classList.remove("dragging"); animation.levelDrag = null; };
         // menú con lo que se puede hacer con un dibujo
         cel.oncontextmenu = (e) => {
           e.preventDefault();
+          if (!this.selected.has(d.number)) {
+            this.selected = new Set([d.number]); this.anchor = d.number; this.render();
+          }
           this._menu(e, d);
         };
         tira.appendChild(cel);
@@ -148,7 +158,12 @@
         b.onclick = () => { m.remove(); fn(); };
         m.appendChild(b);
       };
-      item("Exponer en el frame actual", () => doc.setCell(doc.frame, d.number));
+      item(this.selected.size > 1 ? `Exponer ${this.selected.size} dibujos desde el frame actual`
+        : "Exponer en el frame actual", () => {
+        const lv = doc.level;
+        const numbers = lv.drawings.map((x) => x.number).filter((n) => this.selected.has(n));
+        doc.exposeDrawings(lv.id, numbers.length ? numbers : [d.number], doc.layerId, doc.frame);
+      });
       item("Duplicar", () => {
         const nuevo = doc.duplicateDrawing(d.number);
         if (nuevo) doc.setCell(doc.frame, nuevo.number);

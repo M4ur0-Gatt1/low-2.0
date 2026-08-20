@@ -252,6 +252,29 @@
       ok("undo de drop restaura celdas y nivel", dstLayer.cellAt(1) === 1 && dstLayer.cellAt(2) == null && target.drawings.length === 1);
     }
 
+    // 13. Gestion de capas y camara pertenecen al documento y tienen Undo.
+    {
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      const first = doc.layer;
+      const secondForSelection = doc.addLayer("Seleccion"); history.clear();
+      const selected = doc.selectCellRange(first.id, 2, secondForSelection.id, 6);
+      ok("XSheet y Timeline comparten un rango canonico", selected.from === 2 && selected.to === 6 && selected.toLayerId === secondForSelection.id);
+      doc.setLayerProperty(first.id, "locked", true, "Bloquear capa");
+      ok("bloquear capa modifica el modelo canonico", first.locked === true);
+      history.undo();
+      ok("undo restaura propiedades de capa", first.locked === false);
+      const added = doc.addLayer("Color");
+      ok("agregar capa crea nivel y columna juntos", doc.scene.level(added.levelId) != null);
+      history.undo();
+      ok("undo de agregar capa quita nivel y columna", doc.scene.layer(added.id) == null && doc.scene.level(added.levelId) == null);
+      history.redo();
+      ok("redo recupera nivel y columna", doc.scene.layer(added.id) != null && doc.scene.level(added.levelId) != null);
+      doc.scene.camera.keys[5] = { cx: 100, cy: 80, w: 640, rot: 2 };
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("las claves de camara se guardan en la escena", reopened.scene.camera.keys[5].w === 640);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }
