@@ -9090,7 +9090,8 @@ function dzDragOutAll() {
 function dzAnimationDock(visible) {
   dzPanelDockSetup();
   document.querySelectorAll(".dz-animation-dock").forEach(dock => {
-    dock.hidden = !visible || !dock.children.length;
+    const panels = Array.from(dock.children).filter(el => !el.classList.contains("dz-dock-resizer"));
+    dock.hidden = !visible || !panels.length;
   });
   const view = $("#designView");
   if (view) view.classList.toggle("animation-workspace", !!visible);
@@ -9123,12 +9124,55 @@ function dzPanelDockSetup() {
   const left = makeDock("left", canvas, body);
   const bottom = makeDock("bottom", timeline, view);
   const docks = { left, right, bottom };
+  const dockSizes = (() => { try { return JSON.parse(localStorage.getItem("low.2d.dockSizes") || "{}"); } catch (_) { return {}; } })();
+  const sizeDock = (dock, value) => {
+    const zone = dock.dataset.zone;
+    if (zone === "bottom") {
+      const px = Math.max(130, Math.min(Math.round(innerHeight * .55), value));
+      dock.style.height = dock.style.flexBasis = px + "px";
+      dockSizes.bottom = px;
+    } else {
+      const px = Math.max(190, Math.min(520, value));
+      dock.style.width = dock.style.flexBasis = px + "px";
+      dockSizes[zone] = px;
+    }
+    localStorage.setItem("low.2d.dockSizes", JSON.stringify(dockSizes));
+  };
+  const wireDockResize = dock => {
+    const zone = dock.dataset.zone;
+    const handle = document.createElement("div");
+    handle.className = "dz-dock-resizer";
+    handle.setAttribute("role", "separator");
+    handle.setAttribute("aria-label", zone === "bottom" ? "Cambiar altura de paneles" : "Cambiar ancho de paneles");
+    handle.title = zone === "bottom" ? "Arrastrá para cambiar la altura" : "Arrastrá para cambiar el ancho";
+    dock.appendChild(handle);
+    if (dockSizes[zone]) sizeDock(dock, dockSizes[zone]);
+    handle.addEventListener("pointerdown", e => {
+      if (DZ.workspaceLocked || e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation(); handle.setPointerCapture?.(e.pointerId);
+      const startX = e.clientX, startY = e.clientY;
+      const start = zone === "bottom" ? dock.getBoundingClientRect().height : dock.getBoundingClientRect().width;
+      document.body.classList.add("dz-resizing-dock");
+      const move = ev => sizeDock(dock, zone === "bottom"
+        ? start + startY - ev.clientY
+        : start + (zone === "left" ? ev.clientX - startX : startX - ev.clientX));
+      const up = () => {
+        document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
+        document.body.classList.remove("dz-resizing-dock");
+      };
+      document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+    });
+  };
+  Object.values(docks).forEach(wireDockResize);
   const saved = (() => { try { return JSON.parse(localStorage.getItem("low.2d.panelLayout") || "{}"); } catch (_) { return {}; } })();
   const save = (panel, place, rect) => {
     saved[panel.id] = { place, ...(rect || {}) };
     localStorage.setItem("low.2d.panelLayout", JSON.stringify(saved));
   };
-  const updateDocks = () => Object.values(docks).forEach(d => d.hidden = !d.children.length || !DZ.anim);
+  const updateDocks = () => Object.values(docks).forEach(d => {
+    const panels = Array.from(d.children).filter(el => !el.classList.contains("dz-dock-resizer"));
+    d.hidden = !panels.length || !DZ.anim;
+  });
   const dockPanel = (panel, zone) => {
     panel.classList.remove("dz-panel-floating");
     panel.style.left = panel.style.top = panel.style.right = panel.style.bottom = panel.style.width = panel.style.height = "";

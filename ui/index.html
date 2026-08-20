@@ -413,7 +413,7 @@
       <button class="ibtn dz-toolbtn" data-tool="eraser" title="Borrador (E): pasalo por encima y borra trazos/formas enteros"><svg class="ico"><use href="#i-eraser"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="dropper" title="Cuentagotas (I): clic en un elemento toma su relleno y trazo"><svg class="ico"><use href="#i-dropper"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="bucket" title="Balde (G): clic en un elemento le aplica el relleno actual (Shift: el trazo)"><svg class="ico"><use href="#i-bucket"/></svg></button>
-      <div class="hsep"></div>
+      <div class="hsep" data-label="Formas"></div>
       <button class="ibtn" id="dzAddRect" title="Rectángulo (R)"><svg class="ico"><use href="#i-rect"/></svg></button>
       <button class="ibtn" id="dzAddCircle" title="Círculo"><svg class="ico"><use href="#i-circle"/></svg></button>
       <button class="ibtn" id="dzAddEllipse" title="Elipse (O)"><svg class="ico"><use href="#i-ellipse"/></svg></button>
@@ -422,14 +422,14 @@
       <button class="ibtn" id="dzAddText" title="Texto (T)"><svg class="ico"><use href="#i-text"/></svg></button>
       <button class="ibtn" id="dzAddLine" title="Línea (L)"><svg class="ico"><use href="#i-line"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="ruler" title="Regla / Hilo tensado (R): clic = inicio, clic = fin con línea elástica · Shift+clic = 15° · clic derecho = punto de fuga para perspectiva · Esc cancela"><svg class="ico"><use href="#i-ruler"/></svg></button>
-      <div class="hsep"></div>
-      <!-- herramientas vectoriales estilo Toon Boom -->
-      <button class="ibtn dz-toolbtn" data-tool="inflator" title="Inflador: seleccioná una forma y arrastrá para inflarla/desinflarla · Shift desinfla"><svg class="ico"><use href="#i-inflate"/></svg></button>
-      <button class="ibtn dz-toolbtn" data-tool="handler" title="Manejador de contorno: clic en una línea y arrastrá ↕ para engrosar/afinar el trazo"><svg class="ico"><use href="#i-contour"/></svg></button>
+      <div class="hsep" data-label="Edición vectorial"></div>
+      <!-- mesa vectorial: operaciones sobre el trazo existente -->
+      <button class="ibtn dz-toolbtn" data-tool="inflator" aria-label="Inflar forma" title="Inflar forma: seleccioná una forma y arrastrá para expandirla · Shift contrae"><svg class="ico"><use href="#i-inflate"/></svg></button>
+      <button class="ibtn dz-toolbtn" data-tool="handler" aria-label="Bomba de grosor" title="Bomba de grosor (Pump): arrastrá verticalmente sobre una línea para engrosar o afinar el trazo"><svg class="ico"><use href="#i-contour"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="iron" title="Plancha: pasá sobre trazos para suavizarlos progresivamente"><svg class="ico"><use href="#i-iron"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="pliers" title="Pinza: clic en el borde de un trazado para cortarlo en dos"><svg class="ico"><use href="#i-cut"/></svg></button>
-      <button class="ibtn dz-toolbtn" data-tool="magnet" title="Imán: clic y arrastrá para atraer los vértices cercanos y deformar"><svg class="ico"><use href="#i-magnet"/></svg></button>
-      <div class="hsep"></div>
+      <button class="ibtn dz-toolbtn" data-tool="magnet" aria-label="Deformar trazo" title="Deformar trazo (Pinch/Imán): arrastrá para atraer puntos cercanos y curvar la línea"><svg class="ico"><use href="#i-magnet"/></svg></button>
+      <div class="hsep" data-label="Animación"></div>
       <button class="ibtn dz-toolbtn" data-tool="pivot" title="Pivote de rig (J): clic en un elemento fija su eje de rotación (posado cutout) · Alt+clic lo quita"><svg class="ico"><use href="#i-pivot"/></svg></button>
       <button class="ibtn" id="dzMirror" title="Modo espejo (M): lápiz, pincel y pluma dibujan también reflejados sobre el eje vertical del lienzo — ideal para personajes simétricos"><svg class="ico"><use href="#i-mirror"/></svg></button>
       <div class="hsep"></div>
