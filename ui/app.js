@@ -9988,7 +9988,9 @@ function dzPanelDockSetup() {
     const external = document.createElement("button");
     external.className = "dz-external"; external.type = "button"; external.textContent = "Otra pantalla";
     external.title = "Abrir como ventana nativa para llevar a otro monitor";
-    const panelKind = panel.id === "dzLevelStrip" ? "levelstrip" : panel.id === "dzOnionPanel" ? "onion" : "xsheet";
+    const panelKind = panel.id === "dzLevelStrip" ? "levelstrip"
+      : panel.id === "dzOnionPanel" ? "onion"
+      : panel.id === "dzRigPanel" ? "rig" : "xsheet";
     external.onclick = e => { e.stopPropagation(); dzDetachPanel(panelKind); };
     head.insertBefore(external, head.querySelector(".dz-op-x"));
     head.addEventListener("pointerdown", e => {
@@ -10021,7 +10023,8 @@ function dzPanelDockSetup() {
       save(panel, "float", { x: panel.offsetLeft, y: panel.offsetTop, w: panel.offsetWidth, h: panel.offsetHeight });
     }).observe(panel);
   };
-  for (const [id, headId] of [["dzLevelStrip","dzLsHead"],["dzOnionPanel","dzOpHead"],["dzXsheet","dzXsHead"]]) {
+  for (const [id, headId] of [["dzLevelStrip","dzLsHead"],["dzOnionPanel","dzOpHead"],
+    ["dzXsheet","dzXsHead"],["dzRigPanel","dzRigHead"]]) {
     const panel = $("#" + id), head = $("#" + headId); if (!panel) continue;
     const cfg = saved[id];
     if (cfg && cfg.place === "float") floatPanel(panel, cfg.x || 80, cfg.y || 80, cfg.w || 260, cfg.h || 260);
