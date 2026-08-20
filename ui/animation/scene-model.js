@@ -227,6 +227,22 @@
         sx: lerp(p.sx == null ? (p.s == null ? 1 : p.s) : p.sx, q.sx == null ? (q.s == null ? 1 : q.s) : q.sx),
         sy: lerp(p.sy == null ? (p.s == null ? 1 : p.s) : p.sy, q.sy == null ? (q.s == null ? 1 : q.s) : q.sy) };
     }
+    rigWorldPose(id, frame, seen = new Set()) {
+      const node = this.rigNode(id);
+      if (!node || seen.has(id)) return null;
+      seen.add(id);
+      const local = this.rigPose(id, frame) || { x: 0, y: 0, r: 0, sx: 1, sy: 1 };
+      if (!node.parentId) return local;
+      const parent = this.rigWorldPose(node.parentId, frame, seen);
+      if (!parent) return local;
+      const rad = (parent.r || 0) * Math.PI / 180;
+      const lx = (local.x || 0) * (parent.sx == null ? 1 : parent.sx);
+      const ly = (local.y || 0) * (parent.sy == null ? 1 : parent.sy);
+      return { x: parent.x + lx * Math.cos(rad) - ly * Math.sin(rad),
+        y: parent.y + lx * Math.sin(rad) + ly * Math.cos(rad), r: (parent.r || 0) + (local.r || 0),
+        sx: (parent.sx == null ? 1 : parent.sx) * (local.sx == null ? 1 : local.sx),
+        sy: (parent.sy == null ? 1 : parent.sy) * (local.sy == null ? 1 : local.sy) };
+    }
 
     /** Expone un dibujo en un frame. Si el dibujo no existe en el nivel, lo
      *  CREA vacío: dibujar es lo que después le pone contenido. */

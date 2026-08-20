@@ -294,6 +294,12 @@
       ok("rig se conserva al guardar y reabrir", reopened.scene.rigNode("brazo").parentId === "torso" && reopened.scene.rigNode("brazo").keys[13].r === 90);
       const migrated = new animation.Scene({ rig: { mano: { 1: { x: 3, y: 4, r: 5, s: 1 } } } });
       ok("rig legacy migra a nodos canónicos", migrated.rigNode("mano").keys[1].x === 3);
+      doc.setRigKey("torso", 1, { x: 10, y: 0, r: 90, s: 2 });
+      doc.setRigKey("brazo", 1, { x: 5, y: 0, r: 15, s: 1 });
+      const world = doc.scene.rigWorldPose("brazo", 1);
+      ok("parenting propaga posición rotación y escala", Math.round(world.x) === 10 && Math.round(world.y) === 10 && world.r === 105 && world.sx === 2, JSON.stringify(world));
+      doc.setRigPivot("brazo", { x: 12, y: 8 });
+      ok("pivote pertenece al nodo canónico", doc.scene.rigNode("brazo").pivot.x === 12);
     }
 
     const fallan = res.filter((r) => !r.ok);

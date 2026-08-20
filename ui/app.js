@@ -791,7 +791,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     if (!DZ.sel) return dzSetStatus(" Seleccioná la pieza primero (flecha blanca D)");
     const id = $("#rigId").value.trim().replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]/g, "_");
     if (!id) return;
-    dzSnapshot(); DZ.sel.id = id; dzBuildLayers(); dzRigPanelSync();
+    dzSnapshot(); DZ.sel.id = id; dzBuildLayers();
+    if (DZ.doc) DZ.doc.ensureRigNode(id, { elementId: id });
+    dzRigPanelSync();
     dzSetStatus(" pieza «" + id + "» lista — posala y clavá con K");
   });
   ["rigX", "rigY", "rigR", "rigS"].forEach(id => {
@@ -813,6 +815,11 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   };
   $("#rigDel").onclick = () => {
     if (DZ.sel && DZ.sel.id) dzRigDelKey(DZ.sel.id, dzRigCur());
+  };
+  $("#rigParent").onchange = e => {
+    if (!DZ.doc || !DZ.sel || !DZ.sel.id) return;
+    if (!DZ.doc.setRigParent(DZ.sel.id, e.target.value || null)) dzSetStatus(" No se puede crear un ciclo en la jerarquía");
+    else { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); }
   };
   $("#perfRec").onclick = dzPerfRec;
   $("#perfPlay").onclick = dzPerfPlay;
@@ -2575,12 +2582,14 @@ function dzPivotClick(e) {
   dzSnapshot();
   if (e.altKey && target.hasAttribute("data-pivot")) {
     target.removeAttribute("data-pivot");
+    if (DZ.doc && target.id && DZ.doc.scene.rigNode(target.id)) DZ.doc.setRigPivot(target.id, null);
     dzSelect(target); dzMarkDirty();
     dzSetStatus(" Pivote quitado — la rotación vuelve al centro");
     return;
   }
   const p = dzToUser(e.clientX, e.clientY);
   target.setAttribute("data-pivot", `${Math.round(p.x)} ${Math.round(p.y)}`);
+  if (DZ.doc && target.id) { DZ.doc.ensureRigNode(target.id); DZ.doc.setRigPivot(target.id, p); }
   dzSelect(target); dzMarkDirty();
   dzSetStatus(" Pivote fijado — rotá con la manija  y gira desde acá (hombro, codo, cadera…). Alt+clic lo quita.");
 }
@@ -2735,7 +2744,7 @@ function dzPointerDown(e) {
     const num = recNow ? 1 + (performance.now() - recNow.t0) / 1000 * recNow.fps : dzRigCur();
     const pv = dzRigPivotOf(el);
     rigDrag = { id: el.id, pv,
-                k0: dzRigAt(el.id, num) || { x: 0, y: 0, r: 0, s: 1 },
+                k0: dzRigLocalAt(el.id, num) || { x: 0, y: 0, r: 0, s: 1 },
                 a0: Math.atan2(start.y - pv.y, start.x - pv.x) };
     if (recNow) { recNow.active = el.id; recNow.take[el.id] = recNow.take[el.id] || []; }
   }
@@ -6053,7 +6062,7 @@ function dzRigTracks() {
   return (DZ.scene && DZ.scene.rig) || {};
 }
 function dzRigAt(id, num) {
-  if (DZ.doc && DZ.doc.scene.rigNode(id)) return DZ.doc.scene.rigPose(id, num);
+  if (DZ.doc && DZ.doc.scene.rigNode(id)) return DZ.doc.scene.rigWorldPose(id, num);
   const trk = dzRigTracks()[id];
   if (!trk) return null;
   const ks = Object.keys(trk).map(Number).sort((a, b) => a - b);
@@ -6068,7 +6077,13 @@ function dzRigAt(id, num) {
   return { x: dzLerp(a.x, b.x, t), y: dzLerp(a.y, b.y, t),
            r: dzLerp(a.r || 0, b.r || 0, t), s: dzLerp(a.s == null ? 1 : a.s, b.s == null ? 1 : b.s, t) };
 }
+function dzRigLocalAt(id, num) {
+  if (DZ.doc && DZ.doc.scene.rigNode(id)) return DZ.doc.scene.rigPose(id, num);
+  return dzRigAt(id, num);
+}
 function dzRigPivotOf(el) {
+  const node = DZ.doc && el.id && DZ.doc.scene.rigNode(el.id);
+  if (node && node.pivot) return { x: node.pivot.x, y: node.pivot.y };
   const pv = el.getAttribute && el.getAttribute("data-pivot");
   if (pv) { const p = pv.split(/\s+/).map(Number); return { x: p[0], y: p[1] }; }
   try { const b = el.getBBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }
@@ -6161,12 +6176,22 @@ function dzRigPanelSync() {
   const el = DZ.sel, num = dzRigCur();
   $("#rigId").value = (el && el.id) || "";
   $("#rigId").placeholder = el ? (el.id ? el.id : "sin nombre — escribí uno y Enter") : "seleccioná una pieza (D)";
-  const k = (el && el.id && dzRigAt(el.id, num)) || { x: 0, y: 0, r: 0, s: 1 };
+  const k = (el && el.id && dzRigLocalAt(el.id, num)) || { x: 0, y: 0, r: 0, s: 1 };
   $("#rigX").value = Math.round(k.x); $("#rigY").value = Math.round(k.y);
   $("#rigR").value = Math.round(k.r * 10) / 10; $("#rigS").value = Math.round((k.s == null ? (k.sx == null ? 1 : k.sx) : k.s) * 100) / 100;
   const chips = $("#rigChips");
   chips.innerHTML = "";
   const trk = (el && el.id && dzRigTracks()[el.id]) || {};
+  const parent = $("#rigParent");
+  if (parent) {
+    const current = el && el.id && DZ.doc && DZ.doc.scene.rigNode(el.id);
+    parent.innerHTML = '<option value="">— raíz —</option>';
+    if (DZ.doc) Object.values(DZ.doc.scene.rig.nodes).filter(n => !current || n.id !== current.id).forEach(n => {
+      const o = document.createElement("option"); o.value = n.id; o.textContent = n.id;
+      o.selected = !!current && current.parentId === n.id; parent.appendChild(o);
+    });
+    parent.disabled = !current;
+  }
   Object.keys(trk).map(Number).sort((a, b) => a - b).forEach(n => {
     const c = document.createElement("span");
     c.className = "dz-chip" + (n === num ? " on" : "");

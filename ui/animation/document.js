@@ -510,6 +510,13 @@
       });
     }
 
+    setRigPivot(id, pivot) {
+      return this._rigChange("Cambiar pivote del rig", (rig) => {
+        const node = rig.nodes[id]; if (!node) return false;
+        node.pivot = pivot ? { x: +pivot.x || 0, y: +pivot.y || 0 } : null; return true;
+      });
+    }
+
     // ── serialización ────────────────────────────────────────────────────
     toJSON() {
       return { format: "lowscene", version: 1, savedAt: new Date().toISOString(),
