@@ -309,7 +309,7 @@
       ok("preparar dibujo registra todas las piezas en una operación",
         Object.keys(prepared.scene.rig.nodes).length === 3 && prepared.scene.rigNode("brazo_auto").parentId === "torso_auto");
       ok("cada pieza explicita su vínculo rígido con el arte",
-        prepared.scene.rig.version === 3 && prepared.scene.rigNode("mano_auto").binding.mode === "rigid" &&
+        prepared.scene.rig.version === 4 && prepared.scene.rigNode("mano_auto").binding.mode === "rigid" &&
         prepared.scene.rigNode("mano_auto").binding.elementId === "mano_auto");
       preparedHistory.undo();
       ok("undo de preparar dibujo quita el rig completo", Object.keys(prepared.scene.rig.nodes).length === 0);
@@ -334,7 +334,7 @@
       ok("rig se conserva al guardar y reabrir", reopened.scene.rigNode("brazo").parentId === "torso" && reopened.scene.rigNode("brazo").keys[13].r === 90);
       const migrated = new animation.Scene({ rig: { mano: { 1: { x: 3, y: 4, r: 5, s: 1 } } } });
       ok("rig legacy migra a nodos canónicos", migrated.rigNode("mano").keys[1].x === 3);
-      ok("rig legacy migra al esquema cut-out v3", migrated.rig.version === 3 &&
+      ok("rig legacy migra al esquema profesional v4", migrated.rig.version === 4 &&
         migrated.rig.setup.mode === "cutout" && migrated.rigNode("mano").binding.mode === "rigid");
       doc.setRigKey("torso", 1, { x: 10, y: 0, r: 90, s: 2 });
       doc.setRigKey("brazo", 1, { x: 5, y: 0, r: 15, s: 1 });
@@ -395,7 +395,101 @@
         !doc.scene.rigConstraint(ik) && doc.scene.rigNode("mano").parentId == null);
     }
 
-    // 16. El transporte visible controla el reproductor del documento único.
+    // 16. Rig v4: huesos/arte separados, canales, orden y ciclos.
+    {
+      const legacy = new animation.Scene({ rig: { version: 3, nodes: {
+        torso: { elementId: "svg_torso", pivot: { x: 40, y: 50 },
+          keys: { 1: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, 11: { x: 20, y: 0, r: 10, sx: 1, sy: 1 } } }
+      } } });
+      const migratedSlot = legacy.rigSlot("slot:torso");
+      const migratedAttachment = legacy.rigActiveAttachment("slot:torso");
+      ok("v3 migra separando hueso, slot y attachment",
+        legacy.rig.version === 4 && legacy.rigBone("torso") === legacy.rig.nodes.torso &&
+        migratedSlot.boneId === "torso" && migratedAttachment.elementId === "svg_torso");
+      ok("v3 migra el binding rígido fuera del hueso",
+        legacy.rig.bindings["binding:torso"].attachmentId === "attachment:torso");
+      ok("las claves v3 migran a canales por propiedad",
+        legacy.rigChannelValue(animation.rigChannelPath("torso", "x"), 6) === 10);
+      const serializedRig = legacy.toJSON().rig;
+      ok("el JSON v4 guarda bones sin duplicar el adaptador nodes",
+        !!serializedRig.bones.torso && serializedRig.nodes == null);
+
+      const skeleton = new animation.LowDoc();
+      skeleton.ensureRigBone("root", { name: "Raíz", pivot: { x: 10, y: 20 } });
+      ok("un hueso puede existir sin pieza de arte ni slot",
+        skeleton.scene.rigBone("root").elementId == null && Object.keys(skeleton.scene.rig.slots).length === 0);
+      const skeletonSlot = skeleton.ensureRigSlot("root", { id: "body-slot" });
+      const skeletonAttachment = skeleton.addRigAttachment(skeletonSlot,
+        { id: "body-front", elementId: "svg_body_front" });
+      const skeletonBinding = skeleton.setRigBinding({ boneId: "root", slotId: skeletonSlot,
+        attachmentId: skeletonAttachment, mode: "rigid" });
+      ok("arte y binding se agregan después del esqueleto",
+        skeleton.scene.rig.bindings[skeletonBinding].elementId === "svg_body_front" &&
+        skeleton.scene.rigBone("root").elementId == null);
+      const reopenedSkeleton = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(skeleton.toJSON())));
+      ok("un esqueleto puro sigue separado al guardar y reabrir",
+        reopenedSkeleton.scene.rigBone("root").elementId == null &&
+        reopenedSkeleton.scene.rigActiveAttachment("body-slot").elementId === "svg_body_front");
+
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      doc.ensureRigNode("cabeza", { elementId: "frente" });
+      const slotId = "slot:cabeza";
+      const profileId = doc.addRigAttachment(slotId, { id: "cabeza_perfil", elementId: "perfil" });
+      history.clear();
+      doc.setRigActiveAttachment(slotId, profileId);
+      ok("un slot cambia de sustitución sin tocar el hueso",
+        doc.scene.rigActiveAttachment(slotId).elementId === "perfil" && doc.scene.rigBone("cabeza").elementId === "frente");
+      history.undo();
+      ok("undo restaura la sustitución activa",
+        doc.scene.rigActiveAttachment(slotId).elementId === "frente");
+      history.redo();
+
+      doc.ensureRigNode("mano", { elementId: "mano" });
+      const orderedSlots = ["slot:mano", "slot:cabeza"];
+      history.clear(); doc.setRigSlotOrder(orderedSlots);
+      ok("el orden visual vive en slots, no en huesos",
+        doc.scene.rigSlot("slot:mano").drawOrder === 0 && doc.scene.rigSlot("slot:cabeza").drawOrder === 1);
+      history.undo();
+      ok("undo restaura el orden visual completo", doc.scene.rigSlot("slot:cabeza").drawOrder === 0);
+
+      const xPath = animation.rigChannelPath("cabeza", "x");
+      history.clear();
+      doc.setRigChannelKey(xPath, 1, 0); doc.setRigChannelKey(xPath, 11, 20);
+      ok("los canales por propiedad interpolan y alimentan la pose",
+        doc.scene.rigChannelValue(xPath, 6) === 10 && doc.scene.rigPose("cabeza", 6).x === 10);
+      history.undo();
+      ok("undo de canal restaura clave y pose juntas",
+        doc.scene.rigChannel(xPath).keys[11] == null && doc.scene.rigNode("cabeza").keys[11] == null);
+
+      history.clear();
+      ok("se agrega una constraint ordenada",
+        doc.upsertRigConstraint({ id: "follow", type: "transform", writes: ["cabeza"] }) === "follow");
+      ok("una segunda constraint conserva orden estable",
+        doc.upsertRigConstraint({ id: "hand", type: "transform", reads: ["cabeza"], writes: ["mano"] }) === "hand" &&
+        doc.scene.rigOrderedConstraints().map((c) => c.id).join(",") === "follow,hand");
+      ok("se rechaza una dependencia circular sin ensuciar el rig",
+        doc.upsertRigConstraint({ id: "follow", type: "transform", reads: ["mano"], writes: ["cabeza"] }) === false &&
+        doc.scene.rigConstraint("follow").reads.length === 0 && doc.scene.validateRig().valid);
+      doc.setRigConstraintOrder(["hand", "follow"]);
+      ok("las dependencias prevalecen sobre un orden manual inválido",
+        doc.scene.rig.constraintOrder.join(",") === "hand,follow" &&
+        doc.scene.rigOrderedConstraints().map((c) => c.id).join(",") === "follow,hand");
+      history.undo();
+      ok("undo restaura la preferencia de orden", doc.scene.rig.constraintOrder[0] === "follow");
+
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("slots, attachments, canales y orden sobreviven guardar/reabrir",
+        reopened.scene.rig.version === 4 && reopened.scene.rigActiveAttachment(slotId).elementId === "perfil" &&
+        reopened.scene.rigChannelValue(xPath, 1) === 0 && reopened.scene.rigOrderedConstraints()[0].id === "follow");
+      const broken = new animation.Scene({ rig: { version: 4,
+        bones: { root: { id: "root" } },
+        slots: { bad: { id: "bad", boneId: "missing", activeAttachmentId: "also-missing" } } } });
+      ok("el diagnóstico detecta referencias rotas antes de exportar",
+        broken.validateRig().valid === false && broken.validateRig().errors.length === 2);
+    }
+
+    // 17. El transporte visible controla el reproductor del documento único.
     {
       ok("reproductor canonico disponible", typeof animation.Playback === "function");
       if (animation.Playback) {
@@ -410,7 +504,7 @@
       }
     }
 
-    // 17. La mesa tiene una resolución canónica independiente de la ventana.
+    // 18. La mesa tiene una resolución canónica independiente de la ventana.
     {
       const doc = new animation.LowDoc();
       const history = new LOW.core.HistoryManager(); doc.setHistory(history);
@@ -431,7 +525,7 @@
         `${reopened.scene.width}×${reopened.scene.height}`);
     }
 
-    // 18. Paletas y estilos: el color es material canónico y sobrevive a guardar/reabrir.
+    // 19. Paletas y estilos: el color es material canónico y sobrevive a guardar/reabrir.
     {
       const sc = new Scene();
       const lv = sc.addLevel("Personaje");

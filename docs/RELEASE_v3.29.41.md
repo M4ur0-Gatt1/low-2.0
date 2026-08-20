@@ -15,6 +15,10 @@ qué debe entrar en la próxima versión; no afirma que el instalador ya exista.
 - Arquitectura profesional v4 definida para slots, attachments, mallas, pesos,
   constraints ordenadas, controles, acciones y rigs de múltiples vistas, sin
   crear una escena o sistema paralelo.
+- Fundamento v4 implementado: migración automática desde v3, bones separados
+  del arte, slots/attachments/bindings, canales por propiedad, orden explícito
+  de constraints, rechazo de ciclos y diagnóstico de referencias rotas. Un
+  esqueleto puede existir y guardarse sin una pieza de arte obligatoria.
 
 ## Trabajo concurrente de Claude incluido en la rama
 
@@ -28,7 +32,7 @@ borrador no convierte una prueba pendiente en una validación aprobada.
 
 ## Verificación
 
-- ✅ 98/98 pruebas del modelo 2D.
+- ✅ 118/118 pruebas del modelo 2D.
 - ✅ E2E previo de registrar piezas, mover pivote, vincular y Undo.
 - ✅ Compilación TypeScript sin errores.
 - ✅ Build de producción del renderer híbrido.

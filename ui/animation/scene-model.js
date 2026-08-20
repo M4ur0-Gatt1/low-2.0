@@ -43,30 +43,166 @@
     sx: pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx,
     sy: pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy });
 
-  function rigData(data) {
-    if (data && data.nodes) {
-      const nodes = {};
-      for (const [id, raw] of Object.entries(data.nodes)) {
-        const n = raw || {};
-        const elementId = n.elementId || n.binding?.elementId || id;
-        nodes[id] = { id, type: n.type || "drawing", elementId,
-          binding: { mode: n.binding?.mode || "rigid", elementId },
-          parentId: n.parentId || null, pivot: n.pivot ? { x: +n.pivot.x || 0, y: +n.pivot.y || 0 } : null,
-          rest: rigPoseData(n.rest), keys: clone(n.keys || {}), pinned: !!n.pinned,
-          limits: { min: Number.isFinite(+n.limits?.min) ? +n.limits.min : -180,
-            max: Number.isFinite(+n.limits?.max) ? +n.limits.max : 180 } };
+  const rigChannelPath = (boneId, property) =>
+    `bones/${encodeURIComponent(boneId)}/pose/${property}`;
+
+  const rigChannelData = (path, raw = {}) => ({ path,
+    valueType: raw.valueType || "number", interpolation: raw.interpolation || "linear",
+    keys: clone(raw.keys || {}) });
+
+  const rigConstraintData = (id, raw = {}, index = 0) => ({ ...clone(raw), id,
+    type: raw.type || "transform", enabled: raw.enabled !== false,
+    mix: Number.isFinite(+raw.mix) ? Math.max(0, Math.min(1, +raw.mix)) : 1,
+    order: Number.isFinite(+raw.order) ? +raw.order : index,
+    reads: [...new Set((raw.reads || []).filter(Boolean))],
+    writes: [...new Set((raw.writes || []).filter(Boolean))],
+    dependsOn: [...new Set((raw.dependsOn || []).filter(Boolean))] });
+
+  function rigConstraintEdges(rig) {
+    const constraints = rig.constraints || {}, ids = Object.keys(constraints);
+    const edges = Object.fromEntries(ids.map((id) => [id, new Set()]));
+    const writers = {};
+    for (const id of ids) {
+      const c = constraints[id];
+      for (const resource of c.writes || []) (writers[resource] ||= []).push(id);
+      for (const dependency of c.dependsOn || []) if (edges[dependency]) edges[dependency].add(id);
+    }
+    for (const id of ids) {
+      for (const resource of constraints[id].reads || [])
+        for (const writer of writers[resource] || []) edges[writer].add(id);
+    }
+    return edges;
+  }
+
+  function rigConstraintHasCycle(rig) {
+    const constraints = rig.constraints || {}, ids = Object.keys(constraints);
+    const edges = rigConstraintEdges(rig);
+    const visiting = new Set(), visited = new Set();
+    const visit = (id) => {
+      if (visiting.has(id)) return true;
+      if (visited.has(id)) return false;
+      visiting.add(id);
+      for (const next of edges[id] || []) if (visit(next)) return true;
+      visiting.delete(id); visited.add(id); return false;
+    };
+    return ids.some(visit);
+  }
+
+  function rigOrderedConstraintIds(rig) {
+    const constraints = rig.constraints || {}, ids = Object.keys(constraints), edges = rigConstraintEdges(rig);
+    const preferred = [...new Set([...(rig.constraintOrder || []), ...ids])].filter((id) => constraints[id]);
+    const rank = Object.fromEntries(preferred.map((id, index) => [id, index]));
+    const indegree = Object.fromEntries(ids.map((id) => [id, 0]));
+    for (const next of Object.values(edges)) for (const id of next) indegree[id]++;
+    const ready = ids.filter((id) => indegree[id] === 0).sort((a, b) => rank[a] - rank[b]);
+    const result = [];
+    while (ready.length) {
+      const id = ready.shift(); result.push(id);
+      for (const next of edges[id]) {
+        indegree[next]--;
+        if (indegree[next] === 0) {
+          ready.push(next); ready.sort((a, b) => rank[a] - rank[b]);
+        }
       }
-      return { version: 3, setup: { mode: data.setup?.mode || "cutout" },
-        nodes, constraints: clone(data.constraints || {}) };
     }
-    const nodes = {};
-    for (const [elementId, keys] of Object.entries(data || {})) {
-      nodes[elementId] = { id: elementId, type: "drawing", elementId,
-        binding: { mode: "rigid", elementId },
-        parentId: null, pivot: null, rest: rigPoseData(), keys: clone(keys || {}), pinned: false,
-        limits: { min: -180, max: 180 } };
+    return result.length === ids.length ? result : preferred;
+  }
+
+  function rigDiagnostics(rig) {
+    const errors = [], warnings = [], bones = rig.bones || rig.nodes || {};
+    for (const [id, bone] of Object.entries(bones)) {
+      const seen = new Set([id]); let parentId = bone.parentId;
+      while (parentId) {
+        if (!bones[parentId]) { errors.push({ code: "missing-parent", id, ref: parentId }); break; }
+        if (seen.has(parentId)) { errors.push({ code: "bone-cycle", id, ref: parentId }); break; }
+        seen.add(parentId); parentId = bones[parentId].parentId;
+      }
     }
-    return { version: 3, setup: { mode: "cutout" }, nodes, constraints: {} };
+    for (const [id, slot] of Object.entries(rig.slots || {})) {
+      if (slot.boneId && !bones[slot.boneId]) errors.push({ code: "missing-slot-bone", id, ref: slot.boneId });
+      if (slot.activeAttachmentId && !rig.attachments?.[slot.activeAttachmentId])
+        errors.push({ code: "missing-active-attachment", id, ref: slot.activeAttachmentId });
+    }
+    for (const [id, attachment] of Object.entries(rig.attachments || {}))
+      if (!rig.slots?.[attachment.slotId]) errors.push({ code: "missing-attachment-slot", id, ref: attachment.slotId });
+    for (const [id, binding] of Object.entries(rig.bindings || {})) {
+      if (binding.boneId && !bones[binding.boneId]) errors.push({ code: "missing-binding-bone", id, ref: binding.boneId });
+      if (binding.slotId && !rig.slots?.[binding.slotId]) errors.push({ code: "missing-binding-slot", id, ref: binding.slotId });
+      if (binding.attachmentId && !rig.attachments?.[binding.attachmentId])
+        errors.push({ code: "missing-binding-attachment", id, ref: binding.attachmentId });
+    }
+    if (rigConstraintHasCycle(rig)) errors.push({ code: "constraint-cycle" });
+    for (const id of rig.constraintOrder || [])
+      if (!rig.constraints?.[id]) warnings.push({ code: "missing-ordered-constraint", id });
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  function rigData(data) {
+    const source = data || {}, structured = !!(source.nodes || source.bones);
+    const sourceBones = source.bones || source.nodes || (structured ? {} : source);
+    const bones = {}, slots = clone(source.slots || {}), attachments = clone(source.attachments || {}),
+      bindings = clone(source.bindings || {}), channels = {};
+    for (const [id, raw] of Object.entries(sourceBones)) {
+      const n = structured ? (raw || {}) : { keys: raw || {} };
+      const hasArtLink = !source.bones || !!(n.elementId || n.binding?.elementId);
+      const elementId = n.elementId || n.binding?.elementId || id;
+      bones[id] = { id, type: "bone", name: n.name || id,
+        parentId: n.parentId || null, pivot: n.pivot ? { x: +n.pivot.x || 0, y: +n.pivot.y || 0 } : null,
+        rest: rigPoseData(n.rest), keys: clone(n.keys || {}), pinned: !!n.pinned,
+        inherit: { translation: n.inherit?.translation !== false, rotation: n.inherit?.rotation !== false,
+          scale: n.inherit?.scale !== false },
+        limits: { min: Number.isFinite(+n.limits?.min) ? +n.limits.min : -180,
+          max: Number.isFinite(+n.limits?.max) ? +n.limits.max : 180 } };
+      if (hasArtLink) {
+        bones[id].elementId = elementId;
+        bones[id].binding = { mode: n.binding?.mode || "rigid", elementId };
+      }
+      for (const property of ["x", "y", "r", "sx", "sy"]) {
+        const path = rigChannelPath(id, property), keys = {};
+        for (const [frame, pose] of Object.entries(n.keys || {})) {
+          const normalized = rigPoseData(pose); keys[frame] = normalized[property];
+        }
+        if (Object.keys(keys).length) channels[path] = rigChannelData(path, { keys });
+      }
+      if (!source.bones) {
+        const slotId = `slot:${id}`, attachmentId = `attachment:${id}`, bindingId = `binding:${id}`;
+        slots[slotId] ||= { id: slotId, name: n.name || id, boneId: id,
+          drawOrder: Object.keys(slots).length, activeAttachmentId: attachmentId, visible: true };
+        attachments[attachmentId] ||= { id: attachmentId, slotId, type: "drawing", elementId,
+          name: n.name || id, levelId: n.levelId || null, drawingNumber: n.drawingNumber ?? null };
+        bindings[bindingId] ||= { id: bindingId, mode: n.binding?.mode || "rigid", boneId: id,
+          slotId, attachmentId, elementId };
+      }
+    }
+    for (const [path, channel] of Object.entries(source.channels || {}))
+      channels[path] = rigChannelData(path, channel);
+    const constraints = {};
+    Object.entries(source.constraints || {}).forEach(([id, constraint], index) => {
+      constraints[id] = rigConstraintData(id, constraint, index);
+    });
+    const requestedOrder = (source.constraintOrder || source.setup?.evaluationOrder || []).filter((id) => constraints[id]);
+    const remainder = Object.keys(constraints).filter((id) => !requestedOrder.includes(id))
+      .sort((a, b) => constraints[a].order - constraints[b].order || a.localeCompare(b));
+    const rig = { version: 4,
+      setup: { mode: source.setup?.mode || "cutout", restFrame: Math.max(1, Math.round(source.setup?.restFrame || 1)),
+        units: source.setup?.units || "px" },
+      bones, slots, attachments, bindings, meshes: clone(source.meshes || {}),
+      deformers: clone(source.deformers || {}), constraints,
+      constraintOrder: [...requestedOrder, ...remainder], controllers: clone(source.controllers || {}),
+      actions: clone(source.actions || {}), channels, switches: clone(source.switches || {}),
+      physics: clone(source.physics || {}), diagnostics: { valid: true, errors: [], warnings: [] } };
+    // `nodes` es sólo el nombre de compatibilidad usado por la UI v3. Comparte
+    // la misma referencia que `bones`; el JSON canónico nunca serializa ambos.
+    rig.nodes = rig.bones;
+    rig.diagnostics = rigDiagnostics(rig);
+    return rig;
+  }
+
+  function rigToJSON(rig) {
+    const normalized = rigData(rig), out = clone(normalized);
+    delete out.nodes;
+    out.diagnostics = rigDiagnostics(normalized);
+    return out;
   }
 
   // Matrices afines SVG [a,b,c,d,e,f]. El rig de recortes conserva las piezas
@@ -349,23 +485,66 @@
       return lv ? lv.byNumber(num) : null;
     }
 
-    rigNode(id) { return this.rig.nodes[id] || null; }
+    rigNode(id) { return this.rig.bones[id] || null; }
+    rigBone(id) { return this.rigNode(id); }
+    rigSlot(id) { return this.rig.slots[id] || null; }
+    rigAttachment(id) { return this.rig.attachments[id] || null; }
+    rigActiveAttachment(slotId) {
+      const slot = this.rigSlot(slotId);
+      return slot && slot.activeAttachmentId ? this.rigAttachment(slot.activeAttachmentId) : null;
+    }
+    rigOrderedConstraints() {
+      return rigOrderedConstraintIds(this.rig).map((id) => this.rig.constraints[id]).filter(Boolean);
+    }
+    rigChannel(path) { return this.rig.channels[path] || null; }
+    rigChannelValue(path, frame, fallback = 0) {
+      const channel = this.rigChannel(path), keys = channel?.keys || {};
+      const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!frames.length) return fallback;
+      const f = Number(frame) || 1;
+      if (keys[f] != null) return clone(keys[f]);
+      if (f <= frames[0]) return clone(keys[frames[0]]);
+      if (f >= frames.at(-1)) return clone(keys[frames.at(-1)]);
+      let a = frames[0], b = frames.at(-1);
+      for (const k of frames) { if (k <= f) a = k; else { b = k; break; } }
+      if (channel.interpolation === "step" || typeof keys[a] !== "number" || typeof keys[b] !== "number")
+        return clone(keys[a]);
+      return keys[a] + (keys[b] - keys[a]) * ((f - a) / (b - a));
+    }
+    validateRig() {
+      this.rig.diagnostics = rigDiagnostics(this.rig);
+      return clone(this.rig.diagnostics);
+    }
     rigPose(id, frame) {
       const node = this.rigNode(id), keys = node && node.keys;
       if (!node) return null;
       const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
-      if (!frames.length) return clone(node.rest || rigPoseData());
+      if (!frames.length) {
+        const rest = clone(node.rest || rigPoseData());
+        for (const property of ["x", "y", "r", "sx", "sy"])
+          rest[property] = this.rigChannelValue(rigChannelPath(id, property), frame, rest[property]);
+        return rest;
+      }
       const f = Number(frame) || 1;
-      if (keys[f]) return rigPoseData(keys[f]);
-      if (f <= frames[0]) return rigPoseData(keys[frames[0]]);
-      if (f >= frames.at(-1)) return rigPoseData(keys[frames.at(-1)]);
+      let pose;
+      if (keys[f]) pose = rigPoseData(keys[f]);
+      else if (f <= frames[0]) pose = rigPoseData(keys[frames[0]]);
+      else if (f >= frames.at(-1)) pose = rigPoseData(keys[frames.at(-1)]);
+      if (pose) {
+        for (const property of ["x", "y", "r", "sx", "sy"])
+          pose[property] = this.rigChannelValue(rigChannelPath(id, property), frame, pose[property]);
+        return pose;
+      }
       let a = frames[0], b = frames.at(-1);
       for (const k of frames) { if (k <= f) a = k; else { b = k; break; } }
       const t = (f - a) / (b - a), p = keys[a], q = keys[b];
       const lerp = (x, y) => Number(x || 0) + (Number(y || 0) - Number(x || 0)) * t;
-      return { x: lerp(p.x, q.x), y: lerp(p.y, q.y), r: lerp(p.r, q.r),
+      pose = { x: lerp(p.x, q.x), y: lerp(p.y, q.y), r: lerp(p.r, q.r),
         sx: lerp(p.sx == null ? (p.s == null ? 1 : p.s) : p.sx, q.sx == null ? (q.s == null ? 1 : q.s) : q.sx),
         sy: lerp(p.sy == null ? (p.s == null ? 1 : p.s) : p.sy, q.sy == null ? (q.s == null ? 1 : q.s) : q.sy) };
+      for (const property of ["x", "y", "r", "sx", "sy"])
+        pose[property] = this.rigChannelValue(rigChannelPath(id, property), frame, pose[property]);
+      return pose;
     }
     rigWorldPose(id, frame, seen = new Set()) {
       const node = this.rigNode(id);
@@ -470,7 +649,7 @@
                levels: this.levels.map((l) => l.toJSON()),
                layers: this.layers.map((l) => l.toJSON()),
                palettes: this.palettes.map((p) => p.toJSON()),
-               camera: this.camera, audio: this.audio, rig: clone(this.rig), revision: this.revision };
+               camera: this.camera, audio: this.audio, rig: rigToJSON(this.rig), revision: this.revision };
     }
 
     /** Convierte el modelo VIEJO (`frames` = lista de archivos) al nuevo. Cada
@@ -497,6 +676,14 @@
   animation.Palette = Palette;
   animation.Style = Style;
   animation.clone = clone;
+  animation.rigData = rigData;
+  animation.rigToJSON = rigToJSON;
+  animation.rigChannelPath = rigChannelPath;
+  animation.rigChannelData = rigChannelData;
+  animation.rigConstraintData = rigConstraintData;
+  animation.rigDiagnostics = rigDiagnostics;
+  animation.rigConstraintHasCycle = rigConstraintHasCycle;
+  animation.rigOrderedConstraintIds = rigOrderedConstraintIds;
 
   // La clase History previa se conserva: la usa el resto del módulo.
   class History {
