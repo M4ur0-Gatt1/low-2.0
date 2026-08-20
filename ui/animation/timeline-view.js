@@ -66,47 +66,51 @@
       // ── herramientas de celdas ──
       const tools = document.createElement("div"); tools.className = "tl2-tools";
       const group = () => { const g = document.createElement("span"); g.className = "tl2-toolgroup"; tools.appendChild(g); return g; };
-      const button = (host, text, title, action, active=false) => {
-        const b = document.createElement("button"); b.textContent = text; b.title = title;
-        b.className = active ? "on" : ""; b.onclick = action; host.appendChild(b); return b;
+      const button = (host, icon, title, action, active=false, badge="") => {
+        const b = document.createElement("button");
+        b.title = title; b.setAttribute("aria-label", title);
+        b.className = (active ? "on " : "") + (badge ? "tl2-badge" : "");
+        if (icon) b.innerHTML = `<svg class="tl2-icon" aria-hidden="true"><use href="#${icon}"></use></svg>`;
+        if (badge) b.innerHTML += `<span aria-hidden="true">${badge}</span>`;
+        b.onclick = action; host.appendChild(b); return b;
       };
       const selected = () => doc.cellSelection || { fromLayerId: doc.layerId, toLayerId: doc.layerId,
         anchorLayerId: doc.layerId, anchorFrame: doc.frame, from: doc.frame, to: doc.frame };
       const edit = group();
-      button(edit, "Dibujo nuevo", "Crear un dibujo vacío en la celda actual", () => {
+      button(edit, "i-blank-frame", "Crear un dibujo vacío en la celda actual", () => {
         if (doc.cell == null) doc.ensureDrawing();
         else { const d = doc.duplicateDrawing(doc.cell); if (d) doc.setCell(doc.frame, d.number); }
         doc.emit("frame");
       });
-      button(edit, "Nivel nuevo", "Crear un nivel y una columna", () => { doc.addLayer(); doc.emit("frame"); });
+      button(edit, "i-level", "Crear un nivel y una columna", () => { doc.addLayer(); doc.emit("frame"); });
       const clipboard = group(), clip = animation.shortcuts && animation.shortcuts.clip;
-      button(clipboard, "Cortar", "Cortar las celdas seleccionadas", () => {
+      button(clipboard, "i-cut", "Cortar las celdas seleccionadas", () => {
         if (!clip) return; clip.range = doc.readCells(selected()); doc.clearCells(selected(), "Cortar rango");
       });
-      button(clipboard, "Copiar", "Copiar las celdas seleccionadas", () => {
+      button(clipboard, "i-copy", "Copiar las celdas seleccionadas", () => {
         if (!clip) return; clip.range = doc.readCells(selected()); if (this.status) this.status("Celdas copiadas");
       });
-      button(clipboard, "Pegar", "Pegar desde la celda actual", () => {
+      button(clipboard, "i-paste", "Pegar desde la celda actual", () => {
         if (clip && clip.range) doc.pasteCells(clip.range, doc.layerId, doc.frame, { label: "Pegar rango" });
       });
       const timing = group();
-      button(timing, "Insertar", "Insertar una celda antes del fotograma actual", () => doc.apply("insert", doc.frame, 1));
-      button(timing, "Vaciar", "Vaciar las celdas sin borrar sus dibujos", () => doc.clearCells(selected(), "Vaciar rango"));
-      button(timing, "− exposición", "Acortar la exposición actual", () => doc.apply("stepChange", doc.frame, -1));
-      button(timing, "+ exposición", "Extender la exposición actual", () => doc.apply("stepChange", doc.frame, +1));
+      button(timing, "i-insert", "Insertar una celda antes del fotograma actual", () => doc.apply("insert", doc.frame, 1));
+      button(timing, "i-eraser", "Vaciar las celdas sin borrar sus dibujos", () => doc.clearCells(selected(), "Vaciar rango"));
+      button(timing, "i-exposure-less", "Acortar la exposición actual", () => doc.apply("stepChange", doc.frame, -1));
+      button(timing, "i-exposure-more", "Extender la exposición actual", () => doc.apply("stepChange", doc.frame, +1));
       const sequence = group();
-      button(sequence, "1s", "Exponer cada dibujo por un fotograma", () => { const s = selected(); doc.apply("step", s.from, s.to, 1); });
-      button(sequence, "2s", "Exponer cada dibujo por dos fotogramas", () => { const s = selected(); doc.apply("step", s.from, s.to, 2); });
-      button(sequence, "3s", "Exponer cada dibujo por tres fotogramas", () => { const s = selected(); doc.apply("step", s.from, s.to, 3); });
-      button(sequence, "Autoexponer", "Completar los huecos sosteniendo el dibujo anterior", () => { const s = selected(); doc.apply("autoexpose", s.from, s.to); });
-      button(sequence, "Quitar holds", "Dejar una celda por dibujo", () => { const s = selected(); doc.apply("dedupe", s.from, s.to); });
-      button(sequence, "Repetir", "Repetir el rango seleccionado", () => { const s = selected(); doc.apply("repeat", s.from, s.to, 1); });
-      button(sequence, "Invertir", "Invertir el orden del rango seleccionado", () => { const s = selected(); doc.apply("reverse", s.from, s.to); });
-      button(sequence, "Ida y vuelta", "Crear un ciclo ping-pong con el rango", () => { const s = selected(); doc.apply("swing", s.from, s.to); });
+      button(sequence, "", "Exponer cada dibujo por un fotograma", () => { const s = selected(); doc.apply("step", s.from, s.to, 1); }, false, "1s");
+      button(sequence, "", "Exponer cada dibujo por dos fotogramas", () => { const s = selected(); doc.apply("step", s.from, s.to, 2); }, false, "2s");
+      button(sequence, "", "Exponer cada dibujo por tres fotogramas", () => { const s = selected(); doc.apply("step", s.from, s.to, 3); }, false, "3s");
+      button(sequence, "i-autoexpose", "Completar los huecos sosteniendo el dibujo anterior", () => { const s = selected(); doc.apply("autoexpose", s.from, s.to); });
+      button(sequence, "i-dedupe", "Dejar una celda por dibujo", () => { const s = selected(); doc.apply("dedupe", s.from, s.to); });
+      button(sequence, "i-loop", "Repetir el rango seleccionado", () => { const s = selected(); doc.apply("repeat", s.from, s.to, 1); });
+      button(sequence, "i-reverse", "Invertir el orden del rango seleccionado", () => { const s = selected(); doc.apply("reverse", s.from, s.to); });
+      button(sequence, "i-swing", "Crear un ciclo ping-pong con el rango", () => { const s = selected(); doc.apply("swing", s.from, s.to); });
       const media = group();
-      button(media, "Mesa de luz", "Activar el papel cebolla", () => { if (this.toggleOnion) this.toggleOnion(); }, this.onionEnabled);
-      button(media, "Mezclador…", "Abrir los faders de papel cebolla", () => { if (this.openOnion) this.openOnion(); });
-      button(media, "Audio…", "Cargar una pista de audio", () => { if (this.loadAudio) this.loadAudio(); });
+      button(media, "i-onion", "Activar el papel cebolla", () => { if (this.toggleOnion) this.toggleOnion(); }, this.onionEnabled);
+      button(media, "i-mixer", "Abrir los faders de papel cebolla", () => { if (this.openOnion) this.openOnion(); });
+      button(media, "i-audio", "Cargar una pista de audio", () => { if (this.loadAudio) this.loadAudio(); });
       cont.appendChild(tools);
 
       // ── regla de frames ──

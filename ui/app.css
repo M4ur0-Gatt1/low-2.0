@@ -2234,14 +2234,18 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   color: var(--fg, #e6e9f0); background: var(--panel, #17181c); user-select: none; }
 .tl2-ruler { display: flex; position: sticky; top: 0; z-index: 2;
   background: var(--panel2, #1e2026); border-bottom: 1px solid var(--line, #2a2d35); }
-.tl2-tools { min-height: 35px; display: flex; align-items: center; gap: 5px; padding: 4px 7px;
+.tl2-tools { min-height: 29px; display: flex; align-items: center; gap: 3px; padding: 2px 5px;
   overflow-x: auto; background: var(--panel, #191a1f); border-bottom: 1px solid var(--line, #2a2d35); }
-.tl2-toolgroup { display: flex; align-items: center; gap: 3px; padding-right: 6px;
+.tl2-toolgroup { display: flex; align-items: center; gap: 1px; padding-right: 4px;
   border-right: 1px solid var(--line, #2a2d35); }
-.tl2-tools button, .tl2-lighttable button { height: 26px; padding: 0 8px; border: 1px solid transparent;
-  border-radius: 4px; background: transparent; color: var(--mut, #a8a49c); font: 500 11px/1 Figtree, sans-serif; cursor: pointer; white-space: nowrap; }
+.tl2-tools button, .tl2-lighttable button { height: 24px; padding: 0; border: 1px solid transparent;
+  border-radius: 3px; background: transparent; color: var(--mut, #a8a49c); font: 600 9px/1 Figtree, sans-serif; cursor: pointer; white-space: nowrap; }
+.tl2-tools button { width: 24px; min-width: 24px; display: inline-grid; place-items: center; }
+.tl2-tools .tl2-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tl2-tools button.tl2-badge span { letter-spacing: -.02em; }
 .tl2-tools button:hover, .tl2-lighttable button:hover { background: rgba(255,255,255,.06); color: var(--txt, #eee); }
 .tl2-tools button.on { color: var(--accent, #F0450E); border-color: rgba(240,69,14,.4); background: rgba(240,69,14,.10); }
+.tl2-tools button:focus-visible { outline: 2px solid var(--accent, #F0450E); outline-offset: -2px; }
 .tl2-lighttable { display: flex; border-bottom: 1px solid var(--line2, #23252c); background: rgba(0,0,0,.10); }
 .tl2-lighttable .tl2-name { justify-content: space-between; color: var(--mut, #a8a49c); }
 .tl2-lighttable button { height: 20px; padding: 0 5px; font-size: 9px; }
