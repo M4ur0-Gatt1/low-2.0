@@ -544,35 +544,15 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   // herramientas de dibujo (lápiz/pincel/pluma) — pointer events para presión
   document.querySelectorAll(".dz-toolbtn").forEach(b =>
     b.onclick = () => dzSetTool(b.dataset.tool));
-  document.querySelectorAll("#dzQuickTools [data-qtool]").forEach(b =>
-    b.onclick = () => dzSetTool(b.dataset.qtool));
-  $("#dzQuickLayers").onclick = dzLayersToggle;
-  $("#dzQuickColor").oninput = e => {
-    DZ.drawColor = e.target.value;
-    $("#dzPStroke").value = e.target.value;
-    dzStyleApply("stroke", e.target.value);
-  };
-  $("#dzQuickSize").oninput = e => {
-    DZ.drawW = +e.target.value || 1;
-    $("#dzDrawW").value = DZ.drawW;
-    dzStyleApply("stroke-width", DZ.drawW);
-  };
-  $("#dzQuickOpacity").oninput = e => {
-    DZ.drawOpacity = Math.max(.05, +e.target.value / 100);
-    $("#dzOpacity").value = e.target.value;
-    $("#dzOpacityLbl").textContent = e.target.value + "%";
-    dzStyleApply("opacity", DZ.drawOpacity.toFixed(2));
-  };
   // panel de estilo: color de relleno/trazo, grosor, opacidad, paleta
   $("#dzPFill").oninput = e => { DZ.fillColor = e.target.value; dzStyleApply("fill", e.target.value); };
-  $("#dzPStroke").oninput = e => { DZ.drawColor = e.target.value; $("#dzQuickColor").value = e.target.value; dzStyleApply("stroke", e.target.value); };
+  $("#dzPStroke").oninput = e => { DZ.drawColor = e.target.value; dzStyleApply("stroke", e.target.value); };
   $("#dzFillNone").onclick = () => dzStyleApply("fill", "none") || dzSetStatus("∅ Seleccioná un elemento para sacarle el relleno");
   $("#dzStrokeNone").onclick = () => dzStyleApply("stroke", "none") || dzSetStatus("∅ Seleccioná un elemento para sacarle el trazo");
-  $("#dzDrawW").oninput = e => { DZ.drawW = +e.target.value || 6; $("#dzQuickSize").value = DZ.drawW; dzStyleApply("stroke-width", DZ.drawW); };
+  $("#dzDrawW").oninput = e => { DZ.drawW = +e.target.value || 6; dzStyleApply("stroke-width", DZ.drawW); };
   $("#dzOpacity").oninput = e => {
     $("#dzOpacityLbl").textContent = e.target.value + "%";
     DZ.drawOpacity = Math.max(.05, +e.target.value / 100);
-    $("#dzQuickOpacity").value = e.target.value;
     dzStyleApply("opacity", (+e.target.value / 100).toFixed(2));
   };
   DZ.fillColor = $("#dzPFill").value; DZ.drawColor = $("#dzPStroke").value; DZ.drawOpacity = 1;
@@ -2280,9 +2260,7 @@ async function openDesign(path) {
   const cv = $("#dzCanvas");
   // NO usar innerHTML: adentro del lienzo viven #dzHandle y #dzPin — pisarlos
   // rompía todo el editor ("Cannot set properties of null"). Solo cambiar el svg.
-  // Y OJO: solo el svg del DISEÑO, que es hijo DIRECTO. Un querySelectorAll("svg")
-  // se llevaba puestos los iconos de la barra flotante (#dzQuickTools vive dentro
-  // del lienzo), y sus botones quedaban vacíos apenas abrías un diseño.
+  // Solo el svg del DISEÑO, que es hijo directo; los overlays del editor se conservan.
   [...cv.children].filter(n => n.tagName.toLowerCase() === "svg").forEach(n => n.remove());
   let sourceSvg = r.svg;
   const recovery = window.LOW?.workspace?.recovery?.get(path);
@@ -3634,8 +3612,6 @@ function dzSetTool(t) {
   DZ.tool = t;
   document.querySelectorAll(".dz-toolbtn").forEach(b =>
     b.classList.toggle("active", b.dataset.tool === t));
-  document.querySelectorAll("#dzQuickTools [data-qtool]").forEach(b =>
-    b.classList.toggle("active", b.dataset.qtool === t));
   const cv = $("#dzCanvas");
   cv.style.cursor = (t in DZ_CURSORS) ? DZ_CURSORS[t] : "crosshair";
   cv.dataset.tool = t;          // el CSS decide el cursor de los hijos del svg
@@ -5283,8 +5259,9 @@ async function dzAnimToggle() {
     try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
     await openDesign(r.path);
   }
-  DZ.anim = { frames: [], idx: 0, playing: false, onion: true, cache: {} };
-  $("#dzOnionPanel").hidden = false;   // el panel 🗂 aparece con la timeline
+  DZ.anim = { frames: [], idx: 0, playing: false, onion: false, cache: {} };
+  $("#dzOnionPanel").hidden = true;
+  $("#tlOnion").classList.remove("active");
   // cargar la escena (claves de cámara/dibujo, easing) que vive junto a los cuadros
   const sc = await api.scene_get(DZ.path);
   DZ.scene = (sc && sc.scene) || {};

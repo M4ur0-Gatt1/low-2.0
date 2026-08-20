@@ -1998,11 +1998,12 @@ header {
 
 /* Estudio creativo y animación: el mismo lenguaje, sin parecer otra aplicación. */
 .dz-tools {
-  width: 98px; gap: 6px; padding: 10px 8px; background: var(--panel);
+  width: 48px; gap: 3px; padding: 6px; background: var(--panel);
+  flex-flow: column nowrap; justify-content: flex-start; align-content: center;
   border-right-color: var(--line2);
 }
-.dz-tools .ibtn { width: 36px; height: 36px; border-radius: 10px; }
-.dz-tools .hsep { background: var(--line2); margin: 5px 7px; }
+.dz-tools .ibtn { width: 34px; height: 32px; flex: none; border-radius: 5px; }
+.dz-tools .hsep { background: var(--line2); margin: 3px 0; }
 .dz-menubar { background: var(--panel); border-bottom-color: var(--line2); }
 .dz-inspector {
   width: 274px; padding: 17px 16px; background: var(--panel); border-left-color: var(--line2);
@@ -2016,24 +2017,6 @@ header {
 .dz-timeline { gap: 9px; padding: 9px 13px; background: var(--panel); border-top-color: var(--line2); }
 .tl-frame { border-color: transparent; border-radius: 9px; background: var(--panel2); box-shadow: inset 0 0 0 1px var(--line2); }
 .tl-frame:hover { background: var(--surface-raised); border-color: transparent; }
-.dz-procreate-bar {
-  right: 24px; top: 20px; gap: 4px; padding: 6px; border-color: var(--line);
-  border-radius: 17px; background: rgba(27, 26, 25, .94); box-shadow: var(--shadow-float);
-}
-.dz-procreate-bar button {
-  width: 40px; height: 40px; padding: 9px; border: 0; border-radius: 11px;
-  background: transparent; color: var(--mut);
-}
-.dz-procreate-bar button .ico { width: 20px; height: 20px; stroke-width: 1.65; }
-.dz-procreate-bar button:hover { color: var(--txt); background: var(--surface-hover); border-color: transparent; transform: none; }
-.dz-procreate-bar button.active {
-  color: var(--red); background: var(--redsoft); border-color: transparent;
-  box-shadow: inset 0 0 0 1px rgba(223,108,72,.2);
-}
-.dz-procreate-sliders {
-  border-color: var(--line); border-radius: 18px; background: rgba(27,26,25,.95);
-  box-shadow: var(--shadow-float);
-}
 .dz-canvas {
   background-color: #11110f;
   background-image: linear-gradient(45deg,#181816 25%,transparent 25%),
