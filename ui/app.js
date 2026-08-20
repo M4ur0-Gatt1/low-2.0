@@ -672,17 +672,34 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#tlXs").onclick = dzXsToggle;
   $("#tlLayers").onclick = dzTlGridToggle;
   const tlGrid = $("#dzTlGrid"), tlResize = $("#dzTlgResize");
-  const savedTlHeight = +(localStorage.getItem("low.timeline.height") || 230);
-  if (tlGrid) tlGrid.style.height = Math.max(120, Math.min(window.innerHeight * .48, savedTlHeight)) + "px";
+  const timelineLimits = () => ({
+    min: window.innerHeight <= 820 ? 64 : 72,
+    max: window.innerHeight <= 820 ? window.innerHeight * .30 : window.innerHeight * .42
+  });
+  const defaultTlHeight = Math.round(Math.min(180, window.innerHeight * .18));
+  const savedTlHeight = +(localStorage.getItem("low.timeline.height") || defaultTlHeight);
+  const syncTimelineSeparator = () => {
+    if (!tlGrid || !tlResize) return;
+    const limits = timelineLimits();
+    tlResize.setAttribute("aria-valuemin", String(Math.round(limits.min)));
+    tlResize.setAttribute("aria-valuemax", String(Math.round(limits.max)));
+    tlResize.setAttribute("aria-valuenow", String(Math.round(tlGrid.getBoundingClientRect().height)));
+  };
+  if (tlGrid) {
+    const limits = timelineLimits();
+    tlGrid.style.height = Math.max(limits.min, Math.min(limits.max, savedTlHeight)) + "px";
+    requestAnimationFrame(syncTimelineSeparator);
+  }
   if (tlResize) tlResize.addEventListener("pointerdown", (e) => {
     e.preventDefault(); e.stopPropagation();
     const pointerId = e.pointerId, startY = e.clientY;
     const startHeight = tlGrid.getBoundingClientRect().height;
     const move = (ev) => {
       if (ev.pointerId !== pointerId) return;
-      const height = Math.max(120, Math.min(window.innerHeight * .48,
-        startHeight + startY - ev.clientY));
+      const limits = timelineLimits();
+      const height = Math.max(limits.min, Math.min(limits.max, startHeight + startY - ev.clientY));
       tlGrid.style.height = height + "px";
+      syncTimelineSeparator();
     };
     const up = (ev) => {
       if (ev.pointerId !== pointerId) return;
@@ -694,6 +711,29 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", up);
     document.addEventListener("pointercancel", up);
+  });
+  if (tlResize) tlResize.addEventListener("dblclick", () => {
+    const limits = timelineLimits();
+    const current = tlGrid.getBoundingClientRect().height;
+    const previous = +(tlGrid.dataset.expandedHeight || defaultTlHeight);
+    if (current > limits.min + 8) {
+      tlGrid.dataset.expandedHeight = String(Math.round(current));
+      tlGrid.style.height = limits.min + "px";
+    } else {
+      tlGrid.style.height = Math.max(limits.min, Math.min(limits.max, previous)) + "px";
+    }
+    syncTimelineSeparator();
+    try { localStorage.setItem("low.timeline.height", String(Math.round(tlGrid.getBoundingClientRect().height))); } catch (err) { /* */ }
+  });
+  if (tlResize) tlResize.addEventListener("keydown", (e) => {
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const limits = timelineLimits(), current = tlGrid.getBoundingClientRect().height;
+    const next = e.key === "Home" ? limits.min : e.key === "End" ? limits.max
+      : current + (e.key === "ArrowUp" ? 12 : -12);
+    tlGrid.style.height = Math.max(limits.min, Math.min(limits.max, next)) + "px";
+    syncTimelineSeparator();
+    try { localStorage.setItem("low.timeline.height", String(Math.round(tlGrid.getBoundingClientRect().height))); } catch (err) { /* */ }
   });
   $("#dzXsClose").onclick = () => dzAnimSetView("timeline");
   $("#dzXsHead").addEventListener("mousedown", (e) => {
