@@ -1436,6 +1436,18 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
   width: 58px; flex: none; font: 500 10.5px 'JetBrains Mono', monospace; color: var(--mut);
 }
 .dz-lt-blend select { flex: 1; min-width: 0; }
+.dz-compositor { margin-top:12px; padding:10px; border:1px solid var(--line2); border-radius:8px; background:var(--panel2); }
+.dz-compositor[hidden] { display:none; }
+.dz-comp-head { display:flex; align-items:center; gap:8px; margin-bottom:9px; color:var(--txt); font:650 12px Figtree,sans-serif; }
+.dz-comp-head button { margin-left:auto; border:0; background:transparent; color:var(--mut); font:600 11px Figtree,sans-serif; cursor:pointer; }
+.dz-comp-head button:hover { color:var(--red); }
+.dz-compositor > label { display:grid; grid-template-columns:76px 1fr 42px; align-items:center; gap:7px; min-height:30px; color:var(--mut); font-size:11.5px; }
+.dz-compositor input[type=range] { width:100%; accent-color:var(--red); }
+.dz-compositor output { text-align:right; color:var(--txt); font:500 10.5px "JetBrains Mono",monospace; }
+.dz-comp-shadow { display:grid; grid-template-columns:1fr 42px 42px 42px 28px; gap:5px; align-items:center; padding-top:7px; border-top:1px solid var(--line2); }
+.dz-comp-shadow label { color:var(--txt); font-size:11.5px; }
+.dz-comp-shadow input[type=number] { width:42px; height:26px; padding:2px 4px; background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:4px; }
+.dz-comp-shadow input[type=color] { width:28px; height:26px; padding:1px; border:1px solid var(--line); background:var(--panel); border-radius:4px; }
 .dz-lt-op input[type="range"] { flex: 1; min-width: 0; accent-color: var(--red); }
 .dz-lt-op span { width: 34px; text-align: right; font: 400 10.5px 'JetBrains Mono', monospace; color: var(--mut); }
 .dz-lt-btns { display: flex; gap: 3px; justify-content: space-between; }

@@ -657,6 +657,20 @@
           <button class="ibtn" id="dzLayDel" title="Borrar capa (Supr)"><svg class="ico"><use href="#i-trash"/></svg></button>
         </div>
       </div>
+      <section class="dz-compositor" id="dzCompositor" hidden>
+        <div class="dz-comp-head"><span>Composición de capa</span><button id="dzCompReset" title="Quitar efectos de esta capa">Restablecer</button></div>
+        <label>Desenfoque <input type="range" id="dzCompBlur" min="0" max="40" step="0.5" value="0"><output id="dzCompBlurVal">0 px</output></label>
+        <label>Brillo <input type="range" id="dzCompBright" min="0" max="200" value="100"><output id="dzCompBrightVal">100%</output></label>
+        <label>Contraste <input type="range" id="dzCompContrast" min="0" max="200" value="100"><output id="dzCompContrastVal">100%</output></label>
+        <label>Saturación <input type="range" id="dzCompSaturate" min="0" max="200" value="100"><output id="dzCompSaturateVal">100%</output></label>
+        <div class="dz-comp-shadow">
+          <label><input type="checkbox" id="dzCompShadow"> Sombra</label>
+          <input type="number" id="dzCompShadowX" value="8" step="1" title="Desplazamiento X">
+          <input type="number" id="dzCompShadowY" value="8" step="1" title="Desplazamiento Y">
+          <input type="number" id="dzCompShadowBlur" value="8" min="0" step="1" title="Desenfoque">
+          <input type="color" id="dzCompShadowColor" value="#000000" title="Color de sombra">
+        </div>
+      </section>
       <div class="dz-empty" id="dzEmpty" hidden></div>
       <div id="dzProps" hidden></div>
     </div>
