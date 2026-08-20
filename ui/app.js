@@ -4945,6 +4945,22 @@ function dzInflatorUp(e) {
 /* ── Manejador de contorno: clic en una línea y arrastrá ↕ para cambiar
    el grosor del trazo (stroke-width) en tiempo real. ── */
 let HANDLER = null;   // { el, startW }
+function dzVectorPrefs() {
+  if (DZ.vectorPrefs) return DZ.vectorPrefs;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("low.2d.vectorTools") || "{}"); } catch (_) { /* valores seguros */ }
+  DZ.vectorPrefs = {
+    pumpSensitivity: Math.max(1, Math.min(12, +saved.pumpSensitivity || 4)),
+    magnetRadius: Math.max(10, Math.min(240, +saved.magnetRadius || 60)),
+    magnetStrength: Math.max(.05, Math.min(1, +saved.magnetStrength || .5)),
+    ironPasses: Math.max(1, Math.min(5, +saved.ironPasses || 1)),
+  };
+  return DZ.vectorPrefs;
+}
+function dzVectorPrefsSet(key, value) {
+  const prefs = dzVectorPrefs(); prefs[key] = value;
+  try { localStorage.setItem("low.2d.vectorTools", JSON.stringify(prefs)); } catch (_) { /* sesión privada */ }
+}
 
 /* Elige la LÍNEA (elemento con trazo) más cercana al cursor, no el relleno de
    fondo. Antes las herramientas de línea usaban elementFromPoint crudo  al no
@@ -5007,7 +5023,7 @@ function dzHandlerUp(e) {
 function dzHandlerGlobalMove(e) {
   if (!HANDLER || !HANDLER.el) return;
   const dy = HANDLER.startY - e.clientY;
-  const newW = Math.max(0.5, Math.min(200, HANDLER.startW + dy / 4));
+  const newW = Math.max(0.5, Math.min(200, HANDLER.startW + dy / dzVectorPrefs().pumpSensitivity));
   HANDLER.el.setAttribute("stroke-width", newW.toFixed(1));
   dzSetStatus("📏 Grosor: " + newW.toFixed(1) + "px");
 }
@@ -5019,11 +5035,11 @@ function dzIronDown(e) {
   e.preventDefault(); e.stopPropagation();
   const el = dzPickStroke(e.clientX, e.clientY);
   if (!el) return dzSetStatus(" Acercate a un trazo para suavizarlo");
-  dzIronSmooth(el);
+  for (let i = 0; i < dzVectorPrefs().ironPasses; i++) dzIronSmooth(el, i === 0);
 }
 
-function dzIronSmooth(el) {
-  dzSnapshot();
+function dzIronSmooth(el, snapshot = true) {
+  if (snapshot) dzSnapshot();
   const tag = el.tagName.toLowerCase();
   if (tag === "path") {
     const d = el.getAttribute("d") || "";
@@ -5134,7 +5150,7 @@ let MAGNET = null;   // { active, radius }
 function dzMagnetDown(e) {
   e.preventDefault(); e.stopPropagation();
   dzSnapshot();
-  MAGNET = { active: true, radius: 60 / (DZ.zoom || 1) };
+  MAGNET = { active: true, radius: dzVectorPrefs().magnetRadius / (DZ.zoom || 1) };
   dzMagnetApply(e);
   dzSetStatus("🧲 Imán activo — arrastrá para deformar · soltá para terminar");
 }
@@ -5165,8 +5181,8 @@ function dzMagnetApply(e) {
         const d2 = dx * dx + dy * dy;
         if (d2 < r2) {
           const force = 1 - Math.sqrt(d2) / MAGNET.radius;
-          s.n[s.n.length - 2] = lx + dx * force * 0.5;
-          s.n[s.n.length - 1] = ly + dy * force * 0.5;
+          s.n[s.n.length - 2] = lx + dx * force * dzVectorPrefs().magnetStrength;
+          s.n[s.n.length - 1] = ly + dy * force * dzVectorPrefs().magnetStrength;
           dirty = true; moved++;
         }
       }
@@ -5178,8 +5194,8 @@ function dzMagnetApply(e) {
         const dx = p.x - pts[i], dy = p.y - pts[i + 1];
         if (dx * dx + dy * dy < r2) {
           const force = 1 - Math.hypot(dx, dy) / MAGNET.radius;
-          pts[i] += dx * force * 0.5;
-          pts[i + 1] += dy * force * 0.5;
+          pts[i] += dx * force * dzVectorPrefs().magnetStrength;
+          pts[i + 1] += dy * force * dzVectorPrefs().magnetStrength;
           dirty = true; moved++;
         }
       }
@@ -5192,8 +5208,8 @@ function dzMagnetApply(e) {
         const dy = p.y - (isY ? v : (+el.getAttribute(attr === "x1" ? "y1" : "y2")));
         if (dx * dx + dy * dy < r2) {
           const force = 1 - Math.hypot(dx, dy) / MAGNET.radius;
-          if (isY) el.setAttribute(attr, v + dy * force * 0.5);
-          else el.setAttribute(attr, v + dx * force * 0.5);
+          if (isY) el.setAttribute(attr, v + dy * force * dzVectorPrefs().magnetStrength);
+          else el.setAttribute(attr, v + dx * force * dzVectorPrefs().magnetStrength);
           moved++;
         }
       }
@@ -6765,13 +6781,17 @@ function dzToolOptsRender() {
   } else if (t === "inflator") {
     html += `<span class="dz-hint">seleccioná una forma y arrastrá para inflar · Shift arrastrar = desinflar</span>`;
   } else if (t === "handler") {
-    html += `<span class="dz-hint">clic en un trazo y arrastrá ↕ para cambiar el grosor en tiempo real</span>`;
+    html += `<label>Sensibilidad <input type="range" id="toPumpSensitivity" min="1" max="12" value="${dzVectorPrefs().pumpSensitivity}"></label>
+      <span class="dz-hint">Pump: clic en un trazo y arrastrá ↕ para cambiar el grosor</span>`;
   } else if (t === "iron") {
-    html += `<span class="dz-hint">clic sobre un trazo para suavizarlo · cada clic lo alisa más</span>`;
+    html += `<label>Pasadas <input type="number" id="toIronPasses" min="1" max="5" value="${dzVectorPrefs().ironPasses}" class="dz-win"></label>
+      <span class="dz-hint">clic sobre un trazo para suavizarlo sin cambiar de herramienta</span>`;
   } else if (t === "pliers") {
     html += `<span class="dz-hint">clic justo sobre el borde de un path para partirlo en dos</span>`;
   } else if (t === "magnet") {
-    html += `<span class="dz-hint">arrastrá cerca de los vértices para atraerlos y deformar</span>`;
+    html += `<label>Radio <input type="range" id="toMagnetRadius" min="10" max="240" value="${dzVectorPrefs().magnetRadius}"></label>
+      <label>Fuerza <input type="range" id="toMagnetStrength" min="5" max="100" value="${Math.round(dzVectorPrefs().magnetStrength * 100)}"></label>
+      <span class="dz-hint">Pinch/Imán: arrastrá cerca del trazo para deformarlo</span>`;
   } else if (t === "eraser") {
     html += `<span class="dz-hint">pasá por encima y borra trazos enteros — las capas con candado no se tocan</span>`;
   } else if (t === "nodes") {
@@ -6809,6 +6829,10 @@ function dzToolOptsRender() {
     try { localStorage.setItem("fidel.dzsmooth", String(DZ.smooth)); } catch (err) { /* */ }
   };
   const of2 = $("#toFill"); if (of2) of2.oninput = e => { DZ.fillColor = e.target.value; const p = $("#dzPFill"); if (p) p.value = e.target.value; };
+  const pump = $("#toPumpSensitivity"); if (pump) pump.oninput = e => dzVectorPrefsSet("pumpSensitivity", +e.target.value);
+  const passes = $("#toIronPasses"); if (passes) passes.oninput = e => dzVectorPrefsSet("ironPasses", Math.max(1, Math.min(5, +e.target.value || 1)));
+  const radius = $("#toMagnetRadius"); if (radius) radius.oninput = e => dzVectorPrefsSet("magnetRadius", +e.target.value);
+  const strength = $("#toMagnetStrength"); if (strength) strength.oninput = e => dzVectorPrefsSet("magnetStrength", +e.target.value / 100);
 }
 /* splitter: redimensionar el inspector arrastrando (persistente) */
 function dzSplitWire() {
