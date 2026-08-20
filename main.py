@@ -1900,6 +1900,30 @@ class Api:
             return {"error": str(e)}
         return {"data": data, "mime": mime, "name": p.name}
 
+    def save_binary(s, base64_data, filename="modelo.stl"):
+        """Guarda un archivo BINARIO que viene del estudio 3D (por ejemplo un
+        STL). No se puede reusar save_file: ese escribe texto UTF-8 y un binario
+        pasado por ahí sale corrupto."""
+        import base64 as _b64
+        try:
+            datos = _b64.b64decode(base64_data or "")
+        except Exception as e:
+            return {"error": f"datos ilegibles: {e}"}
+        if not datos:
+            return {"error": "no llegó nada para guardar"}
+        r = s._window.create_file_dialog(webview.SAVE_DIALOG,
+                                        directory=s.ws or "",
+                                        save_filename=filename)
+        if not r:
+            return None
+        ruta = Path(r[0] if isinstance(r, (list, tuple)) else str(r))
+        try:
+            ruta.parent.mkdir(parents=True, exist_ok=True)
+            ruta.write_bytes(datos)
+        except OSError as e:
+            return {"error": str(e)}
+        return {"path": str(ruta), "name": ruta.name, "bytes": len(datos)}
+
     def save_file(s, path, content, filename="codigo.py"):
         # `filename` = nombre sugerido en el diálogo. Lo usa, por ejemplo, LOW
         # Estudio para proponer "proyecto.low3d" en vez de "codigo.py".

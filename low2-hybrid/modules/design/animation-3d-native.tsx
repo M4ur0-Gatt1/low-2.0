@@ -88,6 +88,60 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   // solo para "Guardar como…" o para el primer guardado de un proyecto nuevo.
   const projectPathRef = useRef<string>('');
   const [savedTick, setSavedTick] = useState(0);
+  /** Exportar STL. Antes de escribir nada dice QUÉ va a salir y qué queda
+   *  afuera: un STL solo lleva triángulos, así que las guías (que son andamio)
+   *  y los rellenos (caras sin espesor, no imprimibles) no entran. Enterarse
+   *  después, con el archivo abierto en el slicer, es mucho peor. */
+  const exportSTL = () => {
+    const e = eng();
+    if (!e) return;
+    const NL = String.fromCharCode(10);
+    const sel = e.selectedCount();
+    const soloSel = sel > 0 && window.confirm(
+      'Hay ' + sel + ' objeto(s) seleccionado(s). ¿Exportar SOLO la selección?' + NL +
+      'Cancelar = exportar toda la escena.');
+    const previo = e.stlReport(soloSel);
+    if (!previo.exportables) {
+      window.alert('No hay nada sólido para exportar.' + NL + NL +
+        'Un STL solo lleva triángulos: sirven los trazos (que son tubos cerrados) y los ' +
+        'volúmenes (Ctrl+E). Las guías son andamio y los rellenos son caras sin espesor, ' +
+        'así que no se pueden imprimir.');
+      return;
+    }
+    const partes = [
+      'Se exportan ' + previo.exportables + ' objeto(s): ' + previo.solidos +
+        ' volumen(es) y ' + previo.trazos + ' trazo(s).',
+      previo.triangulos.toLocaleString('es-AR') + ' triángulos.',
+    ];
+    if (previo.rellenos) {
+      partes.push(NL + 'Quedan afuera ' + previo.rellenos + ' relleno(s): son caras sin espesor.');
+    }
+    if (previo.guias) {
+      partes.push(NL + 'Quedan afuera ' + previo.guias + ' guía(s): son andamio, no geometría.');
+    }
+    partes.push(NL + 'Escala: 1 unidad de LOW = 10 mm.');
+    if (!window.confirm(partes.join(' ') + NL + NL + '¿Exportar?')) return;
+
+    const r = e.exportSTL({ binary: true, scale: 10, onlySelection: soloSel });
+    if (!r) { window.alert('No pude generar el STL.'); return; }
+    const name = (projectId || 'modelo') + '.stl';
+    const bytes = r.data instanceof DataView
+      ? new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength)
+      : new TextEncoder().encode(String(r.data));
+    // Dentro de LOW el estudio corre en un iframe de pywebview, donde la
+    // descarga del navegador no hace nada: se le pasa al host en base64.
+    if (window.parent !== window) {
+      let bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      window.parent.postMessage({ type: 'low:save-binary', name, base64: btoa(bin) }, '*');
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'model/stl' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = name; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
   const saveProject = (asNew = false) => {
     const project = eng()?.exportProject();
     if (!project) return;
@@ -219,6 +273,8 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
               : 'Guardar proyecto LOW 3D (Ctrl+S)')}
           {barBtn('Guardar como…', () => saveProject(true), false,
             'Guardar en otro archivo (Ctrl+Shift+S)')}
+          {barBtn('STL', exportSTL, false,
+            'Exportar como STL para impresión 3D — dice antes qué entra y qué queda afuera')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
           {/* vistas abreviadas: el nombre completo queda en el tooltip */}
           {barBtn('Persp', () => applyView('persp'), view === 'persp', 'Perspectiva')}

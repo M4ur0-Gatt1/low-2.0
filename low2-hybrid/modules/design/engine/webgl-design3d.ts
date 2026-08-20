@@ -22,6 +22,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import { lowStore, type LowStore } from '../../../store/low-store';
 import { LOW_CYAN } from '../theme';
 import type { BrushSettings, GizmoMode, Layer, SurfaceType, ToolType } from '../../../types/design-types';
@@ -4160,6 +4161,85 @@ export class WebGLDesign3D {
     this.lastSurfaceKey = '';
     lowStore.setActiveSurface(null);
     this.setView('persp');
+  }
+
+  // ---------------------------------------------------------------- exportar STL
+
+  /** Qué se puede exportar y qué no, mirado de antemano. Un STL solo contiene
+   *  triángulos: sirve para los TRAZOS (que son tubos cerrados) y para los
+   *  VOLÚMENES. Las guías son andamio y los rellenos son caras SIN espesor —
+   *  un plano de espesor cero no se puede imprimir, y callarlo es peor que
+   *  avisarlo. */
+  stlReport(soloSeleccion = false): {
+    solidos: number; trazos: number; rellenos: number; guias: number;
+    triangulos: number; exportables: number;
+  } {
+    const recs = soloSeleccion && this.selected.size ? [...this.selected] : this.strokes;
+    let solidos = 0, trazos = 0, rellenos = 0, triangulos = 0;
+    for (const rec of recs) {
+      if (rec.kind === 'guide') continue;
+      if (rec.fill) { rellenos++; continue; }
+      if (rec.solid) solidos++; else trazos++;
+      rec.object.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !m.geometry) return;
+        const g = m.geometry;
+        const idx = g.getIndex();
+        const pos = g.getAttribute('position');
+        if (idx) triangulos += idx.count / 3;
+        else if (pos) triangulos += pos.count / 3;
+      });
+    }
+    return {
+      solidos, trazos, rellenos, guias: this.guides.length,
+      triangulos: Math.round(triangulos), exportables: solidos + trazos,
+    };
+  }
+
+  /** Genera el STL. Devuelve el texto (ASCII) o el DataView (binario), listo
+   *  para escribir a un archivo.
+   *
+   *  @param opts.binary   binario (mucho más chico) o ASCII legible
+   *  @param opts.scale    factor de escala; los slicers leen el STL en
+   *                       milímetros, y la escena está en unidades propias
+   *  @param opts.onlySelection  exportar solo lo seleccionado
+   */
+  exportSTL(opts: { binary?: boolean; scale?: number; onlySelection?: boolean } = {}):
+      { data: string | DataView; report: ReturnType<WebGLDesign3D['stlReport']> } | null {
+    const escala = opts.scale && opts.scale > 0 ? opts.scale : 1;
+    const recs = (opts.onlySelection && this.selected.size ? [...this.selected] : this.strokes)
+      .filter((r) => r.kind !== 'guide' && !r.fill);
+    if (!recs.length) return null;
+
+    // Se arma un grupo con COPIAS de las mallas, ya en coordenadas de mundo:
+    // así el exportador no arrastra la escala del grupo padre ni exporta la
+    // grilla, los ejes, las guías o los fantasmas del papel cebolla.
+    const lote = new THREE.Group();
+    const geos: THREE.BufferGeometry[] = [];
+    for (const rec of recs) {
+      rec.object.updateMatrixWorld(true);
+      rec.object.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !m.geometry) return;
+        const g = m.geometry.clone();
+        g.applyMatrix4(m.matrixWorld);
+        if (escala !== 1) g.scale(escala, escala, escala);
+        // sin índice y con normales, que es lo que espera un STL
+        const plana = g.getIndex() ? g.toNonIndexed() : g;
+        if (plana !== g) g.dispose();
+        plana.computeVertexNormals();
+        geos.push(plana);
+        lote.add(new THREE.Mesh(plana, new THREE.MeshBasicMaterial()));
+      });
+    }
+    if (!lote.children.length) return null;
+
+    const exp = new STLExporter();
+    const data = opts.binary
+      ? (exp.parse(lote, { binary: true }) as unknown as DataView)
+      : exp.parse(lote);
+    geos.forEach((g) => g.dispose());
+    return { data, report: this.stlReport(!!opts.onlySelection) };
   }
 
   /** Serializa puntos de control en lugar de la malla derivada, para conservar
