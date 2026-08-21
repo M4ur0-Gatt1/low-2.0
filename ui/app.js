@@ -6283,7 +6283,7 @@ function dzCamToggle() {
   DZ.tool = DZ.camMode ? "camera" : "select";
   $("#dzCamBtn").classList.toggle("active", DZ.camMode);
   $("#tlCamKey").hidden = !DZ.camMode;
-  if (DZ.camMode && !DZ.anim) { dzAnimToggle(); }   // la cámara vive en la timeline
+  if (DZ.camMode && !DZ.anim && !DZ.doc) { dzAnimToggle(); }   // la cámara vive en la timeline
   dzCamOverlay();
   dzToolOptsRender(); dzSbTool();
   dzSetStatus(DZ.camMode ?
@@ -7091,7 +7091,7 @@ function dzRigReadPanel() {
     sx: +$("#rigSX").value || 1, sy: +$("#rigSY").value || 1 };
 }
 function dzRigToggle() {
-  if (!DZ.anim) { sysMsg("Abrí una animación antes de armar el esqueleto."); return; }
+  if (!DZ.anim && !DZ.doc) { sysMsg("Abrí una animación antes de armar el esqueleto."); return; }
   DZ.rigMode = !DZ.rigMode; $("#dzRigBtn").classList.toggle("active", DZ.rigMode); $("#tlRigOpen")?.classList.toggle("active", DZ.rigMode); $("#dzRigPanel").hidden = !DZ.rigMode;
   $("#dzRigOverlay").toggleAttribute("hidden", !DZ.rigMode);
   if (DZ.rigMode) { dzRigSetMode(DZ.rigSubmode || "build"); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzSetStatus("Esqueleto cut-out: registrá las piezas y armá la jerarquía desde la raíz"); }
@@ -7102,8 +7102,8 @@ function dzRigToggle() {
   }
 }
 async function dzRigOpen() {
-  if (!DZ.anim) await dzAnimToggle();
-  if (!DZ.anim) return;
+  if (!DZ.anim && !DZ.doc) await dzAnimToggle();
+  if (!DZ.anim && !DZ.doc) return;
   if (!DZ.rigMode) { dzRigToggle(); return; }
   $("#dzRigPanel").hidden = false;
   $("#dzRigBtn").classList.add("active"); $("#tlRigOpen")?.classList.add("active");
