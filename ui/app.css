@@ -1059,16 +1059,24 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-rig-joint { fill: #171615; stroke: #f2a06e; stroke-width: 2; pointer-events: all; cursor: pointer; }
 .dz-rig-joint.root { fill: #4f8bb8; stroke: #a8d9ff; }
 .dz-rig-joint.selected { fill: #f0450e; stroke: #fff; }
-.dz-rig-overlay[data-mode="build"] .dz-rig-joint { cursor: move; }
+/* área de agarre invisible: los círculos de 5px eran difíciles de atrapar con
+   el lápiz; este disco transparente duplica el área de interacción sin sumar
+   ruido visual. Hereda el cursor de su contexto (build/fk/select/bone-create). */
+.dz-rig-hit { fill: transparent; stroke: none; pointer-events: all; }
+.dz-rig-overlay[data-mode="build"] .dz-rig-joint,
+.dz-rig-overlay[data-mode="build"] .dz-rig-hit { cursor: move; }
 .dz-rig-overlay[data-mode="build"] .dz-rig-bone-tip { cursor: ew-resize; }
 .dz-rig-overlay[data-mode="fk"] .dz-rig-bone-hit { cursor: grab; }
 .dz-rig-overlay[data-mode="fk"] .dz-rig-bone-tip { cursor: grab; }
-.dz-rig-overlay[data-mode="fk"] .dz-rig-joint { cursor: move; }
+.dz-rig-overlay[data-mode="fk"] .dz-rig-joint,
+.dz-rig-overlay[data-mode="fk"] .dz-rig-hit { cursor: move; }
 /* con la herramienta Seleccionar el clic no posa: el cursor debe indicar puntero */
 .dz-rig-overlay[data-tool="select"] .dz-rig-bone-hit { cursor: pointer; }
 .dz-rig-overlay[data-tool="select"] .dz-rig-bone-tip { cursor: pointer; }
-.dz-rig-overlay[data-tool="select"] .dz-rig-joint { cursor: pointer; }
+.dz-rig-overlay[data-tool="select"] .dz-rig-joint,
+.dz-rig-overlay[data-tool="select"] .dz-rig-hit { cursor: pointer; }
 .dz-rig-overlay.bone-create { cursor: crosshair; }
+.dz-rig-overlay.bone-create .dz-rig-hit { cursor: crosshair; }
 .dz-rig-link-arm,.dz-rig-link-preview { fill: none; stroke: #d7d0c8; stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }
 .dz-rig-link-preview { stroke: #f2a06e; stroke-width: 2; }
 .dz-rig-link-handle { fill: #171615; stroke: #f2a06e; stroke-width: 2; pointer-events: all; cursor: crosshair; }
