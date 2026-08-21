@@ -5578,6 +5578,17 @@ async function dzThumbInto(chip, f, i) {
 
 /* ══ insertar cuadro DESPUÉS del actual (⎀) — Shift: en blanco ══ */
 async function dzFrameInsert(blank) {
+  // Modelo nuevo: insertar una celda (vacía o copia del dibujo actual).
+  if (DZ.doc) {
+    const ly = DZ.doc.layer;
+    if (!ly || ly.locked) return dzSetStatus("Capa bloqueada o sin capa activa");
+    const f = DZ.doc.frame;
+    const actual = ly.cellAt(f);
+    DZ.doc.apply("insert", f, 1);          // corre lo que sigue hacia adelante
+    if (!blank && actual != null) DZ.doc.setCell(f, actual);
+    dzSetStatus(blank ? " Celda vacía insertada en " + f : " Frame " + f + " duplicado");
+    return;
+  }
   if (!DZ.anim) return;
   await dzPersist();
   let content = null;
@@ -5925,6 +5936,19 @@ async function dzGoFrame(i) {
   dzCamOverlay();
 }
 async function dzFrameAdd() {
+  // Modelo nuevo: un frame más es un dibujo nuevo expuesto al final.
+  if (DZ.doc) {
+    const ly = DZ.doc.layer, lv = DZ.doc.level;
+    if (!ly || !lv) return dzSetStatus("No hay capa/nivel activo");
+    if (ly.locked) return dzSetStatus("La capa está bloqueada");
+    dzDocCommit();
+    const f = (DZ.doc.scene.lastFrame() || 0) + 1;
+    const n = lv.nextNumber();
+    DZ.doc.setCell(f, n);
+    DZ.doc.goTo(f);
+    dzSetStatus(" Drawing " + n + " expuesto en el frame " + f);
+    return;
+  }
   if (!DZ.anim) return;
   await dzPersist();
   const r = await api.dup_frame(DZ.path);
@@ -8449,6 +8473,20 @@ async function dzTimelineCellActivate(index, createFuture, event=null) {
 }
 
 async function dzDeleteFrameSelection() {
+  // Modelo nuevo: quitar TIEMPO de la capa activa. Los dibujos no se borran
+  // (es la regla de la xsheet: borrar una exposición nunca borra el dibujo).
+  if (DZ.doc) {
+    const sel = DZ.doc.cellSelection;
+    const from = sel ? Math.max(1, sel.from) : DZ.doc.frame;
+    const to = sel ? Math.max(from, sel.to) : DZ.doc.frame;
+    const label = from === to ? "el frame " + from : `los frames ${from}–${to}`;
+    if (!confirm(`¿Quitar ${label} de la capa activa? (los dibujos no se borran)`)) return;
+    dzAnimStopIf();
+    DZ.doc.apply("remove", from, to);
+    DZ.doc.goTo(Math.max(1, Math.min(from, DZ.doc.scene.lastFrame() || 1)));
+    dzSetStatus(" Frames quitados de la capa activa");
+    return;
+  }
   if (!DZ.anim || !DZ.anim.frames.length) return;
   const selection = DZ.timelineSelection || { from: DZ.anim.idx, to: DZ.anim.idx };
   const from = Math.max(0, Math.min(selection.from, DZ.anim.frames.length - 1));
