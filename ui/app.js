@@ -6763,7 +6763,7 @@ function dzRigSetMode(mode) {
   $("#rigToolCreate").disabled = DZ.rigSubmode !== "build";
   [["rigModeBuild", "build"], ["rigModeFk", "fk"], ["rigModeIk", "ik"]].forEach(([id, value]) =>
     $("#" + id).classList.toggle("on", DZ.rigSubmode === value));
-  const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado de la pieza hija hasta el pivote de su padre. «Crear hueso» dibuja la cadena ósea.",
+  const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado al pivote de su padre, o a un área vacía para romper el vínculo. «Crear hueso» dibuja la cadena ósea y vincula el arte que queda debajo.",
     fk: "FK: «Posar» arrastra el cuerpo/punta para rotar o la articulación para mover. «Seleccionar» elige sin posar. Cada gesto crea una clave (si Auto-clave está activo).",
     ik: "IK: elegí una cadena y arrastrá el rombo. Ambos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
