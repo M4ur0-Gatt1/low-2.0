@@ -46,7 +46,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.38"
+LOW_VERSION = "3.29.47"
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -190,15 +190,17 @@ class Api:
         """El usuario pidió detener la consulta en curso."""
         s._cancel = True
 
-    # Paneles que se pueden separar a otra ventana (pensado para dos monitores).
-    # El lienzo NO está: separarlo no tiene sentido, es el centro del trabajo.
+    # Paneles y mesa que se pueden separar a otra ventana para dos monitores.
     PANELS = {
+        "viewer":   {"title": "Mesa de dibujo", "w": 1280, "h": 820, "min": (720, 480)},
         "timeline": {"title": "Timeline", "w": 1180, "h": 520, "min": (720, 320)},
         "xsheet":   {"title": "X-sheet",  "w": 760,  "h": 760, "min": (520, 360)},
         "layers":   {"title": "Capas",    "w": 340,  "h": 720, "min": (260, 320)},
         "tools":    {"title": "Herramientas", "w": 300, "h": 640, "min": (220, 320)},
         "color":    {"title": "Color",    "w": 340,  "h": 420, "min": (260, 260)},
         "onion":    {"title": "Papel cebolla", "w": 250, "h": 330, "min": (220, 260)},
+        "levelstrip":{"title": "Dibujos del nivel", "w": 360, "h": 620, "min": (260, 320)},
+        "rig":      {"title": "Esqueleto / Cut-out", "w": 360, "h": 760, "min": (300, 420)},
     }
 
     @classmethod
@@ -1675,11 +1677,11 @@ class Api:
         return s.insert_frame(path, m.group(0))
 
     def new_design(s):
-        """Crea un lienzo SVG en blanco (artboard blanco 1080²) y devuelve su ruta.
+        """Crea un lienzo SVG en blanco (mesa LOW 1020×1080) y devuelve su ruta.
         Página en blanco de verdad, lista para dibujar — sin carteles."""
         starter = (
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" width="1080" height="1080">\n'
-            '  <rect x="0" y="0" width="1080" height="1080" fill="#ffffff"/>\n'
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 1080" width="1020" height="1080" preserveAspectRatio="xMidYMid meet">\n'
+            '  <rect x="0" y="0" width="1020" height="1080" fill="#ffffff"/>\n'
             '</svg>\n')
         d = s._base() / "disenos"
         d.mkdir(parents=True, exist_ok=True)
@@ -1898,6 +1900,50 @@ class Api:
         except OSError as e:
             return {"error": str(e)}
         return {"data": data, "mime": mime, "name": p.name}
+
+    def save_binary(s, base64_data, filename="modelo.stl"):
+        """Guarda un archivo BINARIO que viene del estudio 3D (por ejemplo un
+        STL). No se puede reusar save_file: ese escribe texto UTF-8 y un binario
+        pasado por ahí sale corrupto.
+
+        Devuelve SIEMPRE un dict que dice qué pasó — {path}, {cancelado} o
+        {error} —, nunca None: el estudio corre en un iframe sin puente con
+        Python, así que si acá no se contesta, del otro lado no se distingue
+        "cancelé", "falló" y "el botón está roto". Y si el diálogo nativo no
+        puede abrirse, el archivo se escribe igual en una carpeta conocida
+        antes que perderse: el trabajo del usuario no se tira."""
+        import base64 as _b64
+        try:
+            datos = _b64.b64decode(base64_data or "")
+        except Exception as e:
+            log(f"save_binary: base64 ilegible: {e}")
+            return {"error": f"datos ilegibles: {e}"}
+        if not datos:
+            return {"error": "no llegó nada para guardar"}
+
+        ruta = None
+        try:
+            r = s._window.create_file_dialog(webview.SAVE_DIALOG,
+                                             directory=s.ws or "",
+                                             save_filename=filename)
+            if not r:
+                return {"cancelado": True}
+            ruta = Path(r[0] if isinstance(r, (list, tuple)) else str(r))
+        except Exception as e:
+            # el diálogo no abrió (pasa si se lo pide desde el hilo equivocado):
+            # se guarda en el workspace o en Documentos y se avisa dónde quedó
+            log(f"save_binary: falló el diálogo ({e}) — guardo en carpeta por defecto")
+            base = Path(s.ws) if s.ws else (Path.home() / "Documents")
+            ruta = base / filename
+
+        try:
+            ruta.parent.mkdir(parents=True, exist_ok=True)
+            ruta.write_bytes(datos)
+        except OSError as e:
+            log(f"save_binary: no pude escribir {ruta}: {e}")
+            return {"error": str(e)}
+        log(f"save_binary: {ruta} ({len(datos)} bytes)")
+        return {"path": str(ruta), "name": ruta.name, "bytes": len(datos)}
 
     def save_file(s, path, content, filename="codigo.py"):
         # `filename` = nombre sugerido en el diálogo. Lo usa, por ejemplo, LOW
@@ -2145,7 +2191,7 @@ class Api:
         try:
             if action == "new":
                 name = (params.get("name") or "anim").strip() or "anim"
-                api.create_project(name, int(params.get("width", 1920)),
+                api.create_project(name, int(params.get("width", 1020)),
                                    int(params.get("height", 1080)),
                                    int(params.get("fps", 24)),
                                    int(params.get("duration", 240)))
@@ -2407,7 +2453,7 @@ class Api:
         return {"ok": True}
 
     # ── API de animación (bridge al motor Python) ──────────
-    def anim_init(s, name="animacion", width=1920, height=1080, fps=24, duration=240):
+    def anim_init(s, name="animacion", width=1020, height=1080, fps=24, duration=240):
         """Inicializa el motor de animación para el workspace actual."""
         if not s.ws:
             return {"error": "Abrí un proyecto primero"}

@@ -38,7 +38,7 @@ DEFAULT_PROJECT = {
     "project": {
         "name": "Sin título",
         "fps": 24,
-        "width": 1920,
+        "width": 1020,
         "height": 1080,
         "duration_frames": 480,
         "color_space": "sRGB"
@@ -467,7 +467,7 @@ class AnimationProject:
 # ── Utility: Crear proyecto nuevo ─────────────────────────────────
 
 def create_animation_project(workspace: Path, name: str, fps: int = 24,
-                                width: int = 1920, height: int = 1080) -> AnimationProject:
+                                width: int = 1020, height: int = 1080) -> AnimationProject:
     proj = AnimationProject(workspace)
     proj.data["project"]["name"] = name
     proj.data["project"]["fps"] = fps

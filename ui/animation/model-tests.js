@@ -130,6 +130,23 @@
          n2.includes(1) && n2.includes(3), JSON.stringify(n2));
       const conColor = r2.every((s) => s.color && s.opacity > 0);
       ok("cada uno viene con color y opacidad", conColor);
+      const mezclado = onion.resolve(sc, ly.id, 4, {
+        beforeOpacity: [.81, 0, 0], afterOpacity: [.17, 0, 0]
+      });
+      const anterior = mezclado.find((s) => s.tipo === "before");
+      const posterior = mezclado.find((s) => s.tipo === "after");
+      ok("la mesa de luz controla la opacidad de cada lado por separado",
+        anterior && posterior && anterior.opacity === .81 && posterior.opacity === .17,
+        JSON.stringify(mezclado.map((s) => [s.tipo, s.opacity])));
+      const apagado = onion.resolve(sc, ly.id, 4, {
+        beforeOpacity: Array(10).fill(0), afterOpacity: Array(10).fill(0)
+      });
+      ok("un canal de la mesa de luz en cero queda realmente apagado", apagado.length === 0);
+      const docLuz = new animation.LowDoc(sc);
+      docLuz.onionCfg = onion.config({ beforeOpacity: [.7, .3, 0], afterOpacity: [.2, 0] });
+      const luzReabierta = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(docLuz.toJSON())));
+      ok("el perfil completo de la mesa de luz se guarda con la escena",
+        luzReabierta.onionCfg.beforeOpacity[1] === .3 && luzReabierta.onionCfg.afterOpacity[0] === .2);
     }
 
     // ── 8. Fill handle: repetir y continuar progresiones ──
@@ -211,6 +228,433 @@
       ok("se puede seguir dibujando sobre lo recuperado",
          doc2.level.byNumber(2).content.includes("M7 7"));
       ok("y sin crear dibujos de más", doc2.level.drawings.length === 3);
+      doc2.goTo(20);
+      ok("seleccionar una celda vacía la deja lista para dibujar", doc2.cell == null);
+      doc2.writeDrawing("<path d='M20 20'/>");
+      ok("el primer trazo en esa celda crea y expone el dibujo automáticamente",
+        doc2.cell != null && doc2.drawing.content.includes("M20 20"));
+    }
+
+    // 11. Rangos rectangulares: copiar/cortar/pegar entre varias columnas.
+    {
+      const sc = new Scene();
+      const la = sc.addLevel("A"), lb = sc.addLevel("B");
+      const a = sc.addLayer(la.id, "A"), b = sc.addLayer(lb.id, "B");
+      [1,2,3].forEach((n, i) => sc.expose(a.id, i + 1, n));
+      [4,5,6].forEach((n, i) => sc.expose(b.id, i + 1, n));
+      const doc = new animation.LowDoc(sc);
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      const range = { fromLayerId: a.id, toLayerId: b.id, from: 1, to: 2 };
+      const clip = doc.readCells(range);
+      ok("copiar rectangulo conserva filas y columnas", clip.width === 2 && clip.height === 2);
+      doc.clearCells(range, "Cortar rango");
+      ok("cortar vacia las dos columnas", a.cellAt(1) == null && b.cellAt(2) == null);
+      history.undo();
+      ok("undo de cortar restaura el rectangulo completo", a.cellAt(1) === 1 && b.cellAt(2) === 5);
+      doc.pasteCells(clip, a.id, 4);
+      ok("pegar rectangulo conserva su geometria", a.cellAt(4) === 1 && b.cellAt(5) === 5);
+      history.undo();
+      ok("undo de pegar restaura todas las columnas", a.cellAt(4) == null && b.cellAt(5) == null);
+    }
+
+    // 12. Level Strip -> XSheet: importa material y permite insertar con undo.
+    {
+      const sc = new Scene();
+      const source = sc.addLevel("Fuente"), target = sc.addLevel("Destino");
+      const srcLayer = sc.addLayer(source.id, "Fuente"), dstLayer = sc.addLayer(target.id, "Destino");
+      source.addDrawing(1, "<path id='uno'/>"); source.addDrawing(2, "<path id='dos'/>");
+      target.addDrawing(1, "<path id='ocupado'/>");
+      sc.expose(dstLayer.id, 1, 1);
+      const doc = new animation.LowDoc(sc);
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      doc.exposeDrawings(source.id, [1,2], dstLayer.id, 1, { insert: true });
+      ok("drop insert desplaza contenido existente", dstLayer.cellAt(3) === 1);
+      ok("drop remapea colision sin pisar dibujos", target.byNumber(1).content.includes("ocupado") && dstLayer.cellAt(1) !== 1);
+      history.undo();
+      ok("undo de drop restaura celdas y nivel", dstLayer.cellAt(1) === 1 && dstLayer.cellAt(2) == null && target.drawings.length === 1);
+    }
+
+    // 13. Gestion de capas y camara pertenecen al documento y tienen Undo.
+    {
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      const first = doc.layer;
+      const secondForSelection = doc.addLayer("Seleccion"); history.clear();
+      const selected = doc.selectCellRange(first.id, 2, secondForSelection.id, 6);
+      ok("XSheet y Timeline comparten un rango canonico", selected.from === 2 && selected.to === 6 && selected.toLayerId === secondForSelection.id);
+      doc.setLayerProperty(first.id, "locked", true, "Bloquear capa");
+      ok("bloquear capa modifica el modelo canonico", first.locked === true);
+      history.undo();
+      ok("undo restaura propiedades de capa", first.locked === false);
+      const added = doc.addLayer("Color");
+      ok("agregar capa crea nivel y columna juntos", doc.scene.level(added.levelId) != null);
+      history.undo();
+      ok("undo de agregar capa quita nivel y columna", doc.scene.layer(added.id) == null && doc.scene.level(added.levelId) == null);
+      history.redo();
+      ok("redo recupera nivel y columna", doc.scene.layer(added.id) != null && doc.scene.level(added.levelId) != null);
+      doc.scene.camera.keys[5] = { cx: 100, cy: 80, w: 640, rot: 2 };
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("las claves de camara se guardan en la escena", reopened.scene.camera.keys[5].w === 640);
+    }
+
+    // 14. Rig canónico: claves, jerarquía, Undo, migración y reapertura.
+    {
+      const prepared = new animation.LowDoc();
+      const preparedHistory = new LOW.core.HistoryManager(); prepared.setHistory(preparedHistory);
+      prepared.ensureRigNodes([
+        { id: "torso_auto", pivot: { x: 50, y: 50 }, pinned: true },
+        { id: "brazo_auto", pivot: { x: 80, y: 45 }, parentId: "torso_auto" },
+        { id: "mano_auto", pivot: { x: 120, y: 45 }, parentId: "torso_auto" },
+      ]);
+      ok("preparar dibujo registra todas las piezas en una operación",
+        Object.keys(prepared.scene.rig.nodes).length === 3 && prepared.scene.rigNode("brazo_auto").parentId === "torso_auto");
+      ok("cada pieza explicita su vínculo rígido con el arte",
+        prepared.scene.rig.version === 4 && prepared.scene.rigNode("mano_auto").binding.mode === "rigid" &&
+        prepared.scene.rigNode("mano_auto").binding.elementId === "mano_auto");
+      preparedHistory.undo();
+      ok("undo de preparar dibujo quita el rig completo", Object.keys(prepared.scene.rig.nodes).length === 0);
+      preparedHistory.redo();
+      ok("redo de preparar dibujo recupera jerarquía y pivotes",
+        prepared.scene.rigNode("torso_auto").pinned && prepared.scene.rigNode("mano_auto").pivot.x === 120);
+
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      doc.ensureRigNode("torso"); doc.ensureRigNode("brazo"); history.clear();
+      doc.setRigParent("brazo", "torso");
+      doc.setRigKey("brazo", 1, { x: 0, y: 0, r: 0, s: 1 });
+      doc.setRigKey("brazo", 13, { x: 24, y: 10, r: 90, s: 1 });
+      const mid = doc.scene.rigPose("brazo", 7);
+      ok("rig interpola claves desde el modelo", mid.x === 12 && mid.r === 45, JSON.stringify(mid));
+      history.undo();
+      ok("undo borra la ultima clave de rig", !doc.scene.rigNode("brazo").keys[13]);
+      history.redo();
+      ok("redo recupera la clave de rig", doc.scene.rigNode("brazo").keys[13].r === 90);
+      ok("rig impide ciclos de parenting", doc.setRigParent("torso", "brazo") === false);
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("rig se conserva al guardar y reabrir", reopened.scene.rigNode("brazo").parentId === "torso" && reopened.scene.rigNode("brazo").keys[13].r === 90);
+      const migrated = new animation.Scene({ rig: { mano: { 1: { x: 3, y: 4, r: 5, s: 1 } } } });
+      ok("rig legacy migra a nodos canónicos", migrated.rigNode("mano").keys[1].x === 3);
+      ok("rig legacy migra al esquema profesional v4", migrated.rig.version === 4 &&
+        migrated.rig.setup.mode === "cutout" && migrated.rigNode("mano").binding.mode === "rigid");
+      doc.setRigKey("torso", 1, { x: 10, y: 0, r: 90, s: 2 });
+      doc.setRigKey("brazo", 1, { x: 5, y: 0, r: 15, s: 1 });
+      const world = doc.scene.rigWorldPose("brazo", 1);
+      ok("parenting propaga posición rotación y escala", Math.round(world.x) === 10 && Math.round(world.y) === 10 && world.r === 105 && world.sx === 2, JSON.stringify(world));
+      doc.setRigPivot("brazo", { x: 12, y: 8 });
+      ok("pivote pertenece al nodo canónico", doc.scene.rigNode("brazo").pivot.x === 12);
+    }
+
+    // 15. Cut-out completo: matriz jerárquica, IK, límites, Undo y persistencia.
+    {
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      doc.ensureRigNode("brazo", { pivot: { x: 0, y: 0 }, pinned: true });
+      doc.ensureRigNode("antebrazo", { pivot: { x: 100, y: 0 } });
+      doc.ensureRigNode("mano", { pivot: { x: 200, y: 0 } });
+      doc.setRigParent("antebrazo", "brazo"); doc.setRigParent("mano", "antebrazo");
+      doc.setRigKey("brazo", 1, { x: 0, y: 0, r: 90, s: 1 });
+      const handAfterParent = doc.scene.rigWorldPoint("mano", 1, { x: 200, y: 0 });
+      ok("la matriz jerárquica mueve la mano alrededor del hombro",
+        Math.round(handAfterParent.x) === 0 && Math.round(handAfterParent.y) === 200,
+        JSON.stringify(handAfterParent));
+      const ik = doc.createRigIK("brazo", "antebrazo", "mano");
+      ok("se crea IK sólo sobre una cadena válida", typeof ik === "string");
+      const initialTarget = doc.scene.rigTargetAt(ik, 1);
+      ok("crear IK conserva el extremo donde estaba, sin salto",
+        Math.round(initialTarget.x) === 0 && Math.round(initialTarget.y) === 200,
+        JSON.stringify(initialTarget));
+      history.clear();
+      doc.setRigIKTarget(ik, 5, { x: 100, y: 100 });
+      const reached = doc.scene.rigWorldPoint("mano", 5, { x: 200, y: 0 });
+      ok("IK de dos huesos alcanza el objetivo", Math.abs(reached.x - 100) < 0.01 && Math.abs(reached.y - 100) < 0.01,
+        JSON.stringify(reached));
+      ok("IK clava las dos rotaciones implicadas en una pose",
+        !!doc.scene.rigNode("brazo").keys[5] && !!doc.scene.rigNode("antebrazo").keys[5]);
+      ok("el objetivo IK queda animado por frame", doc.scene.rigTargetAt(ik, 5).y === 100);
+      history.undo();
+      ok("undo de IK restaura cadena y objetivo juntos",
+        !doc.scene.rigNode("brazo").keys[5] && !doc.scene.rigConstraint(ik).targetKeys[5]);
+      history.redo();
+      doc.setRigKey("antebrazo", 7, { x: 10, y: 0, r: 0, sx: 1, sy: 1 });
+      doc.setRigKey("mano", 7, { x: 5, y: 0, r: 0, sx: 1, sy: 1 });
+      doc.setRigIKTarget(ik, 7, { x: 120, y: 120 });
+      const reachedAfterFk = doc.scene.rigWorldPoint("mano", 7, { x: 200, y: 0 });
+      ok("pasar de FK trasladado a IK no hace saltar la cadena",
+        Math.abs(reachedAfterFk.x - 120) < 0.01 && Math.abs(reachedAfterFk.y - 120) < 0.01,
+        JSON.stringify(reachedAfterFk));
+      doc.setRigLimits("antebrazo", -20, 45);
+      doc.setRigIKTarget(ik, 9, { x: 20, y: 120 });
+      ok("los límites angulares restringen el solver IK",
+        doc.scene.rigNode("antebrazo").keys[9].r <= 45.001);
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("cadena, límites, claves y objetivo IK sobreviven guardar/reabrir",
+        reopened.scene.rigConstraint(ik).targetKeys[9].y === 120 &&
+        reopened.scene.rigNode("antebrazo").limits.max === 45);
+      doc.removeRigNode("antebrazo");
+      ok("quitar una pieza limpia constraints rotos y libera hijos",
+        !doc.scene.rigConstraint(ik) && doc.scene.rigNode("mano").parentId == null);
+    }
+
+    // 16. Rig v4: huesos/arte separados, canales, orden y ciclos.
+    {
+      const legacy = new animation.Scene({ rig: { version: 3, nodes: {
+        torso: { elementId: "svg_torso", pivot: { x: 40, y: 50 },
+          keys: { 1: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, 11: { x: 20, y: 0, r: 10, sx: 1, sy: 1 } } }
+      } } });
+      const migratedSlot = legacy.rigSlot("slot:torso");
+      const migratedAttachment = legacy.rigActiveAttachment("slot:torso");
+      ok("v3 migra separando hueso, slot y attachment",
+        legacy.rig.version === 4 && legacy.rigBone("torso") === legacy.rig.nodes.torso &&
+        migratedSlot.boneId === "torso" && migratedAttachment.elementId === "svg_torso");
+      ok("v3 migra el binding rígido fuera del hueso",
+        legacy.rig.bindings["binding:torso"].attachmentId === "attachment:torso");
+      ok("las claves v3 migran a canales por propiedad",
+        legacy.rigChannelValue(animation.rigChannelPath("torso", "x"), 6) === 10);
+      const serializedRig = legacy.toJSON().rig;
+      ok("el JSON v4 guarda bones sin duplicar el adaptador nodes",
+        !!serializedRig.bones.torso && serializedRig.nodes == null);
+
+      const skeleton = new animation.LowDoc();
+      const skeletonHistory = new LOW.core.HistoryManager(); skeleton.setHistory(skeletonHistory);
+      skeleton.ensureRigBone("root", { name: "Raíz", head: { x: 10, y: 20 }, tail: { x: 80, y: 20 } });
+      ok("un hueso puede existir sin pieza de arte ni slot",
+        skeleton.scene.rigBone("root").elementId == null && Object.keys(skeleton.scene.rig.slots).length === 0);
+      skeletonHistory.clear();
+      skeleton.setRigBoneGeometry("root", { x: 20, y: 30 }, { x: 100, y: 30 });
+      ok("la geometría del hueso se edita en Armado",
+        skeleton.scene.rigBone("root").head.x === 20 && skeleton.scene.rigBone("root").tail.x === 100);
+      skeletonHistory.undo();
+      ok("undo restaura cabeza y punta del hueso juntas",
+        skeleton.scene.rigBone("root").head.x === 10 && skeleton.scene.rigBone("root").tail.x === 80);
+      const skeletonSlot = skeleton.ensureRigSlot("root", { id: "body-slot" });
+      const skeletonAttachment = skeleton.addRigAttachment(skeletonSlot,
+        { id: "body-front", elementId: "svg_body_front" });
+      const skeletonBinding = skeleton.setRigBinding({ boneId: "root", slotId: skeletonSlot,
+        attachmentId: skeletonAttachment, mode: "rigid" });
+      ok("arte y binding se agregan después del esqueleto",
+        skeleton.scene.rig.bindings[skeletonBinding].elementId === "svg_body_front" &&
+        skeleton.scene.rigBone("root").elementId == null);
+      const reopenedSkeleton = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(skeleton.toJSON())));
+      ok("un esqueleto puro sigue separado al guardar y reabrir",
+        reopenedSkeleton.scene.rigBone("root").elementId == null &&
+        reopenedSkeleton.scene.rigActiveAttachment("body-slot").elementId === "svg_body_front");
+
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      doc.ensureRigNode("cabeza", { elementId: "frente" });
+      const slotId = "slot:cabeza";
+      const profileId = doc.addRigAttachment(slotId, { id: "cabeza_perfil", elementId: "perfil" });
+      history.clear();
+      doc.setRigActiveAttachment(slotId, profileId);
+      ok("un slot cambia de sustitución sin tocar el hueso",
+        doc.scene.rigActiveAttachment(slotId).elementId === "perfil" && doc.scene.rigBone("cabeza").elementId === "frente");
+      history.undo();
+      ok("undo restaura la sustitución activa",
+        doc.scene.rigActiveAttachment(slotId).elementId === "frente");
+      history.redo();
+
+      doc.ensureRigNode("mano", { elementId: "mano" });
+      const orderedSlots = ["slot:mano", "slot:cabeza"];
+      history.clear(); doc.setRigSlotOrder(orderedSlots);
+      ok("el orden visual vive en slots, no en huesos",
+        doc.scene.rigSlot("slot:mano").drawOrder === 0 && doc.scene.rigSlot("slot:cabeza").drawOrder === 1);
+      history.undo();
+      ok("undo restaura el orden visual completo", doc.scene.rigSlot("slot:cabeza").drawOrder === 0);
+
+      const xPath = animation.rigChannelPath("cabeza", "x");
+      history.clear();
+      doc.setRigChannelKey(xPath, 1, 0); doc.setRigChannelKey(xPath, 11, 20);
+      ok("los canales por propiedad interpolan y alimentan la pose",
+        doc.scene.rigChannelValue(xPath, 6) === 10 && doc.scene.rigPose("cabeza", 6).x === 10);
+      history.undo();
+      ok("undo de canal restaura clave y pose juntas",
+        doc.scene.rigChannel(xPath).keys[11] == null && doc.scene.rigNode("cabeza").keys[11] == null);
+
+      history.clear();
+      ok("se agrega una constraint ordenada",
+        doc.upsertRigConstraint({ id: "follow", type: "transform", writes: ["cabeza"] }) === "follow");
+      ok("una segunda constraint conserva orden estable",
+        doc.upsertRigConstraint({ id: "hand", type: "transform", reads: ["cabeza"], writes: ["mano"] }) === "hand" &&
+        doc.scene.rigOrderedConstraints().map((c) => c.id).join(",") === "follow,hand");
+      ok("se rechaza una dependencia circular sin ensuciar el rig",
+        doc.upsertRigConstraint({ id: "follow", type: "transform", reads: ["mano"], writes: ["cabeza"] }) === false &&
+        doc.scene.rigConstraint("follow").reads.length === 0 && doc.scene.validateRig().valid);
+      doc.setRigConstraintOrder(["hand", "follow"]);
+      ok("las dependencias prevalecen sobre un orden manual inválido",
+        doc.scene.rig.constraintOrder.join(",") === "hand,follow" &&
+        doc.scene.rigOrderedConstraints().map((c) => c.id).join(",") === "follow,hand");
+      history.undo();
+      ok("undo restaura la preferencia de orden", doc.scene.rig.constraintOrder[0] === "follow");
+
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("slots, attachments, canales y orden sobreviven guardar/reabrir",
+        reopened.scene.rig.version === 4 && reopened.scene.rigActiveAttachment(slotId).elementId === "perfil" &&
+        reopened.scene.rigChannelValue(xPath, 1) === 0 && reopened.scene.rigOrderedConstraints()[0].id === "follow");
+      const broken = new animation.Scene({ rig: { version: 4,
+        bones: { root: { id: "root" } },
+        slots: { bad: { id: "bad", boneId: "missing", activeAttachmentId: "also-missing" } } } });
+      ok("el diagnóstico detecta referencias rotas antes de exportar",
+        broken.validateRig().valid === false && broken.validateRig().errors.length === 2);
+    }
+
+    // 17. El transporte visible controla el reproductor del documento único.
+    {
+      ok("reproductor canonico disponible", typeof animation.Playback === "function");
+      if (animation.Playback) {
+        const doc = new animation.LowDoc();
+        doc.scene.range = { in: 1, out: 3 };
+        const playback = new animation.Playback(doc);
+        let cambios = 0; playback.subscribe(() => { cambios++; });
+        playback.toggle();
+        ok("play inicia el reloj canonico", playback.playing === true && cambios === 1);
+        playback.toggle();
+        ok("segundo play pausa y limpia el reloj", playback.playing === false && playback.raf === 0 && cambios === 2);
+      }
+    }
+
+    // 18. La mesa tiene una resolución canónica independiente de la ventana.
+    {
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      ok("la resolución inicial de LOW es 1020×1080",
+        doc.scene.width === 1020 && doc.scene.height === 1080,
+        `${doc.scene.width}×${doc.scene.height}`);
+      doc.setSize(1920, 1080);
+      ok("un formato de pantalla cambia el documento canónico",
+        doc.scene.width === 1920 && doc.scene.height === 1080);
+      history.undo();
+      ok("undo restaura juntas las dos dimensiones",
+        doc.scene.width === 1020 && doc.scene.height === 1080,
+        `${doc.scene.width}×${doc.scene.height}`);
+      history.redo();
+      const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("la resolución definida se conserva al guardar y reabrir",
+        reopened.scene.width === 1920 && reopened.scene.height === 1080,
+        `${reopened.scene.width}×${reopened.scene.height}`);
+    }
+
+    // 19. Paletas y estilos: el color es material canónico y sobrevive a guardar/reabrir.
+    {
+      const sc = new Scene();
+      const lv = sc.addLevel("Personaje");
+      const pal = sc.addPalette("Piel");
+      sc.setLevelPalette(lv.id, pal.id);
+      ok("el nivel queda vinculado a su paleta", sc.levelPalette(lv.id) === pal);
+
+      const piel = pal.addStyle("Piel", "#f5c5a3", 1);
+      const linea = pal.addStyle("Línea", "#1a1a1a", 0.9);
+      ok("crear dos estilos los registra en la paleta", pal.styles.length === 2);
+      ok("el estilo normaliza el color hex a minúsculas", piel.color === "#f5c5a3");
+      ok("un estilo con nombre repetido no se duplica",
+        pal.addStyle("Piel", "#ffffff") === piel && pal.styles.length === 2);
+
+      linea.setColor("#000000").setOpacity(1);
+      ok("cambiar color y opacidad muta el MISMO estilo",
+        linea.color === "#000000" && linea.opacity === 1);
+
+      pal.locked = true;
+      ok("una paleta bloqueada no deja borrar estilos",
+        pal.removeStyle(piel.id) === null && pal.styles.length === 2);
+      pal.locked = false;
+
+      const roundtrip = new Scene(JSON.parse(JSON.stringify(sc.toJSON())));
+      ok("paleta y estilos se conservan al guardar/reabrir",
+        roundtrip.palettes.length === 1 &&
+        roundtrip.palette(sc.palettes[0].id).styles.length === 2);
+      ok("el vínculo nivel→paleta sobrevive",
+        roundtrip.levelPalette(roundtrip.levels[0].id)?.id === pal.id);
+
+      sc.setLevelPalette(lv.id, null);
+      ok("desvincular no borra la paleta",
+        sc.palette(pal.id) !== null && sc.levelPalette(lv.id) === null);
+      sc.setLevelPalette(lv.id, "no-existe");
+      ok("vincular a una paleta inexistente se rechaza", sc.levelPalette(lv.id) === null);
+    }
+
+    // 20. El trazo referencia al estilo por NUMERO: cambiar el estilo recolorea
+    //     todos los dibujos, y el dibujo no se reescribe.
+    {
+      const { LowDoc, palette: P } = animation;
+      const doc = new LowDoc();
+      const pal = doc.palette;
+      ok("el nivel arranca con paleta y sin pedirla", !!pal && pal.styles.length === 5,
+        pal ? String(pal.styles.length) : "sin paleta");
+      ok("los estilos tienen numero, que es lo que se escribe en el dibujo",
+        JSON.stringify(pal.indices()) === "[1,2,3,4,5]", JSON.stringify(pal.indices()));
+
+      doc.goTo(1); doc.writeDrawing('<path d="M0 0" stroke="#1a1a1a" data-stk="1"/>');
+      doc.goTo(2); doc.writeDrawing('<path d="M9 9" stroke="#1a1a1a" data-stk="1"/>' +
+                                    '<path d="M1 1" fill="#ffffff" data-fil="3"/>');
+      const uso = P.usage(doc.scene, pal);
+      ok("la paleta sabe cuantos elementos usan cada estilo",
+        uso[1] && uso[1].ink === 2 && uso[3] && uso[3].paint === 1, JSON.stringify(uso));
+
+      const contenidoAntes = doc.level.byNumber(2).content;
+      doc.setStyleColor(1, "#00aa55");
+      ok("cambiar el estilo NO reescribe los dibujos",
+        doc.level.byNumber(2).content === contenidoAntes);
+      const hoja = P.css(pal);
+      ok("el color nuevo lo resuelve la paleta, en un solo lugar",
+        hoja.includes('[data-stk="1"]{stroke:#00aa55'));
+      ok("y el color viejo ya no gobierna nada", !hoja.includes("#1a1a1a"));
+
+      doc.removeStyle(3);
+      ok("borrar un estilo deja el dibujo intacto",
+        doc.level.byNumber(2).content === contenidoAntes);
+      ok("y las referencias sueltas quedan senaladas",
+        JSON.stringify(P.orphans(doc.scene, pal)) === "[3]",
+        JSON.stringify(P.orphans(doc.scene, pal)));
+
+      const nuevo = doc.addStyle("#112233", "Contorno").index;
+      const movidos = doc.reassignStyle(1, nuevo);
+      ok("reasignar mueve todas las referencias", movidos === 2, String(movidos));
+      ok("y ahora el estilo nuevo es el que las tiene",
+        (P.usage(doc.scene, pal)[nuevo] || {}).ink === 2);
+      ok("el estilo viejo se quedo sin uso", !P.usage(doc.scene, pal)[1]);
+
+      if (LOW.core && LOW.core.HistoryManager) {
+        const h = new LOW.core.HistoryManager();
+        doc.setHistory(h);
+        doc.setStyleColor(2, "#ff0000");
+        h.undo();
+        ok("Ctrl+Z devuelve el color anterior del estilo", pal.byIndex(2).color === "#f0450e",
+          pal.byIndex(2).color);
+      }
+
+      const doc2 = LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("al reabrir vuelve la paleta con sus numeros y colores",
+        doc2.palette.byIndex(1).color === "#00aa55" && doc2.palette.byIndex(3) === null,
+        doc2.palette.styles.map((s) => s.index + ":" + s.color).join(" "));
+    }
+
+    // 21. ADOPTAR: lo dibujado antes de que la paleta gobernara entra a la paleta.
+    {
+      const { LowDoc, palette: P } = animation;
+      const doc = new LowDoc();
+      doc.goTo(1);
+      doc.writeDrawing('<path d="M0 0" stroke="#f0450e" fill="none"/>' +
+                       '<path d="M1 1" stroke="#f0450e" fill="none"/>' +
+                       '<path d="M2 2" fill="#123456" stroke="none"/>');
+      const pal = doc.palette;
+      const estilosAntes = pal.styles.length;
+      const r = doc.adoptColors();
+      ok("adoptar alcanza a los tres elementos con color", r.elementos === 3, JSON.stringify(r));
+      ok("el naranja ya estaba en la paleta: no se duplica",
+        pal.styles.length === estilosAntes + 1, `${estilosAntes} -> ${pal.styles.length}`);
+      const c = doc.level.byNumber(1).content;
+      ok("los trazos quedaron referenciando su estilo",
+        (c.match(/data-stk="2"/g) || []).length === 2, c);
+      ok("y el color literal sigue ahi como respaldo", c.includes('stroke="#f0450e"'));
+      ok('fill="none" no inventa un estilo: solo un elemento tenia relleno de verdad',
+        (c.match(/data-fil="/g) || []).length === 1,
+        String((c.match(/data-fil="/g) || []).length));
+      doc.setStyleColor(2, "#0000ff");
+      ok("ahora el dibujo viejo se recolorea desde la paleta",
+        P.css(pal).includes('[data-stk="2"]{stroke:#0000ff'));
+      const antes = doc.level.byNumber(1).content;
+      doc.adoptColors();
+      ok("adoptar de nuevo no agrega referencias repetidas",
+        doc.level.byNumber(1).content === antes);
     }
 
     const fallan = res.filter((r) => !r.ok);

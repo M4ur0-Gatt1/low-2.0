@@ -116,6 +116,7 @@ Reglas que se derivan y que el código debe respetar:
 ui/animation/scene-model.js    entidades + invariantes (sin DOM)
 ui/animation/exposures.js      operaciones de celda (step, each, reframe, repeat…)
 ui/animation/onion.js          cálculo de qué drawings mostrar (sin DOM)
+ui/animation/palette.js        el trazo referencia al estilo; resolución del color
 ui/workspace/workspaces.js     definición de layouts como DATOS + persistencia
 ui/app.js                      solo vista y eventos; deja de ser el dueño del estado
 ```
@@ -155,8 +156,8 @@ Una fase termina cuando se puede hacer el flujo real, no cuando compila.
 | 4 | El dibujo entra al modelo solo + escena en un archivo | ✅ hecho |
 | 5 | Onion Skin sobre drawings | ✅ hecho |
 | 6 | Workflow: copiar/pegar, insertar, atajos, navegación, renumerar | ✅ hecho |
-| 7 | Playback: FPS real, rango, loop, scrubbing, audio | ✅ hecho |
-| 8 | Paletas y estilos, pegbars, function editor, schematic | pendiente |
+| 7 | Playback: FPS real, rango, loop, scrubbing | ◐ falta audio |
+| 8 | Paletas y estilos, pegbars, function editor, schematic | ◐ paletas y estilos hechos |
 | 9 | Integración con el módulo 3D | pendiente |
 
 ### Lo que ya está (v3.29.29)
@@ -251,24 +252,140 @@ borrar devuelve el dibujo con su contenido y sus exposiciones.
 **Scrubbing:** arrastrar por la regla de la timeline recorre la animación con la mano — el
 playback muestra el resultado, el scrub sirve para encontrar el frame exacto donde algo falla.
 
-**Audio (v3.29.38).** `audio.js`: lo mínimo para animar con sonido, sobre todo lipsync. La onda
-se dibuja frame a frame en la timeline, se arrastra para calzar el audio con la acción, y suena
-sincronizada con el playback — arrancando desde el frame donde estás parado y reanclándose al dar
-la vuelta con loop, que es donde imagen y sonido se separan si no se cuida. Al hacer scrub suena
-el recorte de ese frame, con desvanecido en la cola para que no haga clic: así se busca la sílaba.
+**Paletas y estilos (fase 8).** El registro canónico del color ya estaba en el modelo
+(`Palette` y `Style` en `scene-model.js`, con color, opacidad y bloqueo). Lo que faltaba para
+que sirviera mientras se dibuja es el otro lado del vínculo: **que el trazo referencie al
+estilo**. Sin eso el color sigue siendo un valor literal pegado adentro de cada trazo, y
+aclarar la línea de un personaje son cuatrocientos trazos repartidos en ciento veinte dibujos,
+uno por uno.
 
-Los PICOS se guardan con la escena (1 KB para 2 segundos), así la onda se sigue viendo al reabrir
-aunque el archivo no esté a mano y no hay que volver a decodificar.
+Ahora el estilo tiene, además de su `id`, un **número corto** — y el número es lo que queda
+escrito en el dibujo (`data-stk` para la línea, `data-fil` para el relleno, como el ink & paint
+de siempre). Se referencia el número y no el `id` por lo mismo que la celda de la X-sheet lleva
+el número del dibujo: un uid repetido en cada elemento del SVG no se lee ni se escribe a mano.
+El número no se reordena ni se reusa; si cambiara, los trazos apuntarían a otro color.
 
-Verificado: 4 golpes detectados en los frames 1, 13, 25 y 37; con desplazamiento 6 pasan a 7, 19,
-31 y 43; el playback pide el audio desde el frame actual, lo corta al parar y lo reancla al dar la
-vuelta; y la onda sobrevive a guardar y reabrir.
+El color lo resuelve una hoja de estilos que se inyecta en el SVG (`palette.js`), no una
+reescritura de los dibujos. Dos consecuencias concretas: el color literal queda igual en el
+archivo como respaldo —el `.svg` guardado se lleva la hoja, así que afuera de LOW se ve con los
+colores de HOY— y recolorear es cambiar una línea de texto, así que arrastrar el selector se ve
+al instante en todos los dibujos, expuestos o no.
+
+El panel (`palette-view.js`) muestra por estilo su número, su color y **cuántos elementos lo
+usan**: es lo que hace falta para animarse a tocar un color y para ver cuál está de adorno.
+Borrar un estilo NO recolorea nada —los trazos se quedan con el color que tienen y quedan
+señalados como sueltos, para reasignarlos cuando se quiera— y "pasar sus N elementos a otro
+estilo" unifica dos colores que terminaron siendo el mismo. Si la paleta está bloqueada, el
+panel no ofrece lo que el modelo va a rechazar.
+
+**Adoptar** es lo que hace que esto sirva para el trabajo que ya existe: mete en la paleta los
+colores de lo que se dibujó antes, sin cambiar cómo se ve. Sin eso la paleta gobernaría solo lo
+nuevo. Verificado en la app sobre un dibujo con colores literales: 5 elementos adoptados, 3
+estilos nuevos para los colores que no estaban, los que ya estaban reusados, y el dibujo
+idéntico en pantalla.
+
+Verificado con eventos de puntero reales, no solo en tests: clic en el casillero 4 → el lápiz
+pasa a ese estilo → se dibuja → el trazo queda con `data-stk="4"` y su color literal de
+respaldo → se arrastra el selector y el trazo YA dibujado cambia en vivo → al soltar queda
+**un** paso de historial y `Ctrl+Z` devuelve el color, en el modelo y en el panel. El papel
+cebolla se mira aparte: al fantasma se le sacan las referencias de estilo, porque si no la
+paleta le impondría su color y el cebolla dejaría de distinguir el pasado del futuro.
+
+Pruebas: **140/140** (20 nuevas). Se comprobó además que las nuevas tengan filo, rompiendo el
+código a propósito: mutar la resolución del color, el salteo de lo ya marcado en *adoptar*, el
+conteo de uso, el filtro de `fill="none"` y el reparto de números hace caer pruebas en las
+cinco mutaciones.
+
+Lo que la paleta todavía NO gobierna: las formas del menú de inserción (rectángulo, estrella,
+texto) y lo importado siguen naciendo con color literal. Entran con **Adoptar**, que es
+justamente para eso. De la fase 8 quedan pegbars, function editor y schematic.
 
 ### Lo que sigue
 
 Retirar `DZ.anim.frames` y la timeline vieja, que todavía conviven con lo nuevo (la timeline de
 abajo sigue siendo la anterior; la planilla nueva es la de la X-sheet). Después: renumerar
 dibujos, audio y scrubbing, paletas y estilos.
+
+---
+
+## Rigging 2D: auditoría y deuda P0 (2026-08-20)
+
+Estado honesto: **flujo cut-out rígido funcional; deformación flexible y editor de curvas aún pendientes**.
+
+### Lo que funciona actualmente
+
+- Registrar piezas SVG sin duplicar dibujos y colocar sus pivotes.
+- Armar una jerarquía padre-hijo sin ciclos; la matriz mundial propaga
+  traslación, rotación y escala hasta las piezas descendientes.
+- Posar en FK y crear claves locales o una clave global de todo el personaje.
+- Crear una cadena IK consecutiva de dos huesos, arrastrar su objetivo, invertir
+  la flexión, fijar raíz y limitar ángulos. La pose IK clava ambos huesos y el
+  objetivo dentro de una sola operación de Undo.
+- Ver las articulaciones sobre la mesa, las claves en una pista Esqueleto de la
+  Timeline y manipular el rig con su panel o mesa desacoplados.
+- Reproducir, exportar, guardar, cerrar, reabrir y continuar: todo evalúa el
+  mismo `LowDoc.scene.rig`; la pose nunca se hornea accidentalmente al Drawing.
+- Grabar una actuación FK, remuestrearla a claves y suavizarla conservando X/Y
+  de escala independientes.
+
+### Deuda que permanece
+
+1. Las piezas cut-out son rígidas: todavía no hay deformador por malla/curva ni pesos.
+2. La Timeline muestra las claves del esqueleto, pero falta selección/copy-paste
+   de claves y edición visual de curvas/easing por propiedad.
+3. Falta una vista Schematic del mismo grafo canónico.
+4. La captura de actuación funciona con FK; la manipulación IK simultánea y la
+   edición avanzada de trayectorias son trabajo posterior.
+5. Los IDs estables ya viven en el modelo y se conservan al guardar, pero la UI
+   todavía debe incorporar una operación explícita de renombrado de pieza.
+
+### Arquitectura obligatoria para resolverlo
+
+Sin crear una escena paralela, extender el modelo actual:
+
+```text
+Scene
+ ├── rig
+ │    ├── nodes[id]: DrawingNode { parentId, pivot, rest, limits, keys }
+ │    └── constraints[id]: IK2 { rootId, midId, effectorId, targetKeys }
+ └── functionCurves[nodeId/property] → Keyframe[]
+```
+
+Las capas/celdas continúan determinando qué Drawing está expuesto. El rig referencia IDs estables
+del modelo, nunca posiciones del DOM. Viewer, Timeline, XSheet, Schematic y export leen la misma
+evaluación de escena.
+
+### Pasada de implementación
+
+- **P0.1 — Canonizar: ✅ hecho.** `Scene.rig.nodes` guarda IDs estables, claves, rest pose y
+  parenting; `LowDoc` serializa, migra `DZ.scene.rig` y registra crear/mover/borrar claves y
+  jerarquía en el Undo compartido. La UI, playback y grabación ya leen/escriben ese estado.
+- **P0.2 — Peg hierarchy: ✅ hecho.** Nodos padre-hijo, rest pose, pivotes y transformación mundial/local.
+- **P0.3 — Timeline/Function curves: ◐ pista hecha.** Pista Esqueleto visible y navegación;
+  faltan selección múltiple de claves, copy/paste,
+  easing editable y navegación desde XSheet/Timeline.
+- **P0.4 — Bones + IK: ✅ hecho para cut-out rígido.** Cadena de dos huesos, target animado,
+  raíz fijada, límites angulares, flip controlado y Undo transaccional.
+- **P0.5 — Deformación:** deformador por curva o malla con pesos persistentes y edición de rest pose.
+- **P0.6 — Schematic:** vista de conexiones que edita el mismo grafo, sin duplicar estado.
+
+Pruebas del modelo: **83/83**. Cubren jerarquía matricial, propagación de pose,
+creación y solución IK, límites, claves automáticas, Undo atómico, persistencia y
+limpieza de constraints al quitar piezas.
+- **P0.7 — Actuación:** grabación sobre las curvas canónicas, reducción configurable de claves y
+  reproducción por reloj real.
+- **P0.8 — Export:** evaluación idéntica entre Viewer, playback y export; eliminar el bake basado
+  en duplicar archivos por frame.
+
+### Criterio de aceptación
+
+Crear torso, brazo y antebrazo → parentar la cadena → fijar pivotes → añadir IK con mano fijada →
+posar en frames 1 y 13 → editar easing → ver la misma pose en Viewer/XSheet/Timeline → Undo/Redo
+de claves y parenting → guardar `.lowscene` → cerrar → reabrir → conservar rig, constraints y
+curvas → exportar y comparar los frames 1/7/13 con el Viewer.
+
+Mientras ese flujo no pase completo, LOW debe llamar a la función **Pegs (experimental)** y no
+presentarla como rigging profesional terminado.
 
 ### Test de aceptación (el que define si esto sirve)
 
@@ -279,11 +396,134 @@ seguir trabajando donde se dejó.
 
 Mientras alguna de esas operaciones falle o sea incoherente, la fase no está terminada.
 
+La arquitectura siguiente del rig —bones, slots, attachments, bindings,
+constraints, controladores, acciones, mallas/pesos y vistas 360— está fijada en
+[`ADR_2D_PRO_RIG_ARCHITECTURE.md`](ADR_2D_PRO_RIG_ARCHITECTURE.md). Ese ADR
+corrige la aplicación directa de técnicas 3D al dominio 2D y mantiene todo en
+el mismo `LowDoc.scene.rig`.
+
 ---
 
-## 5. Fuentes
+## 5. Timeline desacoplada y mesa de luz (pasada 2026-08-20)
+
+- Timeline y XSheet separados son vistas movidas del mismo estado; **Acoplar** devuelve la vista
+  original y no deja una copia detrás.
+- La Timeline separada conserva transporte, loop, FPS, rango In/Out, selección, cámara, claves,
+  audio, exportación y las operaciones canónicas de celdas (cortar/copiar/pegar, vaciar,
+  exposiciones, 1s/2s/3s, autoexponer, quitar holds, repetir, invertir e ida-vuelta).
+- La Timeline principal monta `TimelineView` canónica; el render de archivos legacy queda como
+  adaptador de migración y no vuelve a reemplazarla.
+- La fila **Referencias** encima del tiempo fija dibujos lejanos con clic o clic-arrastre, sin mover
+  el cabezal. Son referencias absolutas y se guardan con la escena.
+- El panel de papel cebolla es una mesa de luz de 20 canales: 10 dibujos anteriores y 10
+  posteriores, opacidad independiente, perfiles rápidos, colores por lado y modo sólo línea.
+- Seleccionar una celda vacía y empezar a dibujar crea y expone el Drawing automáticamente; el
+  usuario no necesita crear un archivo o dibujo manualmente antes del primer trazo.
+
+Pruebas del modelo: **65/65**. Incluyen perfiles independientes, canales apagados, persistencia
+guardar/reabrir y dibujo directo sobre una celda vacía.
+
+---
+
+## 6. Resolución canónica de la mesa de dibujo (pasada 2026-08-20)
+
+- Una escena nueva parte de **1020×1080 px**. Archivo → Documento permite elegir ese formato,
+  HD, Full HD horizontal/vertical, 4K, cuadrado, cine e impresión, o escribir una medida propia.
+- `Scene.width/height` son la única resolución del documento de animación y se guardan dentro de
+  `.lowscene`. Cambiar el tamaño de un panel, acoplarlo, moverlo a otro monitor o ajustar la vista
+  sólo cambia el zoom CSS; no toca la resolución ni las coordenadas del dibujo.
+- La raíz SVG mantiene sincronizados `viewBox`, `width`, `height` y `preserveAspectRatio` al abrir,
+  cambiar de Drawing, recuperar una escena y deshacer/rehacer el cambio de documento.
+- Los SVG anteriores conservan el tamaño que ya tenían durante la migración. El nuevo valor
+  1020×1080 es el predeterminado para archivos nuevos, no una conversión destructiva.
+- Cambiar tamaño y fondo forma una única operación de Undo, y guardar/reabrir conserva el formato.
+
+Pruebas del modelo: **72/72** tras esta pasada (incluyen valor inicial, preset, Undo/Redo y
+persistencia de resolución).
+
+---
+
+## 7. Paneles desacoplados: contrato de estado (pasada 2026-08-20)
+
+- Cada panel auxiliar recibe una foto inicial **antes** de abrir su ventana y sólo se publica si
+  cumple el contrato de su tipo. Así no aparece vacío durante el primer render ni quedan variantes
+  parciales al añadir otro panel.
+- Dibujos del nivel transmite el contenido SVG de cada `Drawing`, su selección y su estado de
+  exposición. La ventana separada renderiza miniaturas reales; seleccionar conserva la semántica
+  del Level Strip y el doble clic expone el dibujo en la celda actual con el mismo Undo canónico.
+- La mesa separada recibe el SVG canónico, pero no el `transform` CSS de zoom/paneo de la ventana
+  principal. Su tamaño y encuadre se recalculan en su propio monitor sin mover el arte ni alterar
+  la resolución del documento.
+- Capas, Herramientas, Color y Papel cebolla usan el mismo contrato validado. Timeline y XSheet
+  continúan compartiendo el estado canónico de animación y lo publican antes de crear la ventana.
+
+Prueba en navegador: miniaturas SVG reales, selección, mesa sin transformación heredada y contrato
+válido para los seis paneles auxiliares generales. Pruebas del modelo: **72/72**.
+
+---
+
+## 8. Fuentes
 
 - [Interface Overview — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/interface_overview.html)
 - [Working in Xsheet/Timeline — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/working_in_xsheet.html)
 - [Drawing Animation Levels — OpenToonz 1.7.1](https://opentoonz.readthedocs.io/en/latest/drawing_animation_levels.html)
 - [Rooms — OpenToonz Wikia](https://opentoonz.fandom.com/wiki/Rooms)
+
+---
+
+## 9. Fundamento de rig profesional v4 (pasada 2026-08-20)
+
+- `Scene.rig` migra automáticamente rigs legacy, v3 y v4 al mismo contrato.
+- Bones contienen jerarquía y pose; slots contienen orden visual; attachments
+  contienen dibujos/sustituciones; bindings declaran cómo se vinculan.
+- Un esqueleto puede crearse sin arte y recibir slots, sustituciones y bindings
+  después; copiar o reutilizar la estructura no obliga a duplicar los dibujos.
+- `rig.nodes` comparte la referencia de `bones` sólo como adaptador temporal de
+  la interfaz existente y no se duplica en el archivo `.lowscene`.
+- Las claves de pose se reflejan en canales por propiedad con interpolación y
+  Undo, preparando Timeline y Function Editor sin romper las claves actuales.
+- Las constraints tienen orden persistente, `mix`, lecturas, escrituras y
+  dependencias. LOW rechaza ciclos antes de guardar el cambio y aplica orden
+  topológico estable cuando una preferencia manual contradice una dependencia.
+- El diagnóstico detecta jerarquías circulares y referencias rotas de slots,
+  attachments y bindings antes de exportar.
+
+Pruebas del modelo: **118/118**. Incluyen migración v3→v4, JSON sin estado
+duplicado, sustituciones y Undo, orden visual, canales, constraints ordenadas,
+rechazo atómico de ciclos, diagnóstico y reapertura.
+
+---
+
+## 10. Armado gráfico y ruta de deformación (pasada 2026-08-20)
+
+- `Crear hueso` ya trabaja sobre la mesa: arrastrar define cabeza y punta; si
+  el gesto empieza en una punta existente, el nuevo hueso nace conectado como
+  hijo. No requiere registrar una pieza de arte antes.
+- Los huesos puros se seleccionan desde el overlay o la jerarquía. Cabeza y
+  punta se editan gráficamente, conservan una longitud mínima y se guardan en
+  el mismo `Scene.rig.bones` canónico.
+- Crear, extender y editar geometría producen una operación atómica de Undo.
+- La carga de un SVG preserva los overlays del editor. Antes eliminaba todos
+  los hijos `<svg>` y podía borrar el overlay del rig junto con el dibujo.
+- Prueba interactiva real: crear raíz, extender un hijo desde la punta,
+  verificar `parentId`, Undo, Redo, cambiar longitud y deshacer.
+
+Pruebas del modelo: **120/120**.
+
+### Decisiones tomadas a partir del informe técnico adjunto
+
+El objetivo de deformación avanzada se divide para no confundir una interfaz
+con un motor terminado:
+
+1. malla 2D explícita, triangulación, bindings y LBS con pesos dispersos;
+2. auto-pesado BBW opcional en bind-time, aislado en Worker, con cancelación,
+   caché y fallback manual; nunca recalculado durante playback;
+3. deformadores de curva/jaula, switches y Master Controllers sobre los
+   channels/actions v4;
+4. rigs 360° como vistas y sustituciones coordinadas por controladores;
+5. Shape-aware IK sólo después de medir calidad y latencia sobre escenas de
+   producción.
+
+Dual-quaternion skinning y generalized winding numbers no son requisitos del
+primer motor 2D: se evaluarán únicamente para torsión o geometría problemática
+que demuestre una mejora frente al coste y complejidad añadidos.

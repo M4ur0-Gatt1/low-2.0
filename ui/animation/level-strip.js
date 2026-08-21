@@ -24,9 +24,12 @@
     constructor(host, doc) {
       this.host = typeof host === "string" ? document.querySelector(host) : host;
       this.doc = doc;
+      this.selected = new Set();
+      this.anchor = null;
       this._desuscribir = doc ? doc.subscribe((d, m) => {
         // se redibuja con lo que la afecta, no con cada movimiento del frame
-        if (m === "level" || m === "cells" || m === "content" || m === "frame") this.render();
+        if (m === "level" || m === "cells" || m === "content" || m === "frame" || m === "palette")
+          this.render();
       }) : null;
     }
     setDoc(doc) {
@@ -61,6 +64,10 @@
 
       const tira = document.createElement("div");
       tira.className = "ls2-strip";
+      // la miniatura lleva la hoja de la paleta: si no, mostraria el color
+      // literal que quedo guardado y no el que el estilo dice hoy
+      const hojaPal = (animation.palette && lv && doc.scene.levelPalette)
+        ? animation.palette.css(doc.scene.levelPalette(lv.id)) : "";
       const actual = doc.cell;
       const expuestos = new Set();
       for (const ly of doc.scene.layers) {
@@ -71,6 +78,7 @@
         const cel = document.createElement("div");
         cel.className = "ls2-item"
           + (d.number === actual ? " actual" : "")
+          + (this.selected.has(d.number) ? " selected" : "")
           + (expuestos.has(d.number) ? "" : " suelto");
         cel.title = expuestos.has(d.number)
           ? `Dibujo ${d.number} · clic: ir a donde está expuesto`
@@ -82,19 +90,50 @@
         mini.innerHTML = d.isEmpty()
           ? ""
           : `<svg viewBox="0 0 ${doc.scene.width} ${doc.scene.height}"
-                  preserveAspectRatio="xMidYMid meet">${d.content}</svg>`;
+                  preserveAspectRatio="xMidYMid meet">${
+                    hojaPal ? `<style>${hojaPal}</style>` : ""}${d.content}</svg>`;
         const num = document.createElement("b");
         num.className = "ls2-num";
         num.textContent = d.number;
         cel.append(mini, num);
 
-        cel.onclick = () => {
+        cel.onclick = (e) => {
+          const drawings = lv.drawings.map((x) => x.number);
+          if (e.ctrlKey || e.metaKey) {
+            this.selected.has(d.number) ? this.selected.delete(d.number) : this.selected.add(d.number);
+            this.anchor = d.number;
+          } else if (e.shiftKey && this.anchor != null) {
+            const a = drawings.indexOf(this.anchor), b = drawings.indexOf(d.number);
+            this.selected = new Set(drawings.slice(Math.min(a, b), Math.max(a, b) + 1));
+          } else { this.selected = new Set([d.number]); this.anchor = d.number; }
+          // Seleccionar material no altera el timing. Exponer es una accion
+          // separada (doble clic, menu contextual o drag hacia la XSheet).
           const f = doc.frameOfDrawing(d.number);
-          if (f) doc.goTo(f); else doc.setCell(doc.frame, d.number);
+          if (f && !(e.ctrlKey || e.metaKey || e.shiftKey)) doc.goTo(f);
+          this.render();
         };
+        cel.ondblclick = (e) => {
+          e.preventDefault(); e.stopPropagation();
+          doc.setCell(doc.frame, d.number);
+        };
+        cel.draggable = true;
+        cel.ondragstart = (e) => {
+          if (!this.selected.has(d.number)) this.selected = new Set([d.number]);
+          const numbers = lv.drawings.map((x) => x.number).filter((n) => this.selected.has(n));
+          animation.levelDrag = { levelId: lv.id, numbers };
+          e.dataTransfer.effectAllowed = "copyMove";
+          e.dataTransfer.setData("application/x-low-level-drawings",
+            JSON.stringify({ levelId: lv.id, numbers }));
+          e.dataTransfer.setData("text/plain", numbers.join(", "));
+          cel.classList.add("dragging");
+        };
+        cel.ondragend = () => { cel.classList.remove("dragging"); animation.levelDrag = null; };
         // menú con lo que se puede hacer con un dibujo
         cel.oncontextmenu = (e) => {
           e.preventDefault();
+          if (!this.selected.has(d.number)) {
+            this.selected = new Set([d.number]); this.anchor = d.number; this.render();
+          }
           this._menu(e, d);
         };
         tira.appendChild(cel);
@@ -125,7 +164,12 @@
         b.onclick = () => { m.remove(); fn(); };
         m.appendChild(b);
       };
-      item("Exponer en el frame actual", () => doc.setCell(doc.frame, d.number));
+      item(this.selected.size > 1 ? `Exponer ${this.selected.size} dibujos desde el frame actual`
+        : "Exponer en el frame actual", () => {
+        const lv = doc.level;
+        const numbers = lv.drawings.map((x) => x.number).filter((n) => this.selected.has(n));
+        doc.exposeDrawings(lv.id, numbers.length ? numbers : [d.number], doc.layerId, doc.frame);
+      });
       item("Duplicar", () => {
         const nuevo = doc.duplicateDrawing(d.number);
         if (nuevo) doc.setCell(doc.frame, nuevo.number);

@@ -9,7 +9,7 @@
  * @module design/components/Toolbar3D
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLowStore } from '../../../store/low-store';
 import type { WebGLDesign3D } from '../engine/webgl-design3d';
@@ -108,7 +108,27 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
     }
     setShowWheel((v) => !v);
   };
-  const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, figuras: true, seleccion: false, superficies: false, pincel: true });
+  const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, figuras: true, seleccion: true, superficies: false, pincel: true });
+  const [estilo, setEstilo] = useState<'stroke' | 'fill' | 'both'>(engine?.current?.getShapeStyle() ?? 'both');
+  const esFigura = currentTool === 'rect' || currentTool === 'circle' || currentTool === 'poly';
+  // Joystick: el estado real vive en el motor (es una opcion de la herramienta,
+  // no del documento), y aca se refleja para poder pintar los botones.
+  const [joyOn, setJoyOn] = useState<boolean>(engine?.current?.getJoystick() ?? false);
+  const [joyMode, setJoyMode] = useState<'2d' | '3d'>(engine?.current?.getJoyMode() ?? '3d');
+  const [joyLock, setJoyLock] = useState<boolean>(engine?.current?.getJoyLocked() ?? false);
+  // el motor avisa cuando el joystick cambia por ATAJO (J / T / K): sin esto los
+  // botones quedaban mintiendo sobre el estado real
+  useEffect(() => {
+    const alDia = () => {
+      const e = engine?.current;
+      if (!e) return;
+      setJoyOn(e.getJoystick());
+      setJoyMode(e.getJoyMode());
+      setJoyLock(e.getJoyLocked());
+    };
+    window.addEventListener('low3d:joy', alDia);
+    return () => window.removeEventListener('low3d:joy', alDia);
+  }, [engine]);
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   const draw: { id: ToolType; icon: React.FC; label: string }[] = [
@@ -120,8 +140,8 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
     { id: 'liquify', icon: Icons.Liquify, label: 'Liquify — arrastrá para deformar el trazo (radio = tamaño de pincel) (L)' },
   ];
   const figuras: { id: ToolType; icon: React.FC; label: string }[] = [
-    { id: 'rect', icon: Icons.Rect, label: 'Rectángulo — arrastrá sobre el plano activo. Shift: cuadrado' },
-    { id: 'circle', icon: Icons.Circle, label: 'Círculo / elipse — arrastrá sobre el plano activo. Shift: círculo perfecto' },
+    { id: 'rect', icon: Icons.Rect, label: 'Rectángulo — arrastrá sobre el plano activo (o sobre la vista). Shift: cuadrado' },
+    { id: 'circle', icon: Icons.Circle, label: 'Círculo / elipse — arrastrá sobre el plano activo (o sobre la vista). Shift: círculo perfecto' },
     { id: 'poly', icon: Icons.Poly, label: 'Polígono regular — la cantidad de lados se elige abajo. Shift: proporcionado' },
   ];
   const sel: { id: ToolType; icon: React.FC; label: string }[] = [
@@ -154,6 +174,26 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
 
       <Section title="Figuras" open={open.figuras} onToggle={() => toggle('figuras')}>
         {figuras.map(toolBtn)}
+        {/* Contorno / relleno de la figura. Vive en el motor, como los lados del
+            polígono: es una opción de la herramienta, no del documento. */}
+        {esFigura && (
+          <div style={{ display: 'flex', gap: 2, width: '100%', padding: '4px 0' }}>
+            {([
+              ['stroke', 'Contorno', 'Solo el perímetro, sin relleno'],
+              ['fill', 'Relleno', 'Solo la cara sólida, sin contorno'],
+              ['both', 'Ambos', 'Contorno y cara sólida en una sola pieza'],
+            ] as const).map(([id, label, title]) => (
+              <button key={id} title={title}
+                onClick={() => { engine?.current?.setShapeStyle(id); setEstilo(id); }}
+                style={{
+                  flex: 1, height: 22, border: 'none', borderRadius: 5, cursor: 'pointer',
+                  fontSize: 10, fontFamily: 'system-ui, sans-serif',
+                  backgroundColor: estilo === id ? LOW_ACCENT : 'transparent',
+                  color: estilo === id ? '#fff' : '#ccc',
+                }}>{label}</button>
+            ))}
+          </div>
+        )}
         {currentTool === 'poly' && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 2px', width: '100%' }}>
             <span style={{ opacity: 0.7 }}>Lados</span>
@@ -167,7 +207,43 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
 
       <Section title="Selección" open={open.seleccion} onToggle={() => toggle('seleccion')}>
         {sel.map(toolBtn)}
-        {currentTool === 'move' && ([
+        {currentTool === 'move' && (
+          <div style={{ width: '100%', padding: '4px 0', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <button
+              onClick={() => { const v = !joyOn; engine?.current?.setJoystick(v); setJoyOn(v); }}
+              title="Joystick (J) - un solo control para mover, rotar y escalar, como en Feather"
+              style={{
+                height: 24, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 10,
+                fontFamily: 'system-ui, sans-serif',
+                backgroundColor: joyOn ? LOW_ACCENT : 'transparent', color: joyOn ? '#fff' : '#ccc',
+              }}>Joystick</button>
+            {joyOn && (
+              <div style={{ display: 'flex', gap: 2 }}>
+                {(['3d', '2d'] as const).map((m) => (
+                  <button key={m}
+                    onClick={() => { engine?.current?.setJoyMode(m); setJoyMode(m); }}
+                    title={m === '3d'
+                      ? 'Ejes globales X/Y/Z: conos para mover, anillos para rotar, esfera para rotar libre'
+                      : 'Sobre la vista: mover en pantalla, escalar de ancho/alto/libre y rotar en el eje de la camara'}
+                    style={{
+                      flex: 1, height: 22, border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 10,
+                      fontFamily: 'system-ui, sans-serif',
+                      backgroundColor: joyMode === m ? LOW_ACCENT : 'transparent',
+                      color: joyMode === m ? '#fff' : '#ccc',
+                    }}>{m.toUpperCase()}</button>
+                ))}
+                <button
+                  onClick={() => { const v = !joyLock; engine?.current?.setJoyLocked(v); setJoyLock(v); }}
+                  title="Candado (K) - mover solo en las cuatro direcciones, escalar uniforme y rotar de 15 en 15 grados"
+                  style={{
+                    width: 26, height: 22, border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 11,
+                    backgroundColor: joyLock ? LOW_ACCENT : 'transparent', color: joyLock ? '#fff' : '#ccc',
+                  }}>{joyLock ? '\u{1F512}' : '\u{1F513}'}</button>
+              </div>
+            )}
+          </div>
+        )}
+        {currentTool === 'move' && !joyOn && ([
           { id: 'translate' as GizmoMode, icon: Icons.GizmoMove, label: 'Gizmo: mover' },
           { id: 'rotate' as GizmoMode, icon: Icons.GizmoRotate, label: 'Gizmo: rotar' },
           { id: 'scale' as GizmoMode, icon: Icons.GizmoScale, label: 'Gizmo: redimensionar' },

@@ -37,7 +37,7 @@
   /** Portapapeles de celdas: guarda REFERENCIAS, no dibujos. Pegar en otro
    *  lado no duplica el dibujo, lo vuelve a exponer — que es justo la ventaja
    *  de tener el nivel separado del tiempo. */
-  const clip = { cells: [] };
+  const clip = { range: null };
 
   function wire(getDoc, getPlayback, opciones) {
     const opts = opciones || {};
@@ -63,7 +63,12 @@
         case "End":        if (pb) pb.last(); else doc.goTo(doc.scene.lastFrame() || 1); break;
         case " ":          if (pb) pb.toggle(); break;
         case "Insert":     doc.apply("insert", doc.frame, 1); break;
-        case "Delete":     doc.apply("clear", doc.frame, doc.frame); break;
+        case "Delete": {
+          const selected = opts.getSelection && opts.getSelection();
+          if (selected) doc.clearCells(selected, "Vaciar rango");
+          else doc.apply("clear", doc.frame, doc.frame);
+          break;
+        }
         case ".":          doc.apply("stepChange", doc.frame, +1); break;
         case ",":          doc.apply("stepChange", doc.frame, -1); break;
         default: manejado = false;
@@ -78,20 +83,20 @@
       // copiar / cortar / pegar CELDAS (referencias, no dibujos)
       if (!manejado && ctrl && ly) {
         const k = e.key.toLowerCase();
-        const sel = (opts.getSelection && opts.getSelection()) || { from: doc.frame, to: doc.frame };
+        const sel = (opts.getSelection && opts.getSelection()) || {
+          fromLayerId: doc.layerId, toLayerId: doc.layerId, from: doc.frame, to: doc.frame };
         if (k === "c") {
-          clip.cells = animation.exposures.read(ly, sel.from, sel.to);
+          clip.range = doc.readCells(sel);
           manejado = true;
-          if (opts.status) opts.status(`${clip.cells.length} celda(s) copiada(s)`);
+          if (opts.status) opts.status(`${clip.range.width} x ${clip.range.height} celdas copiadas`);
         } else if (k === "x") {
-          clip.cells = animation.exposures.read(ly, sel.from, sel.to);
-          doc.apply("clear", sel.from, sel.to);
+          clip.range = doc.readCells(sel);
+          doc.clearCells(sel, "Cortar rango");
           manejado = true;
-        } else if (k === "v" && clip.cells.length) {
-          animation.exposures.write(ly, doc.frame, clip.cells);
-          doc.touch(); doc.emit("cells");
+        } else if (k === "v" && clip.range) {
+          doc.pasteCells(clip.range, doc.layerId, doc.frame, { label: "Pegar rango" });
           manejado = true;
-          if (opts.status) opts.status(`${clip.cells.length} celda(s) pegada(s) en el frame ${doc.frame}`);
+          if (opts.status) opts.status(`${clip.range.width} x ${clip.range.height} celdas pegadas`);
         }
       }
 
