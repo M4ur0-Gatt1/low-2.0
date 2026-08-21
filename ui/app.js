@@ -10771,7 +10771,19 @@ function dzDocUse(doc) {
   dzSyncCanvasDocument(true);
   dzOnionRender();
   dzOnion2Render();
+  dzSyncTransportFromDoc();   // fps y rango In/Out del archivo, a los controles
   if (Object.keys((doc.scene.rig && doc.scene.rig.nodes) || {}).length) dzRigApplyLive(doc.frame);
+}
+
+/** Refleja fps y rango In/Out del documento en los controles de transporte.
+ *  Sin esto, abrir una escena dejaba los controles con los valores por defecto
+ *  aunque el archivo guardara otros. */
+function dzSyncTransportFromDoc() {
+  if (!DZ.doc) return;
+  const sc = DZ.doc.scene;
+  if ($("#tlFps")) $("#tlFps").value = sc.fps || 12;
+  if ($("#tlIn")) $("#tlIn").value = sc.range.in || 1;
+  if ($("#tlOut")) $("#tlOut").value = sc.range.out || 0;
 }
 
 /** Autoguardado de la escena, por si LOW se cierra mal. */
@@ -11149,6 +11161,7 @@ async function dzDocInit() {
   dzPalCssRender();
   dzPaletteRender();          // el panel pasa a mostrar la paleta de la escena
   dzSyncCanvasDocument();
+  dzSyncTransportFromDoc();   // fps y rango del archivo, a los controles
   if (Object.keys((DZ.doc.scene.rig && DZ.doc.scene.rig.nodes) || {}).length) dzRigApplyLive(DZ.doc.frame);
   return DZ.doc;
 }
