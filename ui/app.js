@@ -930,7 +930,10 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      if (dzRigDiscardPreview()) dzSetStatus("Pose de prueba descartada");
+      if (DZ.rigBoneDraft) {
+        dzRigBoneCreateCancel(); dzRigOverlayRender();
+        dzSetStatus("Hueso en curso cancelado");
+      } else if (dzRigDiscardPreview()) dzSetStatus("Pose de prueba descartada");
       return;
     }
     const k = (e.key || "").toLowerCase();
@@ -6606,6 +6609,7 @@ function dzRigSelectedNode() {
   return DZ.doc.scene.rigNode(DZ.rigSelectedId || DZ.sel?.id) || null;
 }
 function dzRigSelectNode(id) {
+  if (DZ.rigBoneDraft) dzRigBoneCreateCancel();   // un clic sobre un control descarta el borrador en curso
   const node = DZ.doc?.scene.rigNode(id); if (!node) return false;
   DZ.rigSelectedId = id;
   const target = dzRigNodeElement(node);
@@ -6718,6 +6722,9 @@ function dzRigSetTool(tool) {
   if (!["select", "pose", "create"].includes(tool)) tool = "select";
   DZ.rigTool = tool;
   DZ.rigBoneTool = tool === "create";
+  if (!DZ.rigBoneTool) dzRigBoneCreateCancel();   // salir de Crear hueso descarta el borrador
+  if (DZ.rigBoneTool) document.addEventListener("pointermove", dzRigBoneCreateMove);
+  else document.removeEventListener("pointermove", dzRigBoneCreateMove);
   $("#rigToolSelect")?.classList.toggle("on", tool === "select");
   $("#rigToolPose")?.classList.toggle("on", tool === "pose");
   $("#rigToolCreate")?.classList.toggle("on", tool === "create");
@@ -6735,7 +6742,7 @@ function dzRigSetMode(mode) {
   $("#rigToolCreate").disabled = DZ.rigSubmode !== "build";
   [["rigModeBuild", "build"], ["rigModeFk", "fk"], ["rigModeIk", "ik"]].forEach(([id, value]) =>
     $("#" + id).classList.toggle("on", DZ.rigSubmode === value));
-  const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado de la pieza hija hasta el pivote de su padre. «Crear hueso» dibuja la cadena ósea.",
+  const hints = { build: "Armado: círculo = pivote (arrastrar mueve el hueso); punta = estirar/orientar; cuerpo = mover. «Crear hueso» se hace con dos clics: cabeza y punta. El cuadrado vincula al padre.",
     fk: "FK: «Posar» arrastra el cuerpo/punta para rotar o la articulación para mover. «Seleccionar» elige sin posar. Cada gesto crea una clave (si Auto-clave está activo).",
     ik: "IK: elegí una cadena y arrastrá el rombo. Ambos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
@@ -6768,48 +6775,63 @@ function dzRigNearestBoneTail(point, maxDistance = 18 / Math.max(.1, DZ.zoom || 
   return best;
 }
 
+/* Creación de huesos estilo Harmony/OpenToonz: CLIC, no arrastre.
+   • 1er clic (o clic en la punta de un hueso) coloca la cabeza;
+   • el ratón previsualiza el hueso en vivo (punta siguiendo al cursor);
+   • 2º clic coloca la punta y crea el hueso;
+   • Esc cancela el borrador.
+   Sin arrastre el cursor nunca se pierde y colocar puntos es predecible. */
 function dzRigBoneCreateDrag(e, forced = null) {
   if (!DZ.doc || !DZ.rigBoneTool || DZ.rigSubmode !== "build") return;
   e.preventDefault(); e.stopPropagation();
-  const pointerId = e.pointerId, rawHead = forced?.head || dzToUser(e.clientX, e.clientY);
+  // 2º clic → coloca la punta del borrador en curso
+  if (DZ.rigBoneDraft) {
+    const draft = DZ.rigBoneDraft;
+    dzRigBoneCreateCancel();
+    const tail = dzToUser(e.clientX, e.clientY);
+    if (Math.hypot(tail.x - draft.head.x, tail.y - draft.head.y) < 4) {
+      dzRigOverlayRender();
+      dzSetStatus("Hueso descartado (muy corto) · clic para empezar de nuevo");
+      return;
+    }
+    const id = dzRigBoneId();
+    DZ.doc.ensureRigBone(id, { name: id, parentId: draft.parentId,
+      head: draft.head, pivot: draft.head, tail });
+    DZ.rigSelectedId = id;
+    dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
+    dzSetStatus(draft.parentId
+      ? "Hueso «" + id + "» conectado a «" + draft.parentId + "» · clic en su punta para seguir la cadena"
+      : "Hueso raíz «" + id + "» creado · clic en su punta para continuar");
+    return;
+  }
+  // 1er clic → coloca la cabeza (raíz o encadenada a la punta más cercana)
+  const rawHead = forced?.head || dzToUser(e.clientX, e.clientY);
   const snap = forced?.parentId ? { bone: DZ.doc.scene.rigBone(forced.parentId), point: rawHead } :
     dzRigNearestBoneTail(rawHead);
   const head = snap?.point || rawHead, parentId = forced?.parentId || snap?.bone?.id || null;
+  DZ.rigBoneDraft = { head, parentId };
   DZ.rigBonePreview = { head, tail: head, parentId };
-  const preview = ev => {
-    if (ev.pointerId !== pointerId) return;
-    DZ.rigBonePreview = { head, tail: dzToUser(ev.clientX, ev.clientY), parentId };
-    dzRigOverlayRender();
-  };
-  const cleanup = () => {
-    document.removeEventListener("pointermove", preview);
-    document.removeEventListener("pointerup", finish);
-    document.removeEventListener("pointercancel", cancel);
-  };
-  const finish = ev => {
-    if (ev.pointerId !== pointerId) return; cleanup();
-    const value = DZ.rigBonePreview; DZ.rigBonePreview = null;
-    if (!value || Math.hypot(value.tail.x - value.head.x, value.tail.y - value.head.y) < 4) {
-      dzRigOverlayRender(); return;
-    }
-    const id = dzRigBoneId();
-    DZ.doc.ensureRigBone(id, { name: id, parentId: value.parentId,
-      head: value.head, pivot: value.head, tail: value.tail });
-    DZ.rigSelectedId = id;
-    dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
-    dzSetStatus(value.parentId
-      ? "Hueso «" + id + "» conectado a «" + value.parentId + "» · podés seguir desde su punta"
-      : "Hueso raíz «" + id + "» creado · arrastrá desde su punta para continuar la cadena");
-  };
-  const cancel = () => { cleanup(); DZ.rigBonePreview = null; dzRigOverlayRender(); };
-  document.addEventListener("pointermove", preview);
-  document.addEventListener("pointerup", finish);
-  document.addEventListener("pointercancel", cancel);
+  dzRigOverlayRender();
+  dzSetStatus(parentId
+    ? "Encadenando desde «" + parentId + "» · mové el ratón y hacé clic en la punta (Esc cancela)"
+    : "Cabeza del hueso colocada · mové el ratón y hacé clic en la punta (Esc cancela)");
+}
+
+/* El puntero sigue al ratón mientras hay un borrador de hueso en curso. */
+function dzRigBoneCreateMove(ev) {
+  if (!DZ.rigBoneDraft || !DZ.rigBonePreview) return;
+  DZ.rigBonePreview = { ...DZ.rigBonePreview, tail: dzToUser(ev.clientX, ev.clientY) };
+  dzRigOverlayRender();
+}
+function dzRigBoneCreateCancel() {
+  DZ.rigBoneDraft = null; DZ.rigBonePreview = null;
 }
 
 function dzRigBoneGeometryDrag(e, node, handle) {
   if (!DZ.doc || DZ.rigSubmode !== "build" || !node?.head || !node?.tail) return;
+  if (DZ.rigBoneDraft) dzRigBoneCreateCancel();
   e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
+  dzCapturePointer(e);
   const pointerId = e.pointerId, start = dzToUser(e.clientX, e.clientY);
   const original = { head: { ...node.head }, tail: { ...node.tail } };
   const preview = ev => {
@@ -6851,6 +6873,7 @@ function dzRigBoneGeometryDrag(e, node, handle) {
 function dzRigBoneFKDrag(e, node, mode) {
   if (!DZ.doc || DZ.rigSubmode !== "fk" || !node) return;
   e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
+  dzCapturePointer(e);
   const pointerId = e.pointerId, frame = dzRigCur(), start = dzToUser(e.clientX, e.clientY);
   const pivot = node.pivot
     ? DZ.doc.scene.rigWorldPoint(node.id, frame, node.pivot)
@@ -6900,6 +6923,7 @@ function dzRigBoneFKDrag(e, node, mode) {
 
 function dzRigBuildPivotDrag(e, node) {
   if (!DZ.doc || DZ.rigSubmode !== "build") return;
+  if (DZ.rigBoneDraft) dzRigBoneCreateCancel();
   e.preventDefault(); e.stopPropagation();
   const target = dzRigNodeElement(node); dzRigSelectNode(node.id);
   const pointerId = e.pointerId;
@@ -6935,6 +6959,7 @@ function dzRigBuildPivotDrag(e, node) {
 
 function dzRigBuildLinkDrag(e, node) {
   if (!DZ.doc || DZ.rigSubmode !== "build") return;
+  if (DZ.rigBoneDraft) dzRigBoneCreateCancel();
   e.preventDefault(); e.stopPropagation();
   const pointerId = e.pointerId;
   const pointer = ev => ({ x: ev.clientX, y: ev.clientY });
@@ -7112,6 +7137,7 @@ function dzRigOverlayRender() {
       "dz-rig-bone" + (selectedId === node.id ? " active" : ""));
     const hit = get("bh:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, "data-id": node.id }, "dz-rig-bone-hit");
     hit.onpointerdown = e => {
+      if (DZ.rigSubmode === "build" && node.tail) return dzRigBoneGeometryDrag(e, node, "head");
       if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "rotate");
       e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
     };
@@ -7221,6 +7247,8 @@ function dzRigToggle() {
   if (DZ.rigMode) { dzRigSetMode(DZ.rigSubmode || "build"); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzSetStatus("Esqueleto cut-out: registrá las piezas y armá la jerarquía desde la raíz"); }
   else {
     DZ.rigBoneTool = false; DZ.rigLivePose = null; DZ.rigIKPreview = null;
+    dzRigBoneCreateCancel();
+    document.removeEventListener("pointermove", dzRigBoneCreateMove);
     $("#rigBoneTool")?.classList.remove("on");
     const ovl = $("#dzRigOverlay");
     ovl.classList.remove("bone-create"); ovl.innerHTML = ""; ovl.__rigCache = null;

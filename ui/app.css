@@ -1037,6 +1037,7 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-rig-overlay {
   position: absolute; inset: 0; z-index: 7; width: 100%; height: 100%;
   overflow: visible; pointer-events: none;
+  touch-action: none; user-select: none; -webkit-user-select: none;
 }
 /* La regla genérica `.dz-canvas > svg` centra y escala la hoja. Esta capa no
    es una hoja: debe cubrir todo el viewer para que articulaciones y objetivos
