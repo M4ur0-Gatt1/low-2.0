@@ -6713,9 +6713,10 @@ function dzRigSetTool(tool) {
 }
 function dzRigSetMode(mode) {
   DZ.rigSubmode = ["build", "fk", "ik"].includes(mode) ? mode : "build";
-  // al cambiar de modo, la herramienta vuelve a una coherente con ese modo
+  // al cambiar de modo, la herramienta vuelve a una coherente con ese modo:
+  // build → seleccionar;  fk/ik → posar (para que arrastrar ya pose, sin pasos extra)
   if (DZ.rigSubmode === "build") dzRigSetTool("select");
-  else dzRigSetTool(DZ.rigTool === "create" ? "select" : DZ.rigTool);
+  else dzRigSetTool(DZ.rigTool === "create" || DZ.rigTool === "select" ? "pose" : DZ.rigTool);
   $("#dzRigPanel").dataset.mode = DZ.rigSubmode;
   $("#rigToolPose").disabled = DZ.rigSubmode === "build";
   $("#rigToolCreate").disabled = DZ.rigSubmode !== "build";
@@ -7046,9 +7047,7 @@ function dzRigOverlayRender() {
   // sin destruir el DOM → sin flicker y sin perder el gesto en curso.
   const sig = JSON.stringify({
     n: Object.keys(doc.scene.rig.nodes).sort(), s: selectedId,
-    m: DZ.rigSubmode || "build", b: !!DZ.rigBoneTool,
-    gp: !!(DZ.rigBoneGeometryPreview || DZ.rigBuildPreview),
-    lp: !!(DZ.rigLinkPreview), bp: !!DZ.rigBonePreview,
+    m: DZ.rigSubmode || "build", t: DZ.rigTool || "select",
     c: Object.keys(doc.scene.rig.constraints || {}).sort()
   });
   const rebuild = overlay.__rigCache?.sig !== sig;
@@ -7057,7 +7056,12 @@ function dzRigOverlayRender() {
   overlay.dataset.tool = DZ.rigTool || "select";
   overlay.classList.toggle("bone-create", !!DZ.rigBoneTool && DZ.rigSubmode === "build");
   overlay.onpointerdown = e => {
-    if (e.target === overlay && DZ.rigBoneTool) dzRigBoneCreateDrag(e);
+    if (!DZ.rigBoneTool) return;
+    // Los joints/tips manejan su propio pointerdown (encadenar/editar) y hacen
+    // stopPropagation. Si llega hasta acá es área libre: crear un hueso nuevo.
+    // (la línea decorativa .dz-rig-bone ya no intercepta: pointer-events:none)
+    if (e.target === overlay || e.target.classList?.contains("dz-rig-bone") ||
+        e.target.classList?.contains("dz-rig-label")) dzRigBoneCreateDrag(e);
   };
   const cv = $("#dzCanvas").getBoundingClientRect();
   overlay.setAttribute("viewBox", `0 0 ${Math.max(1, cv.width)} ${Math.max(1, cv.height)}`);
