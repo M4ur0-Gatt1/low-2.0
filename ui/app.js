@@ -5532,11 +5532,13 @@ async function dzAnimToggle() {
   dzCamOverlay();
 }
 async function dzTimelineRefresh() {
+  // Modelo nuevo (LowDoc): la barra de chips es una VISTA del modelo, igual que
+  // la timeline y la xsheet. Si ya hay documento, se renderiza desde él y las
+  // tres vistas muestran exactamente lo mismo (una sola fuente de verdad).
+  if (DZ.doc) { dzTlFramesRender(); return; }
   const r = await api.list_frames(DZ.path);
   DZ.anim.frames = (r && r.frames) || [];
   DZ.anim.idx = DZ.anim.frames.indexOf(DZ.path);
-  // El modelo canónico de la animación es LowDoc (DZ.doc). El viejo SceneModel
-  // dejó de existir en v3.29.37; los SVG históricos se migran en dzDocInit().
   const box = $("#tlFrames");
   box.innerHTML = "";
   DZ.anim.frames.forEach((f, i) => {
@@ -5553,6 +5555,58 @@ async function dzTimelineRefresh() {
   dzSbFrame();
   dzXsRender();
   if (!$("#dzTlGrid").hidden) dzTlGridRender();   // timeline por capas al día
+}
+/* Barra de chips (#tlFrames) como VISTA del modelo LowDoc: un chip por frame
+   del rango de la escena. Muestra el número de frame, el drawing expuesto en la
+   capa activa (o vacío) y una miniatura directa del dibujo EN MEMORIA (sin ir a
+   disco). Es la misma fuente de verdad que la timeline y la xsheet. */
+function dzTlFramesRender() {
+  const box = $("#tlFrames");
+  if (!box || !DZ.doc) return;
+  const doc = DZ.doc, sc = doc.scene;
+  const rango = sc.playRange();
+  const total = Math.max(rango.out, doc.frame, sc.lastFrame() || 1) + 6;
+  box.innerHTML = "";
+  for (let i = 1; i <= total; i++) {
+    const c = document.createElement("div");
+    c.className = "tl-frame" + (i === doc.frame ? " cur" : "");
+    const dw = sc.drawingAt(doc.layerId, i);
+    const num = dw ? dw.number : null;
+    c.innerHTML = '<span class="tl-n">' + i + "</span>";
+    c.title = "Frame " + i + (num != null ? " · drawing " + num : " · vacío");
+    c.onclick = () => dzGoFrame(i - 1);
+    box.appendChild(c);
+    if (num != null) dzTlThumbFromDoc(c, i);
+  }
+  $("#tlInfo").textContent = total + " cuadro(s)";
+  dzTimelineBadges();
+  dzSbFrame();
+  dzXsRender();
+  if (!$("#dzTlGrid").hidden) dzTlGridRender();   // timeline por capas al día
+}
+/* miniatura de un chip desde el dibujo del modelo (SVG ya en memoria) */
+function dzTlThumbFromDoc(chip, frame) {
+  const doc = DZ.doc;
+  const dw = doc.scene.drawingAt(doc.layerId, frame);
+  if (!dw || !dw.content) return;
+  const tmp = document.createElement("div"); tmp.innerHTML = dw.content;
+  const svg = tmp.querySelector("svg");
+  if (!svg) return;
+  svg.removeAttribute("width"); svg.removeAttribute("height");
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  const th = document.createElement("div");
+  th.className = "tl-thumb"; th.appendChild(svg);
+  chip.insertBefore(th, chip.firstChild);
+}
+/* actualiza SOLO el chip activo y los badges (barato: se llama en cada cambio
+   de frame, sin re-renderizar toda la barra) */
+function dzTlFramesSync() {
+  if (!DZ.doc) return;
+  const box = $("#tlFrames");
+  if (!box) return;
+  box.querySelectorAll(".tl-frame").forEach((c, i) =>
+    c.classList.toggle("cur", i + 1 === DZ.doc.frame));
+  dzTimelineBadges();
 }
 /* miniatura del cuadro dentro del chip de la timeline (estilo X-sheet) */
 async function dzThumbInto(chip, f, i) {
@@ -6066,11 +6120,11 @@ function dzFrameNum(path) {
   const m = /_f(\d{3})\.svg$/i.exec(path || "");
   return m ? parseInt(m[1], 10) : 1;
 }
-function dzSceneSave() {
-  if (DZ.path && DZ.scene) {
-    api.scene_save(DZ.path, DZ.scene);
-  }
-}
+/* dzSceneSave vive abajo (sección GUARDAR Y ABRIR LA ESCENA) como UNA sola
+   función sobre el modelo LowDoc. La definición histórica que guardaba sólo
+   la cámara (api.scene_save) quedó eliminada: tener dos funciones con el mismo
+   nombre hacía que la de abajo pisara a ésta por hoisting y la cámara legacy
+   dejara de persistir sin avisar. */
 function dzVB() {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   return ((svg && svg.getAttribute("viewBox")) || "0 0 1080 1080").split(/\s+/).map(Number);
@@ -6273,7 +6327,25 @@ function dzKeyToggle() {
   dzSceneSave(); dzTimelineBadges();
 }
 function dzTimelineBadges() {
-  if (!DZ.anim) return;
+  if (!DZ.anim && !DZ.doc) return;
+  // Modelo nuevo: los badges salen del modelo (cámara y rig), no de DZ.scene.
+  if (DZ.doc) {
+    const doc = DZ.doc, sc = doc.scene;
+    const cams = (sc.camera && sc.camera.keys) || {};
+    const rig = dzRigTracks();
+    document.querySelectorAll("#tlFrames .tl-frame").forEach((c, i) => {
+      c.querySelectorAll(".tl-key").forEach(n => n.remove());
+      const num = i + 1;   // los chips del modelo son 1-based
+      const hasRig = Object.keys(rig).some(id => rig[id] && rig[id][num]);
+      let badge = (cams[num] ? "●" : "") + (hasRig ? "◇" : "");
+      if (badge) {
+        const b = document.createElement("span");
+        b.className = "tl-key"; b.textContent = badge;
+        c.appendChild(b);
+      }
+    });
+    return;
+  }
   const keys = (DZ.scene && DZ.scene.keys) || [];
   const cams = (DZ.scene && DZ.scene.cam) || {};
   document.querySelectorAll("#tlFrames .tl-frame").forEach((c, i) => {
@@ -7535,6 +7607,10 @@ function dzSbTool() {
 function dzSbFrame() {
   const el = $("#sbFrame");
   if (!el) return;
+  if (DZ.doc) {
+    el.textContent = `cuadro ${DZ.doc.frame}/${DZ.doc.scene.lastFrame() || 1}`;
+    return;
+  }
   el.textContent = DZ.anim ? `cuadro ${DZ.anim.idx + 1}/${DZ.anim.frames.length}` : "";
 }
 /* opciones contextuales de la herramienta activa (franja bajo la barra) */
@@ -8736,7 +8812,9 @@ function dzPlaybackHead(index) {
     el.classList.toggle("cur", +el.dataset.i === index));
   document.querySelectorAll(".dz-xs-row").forEach((row, i) => row.classList.toggle("cur", i === index));
   const status = $("#sbFrame");
-  if (status && DZ.anim) status.textContent = `cuadro ${index + 1}/${DZ.anim.frames.length}`;
+  if (!status) return;
+  const total = DZ.doc ? (DZ.doc.scene.lastFrame() || 1) : (DZ.anim ? DZ.anim.frames.length : 1);
+  status.textContent = `cuadro ${index + 1}/${total}`;
 }
 /* rango de reproducción/export [lo,hi] 0-based inclusive, según In/Out de la
    barra (In 1-based; Out 1-based, 0 = hasta el final), clamp a los cuadros */
@@ -10981,6 +11059,7 @@ async function dzDocInit() {
       const drawing = doc.drawing;
       dzCanvasSet(drawing ? drawing.content : "");
       dzOnionRender();
+      dzTlFramesSync();          // la barra de chips sigue al modelo
       const hasRig = Object.keys((doc.scene.rig && doc.scene.rig.nodes) || {}).length > 0;
       if (hasRig) {
         dzRigApplyLive(doc.frame);
