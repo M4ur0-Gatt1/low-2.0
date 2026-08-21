@@ -827,12 +827,20 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigModeBuild").onclick = () => dzRigSetMode("build");
   $("#rigModeFk").onclick = () => dzRigSetMode("fk");
   $("#rigModeIk").onclick = () => dzRigSetMode("ik");
+  $("#rigToolSelect").onclick = () => dzRigSetTool("select");
+  $("#rigToolPose").onclick = () => dzRigSetTool("pose");
+  $("#rigToolCreate").onclick = () => dzRigSetTool("create");
+  $("#rigAutoKey").onchange = e => {
+    DZ.rigAutoKey = !!e.target.checked;
+    dzSetStatus(DZ.rigAutoKey
+      ? "Auto-clave activada — al soltar se clava la pose"
+      : "Auto-clave desactivada — posá libre y confirmá con Enter (Esc descarta)");
+  };
   $("#rigId").addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault(); dzRigRegisterSelected();
   });
   $("#rigAuto").onclick = dzRigPrepareDrawing;
-  $("#rigBoneTool").onclick = dzRigToggleBoneTool;
   $("#rigAdd").onclick = dzRigRegisterSelected;
   $("#rigRemove").onclick = dzRigRemoveSelected;
   $("#rigPivotTool").onclick = () => { dzSetTool("pivot"); dzSetStatus("Pivote: hacé clic donde articula la pieza seleccionada"); };
@@ -907,6 +915,19 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     if (e.code === "Space" && DZ.spaceDown) {
       DZ.spaceDown = false;
       $("#dzCanvas").style.cursor = (DZ.tool || "select") in DZ_CURSORS ? DZ_CURSORS[DZ.tool || "select"] : "crosshair";
+    }
+  });
+  // confirmar/descartar una pose de prueba del rig (auto-clave OFF)
+  document.addEventListener("keydown", e => {
+    if (!DZ.rigMode || $("#designView").hidden) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || "")) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (dzRigCommitPreview()) dzSetStatus("Pose clavada en F" + dzRigCur());
+      else dzSetStatus("Nada que clavar — posá un hueso primero");
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      if (dzRigDiscardPreview()) dzSetStatus("Pose de prueba descartada");
     }
   });
   $("#dzDup").onclick = dzDuplicate;
@@ -2305,7 +2326,7 @@ window.addEventListener("message", async (event) => {
 });
 
 /* ══ Entorno de diseño: SVG vivo + inspector por elemento ══ */
-const DZ = { path: null, sel: null, zoom: 1 };
+const DZ = { path: null, sel: null, zoom: 1, rigTool: "select", rigAutoKey: true };
 // Registro central de paneles: base para guardar espacios de trabajo, acoplar
 // cualquier panel y restaurarlo en configuraciones de dos monitores.
 if (window.LOW && LOW.workspace && LOW.workspace.panels) {
@@ -2989,9 +3010,14 @@ function dzPointerDown(e) {
     if (rigDrag && DZ.perf && DZ.perf.rec) {
       DZ.perf.rec.active = null; DZ.perf.rec.livePose = null; // vuelve al replay de su pista
     } else if (moved && rigDrag && rigDrag.pose) {
-      DZ.rigLivePose = null;
-      dzRigSetKey(rigDrag.id, dzRigCur(), rigDrag.pose);
-      dzSetStatus(" pose clavada en el cuadro " + dzRigCur() + " (Shift al arrastrar = rotar)");
+      if (DZ.rigAutoKey === false) {
+        dzRigPanelSync();
+        dzSetStatus(" Pose de prueba en F" + dzRigCur() + " · Enter clava, Esc descarta");
+      } else {
+        DZ.rigLivePose = null;
+        dzRigSetKey(rigDrag.id, dzRigCur(), rigDrag.pose);
+        dzSetStatus(" pose clavada en el cuadro " + dzRigCur() + " (Shift al arrastrar = rotar)");
+      }
     }
     if (moved) { dzBuildInspector(el); if (!rigDrag) dzMarkDirty(); }
     if (rec && moved) dzRecFinish(rec);
@@ -6668,15 +6694,28 @@ function dzRigTogglePin() {
   const node = dzRigSelectedNode(); if (!node) return dzSetStatus("Elegí una pieza del esqueleto");
   DZ.doc.setRigPinned(node.id, !node.pinned); dzRigPanelSync(); dzRigOverlayRender();
 }
+function dzRigSetTool(tool) {
+  if (!["select", "pose", "create"].includes(tool)) tool = "select";
+  DZ.rigTool = tool;
+  DZ.rigBoneTool = tool === "create";
+  $("#rigToolSelect")?.classList.toggle("on", tool === "select");
+  $("#rigToolPose")?.classList.toggle("on", tool === "pose");
+  $("#rigToolCreate")?.classList.toggle("on", tool === "create");
+  $("#rigBoneTool")?.classList.toggle("on", DZ.rigBoneTool);
+  dzRigOverlayRender();
+}
 function dzRigSetMode(mode) {
   DZ.rigSubmode = ["build", "fk", "ik"].includes(mode) ? mode : "build";
-  if (DZ.rigSubmode !== "build") DZ.rigBoneTool = false;
-  $("#rigBoneTool")?.classList.toggle("on", !!DZ.rigBoneTool);
+  // al cambiar de modo, la herramienta vuelve a una coherente con ese modo
+  if (DZ.rigSubmode === "build") dzRigSetTool("select");
+  else dzRigSetTool(DZ.rigTool === "create" ? "select" : DZ.rigTool);
   $("#dzRigPanel").dataset.mode = DZ.rigSubmode;
+  $("#rigToolPose").disabled = DZ.rigSubmode === "build";
+  $("#rigToolCreate").disabled = DZ.rigSubmode !== "build";
   [["rigModeBuild", "build"], ["rigModeFk", "fk"], ["rigModeIk", "ik"]].forEach(([id, value]) =>
     $("#" + id).classList.toggle("on", DZ.rigSubmode === value));
-  const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado de la pieza hija hasta el pivote de su padre.",
-    fk: "FK: arrastrá el cuerpo o la punta del hueso para rotarlo, o la articulación para moverlo. Cada gesto crea una clave.",
+  const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado de la pieza hija hasta el pivote de su padre. «Crear hueso» dibuja la cadena ósea.",
+    fk: "FK: «Posar» arrastra el cuerpo/punta para rotar o la articulación para mover. «Seleccionar» elige sin posar. Cada gesto crea una clave (si Auto-clave está activo).",
     ik: "IK: elegí una cadena y arrastrá el rombo. Ambos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
 }
@@ -6684,9 +6723,7 @@ function dzRigSetMode(mode) {
 function dzRigToggleBoneTool() {
   if (!DZ.doc) return dzSetStatus("Abrí una animación antes de crear huesos");
   dzRigSetMode("build");
-  DZ.rigBoneTool = !DZ.rigBoneTool;
-  $("#rigBoneTool").classList.toggle("on", DZ.rigBoneTool);
-  dzRigOverlayRender();
+  dzRigSetTool(DZ.rigTool === "create" ? "select" : "create");
   dzSetStatus(DZ.rigBoneTool
     ? "Crear hueso: arrastrá desde la articulación hasta la punta · empezá cerca de otra punta para encadenarlo"
     : "Herramienta de huesos desactivada");
@@ -6819,11 +6856,18 @@ function dzRigBoneFKDrag(e, node, mode) {
   };
   const up = (ev) => {
     if (ev.pointerId !== pointerId) return; cleanup();
-    const pose = DZ.rigLivePose && DZ.rigLivePose[node.id]; DZ.rigLivePose = null;
+    const pose = DZ.rigLivePose && DZ.rigLivePose[node.id];
     if (pose) {
+      if (DZ.rigAutoKey === false) {
+        dzRigPanelSync();
+        dzSetStatus("Pose de prueba en F" + frame + " · Enter clava, Esc descarta");
+        return;
+      }
+      DZ.rigLivePose = null;
       dzRigSetKey(node.id, frame, pose);
       dzSetStatus("Hueso «" + node.id + "» posado en F" + frame + (mode === "translate" ? " (mover)" : " (rotar)"));
     } else {
+      DZ.rigLivePose = null;
       dzRigApplyLive(frame); dzRigOverlayRender();
     }
   };
@@ -6911,6 +6955,29 @@ function dzRigResetPose() {
   DZ.doc.setRigKey(node.id, dzRigCur(), { x: 0, y: 0, r: 0, sx: 1, sy: 1 });
   dzRigApplyLive(dzRigCur()); dzRigPanelSync();
 }
+/* pose de prueba (auto-clave OFF): Enter la clava, Esc la descarta */
+function dzRigCommitPreview() {
+  const frame = dzRigCur();
+  if (DZ.rigIKPreview && DZ.doc) {
+    const p = DZ.rigIKPreview; DZ.rigIKPreview = null;
+    const ok = DZ.doc.setRigIKTarget(p.constraintId, frame, p.target);
+    dzRigApplyLive(frame); dzTimelineBadges(); dzRigPanelSync(); dzRigOverlayRender();
+    return ok;
+  }
+  if (DZ.rigLivePose) {
+    const poses = DZ.rigLivePose; DZ.rigLivePose = null;
+    DZ.doc.setRigPoseKeys(poses, frame, "Clave de pose");
+    dzRigApplyLive(frame); dzTimelineBadges(); dzRigPanelSync(); dzRigOverlayRender();
+    return true;
+  }
+  return false;
+}
+function dzRigDiscardPreview() {
+  const had = !!(DZ.rigLivePose || DZ.rigIKPreview);
+  DZ.rigLivePose = null; DZ.rigIKPreview = null;
+  if (had) { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); }
+  return had;
+}
 function dzRigCreateIK() {
   if (!DZ.doc) return;
   const id = DZ.doc.createRigIK($("#rigIkRoot").value, $("#rigIkMid").value, $("#rigIkEnd").value);
@@ -6942,7 +7009,12 @@ function dzRigIKDrag(e, constraintId) {
   const finish = ev => {
     if (ev.pointerId !== pointerId) return;
     document.removeEventListener("pointermove", preview); document.removeEventListener("pointerup", finish); document.removeEventListener("pointercancel", cancel);
-    const value = DZ.rigIKPreview; DZ.rigIKPreview = null;
+    const value = DZ.rigIKPreview;
+    if (value && DZ.rigAutoKey === false) {
+      dzSetStatus(`Objetivo IK de prueba en F${dzRigCur()} · Enter clava, Esc descarta`);
+      return;
+    }
+    DZ.rigIKPreview = null;
     if (value && DZ.doc.setRigIKTarget(constraintId, dzRigCur(), value.target)) {
       dzRigApplyLive(dzRigCur()); dzTimelineBadges(); dzRigPanelSync(); dzSetStatus(`Pose IK clavada en F${dzRigCur()}`);
     }
@@ -6951,19 +7023,35 @@ function dzRigIKDrag(e, constraintId) {
 }
 function dzRigOverlayRender() {
   const overlay = $("#dzRigOverlay"), doc = DZ.doc;
-  if (!overlay || !DZ.rigMode || !doc ||
-      (!Object.keys(doc.scene.rig.nodes).length && !DZ.rigBoneTool)) {
+  const empty = !overlay || !DZ.rigMode || !doc ||
+      (!Object.keys(doc.scene.rig.nodes).length && !DZ.rigBoneTool);
+  if (empty) {
     if (overlay) {
       overlay.setAttribute("hidden", ""); overlay.innerHTML = "";
       overlay.classList.remove("bone-create"); overlay.onpointerdown = null;
+      overlay.__rigCache = null;
     } return;
   }
-  overlay.removeAttribute("hidden"); overlay.innerHTML = ""; overlay.dataset.mode = DZ.rigSubmode || "build";
+  const selectedId = DZ.rigSelectedId || DZ.sel?.id;
+  const num = dzRigCur();
+  // signature estructural: si cambia (nodos/selección/modo/herramienta) se
+  // reconstruye; si no (p. ej. solo se mueve la pose), se actualizan posiciones
+  // sin destruir el DOM → sin flicker y sin perder el gesto en curso.
+  const sig = JSON.stringify({
+    n: Object.keys(doc.scene.rig.nodes).sort(), s: selectedId,
+    m: DZ.rigSubmode || "build", b: !!DZ.rigBoneTool,
+    gp: !!(DZ.rigBoneGeometryPreview || DZ.rigBuildPreview),
+    lp: !!(DZ.rigLinkPreview), bp: !!DZ.rigBonePreview,
+    c: Object.keys(doc.scene.rig.constraints || {}).sort()
+  });
+  const rebuild = overlay.__rigCache?.sig !== sig;
+  overlay.removeAttribute("hidden");
+  overlay.dataset.mode = DZ.rigSubmode || "build";
   overlay.classList.toggle("bone-create", !!DZ.rigBoneTool && DZ.rigSubmode === "build");
   overlay.onpointerdown = e => {
     if (e.target === overlay && DZ.rigBoneTool) dzRigBoneCreateDrag(e);
   };
-  const num = dzRigCur(), cv = $("#dzCanvas").getBoundingClientRect();
+  const cv = $("#dzCanvas").getBoundingClientRect();
   overlay.setAttribute("viewBox", `0 0 ${Math.max(1, cv.width)} ${Math.max(1, cv.height)}`);
   const live = DZ.rigLivePose || DZ.rigIKPreview?.poses || {};
   const point = id => {
@@ -6979,69 +7067,80 @@ function dzRigOverlayRender() {
     const p = doc.scene.rigWorldPoint(node.id, num, localTail, live), s = dzFromUser(p.x, p.y);
     return s && { x: s.x - cv.left, y: s.y - cv.top, user: p };
   };
-  const ns = "http://www.w3.org/2000/svg", add = (tag, attrs, cls) => {
-    const el = document.createElementNS(ns, tag); if (cls) el.setAttribute("class", cls);
-    Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v)); overlay.appendChild(el); return el;
+  const ns = "http://www.w3.org/2000/svg";
+  if (rebuild) { overlay.innerHTML = ""; overlay.__rigCache = { sig, els: new Map() }; }
+  const els = overlay.__rigCache.els, used = new Set();
+  const get = (key, tag, attrs, cls) => {
+    used.add(key);
+    let el = els.get(key);
+    if (!el) { el = document.createElementNS(ns, tag); els.set(key, el); overlay.appendChild(el); }
+    if (cls !== undefined) el.setAttribute("class", cls);
+    if (attrs) Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+    return el;
   };
-  const selectedId = DZ.rigSelectedId || DZ.sel?.id;
+  const posable = DZ.rigTool === "pose";   // FK/IK: sin «Posar», el clic solo selecciona
   for (const node of Object.values(doc.scene.rig.nodes)) {
     let a = point(node.id), b = tailPoint(node);
     if (!b && node.parentId) { a = point(node.parentId); b = point(node.id); }
     if (!a || !b) continue;
-    add("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y },
+    get("bl:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y },
       "dz-rig-bone" + (selectedId === node.id ? " active" : ""));
-    const hit = add("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, "data-id": node.id }, "dz-rig-bone-hit");
+    const hit = get("bh:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, "data-id": node.id }, "dz-rig-bone-hit");
     hit.onpointerdown = e => {
-      if (DZ.rigSubmode === "fk") return dzRigBoneFKDrag(e, node, "rotate");
+      if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "rotate");
       e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
     };
   }
   for (const node of Object.values(doc.scene.rig.nodes)) {
     const p = point(node.id); if (!p) continue;
-    const joint = add("circle", { cx: p.x, cy: p.y, r: node.pinned ? 7 : 5, "data-id": node.id },
+    const joint = get("jt:" + node.id, "circle", { cx: p.x, cy: p.y, r: node.pinned ? 7 : 5, "data-id": node.id },
       "dz-rig-joint" + (node.pinned ? " root" : "") + (selectedId === node.id ? " selected" : ""));
     joint.onpointerdown = e => {
       if (DZ.rigSubmode === "build" && node.tail) return dzRigBoneGeometryDrag(e, node, "head");
       if (DZ.rigSubmode === "build") return dzRigBuildPivotDrag(e, node);
-      if (DZ.rigSubmode === "fk") return dzRigBoneFKDrag(e, node, "translate");
+      if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "translate");
       e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
     };
-    const tipPoint = tailPoint(node);
-    if (tipPoint) {
-      const tip = add("circle", { cx: tipPoint.x, cy: tipPoint.y, r: 5, "data-id": node.id }, "dz-rig-bone-tip");
+    const tp = tailPoint(node);
+    if (tp) {
+      const tip = get("tp:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 5, "data-id": node.id }, "dz-rig-bone-tip");
       tip.onpointerdown = e => {
-        if (DZ.rigBoneTool) return dzRigBoneCreateDrag(e, { head: tipPoint.user, parentId: node.id });
-        if (DZ.rigSubmode === "fk") return dzRigBoneFKDrag(e, node, "rotate");
+        if (DZ.rigBoneTool) return dzRigBoneCreateDrag(e, { head: tp.user, parentId: node.id });
+        if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "rotate");
         return dzRigBoneGeometryDrag(e, node, "tail");
       };
     }
-    if (selectedId === node.id) { const label = add("text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label"); label.textContent = node.id; }
+    if (selectedId === node.id) {
+      const label = get("lb:" + node.id, "text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label");
+      label.textContent = node.id;
+    }
   }
   if (DZ.rigBonePreview) {
     const hs = dzFromUser(DZ.rigBonePreview.head.x, DZ.rigBonePreview.head.y);
     const ts = dzFromUser(DZ.rigBonePreview.tail.x, DZ.rigBonePreview.tail.y);
-    if (hs && ts) add("line", { x1: hs.x - cv.left, y1: hs.y - cv.top,
+    if (hs && ts) get("pb", "line", { x1: hs.x - cv.left, y1: hs.y - cv.top,
       x2: ts.x - cv.left, y2: ts.y - cv.top }, "dz-rig-bone-preview");
   }
   const selected = selectedId && doc.scene.rigNode(selectedId), selectedPoint = selected && point(selected.id);
   if (DZ.rigSubmode === "build" && selectedPoint) {
     const hx = selectedPoint.x + 28, hy = selectedPoint.y - 28;
-    add("line", { x1: selectedPoint.x, y1: selectedPoint.y, x2: hx, y2: hy }, "dz-rig-link-arm");
-    const handle = add("rect", { x: hx - 5, y: hy - 5, width: 10, height: 10, rx: 1,
+    get("la", "line", { x1: selectedPoint.x, y1: selectedPoint.y, x2: hx, y2: hy }, "dz-rig-link-arm");
+    const handle = get("lh", "rect", { x: hx - 5, y: hy - 5, width: 10, height: 10, rx: 1,
       "data-id": selected.id }, "dz-rig-link-handle");
     handle.onpointerdown = e => dzRigBuildLinkDrag(e, selected);
     if (DZ.rigLinkPreview?.childId === selected.id) {
       const p = DZ.rigLinkPreview.pointer;
-      add("line", { x1: selectedPoint.x, y1: selectedPoint.y, x2: p.x - cv.left, y2: p.y - cv.top }, "dz-rig-link-preview");
+      get("lp", "line", { x1: selectedPoint.x, y1: selectedPoint.y, x2: p.x - cv.left, y2: p.y - cv.top }, "dz-rig-link-preview");
     }
   }
   for (const c of Object.values(doc.scene.rig.constraints || {})) {
     const raw = DZ.rigIKPreview?.constraintId === c.id ? DZ.rigIKPreview.target : doc.scene.rigTargetAt(c.id, num); if (!raw) continue;
     const s = dzFromUser(raw.x, raw.y); if (!s) continue; const x = s.x - cv.left, y = s.y - cv.top;
-    const target = add("path", { d: `M${x} ${y - 8}L${x + 8} ${y}L${x} ${y + 8}L${x - 8} ${y}Z`, "data-constraint": c.id },
+    const target = get("ik:" + c.id, "path", { d: `M${x} ${y - 8}L${x + 8} ${y}L${x} ${y + 8}L${x - 8} ${y}Z`, "data-constraint": c.id },
       "dz-rig-target" + (DZ.rigConstraintId === c.id ? " active" : ""));
     target.onpointerdown = e => { DZ.rigConstraintId = c.id; dzRigIKDrag(e, c.id); };
   }
+  for (const [key, el] of els) if (!used.has(key)) { el.remove(); els.delete(key); }
 }
 function dzRigPanelSync() {
   if ($("#dzRigPanel").hidden) return;
@@ -7096,9 +7195,10 @@ function dzRigToggle() {
   $("#dzRigOverlay").toggleAttribute("hidden", !DZ.rigMode);
   if (DZ.rigMode) { dzRigSetMode(DZ.rigSubmode || "build"); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzSetStatus("Esqueleto cut-out: registrá las piezas y armá la jerarquía desde la raíz"); }
   else {
-    DZ.rigBoneTool = false; DZ.rigLivePose = null;
+    DZ.rigBoneTool = false; DZ.rigLivePose = null; DZ.rigIKPreview = null;
     $("#rigBoneTool")?.classList.remove("on");
-    $("#dzRigOverlay").classList.remove("bone-create"); $("#dzRigOverlay").innerHTML = "";
+    const ovl = $("#dzRigOverlay");
+    ovl.classList.remove("bone-create"); ovl.innerHTML = ""; ovl.__rigCache = null;
   }
 }
 async function dzRigOpen() {
