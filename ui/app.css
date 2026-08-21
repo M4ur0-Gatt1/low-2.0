@@ -1056,6 +1056,9 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-rig-joint.root { fill: #4f8bb8; stroke: #a8d9ff; }
 .dz-rig-joint.selected { fill: #f0450e; stroke: #fff; }
 .dz-rig-overlay[data-mode="build"] .dz-rig-joint { cursor: move; }
+.dz-rig-overlay[data-mode="fk"] .dz-rig-bone-hit { cursor: grab; }
+.dz-rig-overlay[data-mode="fk"] .dz-rig-bone-tip { cursor: grab; }
+.dz-rig-overlay[data-mode="fk"] .dz-rig-joint { cursor: move; }
 .dz-rig-link-arm,.dz-rig-link-preview { fill: none; stroke: #d7d0c8; stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }
 .dz-rig-link-preview { stroke: #f2a06e; stroke-width: 2; }
 .dz-rig-link-handle { fill: #171615; stroke: #f2a06e; stroke-width: 2; pointer-events: all; cursor: crosshair; }
