@@ -878,6 +878,30 @@
       });
     }
 
+    /** Vincula un elemento del dibujo a un hueso YA existente en una sola
+     * operación con undo. Es lo que conecta el esqueleto (creado con «Crear
+     * hueso») con las piezas: sin esto el hueso se posa solo y no arrastra el
+     * dibujo. Crea slot + attachment + binding rigid y marca el bone con su
+     * elementId para que la mesa sepa qué elemento transformar. */
+    bindRigElement(boneId, elementId, mode = "rigid") {
+      if (!boneId || !elementId || !this.scene.rigNode(boneId)) return false;
+      return this._rigChange("Vincular dibujo al hueso", (rig) => {
+        const bone = rig.bones[boneId];
+        bone.elementId = elementId;
+        bone.binding = { mode: ["rigid", "weightedMesh", "curve", "envelope", "warp"].includes(mode) ? mode : "rigid", elementId };
+        const slotId = `slot:${boneId}`, attachmentId = `attachment:${boneId}`, bindingId = `binding:${boneId}`;
+        rig.slots[slotId] ||= { id: slotId, name: bone.name || boneId, boneId,
+          drawOrder: Object.keys(rig.slots).length, activeAttachmentId: attachmentId, visible: true };
+        rig.attachments[attachmentId] ||= { id: attachmentId, slotId, type: "drawing", elementId,
+          name: bone.name || boneId, levelId: null, drawingNumber: null };
+        rig.bindings[bindingId] = { id: bindingId, mode: bone.binding.mode, boneId,
+          slotId, attachmentId, elementId };
+        rig.slots[slotId].activeAttachmentId = attachmentId;
+        rig.nodes = rig.bones;
+        return true;
+      });
+    }
+
     setRigActiveAttachment(slotId, attachmentId) {
       return this._rigChange("Cambiar sustitución del rig", (rig) => {
         const slot = rig.slots[slotId], attachment = rig.attachments[attachmentId];

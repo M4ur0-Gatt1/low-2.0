@@ -845,6 +845,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigRemove").onclick = dzRigRemoveSelected;
   $("#rigPivotTool").onclick = () => { dzSetTool("pivot"); dzSetStatus("Pivote: hacé clic donde articula la pieza seleccionada"); };
   $("#rigPin").onclick = dzRigTogglePin;
+  $("#rigBind").onclick = dzRigBindSelection;
   ["rigX", "rigY", "rigR", "rigSX", "rigSY"].forEach(id => {
     $("#" + id).addEventListener("input", () => {
       if (!dzRigSelectedNode()) return dzSetStatus("Esta capa todavía no es una pieza · usá Preparar dibujo o Añadir");
@@ -6696,6 +6697,18 @@ function dzRigRemoveSelected() {
     dzRigApplyLive(dzRigCur()); dzRigPanelSync();
     dzSetStatus(`«${node.id}» salió del esqueleto; el dibujo permanece intacto`);
   }
+}
+/* Vincula la pieza SVG seleccionada en la mesa al hueso activo del esqueleto.
+   Es el puente entre «Crear hueso» (cadena ósea) y el dibujo: sin esto el
+   hueso se posa solo y no arrastra el arte. */
+function dzRigBindSelection() {
+  const node = dzRigSelectedNode();
+  if (!node) return dzSetStatus("Elegí un hueso del esqueleto primero (clic en el overlay o en la lista)");
+  const el = DZ.sel;
+  if (!el || !el.id) return dzSetStatus("Seleccioná en la mesa la pieza del dibujo que querés vincular");
+  if (!DZ.doc.bindRigElement(node.id, el.id)) return dzSetStatus("No pude vincular: revisá que el hueso y la pieza existan");
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
+  dzSetStatus(`«${el.id}» quedó vinculada al hueso «${node.id}» · en FK/IK ya la mueve`);
 }
 function dzRigTogglePin() {
   const node = dzRigSelectedNode(); if (!node) return dzSetStatus("Elegí una pieza del esqueleto");
