@@ -636,18 +636,6 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#tlPrev").onclick = () => { if (DZ.playback) DZ.playback.step(-1); else { dzAnimStopIf(); dzGoFrame(Math.max(0, (DZ.anim ? DZ.anim.idx : 0) - 1)); } };
   $("#tlNext").onclick = () => { if (DZ.playback) DZ.playback.step(1); else { dzAnimStopIf(); dzGoFrame(Math.min((DZ.anim ? DZ.anim.frames.length : 1) - 1, (DZ.anim ? DZ.anim.idx : 0) + 1)); } };
   $("#tlLast").onclick = () => { if (DZ.playback) DZ.playback.last(); else { dzAnimStopIf(); dzGoFrame((DZ.anim ? DZ.anim.frames.length : 1) - 1); } };
-  $("#tlDel").onclick = async () => {
-    if (!DZ.anim) return;
-    if (!confirm("¿Borrar este cuadro? (no se puede deshacer)")) return;
-    const r = await api.del_frame(DZ.path);
-    if (r && r.error) return sysMsg(" " + r.error);
-    try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
-    await openDesign(r.path);
-    dzTimelineReveal();
-    await dzTimelineRefresh();
-    dzOnionUpdate();
-  };
-  // Override del borrado simple: admite rangos seleccionados con Shift.
   $("#tlDel").onclick = dzDeleteFrameSelection;
   $("#tlOnion").onclick = () => {
     if (!DZ.anim) return;
@@ -5533,7 +5521,6 @@ async function dzAnimToggle() {
   const sc = await api.scene_get(DZ.path);
   DZ.scene = (sc && sc.scene) || {};
   DZ.sceneHistory = new LOW.animation.History(180);
-  DZ.sceneModel = DZ.scene.lowModel ? new LOW.animation.SceneModel(DZ.scene.lowModel) : null;
   dzTimelineReveal();
   // Sala Timeline de OpenToonz: visor arriba, transporte y editor de niveles ×
   // fotogramas acoplado abajo. La X-sheet vertical es una vista alternativa.
@@ -5546,19 +5533,8 @@ async function dzTimelineRefresh() {
   const r = await api.list_frames(DZ.path);
   DZ.anim.frames = (r && r.frames) || [];
   DZ.anim.idx = DZ.anim.frames.indexOf(DZ.path);
-  // Adaptador transitorio: los SVG históricos siguen siendo válidos, mientras el
-  // nuevo modelo representa sus exposiciones sin obligar a duplicarlos en el futuro.
-  if (window.LOW?.animation?.SceneModel && !DZ.sceneModel) {
-    DZ.sceneModel = LOW.animation.SceneModel.fromLegacy({ frames: DZ.anim.frames,
-      levels: (DZ.scene && DZ.scene.levels) || ["Dibujo"],
-      fps: Math.max(1, +($("#tlFps")?.value || 12)), scene: DZ.scene });
-  }
-  if (DZ.sceneModel?.metadata?.legacyFrames) {
-    const legacyLevel = DZ.sceneModel.levels[0];
-    if (legacyLevel) legacyLevel.exposures = DZ.anim.frames.map((path, i) => ({
-      frame: i + 1, drawingId: `0:${path}`, hold: false, path
-    }));
-  }
+  // El modelo canónico de la animación es LowDoc (DZ.doc). El viejo SceneModel
+  // dejó de existir en v3.29.37; los SVG históricos se migran en dzDocInit().
   const box = $("#tlFrames");
   box.innerHTML = "";
   DZ.anim.frames.forEach((f, i) => {
@@ -5926,6 +5902,18 @@ async function dzPersist() {
 
 async function dzGoFrame(i) {
   if (!DZ.anim || !DZ.anim.frames[i]) return;
+  // Modelo nuevo (LowDoc): navegar es cambiar de frame EN MEMORIA, no abrir
+  // archivos. Si seguimos abriendo .svg del disco, el modelo y el lienzo se
+  // desincronizan (el viejo índice de archivo no conoce los holds).
+  if (DZ.doc) {
+    dzDocCommit();               // lo que esté en el lienzo, adentro
+    DZ.anim.idx = i;             // la barra vieja queda en sync visual
+    DZ.doc.goTo(i + 1);          // 1-based; el subscribe repinta canvas + onion
+    dzTimelineReveal();
+    if (DZ.rigMode) { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); }
+    dzCamOverlay();
+    return;
+  }
   await dzPersist();                             // el papel cebolla necesita el disco al día
   await openDesign(DZ.anim.frames[i]);
   // openDesign no conoce la animación: restaurar la barra y el estado
@@ -6054,7 +6042,6 @@ function dzFrameNum(path) {
 }
 function dzSceneSave() {
   if (DZ.path && DZ.scene) {
-    if (DZ.sceneModel) DZ.scene.lowModel = DZ.sceneModel.toJSON();
     api.scene_save(DZ.path, DZ.scene);
   }
 }
@@ -7635,6 +7622,11 @@ function dzXsToggle() {
    marcas (🔑 clave · 🎬 cámara) y NOTAS editables. Las notas se guardan en la
    escena (<base>_escena.json) junto a las claves y la cámara. */
 function dzXsRender() {
+  // La vista canónica es la dueña del panel: si ya está montada sobre el
+  // modelo (LowDoc), la renderiza; el render legacy queda sólo como adaptador
+  // mientras la escena todavía no se migró. Evita que la x-sheet vieja (basada
+  // en archivos) pise la nueva (basada en el modelo).
+  if (DZ.doc && DZ.xsView) { DZ.xsView.render(); return; }
   return dzOpenToonzXsRender();
   /* Implementación histórica conservada temporalmente para compatibilidad. */
   const box = $("#dzXsRows");
