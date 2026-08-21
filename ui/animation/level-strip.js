@@ -28,7 +28,8 @@
       this.anchor = null;
       this._desuscribir = doc ? doc.subscribe((d, m) => {
         // se redibuja con lo que la afecta, no con cada movimiento del frame
-        if (m === "level" || m === "cells" || m === "content" || m === "frame") this.render();
+        if (m === "level" || m === "cells" || m === "content" || m === "frame" || m === "palette")
+          this.render();
       }) : null;
     }
     setDoc(doc) {
@@ -63,6 +64,10 @@
 
       const tira = document.createElement("div");
       tira.className = "ls2-strip";
+      // la miniatura lleva la hoja de la paleta: si no, mostraria el color
+      // literal que quedo guardado y no el que el estilo dice hoy
+      const hojaPal = (animation.palette && lv && doc.scene.levelPalette)
+        ? animation.palette.css(doc.scene.levelPalette(lv.id)) : "";
       const actual = doc.cell;
       const expuestos = new Set();
       for (const ly of doc.scene.layers) {
@@ -85,7 +90,8 @@
         mini.innerHTML = d.isEmpty()
           ? ""
           : `<svg viewBox="0 0 ${doc.scene.width} ${doc.scene.height}"
-                  preserveAspectRatio="xMidYMid meet">${d.content}</svg>`;
+                  preserveAspectRatio="xMidYMid meet">${
+                    hojaPal ? `<style>${hojaPal}</style>` : ""}${d.content}</svg>`;
         const num = document.createElement("b");
         num.className = "ls2-num";
         num.textContent = d.number;

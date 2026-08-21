@@ -116,6 +116,7 @@ Reglas que se derivan y que el código debe respetar:
 ui/animation/scene-model.js    entidades + invariantes (sin DOM)
 ui/animation/exposures.js      operaciones de celda (step, each, reframe, repeat…)
 ui/animation/onion.js          cálculo de qué drawings mostrar (sin DOM)
+ui/animation/palette.js        el trazo referencia al estilo; resolución del color
 ui/workspace/workspaces.js     definición de layouts como DATOS + persistencia
 ui/app.js                      solo vista y eventos; deja de ser el dueño del estado
 ```
@@ -156,7 +157,7 @@ Una fase termina cuando se puede hacer el flujo real, no cuando compila.
 | 5 | Onion Skin sobre drawings | ✅ hecho |
 | 6 | Workflow: copiar/pegar, insertar, atajos, navegación, renumerar | ✅ hecho |
 | 7 | Playback: FPS real, rango, loop, scrubbing | ◐ falta audio |
-| 8 | Paletas y estilos, pegbars, function editor, schematic | pendiente |
+| 8 | Paletas y estilos, pegbars, function editor, schematic | ◐ paletas y estilos hechos |
 | 9 | Integración con el módulo 3D | pendiente |
 
 ### Lo que ya está (v3.29.29)
@@ -250,6 +251,54 @@ borrar devuelve el dibujo con su contenido y sus exposiciones.
 
 **Scrubbing:** arrastrar por la regla de la timeline recorre la animación con la mano — el
 playback muestra el resultado, el scrub sirve para encontrar el frame exacto donde algo falla.
+
+**Paletas y estilos (fase 8).** El registro canónico del color ya estaba en el modelo
+(`Palette` y `Style` en `scene-model.js`, con color, opacidad y bloqueo). Lo que faltaba para
+que sirviera mientras se dibuja es el otro lado del vínculo: **que el trazo referencie al
+estilo**. Sin eso el color sigue siendo un valor literal pegado adentro de cada trazo, y
+aclarar la línea de un personaje son cuatrocientos trazos repartidos en ciento veinte dibujos,
+uno por uno.
+
+Ahora el estilo tiene, además de su `id`, un **número corto** — y el número es lo que queda
+escrito en el dibujo (`data-stk` para la línea, `data-fil` para el relleno, como el ink & paint
+de siempre). Se referencia el número y no el `id` por lo mismo que la celda de la X-sheet lleva
+el número del dibujo: un uid repetido en cada elemento del SVG no se lee ni se escribe a mano.
+El número no se reordena ni se reusa; si cambiara, los trazos apuntarían a otro color.
+
+El color lo resuelve una hoja de estilos que se inyecta en el SVG (`palette.js`), no una
+reescritura de los dibujos. Dos consecuencias concretas: el color literal queda igual en el
+archivo como respaldo —el `.svg` guardado se lleva la hoja, así que afuera de LOW se ve con los
+colores de HOY— y recolorear es cambiar una línea de texto, así que arrastrar el selector se ve
+al instante en todos los dibujos, expuestos o no.
+
+El panel (`palette-view.js`) muestra por estilo su número, su color y **cuántos elementos lo
+usan**: es lo que hace falta para animarse a tocar un color y para ver cuál está de adorno.
+Borrar un estilo NO recolorea nada —los trazos se quedan con el color que tienen y quedan
+señalados como sueltos, para reasignarlos cuando se quiera— y "pasar sus N elementos a otro
+estilo" unifica dos colores que terminaron siendo el mismo. Si la paleta está bloqueada, el
+panel no ofrece lo que el modelo va a rechazar.
+
+**Adoptar** es lo que hace que esto sirva para el trabajo que ya existe: mete en la paleta los
+colores de lo que se dibujó antes, sin cambiar cómo se ve. Sin eso la paleta gobernaría solo lo
+nuevo. Verificado en la app sobre un dibujo con colores literales: 5 elementos adoptados, 3
+estilos nuevos para los colores que no estaban, los que ya estaban reusados, y el dibujo
+idéntico en pantalla.
+
+Verificado con eventos de puntero reales, no solo en tests: clic en el casillero 4 → el lápiz
+pasa a ese estilo → se dibuja → el trazo queda con `data-stk="4"` y su color literal de
+respaldo → se arrastra el selector y el trazo YA dibujado cambia en vivo → al soltar queda
+**un** paso de historial y `Ctrl+Z` devuelve el color, en el modelo y en el panel. El papel
+cebolla se mira aparte: al fantasma se le sacan las referencias de estilo, porque si no la
+paleta le impondría su color y el cebolla dejaría de distinguir el pasado del futuro.
+
+Pruebas: **140/140** (20 nuevas). Se comprobó además que las nuevas tengan filo, rompiendo el
+código a propósito: mutar la resolución del color, el salteo de lo ya marcado en *adoptar*, el
+conteo de uso, el filtro de `fill="none"` y el reparto de números hace caer pruebas en las
+cinco mutaciones.
+
+Lo que la paleta todavía NO gobierna: las formas del menú de inserción (rectángulo, estrella,
+texto) y lo importado siguen naciendo con color literal. Entran con **Adoptar**, que es
+justamente para eso. De la fase 8 quedan pegbars, function editor y schematic.
 
 ### Lo que sigue
 

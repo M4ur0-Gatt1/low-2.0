@@ -571,6 +571,92 @@
       ok("vincular a una paleta inexistente se rechaza", sc.levelPalette(lv.id) === null);
     }
 
+    // 20. El trazo referencia al estilo por NUMERO: cambiar el estilo recolorea
+    //     todos los dibujos, y el dibujo no se reescribe.
+    {
+      const { LowDoc, palette: P } = animation;
+      const doc = new LowDoc();
+      const pal = doc.palette;
+      ok("el nivel arranca con paleta y sin pedirla", !!pal && pal.styles.length === 5,
+        pal ? String(pal.styles.length) : "sin paleta");
+      ok("los estilos tienen numero, que es lo que se escribe en el dibujo",
+        JSON.stringify(pal.indices()) === "[1,2,3,4,5]", JSON.stringify(pal.indices()));
+
+      doc.goTo(1); doc.writeDrawing('<path d="M0 0" stroke="#1a1a1a" data-stk="1"/>');
+      doc.goTo(2); doc.writeDrawing('<path d="M9 9" stroke="#1a1a1a" data-stk="1"/>' +
+                                    '<path d="M1 1" fill="#ffffff" data-fil="3"/>');
+      const uso = P.usage(doc.scene, pal);
+      ok("la paleta sabe cuantos elementos usan cada estilo",
+        uso[1] && uso[1].ink === 2 && uso[3] && uso[3].paint === 1, JSON.stringify(uso));
+
+      const contenidoAntes = doc.level.byNumber(2).content;
+      doc.setStyleColor(1, "#00aa55");
+      ok("cambiar el estilo NO reescribe los dibujos",
+        doc.level.byNumber(2).content === contenidoAntes);
+      const hoja = P.css(pal);
+      ok("el color nuevo lo resuelve la paleta, en un solo lugar",
+        hoja.includes('[data-stk="1"]{stroke:#00aa55'));
+      ok("y el color viejo ya no gobierna nada", !hoja.includes("#1a1a1a"));
+
+      doc.removeStyle(3);
+      ok("borrar un estilo deja el dibujo intacto",
+        doc.level.byNumber(2).content === contenidoAntes);
+      ok("y las referencias sueltas quedan senaladas",
+        JSON.stringify(P.orphans(doc.scene, pal)) === "[3]",
+        JSON.stringify(P.orphans(doc.scene, pal)));
+
+      const nuevo = doc.addStyle("#112233", "Contorno").index;
+      const movidos = doc.reassignStyle(1, nuevo);
+      ok("reasignar mueve todas las referencias", movidos === 2, String(movidos));
+      ok("y ahora el estilo nuevo es el que las tiene",
+        (P.usage(doc.scene, pal)[nuevo] || {}).ink === 2);
+      ok("el estilo viejo se quedo sin uso", !P.usage(doc.scene, pal)[1]);
+
+      if (LOW.core && LOW.core.HistoryManager) {
+        const h = new LOW.core.HistoryManager();
+        doc.setHistory(h);
+        doc.setStyleColor(2, "#ff0000");
+        h.undo();
+        ok("Ctrl+Z devuelve el color anterior del estilo", pal.byIndex(2).color === "#f0450e",
+          pal.byIndex(2).color);
+      }
+
+      const doc2 = LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("al reabrir vuelve la paleta con sus numeros y colores",
+        doc2.palette.byIndex(1).color === "#00aa55" && doc2.palette.byIndex(3) === null,
+        doc2.palette.styles.map((s) => s.index + ":" + s.color).join(" "));
+    }
+
+    // 21. ADOPTAR: lo dibujado antes de que la paleta gobernara entra a la paleta.
+    {
+      const { LowDoc, palette: P } = animation;
+      const doc = new LowDoc();
+      doc.goTo(1);
+      doc.writeDrawing('<path d="M0 0" stroke="#f0450e" fill="none"/>' +
+                       '<path d="M1 1" stroke="#f0450e" fill="none"/>' +
+                       '<path d="M2 2" fill="#123456" stroke="none"/>');
+      const pal = doc.palette;
+      const estilosAntes = pal.styles.length;
+      const r = doc.adoptColors();
+      ok("adoptar alcanza a los tres elementos con color", r.elementos === 3, JSON.stringify(r));
+      ok("el naranja ya estaba en la paleta: no se duplica",
+        pal.styles.length === estilosAntes + 1, `${estilosAntes} -> ${pal.styles.length}`);
+      const c = doc.level.byNumber(1).content;
+      ok("los trazos quedaron referenciando su estilo",
+        (c.match(/data-stk="2"/g) || []).length === 2, c);
+      ok("y el color literal sigue ahi como respaldo", c.includes('stroke="#f0450e"'));
+      ok('fill="none" no inventa un estilo: solo un elemento tenia relleno de verdad',
+        (c.match(/data-fil="/g) || []).length === 1,
+        String((c.match(/data-fil="/g) || []).length));
+      doc.setStyleColor(2, "#0000ff");
+      ok("ahora el dibujo viejo se recolorea desde la paleta",
+        P.css(pal).includes('[data-stk="2"]{stroke:#0000ff'));
+      const antes = doc.level.byNumber(1).content;
+      doc.adoptColors();
+      ok("adoptar de nuevo no agrega referencias repetidas",
+        doc.level.byNumber(1).content === antes);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

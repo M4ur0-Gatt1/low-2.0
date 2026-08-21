@@ -256,6 +256,183 @@
       return ok;
     }
 
+    // -- PALETA (el color, ni el material ni el tiempo) --------------------
+    /** La paleta del nivel actual. Si el nivel no tenia, se le crea una y se le
+     *  deja puesta con los cinco colores de arranque: dibujar nunca puede
+     *  exigir "primero arma una paleta". */
+    get palette() {
+      const ly = this.layer, lv = this.level;
+      if (!ly || !lv) return null;
+      let pal = this.scene.levelPalette(lv.id);
+      if (!pal) {
+        pal = this.scene.addPalette("Paleta del nivel");
+        if (animation.palette) animation.palette.seed(pal);
+        this.scene.setLevelPalette(lv.id, pal.id);
+      }
+      return pal;
+    }
+
+    /** Cambia el color de un estilo. Recolorea, de una, todo lo que lo usa.
+     *
+     *  `registrar` en false es para MIENTRAS se arrastra el selector de color:
+     *  ahi llegan decenas de cambios por segundo y no tiene sentido llenar el
+     *  historial de pasos intermedios. Se registra una vez, al soltar, con el
+     *  color de partida que guardo la vista. */
+    setStyleColor(index, color, registrar = true, colorAntes) {
+      const pal = this.palette;
+      const st = pal && pal.byIndex(index);
+      if (!st) return false;
+      const antes = colorAntes || st.color;
+      st.setColor(color);
+      this.touch(); this.emit("palette");
+      if (registrar && antes !== st.color)
+        this._histStyle("Cambiar un color", pal.id, st.id, antes, st.color);
+      return true;
+    }
+    _histStyle(label, paletteId, styleId, antes, despues) {
+      if (!this.history || antes === despues) return;
+      const doc = this;
+      this.history.push({
+        label, domain: "anim", before: antes, after: despues,
+        apply: (_dir, valor) => {
+          const p = doc.scene.palette(paletteId);
+          const s = p && p.style(styleId);
+          if (s) { s.setColor(valor); doc.emit("palette"); }
+        },
+      });
+    }
+
+    addStyle(color, name) {
+      const pal = this.palette;
+      if (!pal) return null;
+      const st = pal.addStyle(name || `Estilo ${pal.nextIndex()}`, color || "#000000");
+      this.touch(); this.emit("palette");
+      if (this.history) {
+        const doc = this, palId = pal.id, datos = st.toJSON();
+        this.history.push({
+          label: "Estilo nuevo", domain: "anim", before: null, after: datos.index,
+          apply: (dir) => {
+            const p = doc.scene.palette(palId);
+            if (!p) return;
+            if (dir === "undo") p.removeStyle(datos.id);
+            else if (!p.style(datos.id)) p.styles.push(new animation.Style(datos));
+            doc.emit("palette");
+          },
+        });
+      }
+      return st;
+    }
+    renameStyle(index, name) {
+      const pal = this.palette;
+      const st = pal && pal.byIndex(index);
+      if (!st || !name || st.name === name) return false;
+      const antes = st.name;
+      st.rename(name);
+      this.touch(); this.emit("palette");
+      if (this.history) {
+        const doc = this, palId = pal.id, stId = st.id;
+        this.history.push({
+          label: "Renombrar estilo", domain: "anim", before: antes, after: st.name,
+          apply: (_dir, valor) => {
+            const p = doc.scene.palette(palId);
+            const s = p && p.style(stId);
+            if (s) { s.name = valor; doc.emit("palette"); }
+          },
+        });
+      }
+      return true;
+    }
+    /** Saca un estilo de la paleta. Los trazos que lo usaban se quedan con su
+     *  color literal y quedan senalados como sueltos: borrar un estilo no puede
+     *  cambiarle el color a un dibujo a espaldas de nadie. */
+    removeStyle(index) {
+      const pal = this.palette;
+      const st = pal && pal.byIndex(index);
+      if (!st || pal.locked) return false;
+      const datos = st.toJSON();
+      pal.removeStyle(st.id);
+      this.touch(); this.emit("palette");
+      if (this.history) {
+        const doc = this, palId = pal.id;
+        this.history.push({
+          label: "Borrar estilo", domain: "anim", before: datos, after: null,
+          apply: (dir) => {
+            const p = doc.scene.palette(palId);
+            if (!p) return;
+            if (dir === "undo") { if (!p.style(datos.id)) p.styles.push(new animation.Style(datos)); }
+            else p.removeStyle(datos.id);
+            doc.emit("palette");
+          },
+        });
+      }
+      return true;
+    }
+    /** Pasa todo lo que usaba un estilo a usar otro: para unificar dos colores
+     *  y para vaciar un estilo antes de borrarlo. */
+    reassignStyle(from, to) {
+      const pal = this.palette;
+      if (!pal || !animation.palette || !pal.byIndex(to)) return 0;
+      const antes = this._snapContenidos();
+      const n = animation.palette.reassign(this.scene, from, to, pal);
+      if (!n) return 0;
+      this.touch(); this.emit("content"); this.emit("palette");
+      this._histContenidos("Reasignar estilo", antes);
+      return n;
+    }
+    /** ADOPTAR: mete en la paleta los colores de lo que ya estaba dibujado.
+     *  No cambia ningun color: habilita cambiarlos. */
+    adoptColors() {
+      const pal = this.palette;
+      if (!pal || !animation.palette) return null;
+      const contAntes = this._snapContenidos();
+      const estilosAntes = pal.styles.map((s) => s.toJSON());
+      const r = animation.palette.adopt(this.scene, pal);
+      if (!r.elementos) return r;
+      this.touch(); this.emit("content"); this.emit("palette");
+      if (this.history) {
+        const doc = this, palId = pal.id;
+        const after = { estilos: pal.styles.map((s) => s.toJSON()), cont: this._snapContenidos() };
+        this.history.push({
+          label: "Adoptar los colores del dibujo", domain: "anim",
+          before: { estilos: estilosAntes, cont: contAntes }, after,
+          apply: (_dir, valor) => {
+            const p = doc.scene.palette(palId);
+            if (p && valor) p.styles = valor.estilos.map((s) => new animation.Style(s));
+            doc._restaurarContenidos(valor && valor.cont);
+            doc.emit("content"); doc.emit("palette"); doc.emit("frame");
+          },
+        });
+      }
+      return r;
+    }
+    /** Copia del contenido de todos los dibujos, para poder deshacer las
+     *  operaciones que escriben en varios a la vez. */
+    _snapContenidos() {
+      const out = {};
+      for (const lv of this.scene.levels)
+        for (const d of lv.drawings) out[lv.id + "/" + d.number] = d.content;
+      return out;
+    }
+    _restaurarContenidos(snap) {
+      if (!snap) return;
+      for (const lv of this.scene.levels)
+        for (const d of lv.drawings) {
+          const v = snap[lv.id + "/" + d.number];
+          if (v != null) d.content = v;
+        }
+    }
+    _histContenidos(label, antes) {
+      if (!this.history) return;
+      const doc = this, despues = this._snapContenidos();
+      this.history.push({
+        label, domain: "anim", before: antes, after: despues,
+        apply: (_dir, valor) => {
+          doc._restaurarContenidos(valor);
+          doc.emit("content"); doc.emit("frame");
+        },
+      });
+    }
+
     /** Lee un rectangulo de la XSheet. Las coordenadas son inclusivas. */
     readCells(range) {
       const layers = this.scene.layers;
