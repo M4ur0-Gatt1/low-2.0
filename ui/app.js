@@ -5795,8 +5795,9 @@ function dzTweenBuild(svgA, svgB, t) {
 }
 /* 🪄 modal: cuántos intermedios y con qué curva (interpolación de OpenToonz) */
 function dzTweenModal() {
-  if (!DZ.anim) return;
-  if (!DZ.anim.frames[DZ.anim.idx + 1])
+  if (!DZ.doc && !DZ.anim) return;
+  // con el modelo, dzTweenRun verifica él mismo si hay un dibujo siguiente
+  if (!DZ.doc && !DZ.anim.frames[DZ.anim.idx + 1])
     return sysMsg("🪄 No hay cuadro siguiente — el intercalado va ENTRE dos cuadros (pará en el primero de los dos)");
   openModal(`<h2>🪄 Intercalar (inbetween)</h2>
     <div class="sub">Genera los cuadros intermedios entre ESTE dibujo y el siguiente.
@@ -5827,6 +5828,77 @@ function dzTweenModal() {
   };
 }
 async function dzTweenRun(n, ease) {
+  // Modelo nuevo: intercalar crea dibujos intermedios EN MEMORIA y los expone
+  // entre el dibujo actual y el siguiente distinto, sin tocar el disco. Todo
+  // queda en UNA sola entrada de historial (Ctrl+Z revierte el intercalado).
+  if (DZ.doc) {
+    dzDocCommit();
+    const doc = DZ.doc, sc = doc.scene, ly = doc.layer, lv = doc.level;
+    if (!ly || !lv || ly.locked) return dzSetStatus("Capa bloqueada o sin capa activa");
+    const f0 = doc.frame;
+    const dwA = sc.drawingAt(doc.layerId, f0);
+    if (!dwA) return dzSetStatus("El frame actual está vacío: no hay de dónde intercalar");
+    let f1 = null, dwB = null;
+    for (let f = f0 + 1; f <= (sc.lastFrame() || 1) + 1; f++) {
+      const d = sc.drawingAt(doc.layerId, f);
+      if (d && d !== dwA) { f1 = f; dwB = d; break; }
+    }
+    if (!dwB || f1 == null)
+      return dzSetStatus("🪄 No hay cuadro siguiente — el intercalado va ENTRE dos cuadros (pará en el primero de los dos)");
+    const vb = dzVB();
+    const wrap = (content) => {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(" ")}">${content}</svg>`;
+      return tmp.querySelector("svg");
+    };
+    const svgA = wrap(dwA.content), svgB = wrap(dwB.content);
+    const fn = DZ_EASES[ease] || DZ_EASES.inout;
+    // generar TODOS los intermedios primero, sin tocar la capa: si falla, no
+    // queda una celda vacía a medias.
+    const mids = [];
+    let matched = 0;
+    for (let k = 0; k < n; k++) {
+      const t = fn((k + 1) / (n + 1));
+      const b = dzTweenBuild(svgA, svgB, t);
+      if (!b) break;
+      matched = b.matched;
+      const tmp2 = document.createElement("div"); tmp2.innerHTML = b.svg;
+      const midSvg = tmp2.querySelector("svg");
+      mids.push(midSvg ? midSvg.innerHTML : "");
+    }
+    if (!mids.length) return dzSetStatus(" No pude generar los intermedios");
+    doc.history.begin("Intercalar");
+    doc.apply("insert", f1, mids.length);          // corre el dibujo B hacia adelante
+    const creados = [];
+    mids.forEach((inner, k) => {
+      const num = lv.nextNumber();
+      lv.addDrawing(num, inner);
+      creados.push({ num, content: inner });
+      doc.setCell(f1 + k, num);
+    });
+    // los dibujos creados también entran al historial: Ctrl+Z no puede dejar
+    // dibujos huérfanos en el nivel (revierte celdas Y material juntos).
+    if (doc.history && creados.length) {
+      const docRef = doc, lvId = lv.id;
+      doc.history.push({
+        label: "Crear dibujos intermedios", domain: "anim", before: null, after: creados,
+        apply: (dir) => {
+          const l = docRef.scene.level(lvId);
+          if (!l) return;
+          if (dir === "undo") creados.forEach((c) => l.removeDrawing(c.num));
+          else creados.forEach((c) => l.addDrawing(c.num, c.content));
+          docRef.emit("level");
+        },
+      });
+    }
+    doc.history.commit();
+    doc.goTo(f1 + mids.length);
+    dzTlFramesRender();
+    dzOnionRender();
+    dzSetStatus("🪄 " + mids.length + " cuadro(s) intermedio(s) creados (" + matched +
+      " elementos interpolados, curva " + ease + "). El papel cebolla te muestra el arco.");
+    return;
+  }
   await dzPersist();
   const next = DZ.anim.frames[DZ.anim.idx + 1];
   const svgA = $("#dzCanvas").querySelector(":scope > svg");
