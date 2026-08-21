@@ -2948,8 +2948,12 @@ function dzPointerDown(e) {
   // Grabando (🎥): el arrastre ES la actuación — se muestrea con su tiempo real.
   let rigDrag = null;
   let rigFrame = dzRigCur();
-  if (DZ.rigMode && DZ.rigSubmode === "fk" && pack.length === 1 && el.id) {
-    const recNow = DZ.perf && DZ.perf.rec;
+  // En FK, arrastrar la pieza en la mesa POSA solo con la herramienta «Posar»
+  // (o durante la grabación del titiritero); con «Seleccionar» el arrastre es
+  // el normal (mover el arte, no crear clave).
+  const rigRecNow = DZ.perf && DZ.perf.rec;
+  if (DZ.rigMode && DZ.rigSubmode === "fk" && (DZ.rigTool === "pose" || rigRecNow) && pack.length === 1 && el.id) {
+    const recNow = rigRecNow;
     rigFrame = recNow ? 1 + (performance.now() - recNow.t0) / 1000 * recNow.fps : dzRigCur();
     const rigNode = DZ.doc && DZ.doc.scene.rigNode(el.id);
     const pv = rigNode?.pivot ? DZ.doc.scene.rigWorldPoint(rigNode.id, rigFrame, rigNode.pivot) : dzRigPivotOf(el);
@@ -6639,6 +6643,18 @@ function dzRigDrawableElements() {
   }
   return pieces;
 }
+/* La pieza de arte dibujable que queda debajo de un punto de pantalla. Sirve
+   para que «Crear hueso» vincule el hueso al dibujo sin pasos extra: se mira
+   el bounding box de cada pieza (robusto aunque el overlay esté encima). */
+function dzRigArtAtPoint(clientX, clientY) {
+  for (const el of dzRigDrawableElements()) {
+    try {
+      const r = el.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) return el;
+    } catch (_) { /* pieza sin caja */ }
+  }
+  return null;
+}
 function dzRigPieceSpec(el, index, requestedId) {
   const svg = $("#dzCanvas")?.querySelector(":scope > svg");
   let id = String(requestedId || el.id || `pieza_${index + 1}`).trim().replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]/g, "_");
@@ -6771,6 +6787,8 @@ function dzRigNearestBoneTail(point, maxDistance = 18 / Math.max(.1, DZ.zoom || 
 function dzRigBoneCreateDrag(e, forced = null) {
   if (!DZ.doc || !DZ.rigBoneTool || DZ.rigSubmode !== "build") return;
   e.preventDefault(); e.stopPropagation();
+  const overlay = $("#dzRigOverlay");
+  try { overlay.setPointerCapture?.(e.pointerId); } catch (_) { /* WebView sin captura */ }
   const pointerId = e.pointerId, rawHead = forced?.head || dzToUser(e.clientX, e.clientY);
   const snap = forced?.parentId ? { bone: DZ.doc.scene.rigBone(forced.parentId), point: rawHead } :
     dzRigNearestBoneTail(rawHead);
@@ -6782,24 +6800,39 @@ function dzRigBoneCreateDrag(e, forced = null) {
     dzRigOverlayRender();
   };
   const cleanup = () => {
+    try { overlay.releasePointerCapture?.(e.pointerId); } catch (_) { /* */ }
     document.removeEventListener("pointermove", preview);
     document.removeEventListener("pointerup", finish);
     document.removeEventListener("pointercancel", cancel);
   };
+  // Crea el hueso, lo selecciona y —si hay una pieza de arte debajo de la
+  // articulación— la vincula al hueso de una vez. Así «Crear hueso» mueve el
+  // dibujo sin un paso extra, como se espera de un esqueleto (Moho/Harmony).
+  const commit = (tailPoint) => {
+    const id = dzRigBoneId();
+    DZ.doc.ensureRigBone(id, { name: id, parentId, head, pivot: head, tail: tailPoint });
+    DZ.rigSelectedId = id;
+    const headClient = dzFromUser(head.x, head.y);
+    let artId = null;
+    if (headClient) {
+      const art = dzRigArtAtPoint(headClient.x, headClient.y);
+      if (art && !art.id) art.id = id;   // pieza sin nombre: adopta el del hueso
+      if (art && art.id && DZ.doc.bindRigElement(id, art.id)) artId = art.id;
+    }
+    dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
+    dzSetStatus((parentId ? "Hueso «" + id + "» conectado a «" + parentId + "»" : "Hueso raíz «" + id + "» creado")
+      + (artId ? " y vinculado a «" + artId + "»" : " · Vincular dibujo para que mueva el arte")
+      + " · arrastrá desde su punta para continuar la cadena");
+  };
   const finish = ev => {
     if (ev.pointerId !== pointerId) return; cleanup();
     const value = DZ.rigBonePreview; DZ.rigBonePreview = null;
-    if (!value || Math.hypot(value.tail.x - value.head.x, value.tail.y - value.head.y) < 4) {
-      dzRigOverlayRender(); return;
-    }
-    const id = dzRigBoneId();
-    DZ.doc.ensureRigBone(id, { name: id, parentId: value.parentId,
-      head: value.head, pivot: value.head, tail: value.tail });
-    DZ.rigSelectedId = id;
-    dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
-    dzSetStatus(value.parentId
-      ? "Hueso «" + id + "» conectado a «" + value.parentId + "» · podés seguir desde su punta"
-      : "Hueso raíz «" + id + "» creado · arrastrá desde su punta para continuar la cadena");
+    if (!value) { dzRigOverlayRender(); return; }
+    // clic corto (sin arrastrar): crea un hueso de longitud mínima horizontal
+    // en vez de no hacer nada — el usuario lo ve al instante y lo puede editar.
+    let tail = value.tail;
+    if (Math.hypot(tail.x - head.x, tail.y - head.y) < 4) tail = { x: head.x + 28, y: head.y };
+    commit(tail);
   };
   const cancel = () => { cleanup(); DZ.rigBonePreview = null; dzRigOverlayRender(); };
   document.addEventListener("pointermove", preview);
@@ -7132,7 +7165,9 @@ function dzRigOverlayRender() {
       tip.onpointerdown = e => {
         if (DZ.rigBoneTool) return dzRigBoneCreateDrag(e, { head: tp.user, parentId: node.id });
         if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "rotate");
-        return dzRigBoneGeometryDrag(e, node, "tail");
+        if (DZ.rigSubmode === "build") return dzRigBoneGeometryDrag(e, node, "tail");
+        // cualquier otro modo/herramienta: la punta al menos selecciona el hueso
+        e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
       };
     }
     if (selectedId === node.id) {
