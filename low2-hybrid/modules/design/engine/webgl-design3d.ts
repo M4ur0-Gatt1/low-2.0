@@ -2434,19 +2434,13 @@ export class WebGLDesign3D {
   private buildTube(points: THREE.Vector3[], pressures: number[], brush: BrushSettings = this.brush,
                     recto = false): THREE.Mesh | null {
     if (points.length < 2) return null;
-    // `recto` = FIGURA geométrica: la polilínea se sigue tal cual, con segmentos
-    // rectos. Catmull-Rom suaviza y redondea: un rectángulo salía con las
-    // esquinas comidas y el contorno desbordando su propio relleno.
-    const curve: THREE.Curve<THREE.Vector3> = recto
-      ? (() => {
-        const path = new THREE.CurvePath<THREE.Vector3>();
-        for (let i = 0; i + 1 < points.length; i++) {
-          if (points[i].distanceTo(points[i + 1]) < 1e-6) continue;
-          path.add(new THREE.LineCurve3(points[i].clone(), points[i + 1].clone()));
-        }
-        return path;
-      })()
-      : new THREE.CatmullRomCurve3(points, false, 'centripetal');
+    // `recto` = FIGURA geométrica (rectángulo, círculo, polígono): la polilínea
+    // se sigue tal cual, con segmentos rectos. NO se usa TubeGeometry acá: en
+    // las esquinas de 90° del cuadrado el tubo genera mitres que se
+    // auto-intersecan y la malla sale rota/deformada. En su lugar se construye
+    // cápsula por cápsula y se unen los vértices con esferas.
+    if (recto) return this.buildSegmentedTube(points, pressures, brush);
+    const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
     const radialSegs = 10;
     const segs = Math.min(Math.max(points.length * (recto ? 3 : 6), 8), 1400);
     const geo = new THREE.TubeGeometry(curve, segs, 1, radialSegs, false);
@@ -2477,6 +2471,58 @@ export class WebGLDesign3D {
     void recto;
     const col = new THREE.Color(brush.color);
     return new THREE.Mesh(cuerpo, new THREE.MeshStandardMaterial({
+      color: col, emissive: col.clone().multiplyScalar(0.06),
+      roughness: THREE.MathUtils.lerp(0.9, 0.25, brush.hardness ?? 0.8), metalness: 0,
+      transparent: brush.opacity < 1, opacity: brush.opacity,
+    }));
+  }
+
+  /** Contorno de una FIGURA (polilínea cerrada de segmentos rectos) construido
+   *  como cápsulas por arista + esferas en cada vértice. Evita los mitres rotos
+   *  que producía TubeGeometry en las esquinas de 90° y deja un trazo de ancho
+   *  uniforme con puntas/esquinas redondeadas, como un pincel real. */
+  private buildSegmentedTube(points: THREE.Vector3[], pressures: number[],
+                             brush: BrushSettings): THREE.Mesh | null {
+    const n = points.length;
+    if (n < 2) return null;
+    const radialSegs = 10;
+    const partes: THREE.BufferGeometry[] = [];
+    const Y = new THREE.Vector3(0, 1, 0);
+    const radiusAt = (i: number) => this.radiusAt(pressures[i] ?? 1, brush);
+    // una cápsula (cilindro con tapas) por arista
+    for (let i = 0; i + 1 < n; i++) {
+      const a = points[i], b = points[i + 1];
+      const len = a.distanceTo(b);
+      if (len < 1e-5) continue;
+      const ra = radiusAt(i), rb = radiusAt(i + 1);
+      if (ra < 1e-5 && rb < 1e-5) continue;
+      const dir = b.clone().sub(a).multiplyScalar(1 / len);
+      const q = new THREE.Quaternion().setFromUnitVectors(Y, dir);
+      const cyl = new THREE.CylinderGeometry(rb, ra, len, radialSegs, 1, false);
+      cyl.applyQuaternion(q);
+      cyl.translate((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, (a.z + b.z) * 0.5);
+      partes.push(cyl);
+    }
+    // esferas en cada vértice: cierran las uniones y redondean puntas/esquinas
+    for (let i = 0; i < n; i++) {
+      const r = radiusAt(i);
+      if (r < 1e-5) continue;
+      const s = new THREE.SphereGeometry(r, radialSegs, 8);
+      s.translate(points[i].x, points[i].y, points[i].z);
+      partes.push(s);
+    }
+    if (!partes.length) return null;
+    let geo: THREE.BufferGeometry;
+    if (partes.length === 1) {
+      geo = partes[0];
+    } else {
+      const merged = BufferGeometryUtils.mergeGeometries(partes, false);
+      if (merged) { partes.forEach((g) => g.dispose()); geo = merged; }
+      else { partes.slice(1).forEach((g) => g.dispose()); geo = partes[0]; }
+    }
+    geo.computeVertexNormals();
+    const col = new THREE.Color(brush.color);
+    return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
       color: col, emissive: col.clone().multiplyScalar(0.06),
       roughness: THREE.MathUtils.lerp(0.9, 0.25, brush.hardness ?? 0.8), metalness: 0,
       transparent: brush.opacity < 1, opacity: brush.opacity,
