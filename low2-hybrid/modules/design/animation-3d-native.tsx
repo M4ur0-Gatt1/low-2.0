@@ -66,6 +66,11 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !onRequestClose) return;
       event.preventDefault();
+      // Escape primero CANCELA lo que esté en curso (un arrastre del joystick,
+      // un trazo a medio hacer, la selección). Solo cierra el módulo cuando no
+      // quedaba nada que cancelar: antes, soltar la selección con Escape se
+      // llevaba puesto el módulo 3D entero.
+      if (eng()?.escapeConsume()) return;
       onRequestClose();
     };
     window.addEventListener('keydown', closeOnEscape);

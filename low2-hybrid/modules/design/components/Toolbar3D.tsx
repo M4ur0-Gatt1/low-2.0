@@ -9,7 +9,7 @@
  * @module design/components/Toolbar3D
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLowStore } from '../../../store/low-store';
 import type { WebGLDesign3D } from '../engine/webgl-design3d';
@@ -108,9 +108,27 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
     }
     setShowWheel((v) => !v);
   };
-  const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, figuras: true, seleccion: false, superficies: false, pincel: true });
+  const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, figuras: true, seleccion: true, superficies: false, pincel: true });
   const [estilo, setEstilo] = useState<'stroke' | 'fill' | 'both'>(engine?.current?.getShapeStyle() ?? 'both');
   const esFigura = currentTool === 'rect' || currentTool === 'circle' || currentTool === 'poly';
+  // Joystick: el estado real vive en el motor (es una opcion de la herramienta,
+  // no del documento), y aca se refleja para poder pintar los botones.
+  const [joyOn, setJoyOn] = useState<boolean>(engine?.current?.getJoystick() ?? false);
+  const [joyMode, setJoyMode] = useState<'2d' | '3d'>(engine?.current?.getJoyMode() ?? '3d');
+  const [joyLock, setJoyLock] = useState<boolean>(engine?.current?.getJoyLocked() ?? false);
+  // el motor avisa cuando el joystick cambia por ATAJO (J / T / K): sin esto los
+  // botones quedaban mintiendo sobre el estado real
+  useEffect(() => {
+    const alDia = () => {
+      const e = engine?.current;
+      if (!e) return;
+      setJoyOn(e.getJoystick());
+      setJoyMode(e.getJoyMode());
+      setJoyLock(e.getJoyLocked());
+    };
+    window.addEventListener('low3d:joy', alDia);
+    return () => window.removeEventListener('low3d:joy', alDia);
+  }, [engine]);
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   const draw: { id: ToolType; icon: React.FC; label: string }[] = [
@@ -189,7 +207,43 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
 
       <Section title="Selección" open={open.seleccion} onToggle={() => toggle('seleccion')}>
         {sel.map(toolBtn)}
-        {currentTool === 'move' && ([
+        {currentTool === 'move' && (
+          <div style={{ width: '100%', padding: '4px 0', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <button
+              onClick={() => { const v = !joyOn; engine?.current?.setJoystick(v); setJoyOn(v); }}
+              title="Joystick (J) - un solo control para mover, rotar y escalar, como en Feather"
+              style={{
+                height: 24, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 10,
+                fontFamily: 'system-ui, sans-serif',
+                backgroundColor: joyOn ? LOW_ACCENT : 'transparent', color: joyOn ? '#fff' : '#ccc',
+              }}>Joystick</button>
+            {joyOn && (
+              <div style={{ display: 'flex', gap: 2 }}>
+                {(['3d', '2d'] as const).map((m) => (
+                  <button key={m}
+                    onClick={() => { engine?.current?.setJoyMode(m); setJoyMode(m); }}
+                    title={m === '3d'
+                      ? 'Ejes globales X/Y/Z: conos para mover, anillos para rotar, esfera para rotar libre'
+                      : 'Sobre la vista: mover en pantalla, escalar de ancho/alto/libre y rotar en el eje de la camara'}
+                    style={{
+                      flex: 1, height: 22, border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 10,
+                      fontFamily: 'system-ui, sans-serif',
+                      backgroundColor: joyMode === m ? LOW_ACCENT : 'transparent',
+                      color: joyMode === m ? '#fff' : '#ccc',
+                    }}>{m.toUpperCase()}</button>
+                ))}
+                <button
+                  onClick={() => { const v = !joyLock; engine?.current?.setJoyLocked(v); setJoyLock(v); }}
+                  title="Candado (K) - mover solo en las cuatro direcciones, escalar uniforme y rotar de 15 en 15 grados"
+                  style={{
+                    width: 26, height: 22, border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 11,
+                    backgroundColor: joyLock ? LOW_ACCENT : 'transparent', color: joyLock ? '#fff' : '#ccc',
+                  }}>{joyLock ? '\u{1F512}' : '\u{1F513}'}</button>
+              </div>
+            )}
+          </div>
+        )}
+        {currentTool === 'move' && !joyOn && ([
           { id: 'translate' as GizmoMode, icon: Icons.GizmoMove, label: 'Gizmo: mover' },
           { id: 'rotate' as GizmoMode, icon: Icons.GizmoRotate, label: 'Gizmo: rotar' },
           { id: 'scale' as GizmoMode, icon: Icons.GizmoScale, label: 'Gizmo: redimensionar' },

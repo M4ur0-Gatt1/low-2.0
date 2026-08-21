@@ -20,6 +20,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { Joystick3D, type JoyMode } from './joystick3d';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
@@ -186,6 +187,7 @@ export class WebGLDesign3D {
   private freeDrawDepth = 0; // 0 = todavía no inicializado, ver ensureFreeDrawDepth()
   private freeDrawPreview?: THREE.Mesh;
   private freeDepthEl!: HTMLDivElement;
+  private joyLecturaEl!: HTMLDivElement;
   private static readonly FREE_DEPTH_MIN = 0.15;
   private static readonly FREE_DEPTH_MAX = 80;
 
@@ -199,7 +201,7 @@ export class WebGLDesign3D {
   private static readonly LIQUIFY_STRENGTH = 0.18;
 
   // interacción
-  private mode: 'idle' | 'draw' | 'move' | 'lasso' | 'point-drag' | 'pivot-drag' | 'liquify-drag' = 'idle';
+  private mode: 'idle' | 'draw' | 'move' | 'lasso' | 'point-drag' | 'pivot-drag' | 'liquify-drag' | 'joystick' = 'idle';
   private current: {
     points: THREE.Vector3[];
     pressures: number[];
@@ -250,6 +252,20 @@ export class WebGLDesign3D {
   // gizmo de transformación (herramienta 'move', un solo trazo seleccionado):
   // pensado como base para animación futura (posar y grabar keyframes).
   private gizmo?: TransformControls;
+  /** JOYSTICK (estilo Feather): un solo control con mover + rotar + escalar en
+   *  lugar de cambiar de modo. Convive con el gizmo clasico: se elige cual se
+   *  usa, y nunca estan los dos a la vez porque se pisarian los blancos. */
+  private joy?: Joystick3D;
+  private joyOn = false;
+  /** El objeto se envuelve en un proxy centrado SOLO mientras dura el gesto.
+   *  Rotar o escalar el grupo crudo lo haria alrededor del origen del mundo
+   *  (los puntos del trazo son mundiales y el grupo esta en 0,0,0), y dejarlo
+   *  envuelto todo el tiempo romperia lo que asume que el trazo cuelga de
+   *  strokesGroup: guardar el proyecto, por ejemplo, perderia el movimiento. */
+  private joyProxy: THREE.Object3D | null = null;
+  private joyOwner: THREE.Object3D | null = null;
+  private joyOwnerParent: THREE.Object3D | null = null;
+  private joyBefore: { pos: THREE.Vector3; quat: THREE.Quaternion; scale: THREE.Vector3 } | null = null;
   private gizmoTarget: THREE.Object3D | null = null;
   private gizmoDragStart = new THREE.Vector3();
   private gizmoDragStartQuat = new THREE.Quaternion();
@@ -418,6 +434,8 @@ export class WebGLDesign3D {
       }
     });
     this.scene.add(this.gizmo);
+    this.joy = new Joystick3D();
+    this.scene.add(this.joy.root);
 
     // overlay SVG para los puntos de fuga (guía pura, no se dibuja ni exporta)
     this.vpEl = document.createElementNS(NS, 'svg') as SVGSVGElement;
@@ -446,6 +464,17 @@ export class WebGLDesign3D {
       borderRadius: '4px', whiteSpace: 'nowrap',
     } as CSSStyleDeclaration);
     container.appendChild(this.freeDepthEl);
+
+    // Lectura del joystick: "X +1.20", "45.0 grados", "ancho 120%". Un gesto sin
+    // numero es una adivinanza; con el numero se puede repetir y corregir.
+    this.joyLecturaEl = document.createElement('div');
+    Object.assign(this.joyLecturaEl.style, {
+      position: 'absolute', left: '0', top: '0', transform: 'translate(16px, -22px)',
+      pointerEvents: 'none', display: 'none', zIndex: '52', fontFamily: 'system-ui, sans-serif',
+      fontSize: '12px', fontWeight: '600', color: '#fff', background: 'rgba(20,22,28,0.82)',
+      padding: '2px 7px', borderRadius: '5px', whiteSpace: 'nowrap',
+    } as CSSStyleDeclaration);
+    container.appendChild(this.joyLecturaEl);
 
     // overlay SVG para el lazo
     this.lassoEl = document.createElementNS(NS, 'svg') as SVGSVGElement;
@@ -495,6 +524,7 @@ export class WebGLDesign3D {
     window.removeEventListener('keyup', this.onKeyUp);
     this.cursorEl?.remove();
     this.freeDepthEl?.remove();
+    this.joyLecturaEl?.remove();
     this.lassoEl?.remove();
     this.vpEl?.remove();
     this.gizmo?.dispose();
@@ -1455,6 +1485,9 @@ export class WebGLDesign3D {
       // el eje móvil del pivote de rotación tiene prioridad sobre los
       // anillos del gizmo: es un blanco más chico y conviene poder
       // agarrarlo aunque quede pegado a ellos en pantalla.
+      // el joystick es lo primero que se prueba: sus blancos estan ENCIMA del
+      // dibujo, asi que un click ahi nunca deberia seleccionar lo que hay detras
+      if (this.joyTryBegin(e)) return;
       if (this.currentGizmoMode === 'rotate' && !this.gizmo?.axis && this.pickPivotMarker()) {
         this.beginPivotDrag(e);
         return;
@@ -1512,6 +1545,14 @@ export class WebGLDesign3D {
     else if (this.mode === 'point-drag') this.movePointDrag();
     else if (this.mode === 'pivot-drag') this.movePivotDrag();
     else if (this.mode === 'liquify-drag') this.moveLiquify();
+    else if (this.mode === 'joystick') this.joyMoveDrag(e);
+    // sin gesto en curso, el joystick resalta la parte que esta bajo el cursor:
+    // hay que poder saber QUE vas a agarrar antes de apretar
+    if (this.mode === 'idle' && this.joyOn && this.joy && this.tool === 'move') {
+      this.joyRefresh();
+      this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+      this.joy.hover(this.joy.pick(this.raycaster));
+    }
     if (this.tool === 'pencil-free') this.updateFreeDrawPreview();
   };
 
@@ -1527,6 +1568,7 @@ export class WebGLDesign3D {
     else if (this.mode === 'point-drag') { this.endPointDrag(); }
     else if (this.mode === 'pivot-drag') { this.endPivotDrag(); }
     else if (this.mode === 'liquify-drag') { this.endLiquify(); }
+    else if (this.mode === 'joystick') { this.joyEndDrag(); }
     this.mode = 'idle';
     this.controls.enabled = true;
     try { this.canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
@@ -1627,6 +1669,16 @@ export class WebGLDesign3D {
       if (this.selected.size) { e.preventDefault(); this.copySelection(); }
     } else if (ctrl && e.key.toLowerCase() === 'v') {
       if (this.clipboard.length) { e.preventDefault(); this.pasteClipboard(); }
+    } else if (!ctrl && e.key.toLowerCase() === 'j' && !typing) {
+      // J: joystick si/no. T: 3D <-> 2D. K: candado (precision).
+      e.preventDefault();
+      this.setJoystick(!this.joyOn);
+    } else if (!ctrl && e.key.toLowerCase() === 't' && !typing && this.joyOn) {
+      e.preventDefault();
+      this.toggleJoyMode();
+    } else if (!ctrl && e.key.toLowerCase() === 'k' && !typing && this.joyOn) {
+      e.preventDefault();
+      this.setJoyLocked(!this.getJoyLocked());
     } else if (ctrl && e.key.toLowerCase() === 'e') {
       if (this.selected.size) { e.preventDefault(); this.solidifySelection(); }
     } else if (ctrl && e.key.toLowerCase() === 'g') {
@@ -1655,12 +1707,9 @@ export class WebGLDesign3D {
       const move = (d: THREE.Vector3) => objs.forEach((o) => o.position.add(d));
       move(delta);
       this.pushCmd({ undo: () => move(delta.clone().negate()), redo: () => move(delta) });
-    } else if (e.key === 'Escape') {
-      this.setSelection([]);
-      this.selectGuide(null);
-      this.selectSurface(null);
-      this.clearPointEdit();
     }
+    // Escape NO se maneja aca: lo pide el componente con escapeConsume(), que
+    // decide si cancela algo o si corresponde cerrar el modulo 3D.
   };
 
   /** Objetos que responden a una transformación (flechas / gizmo): los trazos
@@ -3618,9 +3667,260 @@ export class WebGLDesign3D {
   /** El gizmo de mover/escalar se adjunta a lo que esté elegido con la
    *  herramienta 'move': un trazo (si hay exactamente uno — con varios sigue
    *  el arrastre libre de siempre) o una guía. */
+  // ---------------------------------------------------------------- joystick
+
+  /** Qué se lleva el Escape, en orden: primero cancela el gesto que este en
+   *  curso, después deshace la selección. Devuelve true si hizo algo.
+   *
+   *  Existe porque Escape también CIERRA el módulo 3D: sin esto, cancelar un
+   *  arrastre a medias o soltar la selección se llevaba puesto el módulo
+   *  entero, que es lo último que uno quiere mientras trabaja. El componente
+   *  pregunta primero y solo cierra si acá no había nada que hacer. */
+  escapeConsume(): boolean {
+    if (this.joy?.arrastrando) { this.joyEndDrag(true); return true; }
+    if (this.mode === 'draw' && this.current) { this.commitStroke(); return true; }
+    if (this.selected.size || this.selectedGuide || this.selectedSurface || this.editingStroke) {
+      this.setSelection([]);
+      this.selectGuide(null);
+      this.selectSurface(null);
+      this.clearPointEdit();
+      return true;
+    }
+    return false;
+  }
+
+  /** Prender/apagar el joystick. Apagado, manda el gizmo clasico de siempre. */
+  setJoystick(on: boolean): void {
+    this.joyOn = on;
+    if (!on) { this.joyEndDrag(true); this.joy?.update(this.camera as THREE.Camera, null); }
+    this.syncGizmo();
+    if (on) this.joyRefresh();
+    this.avisarJoy();
+  }
+  getJoystick(): boolean { return this.joyOn; }
+  /** La barra escucha esto: sin el aviso, prender el joystick con la tecla J
+   *  dejaba el boton apagado y no habia forma de saber en que modo estabas. */
+  private avisarJoy(): void {
+    this.canvas.dispatchEvent(new CustomEvent('low3d:joy', { bubbles: true }));
+  }
+  setJoyMode(m: JoyMode): void { this.joy?.setMode(m); this.avisarJoy(); }
+  getJoyMode(): JoyMode { return this.joy?.mode ?? '3d'; }
+  toggleJoyMode(): JoyMode { const m = this.joy?.toggleMode() ?? '3d'; this.avisarJoy(); return m; }
+  setJoyLocked(v: boolean): void { this.joy?.setLocked(v); this.avisarJoy(); }
+  getJoyLocked(): boolean { return this.joy?.locked ?? false; }
+  /** Lectura numerica del gesto en curso ("Y +1.20", "45.0 grados", "120%"). */
+  getJoyLectura(): string { return this.joy?.lectura ?? ''; }
+
+  /** Centro del control: el del objeto elegido. Durante el gesto sale del
+   *  proxy, no de la caja: la caja de un objeto ROTANDO cambia de tamano en
+   *  cada frame y el control se iria saltando solo. */
+  private joyCentro(): THREE.Vector3 | null {
+    if (!this.joyOn || this.tool !== 'move') return null;
+    if (this.joyProxy) return this.joyProxy.getWorldPosition(new THREE.Vector3());
+    if (this.rig) return this.rig.getWorldPosition(new THREE.Vector3());
+    const objs: THREE.Object3D[] = [];
+    if (this.selected.size) objs.push(...[...this.selected].map((r) => r.object));
+    else if (this.selectedGuide) objs.push(this.selectedGuide.mesh);
+    else if (this.selectedSurface) objs.push(this.selectedSurface.mesh);
+    if (!objs.length) return null;
+    const box = new THREE.Box3();
+    for (const o of objs) box.expandByObject(o);
+    return box.isEmpty() ? objs[0].getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3());
+  }
+
+  /** Pone el control en su lugar y con su tamano. Se llama desde el loop, pero
+   *  TAMBIEN cada vez que cambia la seleccion y justo antes de leer un click:
+   *  requestAnimationFrame se pausa cuando la ventana no esta visible, y si el
+   *  widget dependiera solo del loop podria estar invisible o en el lugar
+   *  equivocado justo cuando el usuario lo va a agarrar. */
+  private joyRefresh(): void {
+    this.joy?.update(this.camera as THREE.Camera, this.joyCentro());
+  }
+
+  /** Puntos originales de los trazos al empezar un gesto de escala: cada paso
+   *  del arrastre recalcula desde el ORIGINAL en vez de acumular, si no el
+   *  redondeo del factor se va multiplicando y la forma se deforma sola. */
+  private joyPuntos: { rec: StrokeRecord; pts: THREE.Vector3[] }[] = [];
+
+  /** Estira los trazos elegidos en los ejes de la PANTALLA, alrededor del
+   *  centro del control. Deforma la geometria en vez de la transformacion,
+   *  que es la unica forma de que "solo el ancho" siga significando algo
+   *  cuando el objeto ya esta rotado. */
+  private joyEscalarPuntos(fu: number, fv: number, u: THREE.Vector3, v: THREE.Vector3,
+                           n: THREE.Vector3, centro: THREE.Vector3): void {
+    for (const item of this.joyPuntos) {
+      const rec = item.rec;
+      rec.points = item.pts.map((p0) => {
+        const d = p0.clone().sub(centro);
+        return centro.clone()
+          .addScaledVector(u, d.dot(u) * fu)
+          .addScaledVector(v, d.dot(v) * fv)
+          .addScaledVector(n, d.dot(n));
+      });
+      this.rebuildStrokeMesh(rec);
+    }
+    this.publishObjects();
+  }
+
+  /** Envuelve el objeto para el gesto (ver el comentario de joyProxy). */
+  private joyWrap(target: THREE.Object3D): THREE.Object3D {
+    const box = new THREE.Box3().setFromObject(target);
+    const centro = box.isEmpty()
+      ? target.getWorldPosition(new THREE.Vector3())
+      : box.getCenter(new THREE.Vector3());
+    const proxy = new THREE.Object3D();
+    proxy.position.copy(centro);
+    this.scene.add(proxy);
+    this.joyOwnerParent = target.parent ?? this.strokesGroup;
+    this.joyBefore = {
+      pos: target.position.clone(),
+      quat: target.quaternion.clone(),
+      scale: target.scale.clone(),
+    };
+    proxy.attach(target);   // conserva la transformacion mundial
+    this.joyOwner = target;
+    this.joyProxy = proxy;
+    return proxy;
+  }
+
+  /** Devuelve el objeto a su padre y anota el gesto en el historial. */
+  private joyUnwrap(): void {
+    if (!this.joyProxy) return;
+    const target = this.joyOwner;
+    const padre = this.joyOwnerParent;
+    const before = this.joyBefore;
+    this.scene.remove(this.joyProxy);
+    this.joyProxy = null;
+    this.joyOwner = null;
+    this.joyOwnerParent = null;
+    this.joyBefore = null;
+    if (!target || !padre) return;
+    padre.attach(target);   // aca el objeto se queda con la transformacion real
+    if (!before) return;
+    const after = {
+      pos: target.position.clone(),
+      quat: target.quaternion.clone(),
+      scale: target.scale.clone(),
+    };
+    const cambio = before.pos.distanceToSquared(after.pos) > 1e-10
+      || before.quat.angleTo(after.quat) > 1e-5
+      || before.scale.distanceToSquared(after.scale) > 1e-10;
+    if (!cambio) return;
+    this.pushCmd({
+      undo: () => { target.position.copy(before.pos); target.quaternion.copy(before.quat); target.scale.copy(before.scale); },
+      redo: () => { target.position.copy(after.pos); target.quaternion.copy(after.quat); target.scale.copy(after.scale); },
+    });
+  }
+
+  /** El pointerdown cayo en el joystick? Si si, arranca el gesto. */
+  private joyTryBegin(e: PointerEvent): boolean {
+    if (!this.joyOn || !this.joy || this.tool !== 'move') return false;
+    this.joyRefresh();
+    this.setPointerFromEvent(e);
+    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    const part = this.joy.pick(this.raycaster);
+    if (!part) return false;
+    // ESCALA sobre trazos: no se envuelve nada, se deforman los puntos (ver
+    // joyEscalarPuntos). El resto de los gestos si usan proxy/rig.
+    const centroGesto = this.joyCentro();
+    if (Joystick3D.esEscala(part) && this.selected.size && centroGesto) {
+      this.joyPuntos = [...this.selected].map((r) => ({ rec: r, pts: r.points.map((q) => q.clone()) }));
+      const escalar = (fu: number, fv: number, u: THREE.Vector3, v: THREE.Vector3, n: THREE.Vector3) =>
+        this.joyEscalarPuntos(fu, fv, u, v, n, centroGesto);
+      const okE = this.joy.begin(part, this.raycaster, this.camera as THREE.Camera,
+                                 new THREE.Object3D(), this.pointer.clone(), escalar);
+      if (!okE) { this.joyPuntos = []; return false; }
+      this.capturePointer(e);
+      this.activePointerId = e.pointerId;
+      this.mode = 'joystick';
+      this.controls.enabled = false;
+      return true;
+    }
+    // VARIOS objetos: se cuelgan de un rig centrado, que ya sabe hornear el
+    // gesto en un solo Ctrl+Z (detachRig)
+    let target: THREE.Object3D | null = null;
+    if (this.selected.size > 1) {
+      const objs = [...this.selected].map((r) => r.object);
+      if (!this.rigMatches(objs)) { this.detachRig(); this.attachRig(objs); }
+      target = this.rig;
+    } else {
+      const uno = this.selected.size === 1 ? [...this.selected][0].object
+        : this.selectedGuide?.mesh ?? this.selectedSurface?.mesh ?? null;
+      if (uno) target = this.joyWrap(uno);
+    }
+    if (!target) return false;
+    const ok = this.joy.begin(part, this.raycaster, this.camera as THREE.Camera, target,
+                              this.pointer.clone());
+    if (!ok) { this.joyUnwrap(); return false; }
+    this.capturePointer(e);
+    this.activePointerId = e.pointerId;
+    this.mode = 'joystick';
+    this.controls.enabled = false;
+    return true;
+  }
+
+  private joyMoveDrag(e: PointerEvent): void {
+    if (!this.joy?.arrastrando) return;
+    this.setPointerFromEvent(e);
+    this.raycaster.setFromCamera(this.pointer, this.camera as THREE.Camera);
+    this.joy.move(this.raycaster, this.camera as THREE.Camera, this.pointer.clone());
+    this.mostrarLecturaJoy(e);
+  }
+
+  /** La lectura sigue al cursor mientras dura el gesto. */
+  private mostrarLecturaJoy(e: PointerEvent): void {
+    const texto = this.joy?.lectura ?? '';
+    if (!texto) { this.joyLecturaEl.style.display = 'none'; return; }
+    const [x, y] = this.pointerInCanvas(e);
+    this.joyLecturaEl.textContent = texto;
+    this.joyLecturaEl.style.left = `${x}px`;
+    this.joyLecturaEl.style.top = `${y}px`;
+    this.joyLecturaEl.style.display = 'block';
+  }
+
+  /** Cierra el gesto. `cancelar` deja todo como estaba (Escape). */
+  private joyEndDrag(cancelar = false): void {
+    if (!this.joy?.arrastrando) return;
+    this.joyLecturaEl.style.display = 'none';
+    // gesto de escala: el cambio esta en los PUNTOS, asi que el historial guarda
+    // puntos, no transformaciones
+    if (this.joyPuntos.length) {
+      const items = this.joyPuntos;
+      this.joyPuntos = [];
+      this.joy.end();
+      if (cancelar) {
+        for (const it of items) { it.rec.points = it.pts; this.rebuildStrokeMesh(it.rec); }
+      } else {
+        const despues = items.map((it) => ({ rec: it.rec, pts: it.rec.points.map((q) => q.clone()) }));
+        const cambio = items.some((it, i) => it.pts.some((q, k) => q.distanceToSquared(despues[i].pts[k]) > 1e-12));
+        if (cambio) {
+          const aplicar = (lista: { rec: StrokeRecord; pts: THREE.Vector3[] }[]) => {
+            for (const it of lista) { it.rec.points = it.pts.map((q) => q.clone()); this.rebuildStrokeMesh(it.rec); }
+            this.publishObjects();
+          };
+          this.pushCmd({ undo: () => aplicar(items), redo: () => aplicar(despues) });
+        }
+      }
+      this.controls.enabled = true;
+      this.syncGizmo();
+      this.publishObjects();
+      return;
+    }
+    if (cancelar) this.joy.cancelar(); else this.joy.end();
+    if (this.rig) this.detachRig();
+    this.joyUnwrap();
+    this.controls.enabled = true;
+    this.syncGizmo();
+    this.publishObjects();
+  }
+
+
   private syncGizmo(): void {
     if (!this.gizmo) return;
     if (this.tool !== 'move') { this.detachRig(); this.resetPivot(); this.gizmo.detach(); return; }
+    // con el joystick prendido, el gizmo clasico se queda quieto: los dos
+    // juntos se pisan los blancos y no se sabe cual estas agarrando
+    if (this.joyOn) { this.resetPivot(); this.gizmo.detach(); this.joyRefresh(); return; }
     // VARIOS objetos elegidos (o un grupo de Ctrl+G): se transforman juntos
     // colgándolos de un rig temporal. Antes, con más de uno, el gizmo
     // simplemente no aparecía y no había forma de moverlos en bloque.
@@ -4651,6 +4951,7 @@ export class WebGLDesign3D {
     this.raf = requestAnimationFrame(this.animate);
     this.resize();
     this.controls.update();
+    this.joyRefresh();
     this.renderer.render(this.scene, this.camera as THREE.Camera);
     if (this.showAxes) this.updateVPOverlay();
     // onion-skin por profundidad (depende de la cámara): solo si la vista es
