@@ -2407,6 +2407,7 @@ async function openDesign(path) {
   DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack;
   DZ.dirty = false;             // recién cargado = limpio (no arrastrar el flag)
   DZ.multi = []; dzNodesClear();
+  dzPalCssRender();             // el svg es nuevo: la paleta tiene que gobernarlo
   dzPaletteRender();
   $("#dzProps").hidden = true; $("#dzEmpty").hidden = false;
   $("#dzHandle").hidden = true;
@@ -3579,6 +3580,11 @@ function dzPaletteSave(p) {
 function dzPaletteRender() {
   const box = $("#dzPalette");
   if (!box) return;
+  // Con la escena abierta, el panel muestra la PALETA DE LA ESCENA: estilos
+  // numerados que gobiernan el color de los dibujos. El tacho de colores de
+  // antes sigue existiendo para cuando se edita un SVG suelto, sin animacion:
+  // ahi no hay escena de la cual sacar una paleta.
+  if (DZ.doc && LOW.animation && LOW.animation.PaletteView && dzPalMount()) return;
   const pal = dzPaletteLoad();
   box.innerHTML = "";
   pal.forEach((c, i) => {
@@ -3971,12 +3977,14 @@ function _drawBeginTrack(e, svg) {
     track.el.setAttribute("stroke-width", DZ.drawW || 6);
     track.el.setAttribute("stroke-linecap", "round");
     track.el.setAttribute("stroke-linejoin", "round");
+    dzStyleTag(track.el, "ink");            // el lapiz es LINEA
   } else {
     track.el = document.createElementNS(SVGNS, "g");
     track.el.setAttribute("data-low", "brush");
     track.el.setAttribute("stroke", DZ.drawColor || "#F0450E");
     track.el.setAttribute("fill", "none");
     track.el.setAttribute("stroke-linecap", "round");
+    dzStyleTag(track.el, "ink");            // mientras se traza son segmentos
   }
   if ((DZ.drawOpacity || 1) < .999) track.el.setAttribute("opacity", DZ.drawOpacity.toFixed(2));
   svg.appendChild(track.el);
@@ -3995,6 +4003,7 @@ function _drawFinish() {
     const ribbon = dzBrushRibbon(pts, DZ.drawW || 6, DZ.drawColor || "#F0450E");
     if (ribbon) {
       if (t.el.hasAttribute("opacity")) ribbon.setAttribute("opacity", t.el.getAttribute("opacity"));
+      dzStyleTag(ribbon, "paint");          // el trazo terminado es una cinta RELLENA
       t.el.replaceWith(ribbon); finalEl = ribbon;
     }
     else { t.el.remove(); finalEl = null; }
@@ -9291,7 +9300,7 @@ function dz3dCommitStroke(el, idx, pts, tool, drawColor, drawW) {
   dzSnapshot();
   const refined = dzRefineStroke(pts);
   let stroke;
-  if (tool === "brush") stroke = dzBrushRibbon(refined, drawW, drawColor);
+  if (tool === "brush") stroke = dzStyleTag(dzBrushRibbon(refined, drawW, drawColor), "paint");
   else {
     stroke = document.createElementNS(SVGNS, "path");
     stroke.setAttribute("d", dzSmoothPath(refined));
@@ -9301,6 +9310,7 @@ function dz3dCommitStroke(el, idx, pts, tool, drawColor, drawW) {
     stroke.setAttribute("stroke-linecap", "round");
     stroke.setAttribute("stroke-linejoin", "round");
     stroke.setAttribute("data-low", "pencil");
+    dzStyleTag(stroke, "ink");
   }
   if (!stroke) return;
   if (el.tagName.toLowerCase() === "g") {
@@ -10684,6 +10694,80 @@ function dzOnion2Wire() {
    Ver docs/2D_REDESIGN.md — fase 3. */
 DZ.doc = null;      // LowDoc
 DZ.xsView = null;   // XsheetView
+DZ.palView = null;  // PaletteView
+DZ.palStyle = null; // numero del estilo con el que se dibuja
+
+/* == PALETA: el color como referencia =====================================
+   El trazo no guarda un color, guarda el NUMERO de un estilo, y el color lo
+   resuelve una hoja de estilos que se inyecta en el SVG. Asi cambiar un color
+   recolorea todo lo que lo usa -en todos los dibujos, expuestos o no- sin
+   recorrer nada, y el color literal queda igual en el archivo como respaldo
+   para abrirlo en cualquier visor. */
+
+/** El estilo con el que se esta dibujando. */
+function dzPalActual() {
+  if (!DZ.doc || !LOW.animation.palette) return null;
+  const pal = DZ.doc.palette;
+  if (!pal) return null;
+  let st = DZ.palStyle != null ? pal.byIndex(DZ.palStyle) : null;
+  // primera vez: se engancha al estilo que ya tiene el color del lapiz, para
+  // que empezar a usar la paleta no cambie de color lo que estabas dibujando
+  if (!st) st = pal.byColor(DZ.drawColor) || pal.styles[0] || null;
+  DZ.palStyle = st ? st.index : null;
+  return st;
+}
+
+/** Marca un elemento nuevo con el estilo activo. `papel` es "ink" (la linea) o
+ *  "paint" (el relleno): el lapiz y la pluma son linea, el pincel de LOW es una
+ *  cinta rellena. */
+function dzStyleTag(el, papel) {
+  if (!el || !el.setAttribute) return el;
+  const st = dzPalActual();
+  if (!st || !st.index) return el;
+  const A = LOW.animation.palette.ATTR;
+  el.setAttribute(papel === "paint" ? A.paint : A.ink, String(st.index));
+  return el;
+}
+
+/** Inyecta (o actualiza) la hoja de la paleta dentro del SVG del lienzo. */
+function dzPalCssRender() {
+  const cv = $("#dzCanvas");
+  const svg = cv && cv.querySelector(":scope > svg");
+  if (!svg || !DZ.doc || !LOW.animation.palette) return;
+  const pal = DZ.doc.palette;
+  const css = pal ? LOW.animation.palette.css(pal) : "";
+  let el = svg.querySelector(":scope > style.dz-palcss");
+  if (!css) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElementNS(SVGNS, "style");
+    el.setAttribute("class", "dz-palcss");
+    svg.insertBefore(el, svg.firstChild);
+  }
+  if (el.textContent !== css) el.textContent = css;
+}
+
+/** Muestra la paleta de la escena en su panel. */
+function dzPalMount() {
+  const host = $("#dzPalette");
+  if (!host || !LOW.animation.PaletteView || !DZ.doc) return false;
+  if (!DZ.palView) {
+    DZ.palView = new LOW.animation.PaletteView(host, DZ.doc, {
+      current: DZ.palStyle,
+      // elegir un estilo cambia con que se dibuja: el color del lapiz sigue al
+      // estilo activo, asi el resto del editor no se entera de nada
+      onPick: (st) => {
+        DZ.palStyle = st.index;
+        DZ.drawColor = st.color;
+        if ($("#dzPStroke")) $("#dzPStroke").value = st.color;
+        dzSetStatus(` Estilo ${st.index} - ${st.name || ""}`);
+      },
+    });
+  } else DZ.palView.setDoc(DZ.doc);
+  const st = dzPalActual();
+  if (st) DZ.palView.current = st.index;
+  DZ.palView.render();
+  return true;
+}
 
 /** Contenido dibujable del lienzo (lo de adentro del <svg>, sin el <svg>). */
 function dzCanvasInner() {
@@ -10695,7 +10779,7 @@ function dzCanvasInner() {
   // dentro del Drawing hornearía el muñeco y duplicaría la transformación al
   // volver a abrirlo.
   dzRigStrip(tmp);
-  tmp.querySelectorAll("g.dz-onion, g.dz-penui").forEach((n) => n.remove());
+  tmp.querySelectorAll("g.dz-onion, g.dz-penui, style.dz-palcss").forEach((n) => n.remove());
   return tmp.innerHTML;
 }
 /** Pinta un dibujo del modelo en el lienzo. */
@@ -10703,6 +10787,7 @@ function dzCanvasSet(contenido) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return false;
   svg.innerHTML = contenido || "";
+  dzPalCssRender();          // el innerHTML se llevo la hoja de la paleta
   // Cambiar de Drawing sólo reemplaza el contenido interior. La raíz conserva
   // exactamente la resolución canónica de la escena.
   dzSyncCanvasDocument();
@@ -10741,6 +10826,12 @@ function dzOnionRender() {
     g.setAttribute("opacity", String(c.opacity));
     g.setAttribute("pointer-events", "none");
     g.innerHTML = c.drawing.content || "";
+    // el fantasma se tine entero, asi que NO puede seguir referenciando la
+    // paleta: la hoja de estilos le impondria su color y el papel cebolla
+    // dejaria de distinguir el pasado del futuro
+    g.querySelectorAll("[data-stk],[data-fil]").forEach((n) => {
+      n.removeAttribute("data-stk"); n.removeAttribute("data-fil");
+    });
     dzOnionStripPage(g, svg.getAttribute("viewBox"));
     // teñir: todo el fantasma del color de su lado del tiempo
     g.querySelectorAll("*").forEach((n) => {
@@ -10812,6 +10903,13 @@ async function dzDocInit() {
     } else if (motivo === "onion") dzOnionRender();
     else if (motivo === "document") dzSyncCanvasDocument();
   });
+  // la paleta gobierna el color por hoja de estilos: cada cambio se ve al
+  // instante en el lienzo, sin recorrer los dibujos
+  DZ.doc.subscribe((doc, motivo) => {
+    if (motivo === "palette" || (motivo === "content" && DZ.palView)) dzPalCssRender();
+  });
+  dzPalCssRender();
+  dzPaletteRender();          // el panel pasa a mostrar la paleta de la escena
   dzSyncCanvasDocument();
   if (Object.keys((DZ.doc.scene.rig && DZ.doc.scene.rig.nodes) || {}).length) dzRigApplyLive(DZ.doc.frame);
   return DZ.doc;

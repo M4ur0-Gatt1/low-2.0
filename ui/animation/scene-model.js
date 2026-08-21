@@ -299,6 +299,13 @@
   class Style {
     constructor(data = {}) {
       this.id = data.id || uid("st");
+      // El `id` es la identidad del estilo adentro del modelo. El `index` es su
+      // NUMERO CORTO, y es lo que queda escrito en cada trazo del dibujo: un
+      // uid repetido en cada elemento del SVG no se puede leer ni escribir a
+      // mano, y el numero es justamente lo que en una paleta se nombra.
+      // No se reordena ni se reusa: si cambiara, los trazos apuntarian a otro
+      // color. Lo asigna la paleta al agregar el estilo.
+      this.index = Math.max(0, Math.round(Number(data.index) || 0));
       this.name = data.name || "Estilo";
       this.color = Style.normalizeColor(data.color);
       this.opacity = Style.normalizeOpacity(data.opacity);
@@ -322,7 +329,8 @@
     setColor(color) { this.color = Style.normalizeColor(color); return this; }
     setOpacity(opacity) { this.opacity = Style.normalizeOpacity(opacity); return this; }
     rename(name) { if (name) this.name = name; return this; }
-    toJSON() { return { id: this.id, name: this.name, color: this.color, opacity: this.opacity, meta: this.meta }; }
+    toJSON() { return { id: this.id, index: this.index, name: this.name, color: this.color,
+                        opacity: this.opacity, meta: this.meta }; }
   }
 
   /** Una paleta: colección de estilos asociada a un Level. Un Level tiene a lo
@@ -333,16 +341,29 @@
       this.name = data.name || "Paleta";
       this.locked = !!data.locked;
       this.styles = (data.styles || []).map((s) => new Style(s));
+      // paletas guardadas antes de que el estilo tuviera numero: se les asigna
+      // uno en el orden en que estaban, para no perder ninguna referencia
+      let libre = this.nextIndex();
+      for (const s of this.styles) if (!s.index) s.index = libre++;
     }
     style(id) { return this.styles.find((s) => s.id === id) || null; }
     styleByName(name) { return this.styles.find((s) => s.name === name) || null; }
+    /** Estilo por NUMERO: es como lo referencia el dibujo. */
+    byIndex(i) { return this.styles.find((s) => s.index === Number(i)) || null; }
+    /** Estilo por color exacto (para adoptar dibujos que ya existian). */
+    byColor(color) {
+      const c = Style.normalizeColor(color);
+      return this.styles.find((s) => s.color === c) || null;
+    }
+    indices() { return this.styles.map((s) => s.index).filter(Boolean).sort((a, b) => a - b); }
+    nextIndex() { const n = this.indices(); return n.length ? n[n.length - 1] + 1 : 1; }
     /** Crea un estilo. Si el nombre ya existe, devuelve el que había: nunca se
      *  pisan estilos en silencio. */
     addStyle(name, color, opacity) {
       const n = name || `Estilo ${this.styles.length + 1}`;
       const ya = this.styleByName(n);
       if (ya) return ya;
-      const s = new Style({ name: n, color, opacity });
+      const s = new Style({ name: n, color, opacity, index: this.nextIndex() });
       this.styles.push(s);
       return s;
     }

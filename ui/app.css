@@ -2611,3 +2611,43 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   background: var(--orange);
   box-shadow: 0 0 0 3px var(--orangesoft);
 }
+
+/* ══ PALETA DE LA ESCENA: estilos numerados ═══════════════════════════════
+   Cada casillero es un estilo, no un color suelto: el número es lo que queda
+   escrito en el trazo, y la cuenta dice cuántos elementos lo usan — que es lo
+   que hace falta saber para animarse a cambiar un color. */
+/* el panel viejo era una fila de casilleros; la paleta de la escena es una lista */
+.dz-palette .pal2 { flex: 1 1 100%; }
+.pal2 { display: flex; flex-direction: column; gap: 0; min-height: 0; }
+.pal2-head { display: flex; align-items: center; gap: 6px; padding: 4px 0 6px;
+  font: 600 9px/1 Figtree, sans-serif; letter-spacing: .7px; text-transform: uppercase;
+  color: var(--fg2, #8a93a6); }
+.pal2-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: text; font: inherit; }
+.pal2-btn { border: 1px solid var(--line, #2a2d35); background: transparent; cursor: pointer;
+  color: var(--fg2, #8a93a6); border-radius: 4px; padding: 2px 6px;
+  font: 500 10px/1.3 Figtree, sans-serif; }
+.pal2-btn:hover { color: #fff; border-color: var(--accent, #F0450E); }
+.pal2-grid { display: flex; flex-direction: column; gap: 2px; max-height: 232px; overflow: auto; }
+.pal2-item { position: relative; display: flex; align-items: center; gap: 6px;
+  padding: 3px 5px; border-radius: 4px; cursor: pointer;
+  border: 1px solid transparent; }
+.pal2-item:hover { background: var(--panel2, #1e2026); }
+.pal2-item.actual { border-color: var(--accent, #F0450E); background: var(--panel2, #1e2026); }
+/* el estilo que no usa nadie: está en la paleta de adorno */
+.pal2-item.sinuso .pal2-lbl { opacity: .5; }
+.pal2-sw { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.18); }
+.pal2-num { flex: 0 0 15px; text-align: right;
+  font: 600 9px/1 "JetBrains Mono", monospace; color: var(--fg2, #8a93a6); }
+.pal2-lbl { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 11px/1.3 Figtree, sans-serif; color: var(--fg, #e6e9f0); }
+.pal2-use { flex: 0 0 auto; font: 400 9px/1 "JetBrains Mono", monospace;
+  color: var(--fg2, #8a93a6); opacity: .8; font-style: normal; }
+.pal2-color { flex: 0 0 18px; width: 18px; height: 18px; padding: 0; cursor: pointer;
+  border: 1px solid var(--line, #2a2d35); border-radius: 4px; background: transparent; }
+.pal2-orphans { margin-top: 6px; padding: 5px 6px; border-radius: 4px;
+  background: rgba(240,69,14,.12); border: 1px solid rgba(240,69,14,.35);
+  font: 400 9.5px/1.35 Figtree, sans-serif; color: var(--fg, #e6e9f0); }
+.pal2-foot { padding: 6px 0 2px; font: 400 9.5px/1.3 Figtree, sans-serif;
+  color: var(--fg2, #8a93a6); }
