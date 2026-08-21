@@ -2955,12 +2955,16 @@ function dzPointerDown(e) {
   if (DZ.rigMode && DZ.rigSubmode === "fk" && (DZ.rigTool === "pose" || rigRecNow) && pack.length === 1 && el.id) {
     const recNow = rigRecNow;
     rigFrame = recNow ? 1 + (performance.now() - recNow.t0) / 1000 * recNow.fps : dzRigCur();
-    const rigNode = DZ.doc && DZ.doc.scene.rigNode(el.id);
+    // La pieza de arte puede tener un id distinto del hueso (bindRigElement):
+    // resolvemos el HUESO por elementId para posar la cadena correcta, no crear
+    // un nodo fantasma con el id del <path>/<g>.
+    const boneId = dzRigNodeIdOfElement(el.id) || el.id;
+    const rigNode = DZ.doc && DZ.doc.scene.rigNode(boneId);
     const pv = rigNode?.pivot ? DZ.doc.scene.rigWorldPoint(rigNode.id, rigFrame, rigNode.pivot) : dzRigPivotOf(el);
-    rigDrag = { id: el.id, pv,
-                k0: dzRigLocalAt(el.id, rigFrame) || { x: 0, y: 0, r: 0, s: 1 },
+    rigDrag = { id: boneId, pv,
+                k0: dzRigLocalAt(boneId, rigFrame) || { x: 0, y: 0, r: 0, s: 1 },
                 a0: Math.atan2(start.y - pv.y, start.x - pv.x) };
-    if (recNow) { recNow.active = el.id; recNow.take[el.id] = recNow.take[el.id] || []; }
+    if (recNow) { recNow.active = boneId; recNow.take[boneId] = recNow.take[boneId] || []; }
   }
   // ⏹ grabación armada: este arrastre ES la actuación — muestrear el gesto
   let rec = null;
@@ -6597,6 +6601,14 @@ function dzRigDelKey(id, num) {
 function dzRigNodeElement(node) {
   const svg = $("#dzCanvas")?.querySelector(":scope > svg");
   return svg && node ? svg.querySelector("#" + CSS.escape(node.elementId || node.id)) : null;
+}
+/* Resuelve el id del HUESO a partir del id de una pieza de arte. El dibujo
+   puede tener un id distinto del hueso (bindRigElement); esto evita posar un
+   nodo fantasma con el id del <path>/<g> al arrastrar el arte en FK. */
+function dzRigNodeIdOfElement(elementId) {
+  if (!DZ.doc || !elementId) return null;
+  const node = Object.values(DZ.doc.scene.rig.nodes).find(n => n.elementId === elementId);
+  return node ? node.id : null;
 }
 function dzRigParentDelta(id, dx, dy, frame) {
   const node = DZ.doc && DZ.doc.scene.rigNode(id);
