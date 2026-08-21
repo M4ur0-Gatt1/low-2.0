@@ -1,7 +1,10 @@
-# LOW v3.29.41 — borrador de integración
+# LOW v3.29.41 — integración de rigging 2D y bloque 3D
 
-Estado: **pendiente de tag y publicación**. Este archivo registra exactamente
-qué debe entrar en la próxima versión; no afirma que el instalador ya exista.
+Estado: **publicada** el 21-ago-2026 (tag `v3.29.41`, instaladores armados por
+`build.yml`). Nació como borrador de lo que debía entrar en la versión; se dejó
+tal cual y solo se cambió el estado, así queda el registro de qué se prometió y
+qué se verificó. Las pruebas marcadas con ⏳ abajo siguen pendientes: que la
+versión esté publicada no las convierte en aprobadas.
 
 ## Rigging y animación 2D
 
