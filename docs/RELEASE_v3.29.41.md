@@ -47,9 +47,17 @@ borrador no convierte una prueba pendiente en una validación aprobada.
   comparar Viewer/export: aprobada para el commit 2D `0d0a85c`; debe repetirse
   sobre el ejecutable final.
 - ⏳ Prueba manual de los tres flujos 3D descritos arriba.
-- ⏳ Sincronizar todas las fuentes de versión: el paquete híbrido todavía
-  declara `3.29.39`, mientras el producto principal declara `3.29.40`.
-- ⏳ Confirmar que tag, interfaz y ejecutable informen `3.29.41`.
+- ✅ Fuentes de versión sincronizadas en `3.29.41`: `VERSION`, `LOW_VERSION` en
+  `main.py`, `AppVersion` en `low_installer.iss` (venía quedado en `3.22.17`) y
+  el paquete híbrido (`package.json` y `package-lock.json`, que declaraban
+  `3.29.39`). Los scripts de `ui/index.html` quedaron sellados con `?v=3.29.41`
+  (`tools/stamp_version.py`): sin eso el WebView puede seguir ejecutando el
+  `app.js` anterior después de actualizar.
+- ✅ Tag `v3.29.41` e interfaz informan `3.29.41`. El **ejecutable** lo produce
+  `build.yml` a partir del tag y deriva su versión de ahí; confirmarlo sobre el
+  instalador publicado sigue siendo parte de la prueba manual pendiente.
+- ✅ 120/120 pruebas del modelo 2D corridas de nuevo sobre este mismo árbol
+  antes de taggear.
 
 El build advierte que el chunk principal supera 500 kB. No bloquea esta
 integración, pero debe abordarse con división de código antes de sumar editores
