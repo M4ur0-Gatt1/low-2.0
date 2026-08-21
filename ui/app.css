@@ -1071,6 +1071,13 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-onionpanel.rig2 { width: 306px; max-height: calc(100% - 72px); overflow: auto; font-size: 12px; }
 .rig2 .dz-op-head { position: sticky; top: 0; z-index: 3; min-height: 34px; letter-spacing: .025em; }
 .rig2-modes { position: sticky; top: 34px; z-index: 2; display: grid; grid-template-columns: repeat(3,1fr); padding: 5px; gap: 3px; background: var(--panel); border-bottom: 1px solid var(--line2); }
+.rig2-tools { display: grid; grid-template-columns: repeat(3,1fr); gap: 3px; padding: 5px 8px; border-bottom: 1px solid var(--line2); background: var(--panel); }
+.rig2-tools button { min-height: 27px; }
+.rig2-tools button.on { color: #fff; border-color: #4f8bb8; background: #254a63; }
+.rig2-tools button:disabled { opacity: .35; cursor: not-allowed; }
+.rig2-check { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--mut); font-size: 10px; }
+.rig2-check small { opacity: .65; }
+.rig2-check input { width: auto; height: auto; margin: 0; }
 .rig2 button { min-height: 28px; padding: 4px 8px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel2); color: var(--mut); font: 600 11px Figtree,sans-serif; cursor: pointer; }
 .rig2 button:hover { color: var(--txt); background: var(--surface-hover); }
 .rig2 button.on,.rig2 button.primary { color: var(--txt); border-color: rgba(240,69,14,.65); background: var(--redsoft); }

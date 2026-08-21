@@ -564,11 +564,15 @@
           <button id="rigModeFk" title="Posar cada articulación directamente">FK</button>
           <button id="rigModeIk" title="Mover un extremo y resolver la cadena">IK</button>
         </div>
+        <div class="rig2-tools" id="rigTools" role="toolbar" aria-label="Herramientas de huesos">
+          <button id="rigToolSelect" class="on" title="Seleccionar un hueso o pieza con un clic (sin moverlo)">Seleccionar</button>
+          <button id="rigToolPose" title="Posar: arrastrar el cuerpo o la punta para rotar, la articulación para mover">Posar</button>
+          <button id="rigToolCreate" title="Crear hueso: arrastrar desde la articulación hasta la punta">Crear hueso</button>
+        </div>
         <section class="rig2-section" data-rig-section="build">
           <div class="rig2-title"><b>Cut-out por piezas</b><span id="rigCount">0</span></div>
           <div class="rig2-flow"><span>1 Piezas</span><i>›</i><span>2 Pivotes</span><i>›</i><span>3 Vínculos</span><i>›</i><span>4 Pose</span></div>
           <div class="rig2-actions rig2-prepare"><button class="primary" id="rigAuto" title="Registra las piezas dibujables sin inventar una anatomía ni una jerarquía">Registrar piezas del dibujo</button></div>
-          <div class="rig2-actions rig2-bones"><button id="rigBoneTool" title="Arrastrá sobre la mesa desde la cabeza hasta la punta del hueso. Si empezás cerca de una punta existente, crea un hijo conectado.">Crear hueso</button></div>
           <div class="rig2-row rig2-wide"><input type="text" id="rigId" placeholder="nombre de la pieza" title="ID estable de la pieza">
             <button id="rigAdd" title="Registrar la selección como pieza del esqueleto">Añadir</button>
             <button id="rigRemove" title="Quitar la pieza seleccionada del esqueleto">Quitar</button></div>
@@ -597,6 +601,7 @@
             <button id="rigDel" title="Quitar la clave de esta pieza">Borrar</button>
             <button id="rigReset" title="Restablecer y clavar la pose neutra">Neutra</button>
           </div>
+          <label class="rig2-check"><input type="checkbox" id="rigAutoKey" checked> Auto-clave al soltar <small>(desmarcá para probar sin grabar · Enter clava, Esc descarta)</small></label>
           <div class="dz-suggest rig2-keys" id="rigChips"></div>
         </section>
         <section class="rig2-section" data-rig-section="ik">
