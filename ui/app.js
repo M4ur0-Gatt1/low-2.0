@@ -7151,24 +7151,32 @@ function dzRigOverlayRender() {
   }
   for (const node of Object.values(doc.scene.rig.nodes)) {
     const p = point(node.id); if (!p) continue;
-    const joint = get("jt:" + node.id, "circle", { cx: p.x, cy: p.y, r: node.pinned ? 7 : 5, "data-id": node.id },
-      "dz-rig-joint" + (node.pinned ? " root" : "") + (selectedId === node.id ? " selected" : ""));
-    joint.onpointerdown = e => {
+    const jointHandler = e => {
       if (DZ.rigSubmode === "build" && node.tail) return dzRigBoneGeometryDrag(e, node, "head");
       if (DZ.rigSubmode === "build") return dzRigBuildPivotDrag(e, node);
       if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "translate");
       e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
     };
+    const joint = get("jt:" + node.id, "circle", { cx: p.x, cy: p.y, r: node.pinned ? 7 : 5, "data-id": node.id },
+      "dz-rig-joint" + (node.pinned ? " root" : "") + (selectedId === node.id ? " selected" : ""));
+    joint.onpointerdown = jointHandler;
+    // área de agarre invisible más grande: los huesos de 5px eran difíciles de
+    // atrapar con el lápiz; esto mantiene el aspecto denso pero facilita el gesto.
+    const jointHit = get("jh:" + node.id, "circle", { cx: p.x, cy: p.y, r: 12, "data-id": node.id }, "dz-rig-hit");
+    jointHit.onpointerdown = jointHandler;
     const tp = tailPoint(node);
     if (tp) {
-      const tip = get("tp:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 5, "data-id": node.id }, "dz-rig-bone-tip");
-      tip.onpointerdown = e => {
+      const tipHandler = e => {
         if (DZ.rigBoneTool) return dzRigBoneCreateDrag(e, { head: tp.user, parentId: node.id });
         if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "rotate");
         if (DZ.rigSubmode === "build") return dzRigBoneGeometryDrag(e, node, "tail");
         // cualquier otro modo/herramienta: la punta al menos selecciona el hueso
         e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
       };
+      const tip = get("tp:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 5, "data-id": node.id }, "dz-rig-bone-tip");
+      tip.onpointerdown = tipHandler;
+      const tipHit = get("th:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 11, "data-id": node.id }, "dz-rig-hit");
+      tipHit.onpointerdown = tipHandler;
     }
     if (selectedId === node.id) {
       const label = get("lb:" + node.id, "text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label");
