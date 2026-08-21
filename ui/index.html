@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="app.css?v=dev1787259000">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -113,6 +113,13 @@
   <symbol id="i-camkey" viewBox="0 0 24 24"><rect x="2" y="5" width="11" height="10" rx="2"/><path d="M13 8.5l6-3v9l-6-3"/><circle cx="16.5" cy="19" r="2"/><path d="M18.5 19H23"/></symbol>
   <symbol id="i-clap" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="10" rx="1.5"/><path d="M3 10L4.5 4.5 21 8l-1 3.5"/><path d="M8 5.4l-1.2 3.8M12.5 6.4l-1.2 3.7M17 7.4l-1.2 3.6"/></symbol>
   <symbol id="i-xsheet" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M3 9h18M3 15h18M10 3v18"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 6.2A12 12 0 0122 12a15 15 0 01-3 3.8M6.4 6.5A15 15 0 002 12s3.5 6 10 6c1.1 0 2.1-.2 3-.5"/></symbol>
+  <symbol id="i-loop" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 013-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 01-3 3H3"/></symbol>
+  <symbol id="i-skip-start" viewBox="0 0 24 24"><line x1="5" y1="4" x2="5" y2="20"/><polygon points="19 4 8 12 19 20 19 4"/></symbol>
+  <symbol id="i-level" viewBox="0 0 24 24"><rect x="4" y="3" width="14" height="14" rx="1.5"/><path d="M8 7h6M8 11h6"/><path d="M8 21h12V9"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M16 10V7a4 4 0 00-7.5-2"/></symbol>
   <symbol id="i-rotl" viewBox="0 0 24 24"><path d="M4 10a8.5 8.5 0 108-6.3"/><path d="M4 3.5V10h6.5"/></symbol>
   <symbol id="i-rotr" viewBox="0 0 24 24"><path d="M20 10a8.5 8.5 0 00-8-6.3 8.5 8.5 0 108.4 9.8"/><path d="M20 3.5V10h-6.5"/></symbol>
   <symbol id="i-doc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 8h6M9 12h6M9 16h4"/></symbol>
@@ -121,6 +128,19 @@
   <symbol id="i-contour" viewBox="0 0 24 24"><path d="M3 16c4-8 14-8 18 0"/><path d="M3 8c6 5 12 5 18 0" stroke-width="3"/><circle cx="12" cy="11" r="1.8"/></symbol>
   <symbol id="i-iron" viewBox="0 0 24 24"><path d="M4 16c3-10 13-10 16 0"/><path d="M2 20h20"/><rect x="9" y="14" width="6" height="3" rx="1"/></symbol>
   <symbol id="i-cut" viewBox="0 0 24 24"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/><line x1="9.5" y1="9.5" x2="14.5" y2="14.5"/><path d="M10 7l8 8"/><path d="M7 10l8 8"/></symbol>
+  <!-- acciones compactas de Timeline/X-sheet -->
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 00-2-2H5a2 2 0 00-2 2v9a2 2 0 002 2h3"/></symbol>
+  <symbol id="i-paste" viewBox="0 0 24 24"><path d="M9 5h6v3H9z"/><path d="M8 6H5v15h14V6h-3"/><path d="M9 12h6M9 16h5"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5"/><path d="M5 12h8a6 6 0 016 6"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 7l5 5-5 5"/><path d="M19 12h-8a6 6 0 00-6 6"/></symbol>
+  <symbol id="i-exposure-less" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 12h10"/></symbol>
+  <symbol id="i-exposure-more" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 12h10M12 7v10"/></symbol>
+  <symbol id="i-autoexpose" viewBox="0 0 24 24"><path d="M3 5h6v5H3zM9 10h6v5H9zM15 15h6v5h-6z"/><path d="M5 17h5M8 14l3 3-3 3"/></symbol>
+  <symbol id="i-dedupe" viewBox="0 0 24 24"><path d="M4 4h16v4H4zM4 10h16v4H4zM4 16h16v4H4z"/><path d="M12 2v20"/></symbol>
+  <symbol id="i-reverse" viewBox="0 0 24 24"><path d="M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3"/></symbol>
+  <symbol id="i-swing" viewBox="0 0 24 24"><path d="M4 8h12a4 4 0 010 8H8"/><path d="M7 5L4 8l3 3M11 13l-3 3 3 3"/></symbol>
+  <symbol id="i-mixer" viewBox="0 0 24 24"><path d="M6 3v18M12 3v18M18 3v18"/><circle cx="6" cy="8" r="2"/><circle cx="12" cy="15" r="2"/><circle cx="18" cy="10" r="2"/></symbol>
+  <symbol id="i-audio" viewBox="0 0 24 24"><path d="M4 10h4l5-4v12l-5-4H4z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></symbol>
   <symbol id="i-magnet" viewBox="0 0 24 24"><path d="M7 3v7a5 5 0 0010 0V3"/><path d="M7 3h3v7a2 2 0 004 0V3h3"/><path d="M4 19h16"/></symbol>
 </svg>
 
@@ -281,7 +301,7 @@
     <span class="dz-mb-brand">LOW Estudio</span>
     <div class="dz-menu" data-menu="archivo">Archivo<div class="dz-dd">
       <span data-act="nuevo">Lienzo nuevo</span>
-      <span data-act="documento">Documento… <kbd>tamaño/fondo</kbd></span>
+      <span data-act="documento">Configuración del archivo… <kbd>tamaño/fondo</kbd></span>
       <span data-act="guardar">Guardar <kbd>Ctrl+S</kbd></span>
       <span data-act="importar">Importar imagen de referencia…</span>
       <span data-act="exportar">Exportar animación… <kbd>GIF/PNG</kbd></span>
@@ -311,11 +331,20 @@
       <span data-act="codigo">Código SVG</span>
     </div></div>
     <div class="dz-menu" data-menu="ventana">Ventana<div class="dz-dd">
+      <span data-act="win-viewer">Mesa de dibujo en otra pantalla</span>
+      <hr>
       <span data-act="win-layers">Separar Capas</span>
       <span data-act="win-tools">Separar Herramientas</span>
       <span data-act="win-color">Separar Color</span>
+      <span data-act="win-onion">Separar Papel cebolla</span>
+      <span data-act="win-levelstrip">Separar Dibujos del nivel</span>
+      <span data-act="win-rig">Separar Esqueleto / Cut-out</span>
       <hr><span data-act="win-timeline">Separar Línea de tiempo</span>
       <span data-act="win-xsheet">Separar X-sheet</span>
+      <hr><span data-act="ws-save">Guardar disposición actual</span>
+      <span data-act="ws-duplicate">Duplicar espacio de trabajo…</span>
+      <span data-act="ws-lock">Bloquear / desbloquear disposición</span>
+      <span data-act="ws-reset">Restablecer espacio actual</span>
       <hr><span data-act="win-info">Cada panel recuerda su monitor</span>
     </div></div>
     <div class="dz-menu" data-menu="capa">Capa<div class="dz-dd">
@@ -340,6 +369,7 @@
       <span data-act="interpolar">Interpolación de movimiento</span>
       <span data-act="grabar">Grabación en vivo</span>
       <span data-act="claveia">Fotograma clave con IA…</span>
+      <hr><span data-act="esqueleto">Esqueleto / Cut-out… <kbd>FK · IK</kbd></span>
       <hr><span data-act="camara">Cámara <kbd>C</kbd></span>
       <span data-act="clavecam">Clave de cámara en este cuadro</span>
       <hr><span data-act="exportanim">Exportar animación…</span>
@@ -362,7 +392,7 @@
     <div class="vsep"></div>
     <button class="ibtn" id="dzVar" title="Variaciones: el agente evoluciona el diseño y elegís"><svg class="ico"><use href="#i-sparkle"/></svg></button>
     <button class="ibtn" id="dzAnim" title="Animación: línea de tiempo + papel cebolla + cámara"><svg class="ico"><use href="#i-film"/></svg></button>
-    <button class="ibtn" id="dzDoc" title="Documento: tamaño del lienzo, presets y color de fondo"><svg class="ico"><use href="#i-doc"/></svg></button>
+    <button class="ibtn" id="dzDoc" title="Configuración del archivo: resolución fija, formato y fondo"><svg class="ico"><use href="#i-doc"/></svg></button>
     <div class="flex1"></div>
     <button class="ibtn" id="dzRotL" title="Girar la vista 15° antihorario (tecla [) — solo la vista, no el dibujo"><svg class="ico"><use href="#i-rotl"/></svg></button>
     <span class="dz-zoom" id="dzRotLbl" title="Ángulo de la vista — doble clic endereza">0°</span>
@@ -400,7 +430,7 @@
       <button class="ibtn dz-toolbtn" data-tool="eraser" title="Borrador (E): pasalo por encima y borra trazos/formas enteros"><svg class="ico"><use href="#i-eraser"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="dropper" title="Cuentagotas (I): clic en un elemento toma su relleno y trazo"><svg class="ico"><use href="#i-dropper"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="bucket" title="Balde (G): clic en un elemento le aplica el relleno actual (Shift: el trazo)"><svg class="ico"><use href="#i-bucket"/></svg></button>
-      <div class="hsep"></div>
+      <div class="hsep" data-label="Formas"></div>
       <button class="ibtn" id="dzAddRect" title="Rectángulo (R)"><svg class="ico"><use href="#i-rect"/></svg></button>
       <button class="ibtn" id="dzAddCircle" title="Círculo"><svg class="ico"><use href="#i-circle"/></svg></button>
       <button class="ibtn" id="dzAddEllipse" title="Elipse (O)"><svg class="ico"><use href="#i-ellipse"/></svg></button>
@@ -409,14 +439,14 @@
       <button class="ibtn" id="dzAddText" title="Texto (T)"><svg class="ico"><use href="#i-text"/></svg></button>
       <button class="ibtn" id="dzAddLine" title="Línea (L)"><svg class="ico"><use href="#i-line"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="ruler" title="Regla / Hilo tensado (R): clic = inicio, clic = fin con línea elástica · Shift+clic = 15° · clic derecho = punto de fuga para perspectiva · Esc cancela"><svg class="ico"><use href="#i-ruler"/></svg></button>
-      <div class="hsep"></div>
-      <!-- herramientas vectoriales estilo Toon Boom -->
-      <button class="ibtn dz-toolbtn" data-tool="inflator" title="Inflador: seleccioná una forma y arrastrá para inflarla/desinflarla · Shift desinfla"><svg class="ico"><use href="#i-inflate"/></svg></button>
-      <button class="ibtn dz-toolbtn" data-tool="handler" title="Manejador de contorno: clic en una línea y arrastrá ↕ para engrosar/afinar el trazo"><svg class="ico"><use href="#i-contour"/></svg></button>
+      <div class="hsep" data-label="Edición vectorial"></div>
+      <!-- mesa vectorial: operaciones sobre el trazo existente -->
+      <button class="ibtn dz-toolbtn" data-tool="inflator" aria-label="Inflar forma" title="Inflar forma: seleccioná una forma y arrastrá para expandirla · Shift contrae"><svg class="ico"><use href="#i-inflate"/></svg></button>
+      <button class="ibtn dz-toolbtn" data-tool="handler" aria-label="Bomba de grosor" title="Bomba de grosor (Pump): arrastrá verticalmente sobre una línea para engrosar o afinar el trazo"><svg class="ico"><use href="#i-contour"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="iron" title="Plancha: pasá sobre trazos para suavizarlos progresivamente"><svg class="ico"><use href="#i-iron"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="pliers" title="Pinza: clic en el borde de un trazado para cortarlo en dos"><svg class="ico"><use href="#i-cut"/></svg></button>
-      <button class="ibtn dz-toolbtn" data-tool="magnet" title="Imán: clic y arrastrá para atraer los vértices cercanos y deformar"><svg class="ico"><use href="#i-magnet"/></svg></button>
-      <div class="hsep"></div>
+      <button class="ibtn dz-toolbtn" data-tool="magnet" aria-label="Deformar trazo" title="Deformar trazo (Pinch/Imán): arrastrá para atraer puntos cercanos y curvar la línea"><svg class="ico"><use href="#i-magnet"/></svg></button>
+      <div class="hsep" data-label="Animación"></div>
       <button class="ibtn dz-toolbtn" data-tool="pivot" title="Pivote de rig (J): clic en un elemento fija su eje de rotación (posado cutout) · Alt+clic lo quita"><svg class="ico"><use href="#i-pivot"/></svg></button>
       <button class="ibtn" id="dzMirror" title="Modo espejo (M): lápiz, pincel y pluma dibujan también reflejados sobre el eje vertical del lienzo — ideal para personajes simétricos"><svg class="ico"><use href="#i-mirror"/></svg></button>
       <div class="hsep"></div>
@@ -425,27 +455,12 @@
       <button class="ibtn" id="dzBg" title="Generar un FONDO con IA y enviarlo al fondo del lienzo (eje z)"><svg class="ico"><use href="#i-bg"/></svg></button>
       <button class="ibtn" id="dzVec" title="Vectorizar: convierte la imagen importada/generada en trazos SVG editables (calcar). No más dibujo tosco a mano."><svg class="ico"><use href="#i-vector"/></svg></button>
       <button class="ibtn" id="dzCamBtn" title="Cámara (C): mové/zoomeá/rotá el encuadre y dejá claves por cuadro — el export sale por la cámara"><svg class="ico"><use href="#i-cam"/></svg></button>
-      <button class="ibtn" id="dzRigBtn" title="Rig (): claves de posición/rotación/escala por PIEZA — posá el personaje en cada cuadro clave y LOW interpola (pegs de Toon Boom)"><svg class="ico"><use href="#i-key"/></svg></button>
+      <button class="ibtn" id="dzRigBtn" title="Esqueleto cut-out: armá jerarquías, pivotes, FK/IK, límites y poses con claves"><svg class="ico"><use href="#i-key"/></svg></button>
       <button class="ibtn" id="dzZBtn" title="Cámara multiplano: arrastrá cada capa cerca/lejos de la cámara (profundidad Z) — el paneo Y EL ZOOM producen parallax real, como la cámara multiplano de Disney/Toon Boom/OpenToonz"><svg class="ico"><use href="#i-stage"/></svg></button>
       <div class="hsep"></div>
       <button class="ibtn" id="dzPenDbgBtn" title=" Diagnóstico de tableta: panel en vivo de eventos pointer — útil para depurar tabletas Huion/Wacom. Clic para activar/desactivar." onclick="dzPenDebugToggle()"></button>
     </div>
     <div class="dz-canvas" id="dzCanvas">
-      <!-- barra rápida tipo Procreate: dibujo, mezcla, borrado, capas y color
-           conviven en un único grupo compacto sobre el lienzo -->
-      <div class="dz-procreate-bar" id="dzQuickTools">
-        <button data-qtool="select" data-name="Elegir" title="Selección"><svg class="ico ico-fill"><use href="#i-cursor"/></svg></button>
-        <button data-qtool="pencil" data-name="Lápiz" title="Lápiz"><svg class="ico"><use href="#i-pencil"/></svg></button>
-        <button data-qtool="brush" data-name="Pincel" title="Pincel"><svg class="ico"><use href="#i-brush"/></svg></button>
-        <button data-qtool="iron" data-name="Mezclar" title="Mezclar / suavizar"><svg class="ico"><use href="#i-iron"/></svg></button>
-        <button data-qtool="eraser" data-name="Borrar" title="Borrador"><svg class="ico"><use href="#i-eraser"/></svg></button>
-        <button id="dzQuickLayers" data-name="Capas" title="Capas"><svg class="ico"><use href="#i-files"/></svg></button>
-        <label class="dz-quick-color" title="Color del trazo"><input type="color" id="dzQuickColor" value="#1a1a1a"></label>
-      </div>
-      <div class="dz-procreate-sliders" id="dzQuickSliders">
-        <label title="Tamaño del pincel"><span>T</span><input type="range" id="dzQuickSize" min="1" max="120" value="6"></label>
-        <label title="Opacidad del pincel"><span>%</span><input type="range" id="dzQuickOpacity" min="5" max="100" value="100"></label>
-      </div>
       <!-- cursor visual de herramienta: evita que lápiz/pincel aparezcan como
            una flecha genérica y funciona igual con mouse y tableta -->
       <div class="dz-tool-cursor" id="dzToolCursor" hidden>
@@ -479,11 +494,14 @@
       <div class="dz-rotate" id="dzRotate" title="Arrastrá para rotar · Shift: de a 15°" hidden></div>
       <!-- cámara (🎬): el encuadre animable — arrastrá para mover, esquina = zoom,  = rotar -->
       <div class="dz-cam" id="dzCam" hidden>
-        <span class="dz-cam-tag" id="dzCamTag">🎬 cámara</span>
+        <span class="dz-cam-tag" id="dzCamTag">Cámara 2D</span>
+        <span class="dz-cam-safe" aria-hidden="true"></span>
+        <span class="dz-cam-center" aria-hidden="true"></span>
         <div class="dz-cam-size" id="dzCamSize" title="Arrastrá: zoom de cámara (achica el encuadre = acerca)"></div>
         <div class="dz-cam-rot" id="dzCamRot" title="Arrastrá para rotar la cámara"></div>
       </div>
       <div class="dz-pivotmark" id="dzPivot" title="Pivote de rotación (rig) — la rotación gira alrededor de acá" hidden>✛</div>
+      <svg class="dz-rig-overlay" id="dzRigOverlay" aria-label="Controles del esqueleto" hidden></svg>
       <!-- 🎭 Diorama: vista lateral del multiplano (cámara  capas  fondo).
            El compositing sin nodos: cada capa es una tarjeta física que corrés
            en profundidad, como el diorama de la cámara multiplano de Disney -->
@@ -500,13 +518,12 @@
       <!-- X-sheet: planilla de exposición vertical (flotante) -->
       <div class="dz-xsheet" id="dzXsheet" hidden>
         <div class="dz-op-head" id="dzXsHead"><svg class="ico"><use href="#i-xsheet"/></svg> X-sheet · OpenToonz
-          <button class="dz-panel-pop" id="dzXsDetach" title="Separar X-sheet en otra ventana"><svg class="ico"><use href="#i-ext"/></svg></button>
           <span class="dz-op-x" id="dzXsClose" title="Cerrar">×</span></div>
         <div class="dz-xs-rows" id="dzXsRows"></div>
       </div>
-      <!-- papel cebolla: panel chico, personalizable y ARRASTRABLE -->
+      <!-- papel cebolla: mesa de luz personalizable, acoplable y separable -->
       <div class="dz-onionpanel ls2panel" id="dzLevelStrip" hidden>
-        <div class="dz-op-head" id="dzLsHead">DIBUJOS DEL NIVEL
+        <div class="dz-op-head" id="dzLsHead"><svg class="ico"><use href="#i-level"/></svg> DIBUJOS DEL NIVEL
           <span class="dz-op-x" id="dzLsClose" title="Cerrar">×</span></div>
         <div id="dzLsBody"></div>
       </div>
@@ -514,74 +531,102 @@
         <div class="dz-op-head" id="dzOpHead">
           <button class="onion2-power" id="onOn" title="Activar / desactivar (O)">◉</button>
           <span class="onion2-title">PAPEL CEBOLLA</span>
-          <button class="dz-panel-pop" id="dzOnionDetach" title="Separar en otra ventana">⧉</button>
           <span class="dz-op-x" id="dzOpClose" title="Cerrar">×</span>
         </div>
-        <!-- ANTES / DESPUÉS: cuántos DIBUJOS (no frames) mostrar de cada lado.
-             Los puntos hacen de selector rápido, que es como se usa: se cambia
-             de 1 a 3 constantemente mientras se anima. -->
-        <div class="onion2-side" data-side="before">
-          <i class="onion2-swatch" id="onSwB"></i>
-          <span class="onion2-lbl">Antes</span>
-          <div class="onion2-dots" id="onDotsB"></div>
-          <input type="color" id="onColorB" value="#c0392b" title="Color de los dibujos anteriores">
+        <div class="onion2-mixer" id="onMixer" aria-label="Opacidad por fotograma"></div>
+        <div class="onion2-legend">
+          <label><input type="color" id="onColorB" value="#c0392b" title="Color de dibujos anteriores"><span>anteriores</span></label>
+          <b>fotograma actual</b>
+          <label><span>posteriores</span><input type="color" id="onColorA" value="#1e8449" title="Color de dibujos posteriores"></label>
         </div>
-        <div class="onion2-side" data-side="after">
-          <i class="onion2-swatch" id="onSwA"></i>
-          <span class="onion2-lbl">Después</span>
-          <div class="onion2-dots" id="onDotsA"></div>
-          <input type="color" id="onColorA" value="#1e8449" title="Color de los dibujos siguientes">
+        <div class="onion2-presets">
+          <span class="onion2-lbl">Perfil</span>
+          <button id="onCurve" title="Más opaco cerca del actual y más tenue lejos">Curva</button>
+          <button id="onFlat" title="La misma opacidad en todos los canales activos">Uniforme</button>
+          <button id="onClear" title="Apagar todos los canales">Limpiar</button>
         </div>
         <div class="onion2-row">
-          <span class="onion2-lbl">Opacidad</span>
-          <input type="range" id="onAlpha" min="5" max="80" value="38">
-          <b class="onion2-val" id="onAlphaVal">38%</b>
-        </div>
-        <div class="onion2-row">
-          <span class="onion2-lbl">Desvanece</span>
-          <input type="range" id="onFall" min="20" max="100" value="55"
-                 title="Cuánto se apaga cada dibujo más lejano">
-          <b class="onion2-val" id="onFallVal">55%</b>
+          <span class="onion2-lbl">Vista</span>
+          <button class="onion2-mode" id="onLines" title="Mostrar solamente los trazos del papel cebolla">Solo linea</button>
         </div>
         <div class="onion2-fixed">
           <span class="onion2-lbl">Fijos</span>
           <span class="onion2-chips" id="onFixed"></span>
           <button id="onFixAdd" title="Fijar el frame actual como referencia permanente">+ acá</button>
         </div>
-        <div class="onion2-hint">Trabaja sobre DIBUJOS: dentro de un hold no repite el mismo.</div>
+        <div class="onion2-hint">Cada fader controla un dibujo distinto; los holds no se repiten. Doble clic restablece un canal.</div>
       </div>
-      <div class="dz-onionpanel" id="dzRigPanel" hidden>
-        <div class="dz-op-head" id="dzRigHead"> rig <span class="dz-op-x" id="dzRigClose" title="Cerrar">×</span></div>
-        <div class="dz-op-row"><span>Pieza</span>
-          <input type="text" id="rigId" placeholder="elegí y nombrá…" title="Id de la pieza (Enter para asignar) — seleccioná con la flecha blanca (D)">
+      <div class="dz-onionpanel rig2" id="dzRigPanel" hidden>
+        <div class="dz-op-head" id="dzRigHead"><svg class="ico"><use href="#i-key"/></svg> ESQUELETO · CUT-OUT
+          <span class="dz-op-x" id="dzRigClose" title="Cerrar">×</span></div>
+        <div class="rig2-modes" role="tablist" aria-label="Modo de esqueleto">
+          <button id="rigModeBuild" class="on" title="Registrar piezas, pivotes y vínculos">Armado</button>
+          <button id="rigModeFk" title="Posar cada articulación directamente">FK</button>
+          <button id="rigModeIk" title="Mover un extremo y resolver la cadena">IK</button>
         </div>
-        <div class="dz-op-row"><span>X · Y</span>
-          <input type="number" id="rigX" value="0" step="1" title="Desplazamiento X">
-          <input type="number" id="rigY" value="0" step="1" title="Desplazamiento Y">
+        <div class="rig2-tools" id="rigTools" role="toolbar" aria-label="Herramientas de huesos">
+          <button id="rigToolSelect" class="on" title="Seleccionar un hueso o pieza con un clic (sin moverlo)">Seleccionar</button>
+          <button id="rigToolPose" title="Posar: arrastrar el cuerpo o la punta para rotar, la articulación para mover">Posar</button>
+          <button id="rigToolCreate" title="Crear hueso: arrastrar desde la articulación hasta la punta">Crear hueso</button>
         </div>
-        <div class="dz-op-row"><span>Rot · Esc</span>
-          <input type="number" id="rigR" value="0" step="1" title="Rotación (°) alrededor del pivote ">
-          <input type="number" id="rigS" value="1" step="0.05" title="Escala alrededor del pivote">
-        </div>
-        <div class="dz-op-row">
-          <button class="ghost" id="rigKey" title="Clavar la pose en este cuadro (K)"> clavar</button>
-          <button class="ghost" id="rigDel" title="Quitar la clave de este cuadro">✕</button>
-        </div>
-        <div class="dz-op-row"><div class="dz-suggest" id="rigChips"></div></div>
-        <div class="dz-op-row dz-perf-sep"><span>🎥 Actuación</span>
-          <input type="number" id="perfDur" value="3" min="0.5" max="30" step="0.5" title="Duración de la toma (segundos)">
-          <span class="dz-hint">seg</span>
-        </div>
-        <div class="dz-op-row">
-          <button class="ghost" id="perfRec" title="Grabar una TOMA: cuenta 3-2-1 y actuá el movimiento arrastrando la pieza (Shift = rotarla desde el pivote). Las pasadas anteriores se reproducen mientras grabás — como un titiritero por capas.">⏹ actuar</button>
-          <button class="ghost" id="perfPlay" title="Ver la actuación completa"></button>
-          <button class="ghost" id="perfSmooth" title=" Suavizar la toma (limpia el temblor del pulso sin perder la intención)"></button>
-          <button class="ghost" id="perfBake" title=" Generar los cuadros del lapso (para exportar GIF/video)"></button>
-        </div>
-        <div class="dz-hint" id="rigHint">posá    otro cuadro  posá   · LOW interpola entre claves</div>
+        <section class="rig2-section" data-rig-section="build">
+          <div class="rig2-title"><b>Cut-out por piezas</b><span id="rigCount">0</span></div>
+          <div class="rig2-flow"><span>1 Piezas</span><i>›</i><span>2 Pivotes</span><i>›</i><span>3 Vínculos</span><i>›</i><span>4 Pose</span></div>
+          <div class="rig2-actions rig2-prepare"><button class="primary" id="rigAuto" title="Registra las piezas dibujables sin inventar una anatomía ni una jerarquía">Registrar piezas del dibujo</button></div>
+          <div class="rig2-row rig2-wide"><input type="text" id="rigId" placeholder="nombre de la pieza" title="ID estable de la pieza">
+            <button id="rigAdd" title="Registrar la selección como pieza del esqueleto">Añadir</button>
+            <button id="rigRemove" title="Quitar la pieza seleccionada del esqueleto">Quitar</button></div>
+          <label class="rig2-field"><span>Vínculo</span><select id="rigParent"><option value="">— sin padre —</option></select></label>
+          <div class="rig2-actions">
+            <button id="rigPivotTool" title="Colocar el pivote de la pieza en la mesa">Pivote</button>
+            <button id="rigPin" title="Fijar o liberar esta pieza como raíz">Fijar raíz</button>
+            <button id="rigBind" title="Vincular la pieza seleccionada en la mesa al hueso activo (para que FK/IK la mueva)">Vincular dibujo</button>
+          </div>
+          <div class="rig2-tree" id="rigTree" aria-label="Jerarquía del personaje"></div>
+        </section>
+        <section class="rig2-section" data-rig-section="pose">
+          <div class="rig2-title"><b>Transformación</b><span id="rigFrame">F1</span></div>
+          <div class="rig2-grid">
+            <label>X<input type="number" id="rigX" value="0" step="1"></label>
+            <label>Y<input type="number" id="rigY" value="0" step="1"></label>
+            <label>Rot<input type="number" id="rigR" value="0" step="1"></label>
+            <label>Esc X<input type="number" id="rigSX" value="1" step="0.05"></label>
+            <label>Esc Y<input type="number" id="rigSY" value="1" step="0.05"></label>
+          </div>
+          <div class="rig2-limits"><span>Límite</span>
+            <label>mín<input type="number" id="rigMin" value="-180" min="-360" max="360"></label>
+            <label>máx<input type="number" id="rigMax" value="180" min="-360" max="360"></label></div>
+          <div class="rig2-actions">
+            <button class="primary" id="rigKey" title="Crear clave para la pieza activa">Clave</button>
+            <button id="rigKeyAll" title="Crear una clave para todas las piezas">Clave global</button>
+            <button id="rigDel" title="Quitar la clave de esta pieza">Borrar</button>
+            <button id="rigReset" title="Restablecer y clavar la pose neutra">Neutra</button>
+          </div>
+          <label class="rig2-check"><input type="checkbox" id="rigAutoKey" checked> Auto-clave al soltar <small>(desmarcá para probar sin grabar · Enter clava, Esc descarta)</small></label>
+          <div class="dz-suggest rig2-keys" id="rigChips"></div>
+        </section>
+        <section class="rig2-section" data-rig-section="ik">
+          <div class="rig2-title"><b>Cadena IK</b><span id="rigIkStatus">sin cadena</span></div>
+          <label class="rig2-field"><span>Hombro</span><select id="rigIkRoot"></select></label>
+          <label class="rig2-field"><span>Codo</span><select id="rigIkMid"></select></label>
+          <label class="rig2-field"><span>Extremo</span><select id="rigIkEnd"></select></label>
+          <div class="rig2-actions"><button class="primary" id="rigIkCreate">Crear IK</button>
+            <button id="rigIkFlip" title="Invertir el lado de flexión">Invertir</button>
+            <button id="rigIkDelete">Eliminar</button></div>
+          <label class="rig2-field"><span>Activa</span><select id="rigConstraint"><option value="">— ninguna —</option></select></label>
+          <div class="rig2-target"><span>Objetivo</span><b id="rigTarget">—</b><small>arrastrá el rombo en la mesa</small></div>
+        </section>
+        <details class="rig2-performance">
+          <summary>Captura de actuación</summary>
+          <div class="rig2-row"><label>Duración <input type="number" id="perfDur" value="3" min="0.5" max="30" step="0.5"> s</label></div>
+          <div class="rig2-actions"><button id="perfRec">Actuar</button><button id="perfPlay">Ver</button>
+            <button id="perfSmooth">Suavizar</button><button id="perfBake">Generar</button></div>
+        </details>
+        <div class="rig2-hint" id="rigHint">Armado: registrá las piezas. En la mesa, arrastrá un círculo para colocar su pivote y el cuadrado para vincular esa pieza con su padre.</div>
       </div>
       <div class="dz-pin" id="dzPin" hidden>💬</div>
     </div>
+    <aside class="dz-animation-dock" id="dzAnimationDock" hidden aria-label="Paneles de animación"></aside>
     <div class="dz-code" id="dzCode" hidden>
       <textarea id="dzCodeArea" spellcheck="false"></textarea>
       <div class="dz-code-bar">
@@ -656,6 +701,20 @@
           <button class="ibtn" id="dzLayDel" title="Borrar capa (Supr)"><svg class="ico"><use href="#i-trash"/></svg></button>
         </div>
       </div>
+      <section class="dz-compositor" id="dzCompositor" hidden>
+        <div class="dz-comp-head"><span>Composición de capa</span><button id="dzCompReset" title="Quitar efectos de esta capa">Restablecer</button></div>
+        <label>Desenfoque <input type="range" id="dzCompBlur" min="0" max="40" step="0.5" value="0"><output id="dzCompBlurVal">0 px</output></label>
+        <label>Brillo <input type="range" id="dzCompBright" min="0" max="200" value="100"><output id="dzCompBrightVal">100%</output></label>
+        <label>Contraste <input type="range" id="dzCompContrast" min="0" max="200" value="100"><output id="dzCompContrastVal">100%</output></label>
+        <label>Saturación <input type="range" id="dzCompSaturate" min="0" max="200" value="100"><output id="dzCompSaturateVal">100%</output></label>
+        <div class="dz-comp-shadow">
+          <label><input type="checkbox" id="dzCompShadow"> Sombra</label>
+          <input type="number" id="dzCompShadowX" value="8" step="1" title="Desplazamiento X">
+          <input type="number" id="dzCompShadowY" value="8" step="1" title="Desplazamiento Y">
+          <input type="number" id="dzCompShadowBlur" value="8" min="0" step="1" title="Desenfoque">
+          <input type="color" id="dzCompShadowColor" value="#000000" title="Color de sombra">
+        </div>
+      </section>
       <div class="dz-empty" id="dzEmpty" hidden></div>
       <div id="dzProps" hidden></div>
     </div>
@@ -675,8 +734,7 @@
     <button class="ibtn active" id="tlOnion" title="Papel cebolla: mostrar/ocultar (el panel flotante lo personaliza)"><svg class="ico"><use href="#i-onion"/></svg></button>
     <button class="ibtn dz-anim-mode active" id="tlLayers" title="Timeline OpenToonz: niveles en filas y fotogramas en columnas"><svg class="ico"><use href="#i-files"/></svg><span>Timeline</span></button>
     <button class="ibtn dz-anim-mode" id="tlXs" title="X-sheet: tiempo vertical, niveles en columnas"><svg class="ico"><use href="#i-xsheet"/></svg><span>X-sheet</span></button>
-    <button class="ibtn" id="tlDetach" title="Separar Timeline en una ventana para el segundo monitor"><svg class="ico"><use href="#i-ext"/></svg></button>
-    <button class="ibtn" id="tlDetachXs" title="Separar X-sheet en una ventana para el segundo monitor"><svg class="ico"><use href="#i-xsheet"/></svg><span class="dz-pop-mark">↗</span></button>
+    <button class="ibtn" id="tlRigOpen" title="Esqueleto / Cut-out: armado, FK e IK"><svg class="ico"><use href="#i-key"/></svg></button>
     <div class="tl-frames" id="tlFrames" title="Arrastrá sobre los cuadros para hojearlos (scrub)"></div>
     <button class="ibtn" id="tlKey" title="Marcar/desmarcar este cuadro como FOTOGRAMA CLAVE (pose principal del flujo pose-a-pose)"><svg class="ico"><use href="#i-key"/></svg></button>
     <button class="ibtn" id="tlAdd" title="Duplicar este cuadro al FINAL (flujo clásico: dibujar sobre la copia)"><svg class="ico"><use href="#i-plus"/></svg></button>
@@ -696,7 +754,7 @@
   </div>
   <!-- timeline por CAPAS × cuadros (estilo Toon Boom): filas capa, columnas cuadro -->
   <div class="dz-tlgrid" id="dzTlGrid" hidden>
-    <div class="dz-tlg-resize" id="dzTlgResize" title="Arrastrá para cambiar la altura de la Timeline"></div>
+    <div class="dz-tlg-resize" id="dzTlgResize" title="Arrastrá para cambiar la altura · doble clic para plegar o restaurar la Timeline" role="separator" aria-orientation="horizontal" tabindex="0"></div>
     <div class="dz-tlg-head">
       <span class="dz-tlg-corner">Niveles ↓ · Fotogramas →</span>
       <div class="dz-tlg-cols" id="dzTlgCols"></div>
@@ -730,45 +788,47 @@
 
 <div class="overlay" id="overlay" hidden><div class="modal" id="modal"></div></div>
 
-<script src="vendor/codemirror.min.js?v=3.29.38"></script>
-<script src="vendor/mode-python.min.js?v=3.29.38"></script>
-<script src="vendor/mode-javascript.min.js?v=3.29.38"></script>
-<script src="vendor/mode-shell.min.js?v=3.29.38"></script>
-<script src="vendor/mode-powershell.min.js?v=3.29.38"></script>
-<script src="vendor/mode-xml.min.js?v=3.29.38"></script>
-<script src="vendor/mode-css.min.js?v=3.29.38"></script>
-<script src="vendor/mode-htmlmixed.min.js?v=3.29.38"></script>
-<script src="vendor/addon-closebrackets.min.js?v=3.29.38"></script>
-<script src="vendor/addon-activeline.min.js?v=3.29.38"></script>
-<script src="mock-api.js?v=3.29.38"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="vendor/codemirror.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-python.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-javascript.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-shell.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-powershell.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-xml.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-css.min.js?v=dev1787232053"></script>
+<script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
+<script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
+<script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
+<script src="mock-api.js?v=3.29.47"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=3.29.38"></script>
-<script src="animation/scene-model.js?v=3.29.38"></script>
-<script src="animation/exposures.js?v=3.29.38"></script>
-<script src="animation/onion.js?v=3.29.38"></script>
-<script src="animation/document.js?v=3.29.38"></script>
-<script src="animation/xsheet-view.js?v=3.29.38"></script>
-<script src="animation/timeline-view.js?v=3.29.38"></script>
-<script src="animation/level-strip.js?v=3.29.38"></script>
-<script src="animation/audio.js?v=3.29.38"></script>
-<script src="animation/shortcuts.js?v=3.29.38"></script>
-<script src="animation/model-tests.js?v=3.29.38"></script>
-<script src="animation/timeline.js?v=3.29.38"></script>
-<script src="animation/xsheet.js?v=3.29.38"></script>
-<script src="animation/playback.js?v=3.29.38"></script>
-<script src="animation/camera.js?v=3.29.38"></script>
-<script src="drawing/stabilization.js?v=3.29.38"></script>
-<script src="drawing/pointer-input.js?v=3.29.38"></script>
-<script src="drawing/brushes.js?v=3.29.38"></script>
-<script src="drawing/stroke-engine.js?v=3.29.38"></script>
-<script src="workspace/panels.js?v=3.29.38"></script>
-<script src="workspace/workspaces.js?v=3.29.38"></script>
-<script src="workspace/windows.js?v=3.29.38"></script>
-<script src="workspace/layouts.js?v=3.29.38"></script>
-<script src="workspace/recovery.js?v=3.29.38"></script>
-<script src="ai/commands.js?v=3.29.38"></script>
-<script src="ai/task-runner.js?v=3.29.38"></script>
-<script src="ai/recovery.js?v=3.29.38"></script>
-<script src="app.js?v=3.29.38"></script>
+<script src="core/history.js?v=3.29.47"></script>
+<script src="animation/palette.js?v=3.29.47"></script>
+<script src="animation/scene-model.js?v=3.29.47"></script>
+<script src="animation/exposures.js?v=3.29.47"></script>
+<script src="animation/onion.js?v=3.29.47"></script>
+<script src="animation/document.js?v=3.29.47"></script>
+<script src="animation/xsheet-view.js?v=3.29.47"></script>
+<script src="animation/timeline-view.js?v=3.29.47"></script>
+<script src="animation/level-strip.js?v=3.29.47"></script>
+<script src="animation/palette-view.js?v=3.29.47"></script>
+<script src="animation/audio.js?v=3.29.47"></script>
+<script src="animation/shortcuts.js?v=3.29.47"></script>
+<script src="animation/model-tests.js?v=3.29.47"></script>
+<script src="animation/timeline.js?v=3.29.47"></script>
+<script src="animation/xsheet.js?v=3.29.47"></script>
+<script src="animation/playback.js?v=3.29.47"></script>
+<script src="animation/camera.js?v=3.29.47"></script>
+<script src="drawing/stabilization.js?v=3.29.47"></script>
+<script src="drawing/pointer-input.js?v=3.29.47"></script>
+<script src="drawing/brushes.js?v=3.29.47"></script>
+<script src="drawing/stroke-engine.js?v=3.29.47"></script>
+<script src="workspace/panels.js?v=3.29.47"></script>
+<script src="workspace/workspaces.js?v=3.29.47"></script>
+<script src="workspace/windows.js?v=3.29.47"></script>
+<script src="workspace/layouts.js?v=3.29.47"></script>
+<script src="workspace/recovery.js?v=3.29.47"></script>
+<script src="ai/commands.js?v=3.29.47"></script>
+<script src="ai/task-runner.js?v=3.29.47"></script>
+<script src="ai/recovery.js?v=3.29.47"></script>
+<script src="app.js?v=3.29.47"></script>
 </body>
 </html>

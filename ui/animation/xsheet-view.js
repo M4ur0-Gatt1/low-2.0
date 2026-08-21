@@ -28,16 +28,30 @@
     constructor(host, doc) {
       this.host = typeof host === "string" ? document.querySelector(host) : host;
       this.doc = doc;
-      this.sel = null;              // { layerId, from, to }
-      this._desuscribir = doc ? doc.subscribe(() => this.render()) : null;
+      this.sel = null;              // rectangular, inclusive selection
+      this.dropPreview = null;
+      this._desuscribir = doc ? doc.subscribe((_d, reason) => this._docChanged(reason)) : null;
     }
     setDoc(doc) {
       if (this._desuscribir) this._desuscribir();
       this.doc = doc;
-      this._desuscribir = doc ? doc.subscribe(() => this.render()) : null;
+      this._desuscribir = doc ? doc.subscribe((_d, reason) => this._docChanged(reason)) : null;
       this.render();
     }
     dispose() { if (this._desuscribir) this._desuscribir(); this.host && (this.host.innerHTML = ""); }
+    _docChanged(reason) { if (reason === "frame") this._updateCursor(); else this.render(); }
+    _updateCursor() {
+      if (!this.host || !this.doc) return;
+      this.host.querySelectorAll(".xs2-row.actual").forEach((n) => n.classList.remove("actual"));
+      this.host.querySelectorAll(".xs2-cell.cursor").forEach((n) => n.classList.remove("cursor"));
+      const row = this.host.querySelector(`.xs2-row[data-frame="${this.doc.frame}"]`);
+      if (row) row.classList.add("actual");
+      const cell = this.host.querySelector(`.xs2-cell[data-layer-id="${this.doc.layerId}"][data-frame="${this.doc.frame}"]`);
+      if (cell) cell.classList.add("cursor");
+      const info = this.host.querySelector(".xs2-tpinfo");
+      if (info) info.textContent = `${this.doc.frame} / ${this.doc.scene.playRange().out}`;
+      if (row && row.scrollIntoView) row.scrollIntoView({ block: "nearest" });
+    }
 
     /** Cuántas filas mostrar. */
     _filas() {
@@ -69,7 +83,7 @@
         h.onclick = () => doc.selectLayer(ly.id);
         h.ondblclick = () => {
           const n = prompt("Nombre de la capa:", ly.name);
-          if (n) { ly.name = n; doc.touch(); doc.emit("layers"); }
+          if (n) doc.setLayerProperty(ly.id, "name", n, "Renombrar capa");
         };
         head.appendChild(h);
       }
@@ -86,6 +100,7 @@
       cuerpo.className = "xs2-body";
       for (let f = 1; f <= filas; f++) {
         const fila = document.createElement("div");
+        fila.dataset.frame = String(f);
         fila.className = "xs2-row" + (f === doc.frame ? " actual" : "") + (f % 6 === 1 ? " seg" : "");
 
         // número de frame + marca de papel cebolla
@@ -132,6 +147,7 @@
       d.textContent = txt;
       return d;
     }
+    _icon(id) { return `<svg class="ico"><use href="#${id}"/></svg>`; }
 
     /** Una celda de la planilla. */
     _celdaXs(ly, f) {
@@ -139,10 +155,10 @@
       const val = ly.cellAt(f);
       const esHold = ly.isHold(f);
       const inicio = val != null && !esHold;
-      const enSel = this.sel && this.sel.layerId === ly.id && f >= this.sel.from && f <= this.sel.to
-        && this.sel.to > this.sel.from;
+      const enSel = this._inSelection(ly.id, f);
       const c = document.createElement("div");
       c.className = "xs2-cell" + (enSel ? " rango" : "")
+        + (this._inDropPreview(ly.id, f) ? " drop-preview" : "")
         + (val == null ? " vacia" : "")
         + (esHold ? " hold" : "")
         + (inicio ? " inicio" : "")
@@ -189,7 +205,80 @@
         document.addEventListener("pointermove", mover);
         document.addEventListener("pointerup", soltar);
       };
+      // Selection owns the cell drag; the fill handle below owns timing stretch.
+      c.onclick = () => {};
+      c.onpointerdown = (e) => {
+        if (e.button !== 0 || e.target.closest(".xs2-fill")) return;
+        e.preventDefault();
+        const anchor = e.shiftKey && this.sel
+          ? { layerId: this.sel.anchorLayerId, frame: this.sel.anchorFrame }
+          : { layerId: ly.id, frame: f };
+        const update = (layerId, frame) => {
+          this.sel = doc.selectCellRange(anchor.layerId, anchor.frame, layerId, frame);
+          doc.selectLayer(layerId); doc.goTo(frame); this.render();
+        };
+        update(ly.id, f);
+        const mover = (ev) => {
+          const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+          const cell = hit && hit.closest ? hit.closest(".xs2-cell") : null;
+          if (cell && cell.dataset.layerId) update(cell.dataset.layerId, Number(cell.dataset.frame));
+        };
+        const soltar = () => { document.removeEventListener("pointermove", mover);
+          document.removeEventListener("pointerup", soltar); };
+        document.addEventListener("pointermove", mover); document.addEventListener("pointerup", soltar);
+      };
+      c.dataset.layerId = ly.id; c.dataset.frame = String(f);
+      c.ondragover = (e) => {
+        if (!Array.from(e.dataTransfer.types || []).includes("application/x-low-level-drawings")) return;
+        e.preventDefault(); c.classList.add("drop-target");
+        try {
+          const data = animation.levelDrag || JSON.parse(e.dataTransfer.getData("application/x-low-level-drawings") || "null");
+          const count = data && data.numbers ? data.numbers.length : 1;
+          this.dropPreview = { layerId: ly.id, from: f, to: f + count - 1 };
+          this.host.querySelectorAll(".xs2-cell").forEach((cell) => cell.classList.toggle("drop-preview",
+            cell.dataset.layerId === ly.id && Number(cell.dataset.frame) >= f && Number(cell.dataset.frame) < f + count));
+        } catch (_) { /* Firefox no deja leer el payload antes del drop */ }
+      };
+      c.ondragleave = () => c.classList.remove("drop-target");
+      c.ondrop = (e) => {
+        e.preventDefault(); c.classList.remove("drop-target"); this.dropPreview = null;
+        try {
+          const data = JSON.parse(e.dataTransfer.getData("application/x-low-level-drawings"));
+          doc.exposeDrawings(data.levelId, data.numbers, ly.id, f, { insert: e.shiftKey && !e.altKey });
+          this.sel = this._selection(ly.id, f, ly.id, f + data.numbers.length - 1);
+        } catch (_) { /* ignore external drops */ }
+      };
+      if (val != null && ly.cellAt(f + 1) !== val) {
+        const handle = document.createElement("i"); handle.className = "xs2-fill";
+        handle.onpointerdown = (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const y0 = e.clientY, alto = c.getBoundingClientRect().height || 18;
+          let hasta = f;
+          const mover = (ev) => { hasta = f + Math.max(0, Math.round((ev.clientY - y0) / alto)); };
+          const soltar = () => { document.removeEventListener("pointermove", mover);
+            document.removeEventListener("pointerup", soltar);
+            if (hasta > f) doc.apply("fillHandle", ly.holdStart(f), f, hasta); };
+          document.addEventListener("pointermove", mover); document.addEventListener("pointerup", soltar);
+        };
+        c.appendChild(handle);
+      }
       return c;
+    }
+
+    _selection(aLayer, aFrame, bLayer, bFrame) {
+      return this.doc.selectCellRange(aLayer, aFrame, bLayer, bFrame);
+    }
+    _inSelection(layerId, frame) {
+      if (!this.sel) return false;
+      const layers = this.doc.scene.layers;
+      const i = layers.findIndex((l) => l.id === layerId);
+      const a = layers.findIndex((l) => l.id === this.sel.fromLayerId);
+      const b = layers.findIndex((l) => l.id === this.sel.toLayerId);
+      return i >= a && i <= b && frame >= this.sel.from && frame <= this.sel.to;
+    }
+    _inDropPreview(layerId, frame) {
+      const p = this.dropPreview;
+      return !!p && p.layerId === layerId && frame >= p.from && frame <= p.to;
     }
 
     /** Transporte: reproducir, navegar, FPS y rango. */
@@ -197,10 +286,14 @@
       const doc = this.doc, pb = this.playback;
       const b = document.createElement("div");
       b.className = "xs2-tp";
-      const btn = (txt, title, fn, act) => {
+      const transportIcons = ["i-skip-start", "i-chev-l", pb.playing ? "i-pause" : "i-play",
+        "i-chev-r", "i-step-next", "i-loop"];
+      let transportIcon = 0;
+      const btn = (_txt, title, fn, act) => {
         const x = document.createElement("button");
         x.className = "xs2-tpb" + (act ? " on" : "");
-        x.textContent = txt; x.title = title; x.onclick = fn;
+        x.innerHTML = this._icon(transportIcons[transportIcon++]);
+        x.title = title; x.setAttribute("aria-label", title); x.onclick = fn;
         b.appendChild(x); return x;
       };
       btn("⏮", "Primer frame (Inicio)", () => pb.first());
@@ -248,7 +341,7 @@
       b.className = "xs2-bar";
       const rango = () => {
         const ly = doc.layer;
-        const s = this.sel && this.sel.layerId === doc.layerId && this.sel.to > this.sel.from
+        const s = this.sel && this.sel.fromLayerId === doc.layerId && this.sel.toLayerId === doc.layerId && this.sel.to > this.sel.from
           ? this.sel : null;
         return s ? [s.from, s.to] : [1, Math.max(1, ly ? ly.lastFrame() : 1)];
       };

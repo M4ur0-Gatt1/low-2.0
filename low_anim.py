@@ -295,7 +295,7 @@ class AnimationAPI:
         self.current_graph: Optional[NodeGraph] = None
         self.pipeline: Optional[AIPipeline] = None
 
-    def create_project(self, name: str, width=1920, height=1080, fps=24,
+    def create_project(self, name: str, width=1020, height=1080, fps=24,
                        duration=240) -> Scene:
         """Crea un proyecto nuevo listo para animar."""
         self.current_scene = Scene(name, width, height, fps, duration)
@@ -640,7 +640,7 @@ Ejemplos:
     # new
     p_new = sub.add_parser("new", help="Crear nuevo proyecto")
     p_new.add_argument("name", help="Nombre del proyecto")
-    p_new.add_argument("--width", type=int, default=1920)
+    p_new.add_argument("--width", type=int, default=1020)
     p_new.add_argument("--height", type=int, default=1080)
     p_new.add_argument("--fps", type=int, default=24)
     p_new.add_argument("--duration", type=int, default=240)

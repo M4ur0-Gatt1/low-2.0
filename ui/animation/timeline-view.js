@@ -15,8 +15,9 @@
   "use strict";
   const LOW = global.LOW = global.LOW || {};
   const animation = LOW.animation = LOW.animation || {};
+  const icon = (id) => `<svg class="ico"><use href="#${id}"/></svg>`;
 
-  const ANCHO = 13;        // px por frame
+  const ANCHO = 16;        // px por frame; coincide con la escala legible del tema
   const EXTRA = 24;        // frames de más al final, para seguir armando
 
   class TimelineView {
@@ -24,15 +25,30 @@
       this.host = typeof host === "string" ? document.querySelector(host) : host;
       this.doc = doc;
       this.playback = null;
-      this._desuscribir = doc ? doc.subscribe(() => this.render()) : null;
+      this.onionEnabled = true;
+      this.toggleOnion = null;
+      this.openOnion = null;
+      this.loadAudio = null;
+      this.status = null;
+      this._desuscribir = doc ? doc.subscribe((_d, reason) => this._docChanged(reason)) : null;
     }
     setDoc(doc) {
       if (this._desuscribir) this._desuscribir();
       this.doc = doc;
-      this._desuscribir = doc ? doc.subscribe(() => this.render()) : null;
+      this._desuscribir = doc ? doc.subscribe((_d, reason) => this._docChanged(reason)) : null;
       this.render();
     }
     dispose() { if (this._desuscribir) this._desuscribir(); if (this.host) this.host.innerHTML = ""; }
+    _docChanged(reason) { if (reason === "frame") this._updateCursor(); else this.render(); }
+    _updateCursor() {
+      if (!this.host || !this.doc) return;
+      this.host.querySelectorAll(".actual").forEach((n) => n.classList.remove("actual"));
+      this.host.querySelectorAll(`[data-frame="${this.doc.frame}"]`).forEach((n) => n.classList.add("actual"));
+      const label = this.host.querySelector(".tl2-rulername");
+      if (label) label.textContent = `${this.doc.frame} / ${this.doc.scene.playRange().out}`;
+      const active = this.host.querySelector(`.tl2-cell[data-layer-id="${this.doc.layerId}"][data-frame="${this.doc.frame}"]`);
+      if (active && active.scrollIntoView) active.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
 
     _frames() {
       const doc = this.doc;
@@ -43,8 +59,59 @@
       if (!this.host || !this.doc) return;
       const doc = this.doc, sc = doc.scene;
       const total = this._frames();
+      const cameraKeys = (sc.camera && sc.camera.keys) || {};
       const cont = document.createElement("div");
       cont.className = "tl2";
+
+      // ── herramientas de celdas ──
+      const tools = document.createElement("div"); tools.className = "tl2-tools";
+      const group = () => { const g = document.createElement("span"); g.className = "tl2-toolgroup"; tools.appendChild(g); return g; };
+      const button = (host, icon, title, action, active=false, badge="") => {
+        const b = document.createElement("button");
+        b.title = title; b.setAttribute("aria-label", title);
+        b.className = (active ? "on " : "") + (badge ? "tl2-badge" : "");
+        if (icon) b.innerHTML = `<svg class="tl2-icon" aria-hidden="true"><use href="#${icon}"></use></svg>`;
+        if (badge) b.innerHTML += `<span aria-hidden="true">${badge}</span>`;
+        b.onclick = action; host.appendChild(b); return b;
+      };
+      const selected = () => doc.cellSelection || { fromLayerId: doc.layerId, toLayerId: doc.layerId,
+        anchorLayerId: doc.layerId, anchorFrame: doc.frame, from: doc.frame, to: doc.frame };
+      const edit = group();
+      button(edit, "i-blank-frame", "Crear un dibujo vacío en la celda actual", () => {
+        if (doc.cell == null) doc.ensureDrawing();
+        else { const d = doc.duplicateDrawing(doc.cell); if (d) doc.setCell(doc.frame, d.number); }
+        doc.emit("frame");
+      });
+      button(edit, "i-level", "Crear un nivel y una columna", () => { doc.addLayer(); doc.emit("frame"); });
+      const clipboard = group(), clip = animation.shortcuts && animation.shortcuts.clip;
+      button(clipboard, "i-cut", "Cortar las celdas seleccionadas", () => {
+        if (!clip) return; clip.range = doc.readCells(selected()); doc.clearCells(selected(), "Cortar rango");
+      });
+      button(clipboard, "i-copy", "Copiar las celdas seleccionadas", () => {
+        if (!clip) return; clip.range = doc.readCells(selected()); if (this.status) this.status("Celdas copiadas");
+      });
+      button(clipboard, "i-paste", "Pegar desde la celda actual", () => {
+        if (clip && clip.range) doc.pasteCells(clip.range, doc.layerId, doc.frame, { label: "Pegar rango" });
+      });
+      const timing = group();
+      button(timing, "i-insert", "Insertar una celda antes del fotograma actual", () => doc.apply("insert", doc.frame, 1));
+      button(timing, "i-eraser", "Vaciar las celdas sin borrar sus dibujos", () => doc.clearCells(selected(), "Vaciar rango"));
+      button(timing, "i-exposure-less", "Acortar la exposición actual", () => doc.apply("stepChange", doc.frame, -1));
+      button(timing, "i-exposure-more", "Extender la exposición actual", () => doc.apply("stepChange", doc.frame, +1));
+      const sequence = group();
+      button(sequence, "", "Exponer cada dibujo por un fotograma", () => { const s = selected(); doc.apply("step", s.from, s.to, 1); }, false, "1s");
+      button(sequence, "", "Exponer cada dibujo por dos fotogramas", () => { const s = selected(); doc.apply("step", s.from, s.to, 2); }, false, "2s");
+      button(sequence, "", "Exponer cada dibujo por tres fotogramas", () => { const s = selected(); doc.apply("step", s.from, s.to, 3); }, false, "3s");
+      button(sequence, "i-autoexpose", "Completar los huecos sosteniendo el dibujo anterior", () => { const s = selected(); doc.apply("autoexpose", s.from, s.to); });
+      button(sequence, "i-dedupe", "Dejar una celda por dibujo", () => { const s = selected(); doc.apply("dedupe", s.from, s.to); });
+      button(sequence, "i-loop", "Repetir el rango seleccionado", () => { const s = selected(); doc.apply("repeat", s.from, s.to, 1); });
+      button(sequence, "i-reverse", "Invertir el orden del rango seleccionado", () => { const s = selected(); doc.apply("reverse", s.from, s.to); });
+      button(sequence, "i-swing", "Crear un ciclo ping-pong con el rango", () => { const s = selected(); doc.apply("swing", s.from, s.to); });
+      const media = group();
+      button(media, "i-onion", "Activar el papel cebolla", () => { if (this.toggleOnion) this.toggleOnion(); }, this.onionEnabled);
+      button(media, "i-mixer", "Abrir los faders de papel cebolla", () => { if (this.openOnion) this.openOnion(); });
+      button(media, "i-audio", "Cargar una pista de audio", () => { if (this.loadAudio) this.loadAudio(); });
+      cont.appendChild(tools);
 
       // ── regla de frames ──
       const regla = document.createElement("div");
@@ -57,7 +124,10 @@
       pista.className = "tl2-track";
       for (let f = 1; f <= total; f++) {
         const t = document.createElement("i");
-        t.className = "tl2-tick" + (f % 6 === 1 ? " seg" : "") + (f === doc.frame ? " actual" : "");
+        t.className = "tl2-tick" + (f % 6 === 1 ? " seg" : "") + (f === doc.frame ? " actual" : "")
+          + (cameraKeys[f] ? " camkey" : "");
+        if (cameraKeys[f]) t.title = `Clave de camara en el frame ${f}`;
+        t.dataset.frame = String(f);
         // el número solo cada 6: con uno por frame no se lee nada
         if (f % 6 === 1) t.textContent = String(f);
         // SCRUBBING: arrastrar por la regla recorre la animación con la mano.
@@ -88,6 +158,83 @@
       regla.appendChild(pista);
       cont.appendChild(regla);
 
+      // ── mesa de luz rápida ──
+      // Los marcadores se fijan sin mover el playhead: sirven para calcar una
+      // pose lejana mientras se dibuja en el fotograma actual.
+      const luz = document.createElement("div"); luz.className = "tl2-lighttable";
+      const luzNombre = document.createElement("div"); luzNombre.className = "tl2-name";
+      luzNombre.textContent = "Referencias";
+      const limpiar = document.createElement("button"); limpiar.textContent = "Limpiar";
+      limpiar.title = "Quitar todas las referencias fijas";
+      limpiar.onclick = () => { doc.onionCfg = { ...(doc.onionCfg || {}), fixed: [] };
+        doc.touch(); doc.emit("onion"); };
+      luzNombre.appendChild(limpiar); luz.appendChild(luzNombre);
+      const luzTrack = document.createElement("div"); luzTrack.className = "tl2-track";
+      const cfg = animation.onion.config(doc.onionCfg);
+      const fixed = new Set((cfg.fixed || []).map(Number));
+      for (let f = 1; f <= total; f++) {
+        const c = document.createElement("i"), drawing = doc.layer && doc.layer.cellAt(f);
+        c.className = "tl2-lightcell" + (fixed.has(f) ? " marked " + (f < doc.frame ? "before" : "after") : "")
+          + (f === doc.frame ? " current" : "") + (drawing == null ? " empty" : "");
+        c.dataset.frame = String(f);
+        c.title = drawing == null ? `Frame ${f}: no hay dibujo para fijar` :
+          (fixed.has(f) ? `Quitar referencia fija del frame ${f}` : `Fijar el frame ${f} como referencia`);
+        luzTrack.appendChild(c);
+      }
+      // Clic y arrastre pinta o borra una serie de referencias, igual que los
+      // marcadores de la barra de tiempo de OpenToonz.
+      luzTrack.onpointerdown = (event) => {
+        if (event.button !== 0) return;
+        const start = event.target.closest && event.target.closest(".tl2-lightcell");
+        if (!start || start.classList.contains("empty") || start.classList.contains("current")) return;
+        event.preventDefault();
+        const values = new Set((cfg.fixed || []).map(Number));
+        const turnOn = !values.has(+start.dataset.frame);
+        const painted = new Set();
+        const paint = (cell) => {
+          if (!cell || cell.classList.contains("empty") || cell.classList.contains("current")) return;
+          const frame = +cell.dataset.frame; if (painted.has(frame)) return; painted.add(frame);
+          if (turnOn) values.add(frame); else values.delete(frame);
+          cell.classList.toggle("marked", turnOn);
+          cell.classList.toggle("before", turnOn && frame < doc.frame);
+          cell.classList.toggle("after", turnOn && frame > doc.frame);
+        };
+        paint(start);
+        const move = (e) => paint(document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".tl2-lightcell"));
+        const up = () => {
+          document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
+          doc.onionCfg = { ...cfg, fixed: [...values].sort((a, b) => a - b) };
+          doc.touch(); doc.emit("onion");
+        };
+        document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+      };
+      luz.appendChild(luzTrack); cont.appendChild(luz);
+
+      // ── pista del esqueleto: una pose global reúne las claves de todas las
+      // piezas sin inventar otro timeline. Doble clic clava; Alt+clic borra.
+      const rigNodes = Object.values((sc.rig && sc.rig.nodes) || {});
+      if (rigNodes.length) {
+        const fila = document.createElement("div"); fila.className = "tl2-row tl2-rig";
+        const cab = document.createElement("div"); cab.className = "tl2-name";
+        const badge = document.createElement("span"); badge.textContent = "◇";
+        const nombreRig = document.createElement("span"); nombreRig.textContent = "Esqueleto";
+        cab.append(badge, nombreRig); fila.appendChild(cab);
+        const track = document.createElement("div"); track.className = "tl2-track";
+        for (let f = 1; f <= total; f++) {
+          const keyed = rigNodes.some(node => node.keys && node.keys[f]);
+          const c = document.createElement("i"); c.dataset.frame = String(f);
+          c.className = "tl2-cell rig" + (keyed ? " rigkey" : "") + (f === doc.frame ? " actual" : "");
+          c.title = keyed ? `Pose del esqueleto en F${f} · Alt+clic: borrar` : `F${f} · doble clic: crear pose global`;
+          c.onclick = e => { if (e.altKey && keyed) doc.deleteRigPoseKeys(null, f); else doc.goTo(f); };
+          c.ondblclick = () => {
+            const poses = Object.fromEntries(rigNodes.map(node => [node.id, sc.rigPose(node.id, f)]));
+            doc.setRigPoseKeys(poses, f, "Clave global del rig");
+          };
+          track.appendChild(c);
+        }
+        fila.appendChild(track); cont.appendChild(fila);
+      }
+
       // ── una fila por capa ──
       for (const ly of sc.layers) {
         const fila = document.createElement("div");
@@ -99,10 +246,18 @@
         ojo.className = "tl2-eye";
         ojo.textContent = ly.visible ? "◉" : "◌";
         ojo.title = ly.visible ? "Ocultar la capa" : "Mostrar la capa";
-        ojo.onclick = (e) => { e.stopPropagation(); ly.visible = !ly.visible; doc.touch(); doc.emit("layers"); };
+        ojo.innerHTML = icon(ly.visible ? "i-eye" : "i-eye-off");
+        ojo.setAttribute("aria-label", ojo.title);
+        ojo.onclick = (e) => { e.stopPropagation(); doc.setLayerProperty(ly.id, "visible", !ly.visible,
+          ly.visible ? "Ocultar capa" : "Mostrar capa"); };
+        const lock = document.createElement("button");
+        lock.className = "tl2-eye"; lock.innerHTML = icon(ly.locked ? "i-lock" : "i-unlock");
+        lock.title = ly.locked ? "Desbloquear capa" : "Bloquear capa"; lock.setAttribute("aria-label", lock.title);
+        lock.onclick = (e) => { e.stopPropagation(); doc.setLayerProperty(ly.id, "locked", !ly.locked,
+          ly.locked ? "Desbloquear capa" : "Bloquear capa"); };
         const txt = document.createElement("span");
         txt.textContent = ly.name;
-        cab.append(ojo, txt);
+        cab.append(ojo, lock, txt);
         cab.onclick = () => doc.selectLayer(ly.id);
         fila.appendChild(cab);
 
@@ -113,12 +268,19 @@
           const hold = ly.isHold(f);
           const inicio = v != null && !hold;
           const c = document.createElement("i");
+          c.dataset.frame = String(f); c.dataset.layerId = ly.id;
           c.className = "tl2-cell" + (v == null ? "" : " llena")
             + (inicio ? " inicio" : "") + (hold ? " hold" : "")
+            + (this._inSelection(ly.id, f) ? " rango" : "")
             + (f === doc.frame ? " actual" : "");
           if (inicio) c.textContent = String(v);
           c.title = v == null ? `Frame ${f}` : `Frame ${f} · dibujo ${v}${hold ? " (sostenido)" : ""}`;
-          c.onclick = () => { doc.selectLayer(ly.id); doc.goTo(f); };
+          c.onclick = (e) => {
+            const prior = doc.cellSelection;
+            if (e.shiftKey && prior) doc.selectCellRange(prior.anchorLayerId, prior.anchorFrame, ly.id, f);
+            else doc.selectCellRange(ly.id, f, ly.id, f);
+            doc.selectLayer(ly.id); doc.goTo(f); this.render();
+          };
           // arrastrar un bloque de exposición a otro frame
           if (inicio) {
             c.draggable = true;
@@ -163,11 +325,10 @@
         const track = document.createElement("div");
         track.className = "tl2-track tl2-wave";
         for (let f = 1; f <= total; f++) {
-          const p = this.audio.peakAt(f);
+          const pico = this.audio.peakAt(f);
           const b = document.createElement("i");
           b.className = "tl2-peak" + (f === doc.frame ? " actual" : "");
-          // la barra crece desde el centro, como una onda de verdad
-          b.style.setProperty("--h", Math.round(p * 100) + "%");
+          b.style.setProperty("--h", Math.round(pico * 100) + "%");
           b.title = `Frame ${f}`;
           track.appendChild(b);
         }
@@ -197,6 +358,13 @@
       // seguir el cursor de reproducción sin marear
       const act = cont.querySelector(".tl2-cell.actual") || cont.querySelector(".tl2-tick.actual");
       if (act && act.scrollIntoView) act.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
+    _inSelection(layerId, frame) {
+      const s = this.doc && this.doc.cellSelection;
+      if (!s) return false;
+      const layers = this.doc.scene.layers, i = layers.findIndex((l) => l.id === layerId);
+      const a = layers.findIndex((l) => l.id === s.fromLayerId), b = layers.findIndex((l) => l.id === s.toLayerId);
+      return i >= a && i <= b && frame >= s.from && frame <= s.to;
     }
   }
 

@@ -66,6 +66,11 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !onRequestClose) return;
       event.preventDefault();
+      // Escape primero CANCELA lo que esté en curso (un arrastre del joystick,
+      // un trazo a medio hacer, la selección). Solo cierra el módulo cuando no
+      // quedaba nada que cancelar: antes, soltar la selección con Escape se
+      // llevaba puesto el módulo 3D entero.
+      if (eng()?.escapeConsume()) return;
       onRequestClose();
     };
     window.addEventListener('keydown', closeOnEscape);
@@ -88,6 +93,86 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   // solo para "Guardar como…" o para el primer guardado de un proyecto nuevo.
   const projectPathRef = useRef<string>('');
   const [savedTick, setSavedTick] = useState(0);
+  /** Estado del panel de exportación STL. Antes esto era window.confirm(), y
+   *  dentro de pywebview los diálogos nativos del navegador NO responden: el
+   *  botón "no hacía nada". Ahora el aviso es DOM propio del estudio, que
+   *  funciona igual en la app y en el navegador. */
+  /** "Nuevo proyecto" preguntaba con window.confirm, que dentro de pywebview no
+   *  responde: el botón no hacía absolutamente nada (mismo problema que tenía
+   *  el de STL). El aviso es DOM propio del estudio. */
+  const [confirmNuevo, setConfirmNuevo] = useState(false);
+  /** Avisos que antes iban por window.alert y tampoco se veían. */
+  const [aviso, setAviso] = useState('');
+  const [stlPanel, setStlPanel] = useState<null | {
+    solidos: number; trazos: number; rellenos: number; guias: number; caras: number;
+    triangulos: number; exportables: number; seleccion: number;
+    aristasAbiertas: number; cerrada: boolean;
+    /** El panel NO se cierra al exportar: se queda esperando la respuesta del
+     *  host y termina mostrando la RUTA del archivo. Antes se cerraba al
+     *  instante y, si algo fallaba de ahi para abajo, el boton parecia no
+     *  hacer nada: ni archivo, ni error, ni idea de donde habia quedado. */
+    fase: 'informe' | 'guardando' | 'listo' | 'falla';
+    msg: string;
+  }>(null);
+
+  /** Abre el panel con el informe previo: un STL solo lleva triángulos, así que
+   *  hay que decir QUÉ entra y QUÉ queda afuera ANTES de escribir el archivo.
+   *  Enterarse después, con el archivo ya en el slicer, es mucho peor. */
+  const pedirSTL = () => {
+    const e = eng();
+    if (!e) return;
+    const rep = e.stlReport(false);
+    setStlPanel({ ...rep, seleccion: e.selectedCount(), fase: 'informe', msg: '' });
+  };
+
+  /** Escribe el STL. `soloSel` lo elige el usuario en el panel. */
+  const hacerSTL = (soloSel: boolean) => {
+    const fase = (f: 'guardando' | 'listo' | 'falla', msg: string) =>
+      setStlPanel((p) => (p ? { ...p, fase: f, msg } : p));
+    // TODO el cuerpo va en try/catch: este codigo corre dentro de un iframe que
+    // no tiene el puente de la app, asi que una excepcion aca no aparece en
+    // low.log ni en ningun lado. Sin esto, un error se ve igual que un boton
+    // muerto.
+    try {
+      const e = eng();
+      if (!e) { fase('falla', 'El motor 3D todavia no esta listo.'); return; }
+      const r = e.exportSTL({ binary: true, scale: 10, onlySelection: soloSel });
+      if (!r) { fase('falla', 'No habia nada exportable en la escena.'); return; }
+      const name = (projectId || 'modelo') + '.stl';
+      const bytes = r.data instanceof DataView
+        ? new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength)
+        : new TextEncoder().encode(String(r.data));
+      const kb = Math.max(1, Math.round(bytes.length / 1024));
+      // Dentro de LOW el estudio corre en un iframe de pywebview, donde la
+      // descarga del navegador no hace nada: se le pasa al host en base64 y el
+      // host contesta con low:saved-binary diciendo DONDE quedo.
+      if (window.parent !== window) {
+        let bin = '';
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        fase('guardando', `Generado: ${r.report.triangulos.toLocaleString('es-AR')} triangulos, ${kb} KB. Elegi donde guardarlo.`);
+        window.parent.postMessage(
+          { type: 'low:save-binary', name, base64: btoa(bin) }, '*');
+        return;
+      }
+      // Copia a un ArrayBuffer propio: TS 5.7 distingue ArrayBuffer de
+      // SharedArrayBuffer y no acepta el Uint8Array genérico como BlobPart.
+      const blobBytes = new Uint8Array(bytes.byteLength);
+      blobBytes.set(bytes);
+      const url = URL.createObjectURL(new Blob([blobBytes.buffer], { type: 'model/stl' }));
+      const link = document.createElement('a');
+      link.href = url; link.download = name; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      fase('listo', `Descargado ${name} (${kb} KB).`);
+    } catch (err) {
+      const detalle = err instanceof Error ? err.message : String(err);
+      fase('falla', 'No pude generar el STL: ' + detalle);
+      // que quede en low.log: el host si tiene puente con Python
+      try {
+        window.parent.postMessage({ type: 'low:log', text: 'STL: ' + detalle }, '*');
+      } catch { /* estamos en un navegador suelto */ }
+    }
+  };
+
   const saveProject = (asNew = false) => {
     const project = eng()?.exportProject();
     if (!project) return;
@@ -118,7 +203,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
       // el navegador no da la ruta real del archivo: a partir de acá Guardar
       // vuelve a preguntar dónde, que es lo correcto (no sabemos de dónde vino)
       projectPathRef.current = '';
-    } catch (error) { window.alert(error instanceof Error ? error.message : 'No se pudo abrir el proyecto'); }
+    } catch (error) { setAviso(error instanceof Error ? error.message : 'No se pudo abrir el proyecto'); }
   };
   /** Abrir por la app (pywebview): así SÍ queda la ruta y Guardar sobrescribe. */
   const openProjectViaHost = () => window.parent.postMessage({ type: 'low:open-project' }, '*');
@@ -126,8 +211,23 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   // respuestas del host: ruta con la que quedó el proyecto
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
-      const m = ev.data as { type?: string; path?: string; json?: string } | null;
+      const m = ev.data as {
+        type?: string; path?: string; json?: string;
+        bytes?: number; error?: string; cancelado?: boolean } | null;
       if (!m || typeof m !== 'object') return;
+      if (m.type === 'low:saved-binary') {
+        // el host ya escribio (o no): el panel muestra la RUTA real
+        setStlPanel((pnl) => {
+          if (!pnl) return pnl;
+          if (m.cancelado) return { ...pnl, fase: 'informe', msg: '' };
+          if (m.error) return { ...pnl, fase: 'falla', msg: 'No se pudo guardar: ' + m.error };
+          const kb = Math.max(1, Math.round((m.bytes || 0) / 1024));
+          return { ...pnl, fase: 'listo',
+                   msg: `Guardado (${kb} KB) en:
+${m.path || '(ruta desconocida)'}` };
+        });
+        return;
+      }
       if (m.type === 'low:saved') {
         if (m.path) projectPathRef.current = m.path;
         setSavedTick((n) => n + 1);
@@ -135,7 +235,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
         try {
           eng()?.importProject(JSON.parse(m.json));
           projectPathRef.current = m.path || '';
-        } catch { window.alert('No se pudo abrir el proyecto'); }
+        } catch { setAviso('No se pudo abrir el proyecto'); }
       }
     };
     window.addEventListener('message', onMsg);
@@ -208,7 +308,7 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
           {barBtn('⟳', () => eng()?.redo(), false, 'Rehacer (Ctrl+Alt+Z / Ctrl+Shift+Z)')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
           {barBtn('Nuevo', () => {
-            if (window.confirm('¿Empezar un proyecto nuevo? Se descarta el dibujo actual.')) eng()?.newProject();
+            setConfirmNuevo(true);
           }, false, 'Nuevo proyecto (descarta el dibujo actual)')}
           {barBtn('Abrir', () => {
             if (window.parent !== window) openProjectViaHost(); else fileInputRef.current?.click();
@@ -219,6 +319,8 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
               : 'Guardar proyecto LOW 3D (Ctrl+S)')}
           {barBtn('Guardar como…', () => saveProject(true), false,
             'Guardar en otro archivo (Ctrl+Shift+S)')}
+          {barBtn('STL', pedirSTL, false,
+            'Exportar como STL para impresión 3D — dice antes qué entra y qué queda afuera')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
           {/* vistas abreviadas: el nombre completo queda en el tooltip */}
           {barBtn('Persp', () => applyView('persp'), view === 'persp', 'Perspectiva')}
@@ -262,6 +364,165 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
       <Panel3D title="Pincel / Superficie" initial={{ right: 14, top: 60 }} width={220}>
         <PropertiesPanel3D />
       </Panel3D>
+      {(confirmNuevo || aviso) && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 91, display: 'grid', placeItems: 'center',
+          background: 'rgba(0,0,0,.45)', pointerEvents: 'auto',
+        }} onClick={() => { setConfirmNuevo(false); setAviso(''); }}>
+          <div onClick={(ev) => ev.stopPropagation()} style={{
+            width: 340, padding: 16, borderRadius: 10,
+            background: dark ? '#1b1d23' : '#f4f6fa',
+            border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+            boxShadow: '0 24px 60px rgba(0,0,0,.5)',
+            color: dark ? '#e6e9f0' : '#23272f',
+            font: '400 12px/1.5 Figtree, system-ui, sans-serif',
+          }}>
+            <div style={{ font: '600 11px/1 Figtree, sans-serif', letterSpacing: .8,
+                          textTransform: 'uppercase', opacity: .7, marginBottom: 10 }}>
+              {confirmNuevo ? 'Proyecto nuevo' : 'Aviso'}
+            </div>
+            <div>{confirmNuevo
+              ? 'Se descarta el dibujo actual. Si querés conservarlo, cancelá y guardalo primero.'
+              : aviso}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setConfirmNuevo(false); setAviso(''); }} style={{
+                height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
+                border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+                background: 'transparent', color: 'inherit', fontSize: 12,
+              }}>{confirmNuevo ? 'Cancelar' : 'Cerrar'}</button>
+              {confirmNuevo && (
+                <button onClick={() => { setConfirmNuevo(false); eng()?.newProject(); }} style={{
+                  height: 30, padding: '0 14px', borderRadius: 7, cursor: 'pointer',
+                  border: 'none', background: LOW_ACCENT, color: '#fff', fontSize: 12, fontWeight: 600,
+                }}>Empezar de nuevo</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stlPanel && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 90, display: 'grid', placeItems: 'center',
+          background: 'rgba(0,0,0,.45)', pointerEvents: 'auto',
+        }} onClick={() => setStlPanel((p) => (p && p.fase === 'guardando' ? p : null))}>
+          <div onClick={(ev) => ev.stopPropagation()} style={{
+            width: 372, padding: 16, borderRadius: 10,
+            background: dark ? '#1b1d23' : '#f4f6fa',
+            border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+            boxShadow: '0 24px 60px rgba(0,0,0,.5)',
+            color: dark ? '#e6e9f0' : '#23272f',
+            font: '400 12px/1.5 Figtree, system-ui, sans-serif',
+          }}>
+            <div style={{ font: '600 11px/1 Figtree, sans-serif', letterSpacing: .8,
+                          textTransform: 'uppercase', opacity: .7, marginBottom: 10 }}>
+              Exportar STL
+            </div>
+            {stlPanel.fase !== 'informe' ? (
+              <div>
+                <div style={{ padding: '9px 10px', borderRadius: 6, whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  background: stlPanel.fase === 'falla' ? 'rgba(240,69,14,.14)'
+                    : stlPanel.fase === 'listo' ? 'rgba(30,132,73,.16)'
+                    : (dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)'),
+                  border: `1px solid ${stlPanel.fase === 'falla' ? 'rgba(240,69,14,.45)'
+                    : stlPanel.fase === 'listo' ? 'rgba(30,132,73,.5)'
+                    : (dark ? '#2a2d35' : '#d3d8e2')}` }}>
+                  {stlPanel.msg}
+                </div>
+                {stlPanel.fase === 'guardando' && (
+                  <div style={{ opacity: .7, marginTop: 8 }}>
+                    Se abrio el dialogo de la app para elegir la carpeta. Si no lo ves,
+                    puede estar detras de esta ventana.
+                  </div>
+                )}
+              </div>
+            ) : stlPanel.exportables === 0 ? (
+              <div>
+                No hay nada sólido para exportar.
+                <div style={{ opacity: .7, marginTop: 8 }}>
+                  Un STL solo lleva triángulos: sirven los trazos (que son tubos cerrados) y los
+                  volúmenes (<b>Ctrl+E</b>). Las guías son andamio y los rellenos son caras sin
+                  espesor, así que no se pueden imprimir.
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div>
+                  Se exportan <b>{stlPanel.exportables}</b> objeto(s): {stlPanel.solidos} volumen(es)
+                  y {stlPanel.trazos} trazo(s), <b>{stlPanel.triangulos.toLocaleString('es-AR')}</b> triángulos.
+                </div>
+                {stlPanel.caras > 0 && (
+                  <div style={{ opacity: .7, marginTop: 8 }}>
+                    De {stlPanel.caras} figura(s) va el contorno, no la cara: una cara
+                    no tiene espesor. Para imprimirla, convertila en volumen con <b>Ctrl+E</b>.
+                  </div>
+                )}
+                {(stlPanel.rellenos > 0 || stlPanel.guias > 0) && (
+                  <div style={{ opacity: .7, marginTop: 8 }}>
+                    Quedan afuera
+                    {stlPanel.rellenos > 0 && ` ${stlPanel.rellenos} relleno(s) — caras sin espesor`}
+                    {stlPanel.rellenos > 0 && stlPanel.guias > 0 && ' y'}
+                    {stlPanel.guias > 0 && ` ${stlPanel.guias} guía(s) — son andamio`}.
+                  </div>
+                )}
+                <div style={{ opacity: .7, marginTop: 8 }}>
+                  Escala: 1 unidad de LOW = 10 mm.
+                </div>
+                {/* Para imprimir, que la malla CIERRE es el dato que importa.
+                    Los volúmenes cierran; los trazos quedan abiertos porque el
+                    tubo y sus tapas no están soldados. Decirlo antes evita la
+                    sorpresa en el slicer. */}
+                <div style={{ marginTop: 10, padding: '7px 9px', borderRadius: 6,
+                  background: stlPanel.cerrada ? 'rgba(30,132,73,.16)' : 'rgba(240,69,14,.14)',
+                  border: `1px solid ${stlPanel.cerrada ? 'rgba(30,132,73,.5)' : 'rgba(240,69,14,.45)'}` }}>
+                  {stlPanel.cerrada ? (
+                    <span>La malla <b>cierra</b>: lista para imprimir.</span>
+                  ) : (
+                    <span>
+                      La malla <b>no cierra</b> ({stlPanel.aristasAbiertas} aristas abiertas).
+                      Se exporta igual y la mayoría de los slicers la repara al abrirla.
+                      {stlPanel.trazos > 0 && ' Los trazos quedan abiertos: para un sólido cerrado, convertilos en volumen con Ctrl+E.'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              {stlPanel.fase === 'guardando' ? (
+                <span style={{ opacity: .6, alignSelf: 'center' }}>Esperando el dialogo…</span>
+              ) : (
+                <button onClick={() => setStlPanel(null)} style={{
+                  height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
+                  border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+                  background: 'transparent', color: 'inherit', fontSize: 12,
+                }}>{stlPanel.fase === 'informe' && stlPanel.exportables > 0 ? 'Cancelar' : 'Cerrar'}</button>
+              )}
+              {stlPanel.fase === 'informe' && stlPanel.exportables > 0 && stlPanel.seleccion > 0 && (
+                <button onClick={() => hacerSTL(true)} style={{
+                  height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
+                  border: `1px solid ${LOW_ACCENT}`, background: 'transparent',
+                  color: LOW_ACCENT, fontSize: 12,
+                }}>Solo la selección ({stlPanel.seleccion})</button>
+              )}
+              {stlPanel.fase === 'informe' && stlPanel.exportables > 0 && (
+                <button onClick={() => hacerSTL(false)} style={{
+                  height: 30, padding: '0 14px', borderRadius: 7, cursor: 'pointer',
+                  border: 'none', background: LOW_ACCENT, color: '#fff', fontSize: 12, fontWeight: 600,
+                }}>Exportar</button>
+              )}
+              {stlPanel.fase === 'falla' && (
+                <button onClick={() => setStlPanel((pn) => (pn ? { ...pn, fase: 'informe', msg: '' } : pn))} style={{
+                  height: 30, padding: '0 14px', borderRadius: 7, cursor: 'pointer',
+                  border: `1px solid ${LOW_ACCENT}`, background: 'transparent',
+                  color: LOW_ACCENT, fontSize: 12,
+                }}>Volver a intentar</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <Panel3D title="Objetos" initial={{ right: 14, bottom: 14 }} width={230}>
         <ObjectList3D engine={engineRef} />
       </Panel3D>
