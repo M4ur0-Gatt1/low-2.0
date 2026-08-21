@@ -917,7 +917,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       $("#dzCanvas").style.cursor = (DZ.tool || "select") in DZ_CURSORS ? DZ_CURSORS[DZ.tool || "select"] : "crosshair";
     }
   });
-  // confirmar/descartar una pose de prueba del rig (auto-clave OFF)
+  // confirmar/descartar una pose de prueba + atajos de herramienta (rig)
   document.addEventListener("keydown", e => {
     if (!DZ.rigMode || $("#designView").hidden) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || "")) return;
@@ -925,10 +925,17 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       e.preventDefault();
       if (dzRigCommitPreview()) dzSetStatus("Pose clavada en F" + dzRigCur());
       else dzSetStatus("Nada que clavar — posá un hueso primero");
-    } else if (e.key === "Escape") {
+      return;
+    }
+    if (e.key === "Escape") {
       e.preventDefault();
       if (dzRigDiscardPreview()) dzSetStatus("Pose de prueba descartada");
+      return;
     }
+    const k = (e.key || "").toLowerCase();
+    if (k === "s") { e.preventDefault(); dzRigSetTool("select"); }
+    else if (k === "p" && DZ.rigSubmode !== "build") { e.preventDefault(); dzRigSetTool("pose"); }
+    else if (k === "b" && DZ.rigSubmode === "build") { e.preventDefault(); dzRigSetTool("create"); }
   });
   $("#dzDup").onclick = dzDuplicate;
   $("#dzDel").onclick = dzDeleteSelected;
@@ -7047,6 +7054,7 @@ function dzRigOverlayRender() {
   const rebuild = overlay.__rigCache?.sig !== sig;
   overlay.removeAttribute("hidden");
   overlay.dataset.mode = DZ.rigSubmode || "build";
+  overlay.dataset.tool = DZ.rigTool || "select";
   overlay.classList.toggle("bone-create", !!DZ.rigBoneTool && DZ.rigSubmode === "build");
   overlay.onpointerdown = e => {
     if (e.target === overlay && DZ.rigBoneTool) dzRigBoneCreateDrag(e);
