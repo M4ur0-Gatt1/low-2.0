@@ -2706,3 +2706,10 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .s-link::before { width: 10px; height: 10px; border: 2px solid var(--red); border-radius: 2px; }
 .s-ik::before { width: 10px; height: 10px; border: 2px solid var(--red); transform:
   translate(-50%, -50%) rotate(45deg); }
+
+/* Manija de rotación de una pieza: sale del pivote hacia su propio dibujo, para
+   que agarrarla gire la pieza hacia donde uno la lleva. La línea al padre solo
+   muestra la jerarquía: usarla para rotar giraba al revés. */
+.dz-rig-rot-arm { stroke: var(--red); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .75; pointer-events: none; }
+.dz-rig-rot-handle { fill: var(--red); stroke: #fff; stroke-width: 1.5; cursor: grab; }
+.dz-rig-rot-handle.selected { stroke-width: 2.5; }

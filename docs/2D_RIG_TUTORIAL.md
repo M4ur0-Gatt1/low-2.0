@@ -1,4 +1,4 @@
-# Rig 2D de LOW — cómo se usa (v3.29.49)
+# Rig 2D de LOW — cómo se usa (v3.29.50)
 
 Este documento explica el flujo **tal como está implementado**. Al final está
 el estado de los seis problemas que encontré al revisarlo: cuatro arreglados en
@@ -100,9 +100,10 @@ queda **Posar** para que arrastrar ya pose sin un paso extra.
 
 ### Posar en FK
 
-- Arrastrar el **cuerpo del hueso** o su **punta** → rota sobre el pivote.
-- Arrastrar la **articulación** (el círculo) → mueve el hueso, y los hijos
-  siguen.
+- Arrastrar la **manija** —la línea punteada que sale del pivote hacia el propio
+  dibujo— → **rota** la pieza. En un hueso, además sirven su cuerpo y su punta.
+- Arrastrar la **articulación** (el círculo) → **mueve**, y los hijos siguen.
+- El **pivote** no se toca en FK: se cambia en **Armado**.
 - Con **Auto-clave** tildado, cada gesto deja una clave en el cuadro actual.
   Destildado, podés probar sin grabar: **Enter** clava, **Esc** descarta.
 
@@ -173,6 +174,20 @@ cambió.
 **La pieza perdía su nombre.** Al crear un hueso sobre una pieza sin `id`, la
 pieza adoptaba el nombre del hueso y el dibujo pasaba a llamarse `hueso_12`.
 Ahora recibe nombre de pieza (`pieza_3`).
+
+### Arreglados en la v3.29.50
+
+**La rotación iba para el lado contrario.** Una pieza no tiene cuerpo de hueso,
+así que el único asidero para rotarla era la línea que va **del pivote del padre
+al suyo** — una línea que sale del torso, no del brazo. Agarrarla y bajarla
+hacía **subir** el brazo, como una palanca tomada del lado equivocado (medido:
+un arrastre hacia abajo daba −40°, antihorario). Y una pieza **sin** padre no
+tenía ninguna línea, así que no se podía rotar en la mesa.
+
+Ahora cada pieza tiene su propia **manija de rotación**, que sale del pivote
+hacia su dibujo: se agarra la pieza y gira hacia donde uno la lleva (medido: el
+mismo arrastre hacia abajo ahora da +69.6°, horario, y el brazo cuelga desde el
+hombro). La línea al padre queda solo como indicador de jerarquía.
 
 ### Arreglados en la v3.29.49
 

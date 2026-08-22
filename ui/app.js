@@ -6815,7 +6815,7 @@ function dzRigSetMode(mode) {
   [["rigModeBuild", "build"], ["rigModeFk", "fk"], ["rigModeIk", "ik"]].forEach(([id, value]) =>
     $("#" + id).classList.toggle("on", DZ.rigSubmode === value));
   const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado al pivote de su padre, o a un área vacía para romper el vínculo. En un hueso, arrastrar el círculo mueve el hueso y con Alt mueve solo su pivote. «Crear hueso» dibuja la cadena y toma el dibujo que queda debajo.",
-    fk: "FK: «Posar» arrastra el cuerpo/punta para rotar o la articulación para mover. «Seleccionar» elige sin posar. Cada gesto crea una clave (si Auto-clave está activo).",
+    fk: "FK: la articulación mueve; la MANIJA que sale hacia el dibujo rota (en un hueso, también su cuerpo o su punta). El pivote se cambia en Armado. Cada gesto crea una clave si Auto-clave está activo.",
     ik: "IK: elegí una cadena y arrastrá el rombo. Ambos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
 }
@@ -7213,8 +7213,12 @@ function dzRigOverlayRender() {
     get("bl:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y },
       "dz-rig-bone" + (selectedId === node.id ? " active" : ""));
     const hit = get("bh:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, "data-id": node.id }, "dz-rig-bone-hit");
+    const esHueso = !!node.tail;
     hit.onpointerdown = e => {
-      if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "rotate");
+      // solo el cuerpo de un HUESO de verdad rota: esa línea SÍ es el hueso. En
+      // una pieza, la línea va del pivote del padre al suyo —sale del torso, no
+      // del brazo—, y usarla para rotar giraba al revés.
+      if (esHueso && DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "rotate");
       e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
     };
   }
@@ -7260,6 +7264,38 @@ function dzRigOverlayRender() {
       tip.onpointerdown = tipHandler;
       const tipHit = get("th:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 11, "data-id": node.id }, "dz-rig-hit");
       tipHit.onpointerdown = tipHandler;
+    }
+    // MANIJA DE ROTACIÓN de una pieza: sale del pivote hacia el propio dibujo,
+    // así se agarra la pieza y gira hacia donde uno la lleva. Sin esto, una
+    // pieza sin padre no se podía rotar en la mesa y una con padre giraba al
+    // revés, porque el único asidero era la línea que va hacia el padre.
+    if (!node.tail && DZ.rigSubmode === "fk") {
+      const arte = dzRigNodeElement(node);
+      let dir = null;
+      if (arte) {
+        try {
+          const caja = arte.getBoundingClientRect();
+          const centro = { x: caja.left + caja.width / 2 - cv.left, y: caja.top + caja.height / 2 - cv.top };
+          const v = { x: centro.x - p.x, y: centro.y - p.y };
+          const largo = Math.hypot(v.x, v.y);
+          // pivote en el centro del dibujo: la manija sale hacia el lado más largo
+          dir = largo > 6 ? { x: v.x / largo, y: v.y / largo } : { x: 1, y: 0 };
+        } catch (_) { dir = { x: 1, y: 0 }; }
+      }
+      if (dir) {
+        const L = 46;
+        const hx = p.x + dir.x * L, hy = p.y + dir.y * L;
+        get("ra:" + node.id, "line", { x1: p.x, y1: p.y, x2: hx, y2: hy }, "dz-rig-rot-arm");
+        const mango = get("rm:" + node.id, "circle", { cx: hx, cy: hy, r: 6, "data-id": node.id },
+          "dz-rig-rot-handle" + (selectedId === node.id ? " selected" : ""));
+        const mangoHit = get("rz:" + node.id, "circle", { cx: hx, cy: hy, r: 13, "data-id": node.id }, "dz-rig-hit");
+        const rotar = e => {
+          if (!posable) { e.preventDefault(); e.stopPropagation(); return dzRigSelectNode(node.id); }
+          return dzRigBoneFKDrag(e, node, "rotate");
+        };
+        mango.onpointerdown = rotar;
+        mangoHit.onpointerdown = rotar;
+      }
     }
     if (selectedId === node.id) {
       const label = get("lb:" + node.id, "text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label");
