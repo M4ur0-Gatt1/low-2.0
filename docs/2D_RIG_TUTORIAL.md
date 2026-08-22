@@ -1,4 +1,4 @@
-# Rig 2D de LOW — cómo se usa (v3.29.48)
+# Rig 2D de LOW — cómo se usa (v3.29.49)
 
 Este documento explica el flujo **tal como está implementado**. Al final está
 el estado de los seis problemas que encontré al revisarlo: cuatro arreglados en
@@ -47,8 +47,12 @@ Sirve cuando el personaje **ya está dibujado por partes separadas**.
 2. **Armado → Registrar piezas del dibujo.** Registra *todas* las piezas de una
    vez. Cada una queda con su pivote en el centro de su caja y **sin padre**.
    El contador de arriba te dice cuántas registró.
-3. **Colocá el pivote de cada pieza.** Seleccionala y usá **Pivote**: donde
-   pongas ese punto es donde va a rotar. Para un brazo, el hombro.
+3. **Colocá el pivote de cada pieza.** Seleccionala, tocá **Pivote** y hacé
+   clic donde tiene que girar: para un brazo, el hombro. El punto va a la pieza
+   **elegida** aunque el clic caiga encima de otra — el hombro está sobre el
+   torso, y eso es lo normal. **Alt+clic** lo saca. Si no hay nada elegido, el
+   pivote va a la pieza que esté bajo el clic; si ahí no hay ninguna, la barra
+   de estado lo dice en vez de quedarse callada.
 4. **Armá la jerarquía.** Dos formas, hacen lo mismo:
    - el desplegable **Cuelga de** del panel, o
    - arrastrar el **cuadradito** del nodo seleccionado hasta el **círculo**
@@ -74,6 +78,12 @@ Sirve cuando querés una cadena articulada, con o sin piezas separadas.
 
 Los dos caminos se pueden mezclar en el mismo personaje, y eso es parte de por
 qué el panel se vuelve confuso: terminás con piezas y huesos en la misma lista.
+
+### El pivote de un hueso
+
+Arrastrar el círculo de un hueso mueve **el hueso entero**: es el gesto para
+acomodar la cadena. Para correr solo su **pivote**, arrastralo con **Alt**
+apretado, o usá el botón **Pivote** con el hueso elegido.
 
 ---
 
@@ -163,6 +173,24 @@ cambió.
 **La pieza perdía su nombre.** Al crear un hueso sobre una pieza sin `id`, la
 pieza adoptaba el nombre del hueso y el dibujo pasaba a llamarse `hueso_12`.
 Ahora recibe nombre de pieza (`pieza_3`).
+
+### Arreglados en la v3.29.49
+
+**El pivote se lo llevaba la pieza equivocada.** El botón **Pivote** decía "hacé
+clic donde articula la pieza seleccionada", pero `dzPivotClick` se lo ponía a la
+pieza que estuviera **bajo el cursor**. Como el pivote de un brazo va en el
+hombro —y ahí abajo lo que hay es el torso—, el punto se lo llevaba el torso y
+el brazo seguía girando por el medio, como si el clic no hubiera pasado. Ahora
+manda lo que está elegido.
+
+**Y si el clic no caía en ninguna pieza, no pasaba nada ni se avisaba.** Era un
+`return` mudo. Ahora la barra de estado explica qué falta.
+
+**El pivote de un hueso no se podía mover.** Arrastrar su articulación movía
+siempre el hueso entero, y el botón Pivote solo actuaba sobre piezas del dibujo:
+no había ninguna forma de correr el pivote de un hueso. Ahora **Alt+arrastrar**
+mueve solo el pivote (verificado: el pivote pasó de 511,239 a 551,279 con la
+cabeza y la punta del hueso intactas).
 
 ### Siguen abiertos
 
