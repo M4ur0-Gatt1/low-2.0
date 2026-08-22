@@ -843,7 +843,13 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigAuto").onclick = dzRigPrepareDrawing;
   $("#rigAdd").onclick = dzRigRegisterSelected;
   $("#rigRemove").onclick = dzRigRemoveSelected;
-  $("#rigPivotTool").onclick = () => { dzSetTool("pivot"); dzSetStatus("Pivote: hacé clic donde articula la pieza seleccionada"); };
+  $("#rigPivotTool").onclick = () => {
+    dzSetTool("pivot");
+    const n = dzRigSelectedNode();
+    dzSetStatus(n
+      ? `Pivote de «${n.id}»: hacé clic donde articula (el hombro, el codo…) · Alt+clic lo quita`
+      : "Pivote: elegí antes la pieza o el hueso, o hacé clic encima de la pieza que querés articular");
+  };
   $("#rigPin").onclick = dzRigTogglePin;
   $("#rigBind").onclick = dzRigBindSelection;
   ["rigX", "rigY", "rigR", "rigSX", "rigSY"].forEach(id => {
@@ -2772,8 +2778,34 @@ function dzBoxHandleDown(e, hx, hy) {
    cuerpo — el posado cutout de Toon Boom (peg pivots). El pivote se guarda
    en data-pivot y la rotación gira alrededor de él. ══ */
 function dzPivotClick(e) {
+  // A QUIÉN se le pone el pivote. Manda lo que está ELEGIDO —el hueso del panel
+  // o la pieza de la mesa—, no lo que haya bajo el dedo: el pivote de un brazo
+  // va en el hombro, y ahí abajo lo que hay es el torso. Antes se lo llevaba el
+  // torso, y el brazo seguía girando por el medio como si el clic no hubiera
+  // pasado. Con nada elegido se mantiene el comportamiento de siempre: la pieza
+  // que está debajo.
+  const elegido = (DZ.rigMode && dzRigSelectedNode()) || null;
+  const p = dzToUser(e.clientX, e.clientY);
+  if (elegido) {
+    dzSnapshot();
+    if (e.altKey) {
+      DZ.doc.setRigPivot(elegido.id, null);
+      dzRigNodeElement(elegido)?.removeAttribute("data-pivot");
+      dzMarkDirty(); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender();
+      return dzSetStatus(`Pivote de «${elegido.id}» quitado — vuelve al centro`);
+    }
+    DZ.doc.setRigPivot(elegido.id, p);
+    dzRigNodeElement(elegido)?.setAttribute("data-pivot", `${Math.round(p.x)} ${Math.round(p.y)}`);
+    dzMarkDirty(); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender();
+    return dzSetStatus(`Pivote de «${elegido.id}» puesto acá · ahora gira desde este punto · Alt+clic lo quita`);
+  }
   const el = document.elementFromPoint(e.clientX, e.clientY);
-  if (!el || !el.closest || !el.closest("#dzCanvas svg") || el.closest("g.dz-onion")) return;
+  const dentro = el && el.closest && el.closest("#dzCanvas svg:not(#dzRigOverlay)") && !el.closest("g.dz-onion");
+  if (!dentro) {
+    // Antes esto era un return mudo: el clic no hacía nada y no había forma de
+    // saber por qué.
+    return dzSetStatus("Ahí no hay ninguna pieza · elegí primero la pieza o el hueso, o hacé clic encima del dibujo");
+  }
   let target = el;
   const grp = el.closest && el.closest('#dzCanvas svg > g:not(.dz-onion)');
   if (grp && !e.altKey) target = grp;            // en un rig, la parte suele ser un grupo
@@ -2788,7 +2820,6 @@ function dzPivotClick(e) {
     dzSetStatus(" Pivote quitado — la rotación vuelve al centro");
     return;
   }
-  const p = dzToUser(e.clientX, e.clientY);
   const targetId = target.id;
   target.setAttribute("data-pivot", `${Math.round(p.x)} ${Math.round(p.y)}`);
   if (DZ.doc && targetId) { DZ.doc.ensureRigNode(targetId); DZ.doc.setRigPivot(targetId, p); }
@@ -6783,7 +6814,7 @@ function dzRigSetMode(mode) {
   $("#rigToolCreate").disabled = DZ.rigSubmode !== "build";
   [["rigModeBuild", "build"], ["rigModeFk", "fk"], ["rigModeIk", "ik"]].forEach(([id, value]) =>
     $("#" + id).classList.toggle("on", DZ.rigSubmode === value));
-  const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado al pivote de su padre, o a un área vacía para romper el vínculo. «Crear hueso» dibuja la cadena ósea y vincula el arte que queda debajo.",
+  const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado al pivote de su padre, o a un área vacía para romper el vínculo. En un hueso, arrastrar el círculo mueve el hueso y con Alt mueve solo su pivote. «Crear hueso» dibuja la cadena y toma el dibujo que queda debajo.",
     fk: "FK: «Posar» arrastra el cuerpo/punta para rotar o la articulación para mover. «Seleccionar» elige sin posar. Cada gesto crea una clave (si Auto-clave está activo).",
     ik: "IK: elegí una cadena y arrastrá el rombo. Ambos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
@@ -7190,6 +7221,10 @@ function dzRigOverlayRender() {
   for (const node of Object.values(doc.scene.rig.nodes)) {
     const p = point(node.id); if (!p) continue;
     const jointHandler = e => {
+      // Alt = mover SOLO el pivote, también en un hueso. Sin esto, el pivote de
+      // un hueso no se podía correr por ningún lado: el gesto siempre movía el
+      // hueso entero.
+      if (DZ.rigSubmode === "build" && node.tail && e.altKey) return dzRigBuildPivotDrag(e, node);
       if (DZ.rigSubmode === "build" && node.tail) return dzRigBoneGeometryDrag(e, node, "head");
       if (DZ.rigSubmode === "build") return dzRigBuildPivotDrag(e, node);
       if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "translate");
@@ -7336,7 +7371,7 @@ function dzRigTutorial() {
       <h3>A · El personaje ya está dibujado por partes</h3>
       <ol>
         ${paso("1", "<b>Armado → Registrar piezas del dibujo.</b> Toma todas las partes sueltas del dibujo y les pone un pivote en el centro.")}
-        ${paso("2", "Elegí una pieza y tocá <b>Pivote</b> para poner el punto donde tiene que girar: en un brazo, el hombro.")}
+        ${paso("2", "Elegí la pieza y tocá <b>Pivote</b>; después hacé clic donde tiene que girar: en un brazo, el hombro. El punto va a la pieza ELEGIDA aunque el clic caiga encima de otra —el hombro está sobre el torso y eso es normal—. Alt+clic lo saca.")}
         ${paso("3", "Decile de quién cuelga: el desplegable <b>Cuelga de</b>, o arrastrá el <b>cuadrado</b> hasta el <b>círculo</b> del padre.")}
         ${paso("4", "La cadera o el torso van con <b>Fijar raíz</b>.")}
         ${paso("5", "Pasá a <b>FK</b> y posá.")}
@@ -7349,6 +7384,11 @@ function dzRigTutorial() {
         ${paso("3", "El hueso toma el dibujo que tenga debajo. Si agarró otro, seleccioná la pieza correcta en la mesa y tocá <b>Mueve el dibujo</b>.")}
         ${paso("4", "Pasá a <b>FK</b> y posá.")}
       </ol>
+
+      <h3>El pivote de un hueso</h3>
+      <p>Arrastrar el círculo de un hueso mueve <b>el hueso entero</b>. Para correr solo su
+      pivote —el punto sobre el que gira— arrastralo con <b>Alt</b> apretado, o usá el botón
+      <b>Pivote</b> con el hueso elegido.</p>
 
       <h3>Posar</h3>
       <p><b>FK:</b> arrastrar el cuerpo del hueso o su punta lo <b>rota</b>; arrastrar la
