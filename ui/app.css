@@ -2679,3 +2679,30 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   font: 400 9.5px/1.35 Figtree, sans-serif; color: var(--fg, #e6e9f0); }
 .pal2-foot { padding: 6px 0 2px; font: 400 9.5px/1.3 Figtree, sans-serif;
   color: var(--fg2, #8a93a6); }
+
+/* Pivote ATENUADO: con muchas piezas registradas, los que no son el
+   seleccionado ni su familia directa se corren a un segundo plano para que se
+   vea el dibujo. Siguen agarrables: el área invisible (.dz-rig-hit) no cambia. */
+.dz-rig-joint.dim { opacity: .3; }
+
+/* Tutorial del rig (Ayuda → Cómo se riggea un personaje) */
+.rigdoc { font-size: 12.5px; line-height: 1.6; color: var(--txt); }
+.rigdoc h3 { margin: 16px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--red); }
+.rigdoc p { margin: 0 0 8px; }
+.rigdoc ol { margin: 0 0 8px; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+.rigdoc ol b { color: var(--red); font-variant-numeric: tabular-nums; margin-right: 2px; }
+.rigdoc-nota { border-left: 2px solid var(--red); padding-left: 10px; color: var(--mut); }
+.rigdoc-tip { color: var(--mut); font-size: 11.5px; }
+.rigdoc-simb { list-style: none; margin: 0 0 8px; padding: 0; display: flex;
+  flex-direction: column; gap: 6px; }
+.rigdoc-simb li { display: flex; align-items: center; gap: 10px; }
+.rigdoc-simb i { flex: none; width: 26px; height: 14px; position: relative; }
+.rigdoc-simb i::before { content: ""; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%); }
+.s-pivot::before { width: 9px; height: 9px; border: 2px solid var(--txt); border-radius: 50%; }
+.s-root::before { width: 14px; height: 14px; border: 2px solid var(--txt); border-radius: 50%; }
+.s-bone::before { width: 24px; height: 3px; background: var(--mut); border-radius: 2px; }
+.s-link::before { width: 10px; height: 10px; border: 2px solid var(--red); border-radius: 2px; }
+.s-ik::before { width: 10px; height: 10px; border: 2px solid var(--red); transform:
+  translate(-50%, -50%) rotate(45deg); }
