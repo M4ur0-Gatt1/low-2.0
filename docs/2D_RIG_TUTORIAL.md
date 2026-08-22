@@ -1,8 +1,11 @@
-# Rig 2D de LOW — cómo se usa hoy (v3.29.47)
+# Rig 2D de LOW — cómo se usa (v3.29.48)
 
-Este documento explica el flujo **tal como está implementado**, no como debería
-ser. Al final hay una lista de las cosas que hoy hacen que el flujo se sienta
-raro comparado con Harmony u OpenToonz, con el lugar exacto del código.
+Este documento explica el flujo **tal como está implementado**. Al final está
+el estado de los seis problemas que encontré al revisarlo: cuatro arreglados en
+la v3.29.48 y dos que siguen abiertos.
+
+El mismo tutorial vive dentro del programa, en **Ayuda → Cómo se riggea un
+personaje**.
 
 ---
 
@@ -47,7 +50,7 @@ Sirve cuando el personaje **ya está dibujado por partes separadas**.
 3. **Colocá el pivote de cada pieza.** Seleccionala y usá **Pivote**: donde
    pongas ese punto es donde va a rotar. Para un brazo, el hombro.
 4. **Armá la jerarquía.** Dos formas, hacen lo mismo:
-   - el desplegable **Vínculo** del panel, o
+   - el desplegable **Cuelga de** del panel, o
    - arrastrar el **cuadradito** del nodo seleccionado hasta el **círculo**
      (pivote) del que va a ser su padre. Soltarlo en un área vacía rompe el
      vínculo.
@@ -64,10 +67,9 @@ Sirve cuando querés una cadena articulada, con o sin piezas separadas.
 3. **Para continuar la cadena, empezá el siguiente arrastre cerca de la punta
    del anterior** (a menos de 18 px en pantalla): se engancha solo y queda como
    hijo. Si empezás lejos, nace suelto como raíz.
-4. Al crear el hueso, LOW intenta **vincular solo** el dibujo que esté debajo de
-   la articulación. Si no lo logra —o si agarra la pieza equivocada, que es lo
-   habitual hoy (ver *Problemas*, punto 1)— hacelo a mano: seleccioná la pieza
-   en la mesa, seleccioná el hueso, y **Vincular dibujo**.
+4. Al crear el hueso, LOW **vincula solo** el dibujo que esté debajo de la
+   articulación, mirando la tinta real. Si querés cambiarlo, seleccioná la pieza
+   en la mesa, seleccioná el hueso y tocá **Mueve el dibujo**.
 5. Pasá a **FK** y posá.
 
 Los dos caminos se pueden mezclar en el mismo personaje, y eso es parte de por
@@ -123,7 +125,7 @@ queda **Posar** para que arrastrar ya pose sin un paso extra.
 
 | en Harmony | en OpenToonz | en LOW hoy |
 | --- | --- | --- |
-| jerarquía en Timeline / Node view | parenting por columna en la Xsheet | arrastrar el **cuadrado** al **círculo** del padre, en la mesa |
+| jerarquía en Timeline / Node view | parenting por columna en la Xsheet | **Cuelga de**, o arrastrar el **cuadrado** al **círculo** del padre |
 | peg de la capa | pegbar de la columna | el nodo del rig (no hay peg aparte) |
 | pivote con la Transform Tool | *center* con la Animate Tool | botón **Pivote** |
 | Transform Tool para animar | Animate Tool | modo **FK** + herramienta **Posar** |
@@ -136,38 +138,41 @@ es el paso que no vas a encontrar donde lo buscás.
 
 ---
 
-## Problemas del flujo actual
+## Estado de los problemas que encontré
 
-Esto no es opinión de estilo: son cosas que rompen el trabajo o que enseñan mal.
+### Arreglados en la v3.29.48
 
-1. **El auto-vínculo agarra la pieza equivocada.** Al crear un hueso, LOW busca
-   el dibujo que hay bajo la articulación con `dzRigArtAtPoint`
-   (`ui/app.js`), que recorre las piezas **en orden de dibujo** y devuelve la
-   primera cuyo **rectángulo envolvente** contiene el punto. En un personaje, la
-   primera pieza suele ser el cuerpo, y su rectángulo cubre casi todo: los
-   huesos de la pata, la oreja o la mano terminan vinculados al cuerpo. Debería
-   mirar la tinta real bajo el punto (`document.elementFromPoint`, o
-   `isPointInFill`), y ante empate elegir la pieza más chica o la de más arriba.
+**El auto-vínculo agarraba la pieza equivocada.** `dzRigArtAtPoint` recorría las
+piezas *en orden de dibujo* y devolvía la primera cuyo **rectángulo envolvente**
+contenía el punto. En un personaje, la primera pieza suele ser el cuerpo y su
+rectángulo cubre casi todo: los huesos de la pata, la oreja o la mano terminaban
+vinculados al cuerpo. Ahora mira la **tinta real** con `elementsFromPoint`, y si
+el punto cae en un hueco elige la **caja más chica** que lo contenga, nunca la
+primera. Medido sobre un cuerpo de 400×400 con una mano de 60×60 encima:
+apuntando al centro de la mano, antes devolvía `cuerpo` y ahora devuelve `mano`.
 
-2. **"Registrar piezas del dibujo" satura la mesa.** Registra todas las piezas
-   de golpe, cada una con su círculo y su etiqueta encima del dibujo. Con 35
-   piezas no se ve el personaje ni se puede apuntar a nada. En Harmony no ves
-   35 pivotes a la vez: ves la capa que estás tocando.
+**La mesa se saturaba de pivotes.** Registrar las piezas de un personaje deja
+decenas de círculos encima del dibujo. Ahora, cuando hay más de ocho nodos, los
+que no son el seleccionado ni su familia directa se **atenúan** y se achican.
+Siguen estando y se siguen agarrando igual: el área invisible de agarre no
+cambió.
 
-3. **"Vínculo" nombra dos cosas distintas en el mismo panel**: el desplegable
-   *Vínculo* es el **padre jerárquico**, y el botón *Vincular dibujo* es el
-   **arte que arrastra el hueso**. Son conceptos que en Harmony ni se tocan.
+**«Vínculo» nombraba dos cosas.** El desplegable pasó a llamarse **Cuelga de**
+(la jerarquía) y el botón, **Mueve el dibujo** (qué arte arrastra el hueso).
 
-4. **La jerarquía no se ve en la mesa.** El tirador de vínculo se dibuja solo
-   para el nodo seleccionado y no hay líneas de padre a hijo, así que no hay
-   forma de leer el esqueleto de un vistazo. El árbol del panel es la única
-   fuente, y es chico.
+**La pieza perdía su nombre.** Al crear un hueso sobre una pieza sin `id`, la
+pieza adoptaba el nombre del hueso y el dibujo pasaba a llamarse `hueso_12`.
+Ahora recibe nombre de pieza (`pieza_3`).
 
-5. **Piezas y huesos conviven en la misma lista con el mismo símbolo**, pero se
-   posan distinto: el nodo-pieza no tiene cuerpo que agarrar. Nada en pantalla
-   te dice cuál es cuál.
+### Siguen abiertos
 
-6. **La pieza puede perder su nombre.** Al crear un hueso sobre una pieza sin
-   `id`, la pieza adopta el nombre del hueso
-   (`if (art && !art.id) art.id = id;`), así que el dibujo pasa a llamarse
-   `hueso_12`.
+**Piezas y huesos comparten lista y símbolo**, pero se posan distinto: el
+nodo-pieza no tiene cuerpo que agarrar, solo su articulación. Nada en pantalla
+dice cuál es cuál. Falta un ícono distinto en la lista y una acción de «darle
+hueso a esta pieza».
+
+**La jerarquía de los huesos no se lee de un vistazo.** Ojo con esto, porque mi
+primera lectura fue incorrecta: para una **pieza** con padre, el overlay **sí**
+dibuja la línea que la une a él. Lo que no se ve es la relación entre un
+**hueso** y su padre, porque ahí la línea ya está ocupada dibujando el cuerpo
+del hueso.

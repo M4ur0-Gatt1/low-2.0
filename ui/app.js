@@ -6659,13 +6659,33 @@ function dzRigDrawableElements() {
    para que «Crear hueso» vincule el hueso al dibujo sin pasos extra: se mira
    el bounding box de cada pieza (robusto aunque el overlay esté encima). */
 function dzRigArtAtPoint(clientX, clientY) {
-  for (const el of dzRigDrawableElements()) {
+  const piezas = dzRigDrawableElements();
+  if (!piezas.length) return null;
+  const piezaDe = (el) => {
+    for (let n = el; n && n !== document; n = n.parentElement) if (piezas.includes(n)) return n;
+    return null;
+  };
+  // 1) LA TINTA REAL bajo el punto. Antes se miraba la caja envolvente y se
+  //    devolvía la primera pieza en orden de dibujo: en un personaje esa es el
+  //    cuerpo, y su caja tapa casi todo, así que los huesos de la pata o la
+  //    oreja quedaban vinculados al cuerpo. elementsFromPoint respeta el
+  //    relleno y el trazo, así que un hueco del dibujo ya no cuenta.
+  for (const el of document.elementsFromPoint(clientX, clientY)) {
+    const pieza = piezaDe(el);
+    if (pieza) return pieza;
+  }
+  // 2) Si el punto cayó en un hueco: la caja MÁS CHICA que lo contenga, que es
+  //    la más específica. Nunca la primera del documento.
+  let mejor = null, menor = Infinity;
+  for (const el of piezas) {
     try {
       const r = el.getBoundingClientRect();
-      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) return el;
+      if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) continue;
+      const area = Math.max(1, r.width) * Math.max(1, r.height);
+      if (area < menor) { menor = area; mejor = el; }
     } catch (_) { /* pieza sin caja */ }
   }
-  return null;
+  return mejor;
 }
 function dzRigPieceSpec(el, index, requestedId) {
   const svg = $("#dzCanvas")?.querySelector(":scope > svg");
@@ -6828,7 +6848,10 @@ function dzRigBoneCreateDrag(e, forced = null) {
     let artId = null;
     if (headClient) {
       const art = dzRigArtAtPoint(headClient.x, headClient.y);
-      if (art && !art.id) art.id = id;   // pieza sin nombre: adopta el del hueso
+      // Una pieza sin nombre recibe nombre de PIEZA, no el del hueso: si adopta
+      // "hueso_12" el dibujo y su esqueleto pasan a llamarse igual y no hay
+      // forma de distinguirlos en la lista ni en el archivo.
+      if (art && !art.id) art.id = dzUniqueId("pieza_");
       if (art && art.id && DZ.doc.bindRigElement(id, art.id)) artId = art.id;
     }
     dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
@@ -7149,6 +7172,9 @@ function dzRigOverlayRender() {
     return el;
   };
   const posable = DZ.rigTool === "pose";   // FK/IK: sin «Posar», el clic solo selecciona
+  // para descongestionar la mesa: quién es familia directa del seleccionado
+  const selNode = selectedId ? doc.scene.rigNode(selectedId) : null;
+  const muchos = Object.keys(doc.scene.rig.nodes).length > 8;
   for (const node of Object.values(doc.scene.rig.nodes)) {
     let a = point(node.id), b = tailPoint(node);
     if (!b && node.parentId) { a = point(node.parentId); b = point(node.id); }
@@ -7169,8 +7195,18 @@ function dzRigOverlayRender() {
       if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "translate");
       e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
     };
-    const joint = get("jt:" + node.id, "circle", { cx: p.x, cy: p.y, r: node.pinned ? 7 : 5, "data-id": node.id },
-      "dz-rig-joint" + (node.pinned ? " root" : "") + (selectedId === node.id ? " selected" : ""));
+    // Con muchas piezas registradas la mesa se llena de puntos y no se ve el
+    // dibujo. Los que no son el seleccionado ni su familia directa se atenúan:
+    // siguen ahí y se siguen pudiendo agarrar (el área invisible no cambia),
+    // pero dejan ver el personaje.
+    const cerca = !selNode || node.id === selectedId || node.parentId === selectedId
+      || selNode.parentId === node.id
+      || (node.parentId && node.parentId === selNode.parentId);
+    const tenue = muchos && !cerca && !node.pinned;
+    const joint = get("jt:" + node.id, "circle",
+      { cx: p.x, cy: p.y, r: node.pinned ? 7 : (tenue ? 3 : 5), "data-id": node.id },
+      "dz-rig-joint" + (node.pinned ? " root" : "") + (selectedId === node.id ? " selected" : "")
+        + (tenue ? " dim" : ""));
     joint.onpointerdown = jointHandler;
     // área de agarre invisible más grande: los huesos de 5px eran difíciles de
     // atrapar con el lápiz; esto mantiene el aspecto denso pero facilita el gesto.
@@ -7281,6 +7317,68 @@ function dzRigToggle() {
     ovl.classList.remove("bone-create"); ovl.innerHTML = ""; ovl.__rigCache = null;
   }
 }
+/* ══ TUTORIAL DEL RIG ═══════════════════════════════════════════════════════
+   El sistema no se explica solo: piezas y huesos son la MISMA entidad, y la
+   jerarquía se arma en la mesa y no en la línea de tiempo como en Harmony u
+   OpenToonz. Esto vive dentro del programa (Ayuda → Cómo se riggea un
+   personaje) porque un tutorial que hay que ir a buscar afuera no se lee. */
+function dzRigTutorial() {
+  const paso = (n, t) => `<li><b>${n}</b> ${t}</li>`;
+  openModal(`<h2>Cómo se riggea un personaje</h2>
+    <div class="sub">El esqueleto de LOW en una pantalla · <b>Ayuda → Cómo se riggea</b> para volver acá</div>
+    <div class="rigdoc">
+
+      <p class="rigdoc-nota">En Harmony y en OpenToonz hay dos sistemas separados: la jerarquía de
+      recortes por un lado y el esqueleto por otro. Acá hay <b>una sola cosa</b>: el nodo. Una
+      «pieza» y un «hueso» son el mismo objeto — el hueso además tiene cuerpo, y por eso se lo
+      puede agarrar y rotar desde el medio.</p>
+
+      <h3>A · El personaje ya está dibujado por partes</h3>
+      <ol>
+        ${paso("1", "<b>Armado → Registrar piezas del dibujo.</b> Toma todas las partes sueltas del dibujo y les pone un pivote en el centro.")}
+        ${paso("2", "Elegí una pieza y tocá <b>Pivote</b> para poner el punto donde tiene que girar: en un brazo, el hombro.")}
+        ${paso("3", "Decile de quién cuelga: el desplegable <b>Cuelga de</b>, o arrastrá el <b>cuadrado</b> hasta el <b>círculo</b> del padre.")}
+        ${paso("4", "La cadera o el torso van con <b>Fijar raíz</b>.")}
+        ${paso("5", "Pasá a <b>FK</b> y posá.")}
+      </ol>
+
+      <h3>B · Querés una cadena articulada</h3>
+      <ol>
+        ${paso("1", "<b>Armado → Crear hueso</b> y arrastrá desde la articulación hasta la punta.")}
+        ${paso("2", "Para seguir la cadena, empezá el próximo arrastre <b>sobre la punta del anterior</b>: se engancha solo.")}
+        ${paso("3", "El hueso toma el dibujo que tenga debajo. Si agarró otro, seleccioná la pieza correcta en la mesa y tocá <b>Mueve el dibujo</b>.")}
+        ${paso("4", "Pasá a <b>FK</b> y posá.")}
+      </ol>
+
+      <h3>Posar</h3>
+      <p><b>FK:</b> arrastrar el cuerpo del hueso o su punta lo <b>rota</b>; arrastrar la
+      articulación lo <b>mueve</b> y los hijos siguen. Con <b>Auto-clave</b> cada gesto queda
+      grabado en el cuadro actual; sin auto-clave, <b>Enter</b> graba y <b>Esc</b> descarta.</p>
+      <p><b>IK:</b> elegí hombro, codo y extremo —tres nodos seguidos de la misma cadena—, tocá
+      <b>Crear IK</b> y arrastrá el rombo. <b>Invertir</b> cambia para qué lado dobla el codo.</p>
+
+      <h3>Qué es cada cosa en la mesa</h3>
+      <ul class="rigdoc-simb">
+        <li><i class="s-pivot"></i> el pivote: el punto sobre el que gira</li>
+        <li><i class="s-root"></i> la raíz del personaje</li>
+        <li><i class="s-bone"></i> el cuerpo de un hueso; de la punta sale la cadena</li>
+        <li><i class="s-link"></i> el tirador de vínculo: arrastralo al pivote del padre</li>
+        <li><i class="s-ik"></i> el objetivo de una cadena IK</li>
+      </ul>
+      <p class="rigdoc-tip">Con muchas piezas registradas, los pivotes lejanos se atenúan para
+      dejar ver el dibujo. Siguen ahí: se agarran igual.</p>
+
+      <h3>Si venís de Harmony o de OpenToonz</h3>
+      <p>La jerarquía no se arma en la línea de tiempo: se arma <b>en la mesa</b>, arrastrando el
+      cuadrado de una pieza hasta el círculo de la otra. Ese es el paso que no vas a encontrar
+      donde lo buscás. El resto se traduce derecho: el <i>peg</i> es el nodo, el <i>center</i> es
+      el botón Pivote, la Transform Tool es el modo FK, y los deformadores son Crear hueso.</p>
+
+    </div>
+    <div class="m-actions"><button class="primary" id="mCancel">Entendido</button></div>`);
+  $("#mCancel").onclick = closeModal;
+}
+
 async function dzRigOpen() {
   if (!DZ.anim && !DZ.doc) await dzAnimToggle();
   if (!DZ.anim && !DZ.doc) return;
@@ -7813,6 +7911,7 @@ function dzMenuAction(act) {
     clave: dzKeyToggle, intercalar: dzTweenModal, interpolar: dzMoveTween,
     grabar: dzRecToggle, claveia: dzAIKeyModal, esqueleto: dzRigOpen,
     camara: dzCamToggle, clavecam: dzCamKeyToggle,
+    tutorialrig: dzRigTutorial,
     acerca: () => {
       openModal(`<h2>LOW Estudio</h2>
         <div class="sub">Editor de vectores y animación 2D con IA integrada, dentro de LOW v${S.version || ""}.
