@@ -625,6 +625,14 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#tlFps").onchange = (e) => { if (DZ.playback) DZ.playback.setFps(+e.target.value); };
   const syncPlayRange = () => {
     if (DZ.playback) DZ.playback.setRange(+$("#tlIn").value || 1, +$("#tlOut").value || 0);
+    // y que la regla lo muestre: los casilleros y las manijas son la misma cosa
+    const sc = DZ.doc && DZ.doc.scene;
+    if (sc) {
+      sc.range.in = Math.max(1, +$("#tlIn").value || 1);
+      sc.range.out = Math.max(0, +$("#tlOut").value || 0);
+      DZ.doc.touch(); DZ.doc.emit("frame");
+      if (typeof dzTlGridRender === "function") dzTlGridRender();
+    }
   };
   $("#tlIn").onchange = syncPlayRange;
   $("#tlOut").onchange = syncPlayRange;
@@ -7728,6 +7736,90 @@ function dzRigDoblarLimpiar() {
   dzSetStatus("F" + f + " ya no dobla a \u00ab" + node.id + "\u00bb");
 }
 
+/* == TRAMO ACTIVO DE LA LINEA DE TIEMPO =====================================
+   De que cuadro a que cuadro se anima. Lo de afuera se atenua y no entra ni en
+   la reproduccion ni en el export. El modelo ya guardaba In/Out y el transporte
+   los respetaba, pero solo se podian escribir a mano en dos casilleros: aca se
+   agarran y se arrastran sobre la regla, como en Toon Boom y OpenToonz. */
+
+/** El tramo vigente, resuelto: Out en 0 significa "hasta donde llegue". */
+function dzRangoActual(largoVisible) {
+  const sc = DZ.doc && DZ.doc.scene;
+  const ultimo = Math.max(1, (sc && sc.lastFrame()) || 1, largoVisible ? 0 : 0);
+  if (!sc) return { in: 1, out: ultimo, abierto: true };
+  const abierto = !(sc.range.out > 0);
+  return { in: Math.max(1, sc.range.in || 1),
+           out: abierto ? ultimo : Math.max(1, sc.range.out),
+           abierto };
+}
+
+/** Fija el tramo y lo deja escrito en los dos lados: modelo y casilleros. */
+function dzRangoSet(desde, hasta, opciones) {
+  const sc = DZ.doc && DZ.doc.scene;
+  if (!sc) return;
+  const ultimo = Math.max(1, sc.lastFrame() || 1);
+  let a = Math.max(1, Math.round(desde));
+  let z = Math.max(1, Math.round(hasta));
+  if (a > z) { const tmp = a; a = z; z = tmp; }        // cruzarlos no rompe nada
+  sc.range.in = a;
+  // guardar el Out tal cual: si coincide con el final de la escena se deja
+  // abierto (0), asi la zona sigue creciendo cuando la escena crece.
+  sc.range.out = (z >= ultimo && (opciones && opciones.abierto !== false)) ? 0 : z;
+  if ($("#tlIn")) $("#tlIn").value = sc.range.in;
+  if ($("#tlOut")) $("#tlOut").value = sc.range.out;
+  DZ.doc.touch(); DZ.doc.emit("frame");
+  dzTlGridRender();
+  dzMarkDirty();
+}
+
+/** Arrastrar una manija de la regla. */
+function dzRangoDrag(e, borde) {
+  if (!DZ.doc) return;
+  e.preventDefault(); e.stopPropagation();
+  const cols = $("#dzTlgCols");
+  const pointerId = e.pointerId;
+  const tramo = dzRangoActual();
+  const frameDesdeX = (clientX) => {
+    const caja = cols.getBoundingClientRect();
+    const primera = cols.querySelector(".dz-tlg-col");
+    const ancho = primera ? primera.getBoundingClientRect().width : 22;
+    return Math.max(1, Math.floor((clientX - caja.left + cols.scrollLeft) / Math.max(1, ancho)) + 1);
+  };
+  const mover = ev => {
+    if (ev.pointerId !== pointerId) return;
+    const f = frameDesdeX(ev.clientX);
+    const a = borde === "in" ? f : tramo.in;
+    const z = borde === "in" ? tramo.out : f;
+    // arrastrar el Out lo fija: si no, moverlo al final lo dejaria abierto y
+    // pareceria que el arrastre no hizo nada.
+    dzRangoSet(a, z, { abierto: false });
+  };
+  const soltar = ev => {
+    if (ev.pointerId != null && ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", mover);
+    document.removeEventListener("pointerup", soltar);
+    document.removeEventListener("pointercancel", soltar);
+    const t = dzRangoActual();
+    dzSetStatus("Tramo activo: F" + t.in + " a F" + t.out + " \u00b7 " +
+      (t.out - t.in + 1) + " cuadros \u00b7 doble clic en la regla para volver a toda la escena");
+  };
+  document.addEventListener("pointermove", mover);
+  document.addEventListener("pointerup", soltar);
+  document.addEventListener("pointercancel", soltar);
+}
+
+/** Devolver el tramo a toda la escena. */
+function dzRangoTodo() {
+  const sc = DZ.doc && DZ.doc.scene;
+  if (!sc) return;
+  sc.range.in = 1; sc.range.out = 0;
+  if ($("#tlIn")) $("#tlIn").value = 1;
+  if ($("#tlOut")) $("#tlOut").value = 0;
+  DZ.doc.touch(); DZ.doc.emit("frame");
+  dzTlGridRender(); dzMarkDirty();
+  dzSetStatus("Tramo activo: toda la escena");
+}
+
 /* == COPIAR Y PEGAR UN CUADRO ===============================================
    El gesto mas usado de la animacion tradicional: copiar el dibujo y hacer el
    siguiente encima de la copia.
@@ -9337,12 +9429,25 @@ async function dzTlGridRender() {
   const displayCount = Math.max(48, DZ.anim.frames.length, requestedOut);
   const displayFrames = Array.from({ length: displayCount }, (_, i) => DZ.anim.frames[i] || null);
   // ── encabezado: números de cuadro (cada 5 resaltado) + marcas 🔑/🎬 + playhead ──
+  // El TRAMO ACTIVO: de que cuadro a que cuadro se anima. Lo de afuera se
+  // atenua y no se reproduce, como la zona activa de Toon Boom / OpenToonz.
+  const tramo = dzRangoActual(displayCount);
   $("#dzTlgCols").innerHTML = displayFrames.map((f, i) => {
     const n = i + 1, mj = (n % 5 === 0), num = f ? fnum(i) : null;
     const mark = (num && keys.includes(num) ? "<i class='k'></i>" : "") + (num && cams[num] ? "<i class='c'></i>" : "");
-    return `<span class="dz-tlg-col${i === cur ? " cur" : ""}${selected(i) ? " selected" : ""}${mj ? " mj" : ""}" data-i="${i}">` +
-           `${mj || i === cur ? n : ""}${mark}</span>`;
+    const fuera = n < tramo.in || n > tramo.out;
+    const mango = n === tramo.in ? "<i class='mg in' data-borde='in' title='Primer cuadro del tramo — arrastrá'></i>"
+      : (n === tramo.out ? "<i class='mg out' data-borde='out' title='Último cuadro del tramo — arrastrá'></i>" : "");
+    return `<span class="dz-tlg-col${i === cur ? " cur" : ""}${selected(i) ? " selected" : ""}${mj ? " mj" : ""}` +
+           `${fuera ? " fuera" : ""}" data-i="${i}">` +
+           `${mj || i === cur ? n : ""}${mark}${mango}</span>`;
   }).join("");
+  $("#dzTlgCols").querySelectorAll(".mg").forEach(m =>
+    m.onpointerdown = e => dzRangoDrag(e, m.dataset.borde));
+  $("#dzTlgCols").ondblclick = e => {
+    if (e.target.closest(".mg")) return;      // doble clic en la manija: no
+    dzRangoTodo();
+  };
   const liveSvg = $("#dzCanvas").querySelector(":scope > svg");
   const rows = $("#dzTlgRows");
   rows.innerHTML = "";
@@ -9391,7 +9496,8 @@ async function dzTlGridRender() {
       const c = document.createElement("span");
       c.className = "dz-tlg-cell" +
         (on ? (prevOn ? " held" : " start") : "") + (i === cur ? " cur" : "") +
-        (selected(i) ? " selected" : "");
+        (selected(i) ? " selected" : "") +
+        (i + 1 < tramo.in || i + 1 > tramo.out ? " fuera" : "");
       c.dataset.i = i;
       c.onclick = e => dzTimelineCellActivate(i, false, e);
       c.ondblclick = e => dzTimelineCellActivate(i, true, e);

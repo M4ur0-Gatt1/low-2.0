@@ -2792,3 +2792,33 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .rig2[data-estado="construir"] [data-rig-section="pose"],
 .rig2[data-estado="construir"] [data-rig-section="curva"] { display: none; }
 .rig2[data-estado="animar"] [data-rig-section="build"] { display: none; }
+
+/* TRAMO ACTIVO: lo que queda afuera se atenua, y los dos bordes llevan una
+   manija para agarrarlos. Antes el In/Out solo se podia escribir a mano. */
+.dz-tlg-col.fuera { opacity: .32; background: repeating-linear-gradient(135deg,
+  transparent 0 4px, rgba(127,127,127,.09) 4px 8px); }
+.dz-tlg-col i.mg { width: 0; height: 0; bottom: auto; top: 0; border-radius: 0;
+  border-top: 7px solid var(--cyan); cursor: ew-resize; z-index: 3; }
+.dz-tlg-col i.mg.in { border-left: 6px solid transparent; border-right: 6px solid transparent;
+  transform: translateX(-50%); }
+.dz-tlg-col i.mg.out { border-left: 6px solid transparent; border-right: 6px solid transparent;
+  transform: translateX(-50%); }
+.dz-tlg-col i.mg::after { content: ""; position: absolute; left: -7px; top: -3px;
+  width: 15px; height: 14px; }   /* area de agarre, que el triangulo es chico */
+.dz-tlg-cell.fuera { opacity: .35; }
+
+/* TRAMO ACTIVO en la regla de la timeline: lo de afuera se atenua y los dos
+   bordes llevan manija. Es el In/Out de siempre, ahora agarrable. */
+.tl2-tick.fuera { opacity: .3; }
+.tl2-tick.borde-in { box-shadow: inset 2px 0 0 var(--cyan); }
+.tl2-tick.borde-out { box-shadow: inset -2px 0 0 var(--cyan); }
+.tl2-tick.borde-in.borde-out { box-shadow: inset 2px 0 0 var(--cyan), inset -2px 0 0 var(--cyan); }
+.tl2-mango { position: absolute; top: 0; width: 9px; height: 100%; cursor: ew-resize;
+  z-index: 4; background: transparent; }
+.tl2-mango::before { content: ""; position: absolute; top: 0; width: 0; height: 0;
+  border-top: 6px solid var(--cyan); }
+.tl2-mango.in { left: -1px; }
+.tl2-mango.in::before { left: 0; border-right: 6px solid transparent; }
+.tl2-mango.out { right: -1px; }
+.tl2-mango.out::before { right: 0; border-left: 6px solid transparent; }
+.tl2-mango:hover::before { border-top-width: 9px; }

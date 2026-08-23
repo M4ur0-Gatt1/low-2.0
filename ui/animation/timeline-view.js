@@ -40,6 +40,54 @@
     }
     dispose() { if (this._desuscribir) this._desuscribir(); if (this.host) this.host.innerHTML = ""; }
     _docChanged(reason) { if (reason === "frame") this._updateCursor(); else this.render(); }
+
+    /** El tramo vive en el modelo, pero el export y el transporte leen los
+     *  casilleros In/Out de la barra. Si se escribe uno solo, terminan
+     *  diciendo cosas distintas: se arrastra el tramo y el export saca otro. */
+    _escribirTramo(desde, hasta) {
+      const doc = this.doc, sc = doc.scene;
+      sc.range.in = desde;
+      sc.range.out = hasta;
+      const campoIn = document.querySelector("#tlIn"), campoOut = document.querySelector("#tlOut");
+      if (campoIn) campoIn.value = desde;
+      if (campoOut) campoOut.value = hasta;
+      if (this.playback && this.playback.setRange) this.playback.setRange(desde, hasta);
+      doc.touch(); doc.emit("frame");
+    }
+
+    /** Arrastrar un borde del tramo activo sobre la regla. */
+    _arrastrarTramo(ev, borde, pista, total, tramo) {
+      if (ev.button !== 0) return;
+      ev.preventDefault(); ev.stopPropagation();      // que no haga scrub
+      const doc = this.doc, sc = doc.scene;
+      const pointerId = ev.pointerId;
+      const rect = pista.getBoundingClientRect();
+      const aFrame = (x) => Math.max(1, Math.min(total,
+        1 + Math.floor((x - rect.left + pista.scrollLeft) / ANCHO)));
+      const mover = (e2) => {
+        if (e2.pointerId !== pointerId) return;
+        const f = aFrame(e2.clientX);
+        let a = borde === "in" ? f : tramo.in;
+        let z = borde === "in" ? tramo.out : f;
+        if (a > z) { const tmp = a; a = z; z = tmp; }
+        // al arrastrarlo queda fijo: si lo dejara abierto, llevarlo al final
+        // pareceria no hacer nada
+        this._escribirTramo(a, z);
+        this.render();
+      };
+      const soltar = (e2) => {
+        if (e2 && e2.pointerId != null && e2.pointerId !== pointerId) return;
+        document.removeEventListener("pointermove", mover);
+        document.removeEventListener("pointerup", soltar);
+        document.removeEventListener("pointercancel", soltar);
+        const r = sc.playRange();
+        if (this.status) this.status("Tramo activo: F" + r.in + " a F" + r.out +
+          " \u00b7 " + (r.out - r.in + 1) + " cuadros \u00b7 doble clic en la regla para toda la escena");
+      };
+      document.addEventListener("pointermove", mover);
+      document.addEventListener("pointerup", soltar);
+      document.addEventListener("pointercancel", soltar);
+    }
     _updateCursor() {
       if (!this.host || !this.doc) return;
       this.host.querySelectorAll(".actual").forEach((n) => n.classList.remove("actual"));
@@ -122,10 +170,19 @@
       regla.appendChild(nombre);
       const pista = document.createElement("div");
       pista.className = "tl2-track";
+      // TRAMO ACTIVO: de que cuadro a que cuadro se anima. Lo de afuera se
+      // atenua y no se reproduce. Los dos bordes se arrastran, como la zona
+      // activa de Toon Boom / OpenToonz; antes solo se podian escribir a mano.
+      const ultimo = Math.max(1, sc.lastFrame() || 1);
+      const abierto = !(sc.range.out > 0);
+      const tramo = { in: Math.max(1, sc.range.in || 1),
+                      out: abierto ? ultimo : Math.max(1, sc.range.out) };
       for (let f = 1; f <= total; f++) {
         const t = document.createElement("i");
         t.className = "tl2-tick" + (f % 6 === 1 ? " seg" : "") + (f === doc.frame ? " actual" : "")
-          + (cameraKeys[f] ? " camkey" : "");
+          + (cameraKeys[f] ? " camkey" : "")
+          + (f < tramo.in || f > tramo.out ? " fuera" : "")
+          + (f === tramo.in ? " borde-in" : "") + (f === tramo.out ? " borde-out" : "");
         if (cameraKeys[f]) t.title = `Clave de camara en el frame ${f}`;
         t.dataset.frame = String(f);
         // el número solo cada 6: con uno por frame no se lee nada
@@ -153,8 +210,24 @@
           document.addEventListener("pointermove", mover);
           document.addEventListener("pointerup", soltar);
         };
+        // manija de cada borde: se agarra y se arrastra para mover el tramo
+        for (const borde of (f === tramo.in ? ["in"] : []).concat(f === tramo.out ? ["out"] : [])) {
+          const mango = document.createElement("b");
+          mango.className = "tl2-mango " + borde;
+          mango.title = borde === "in" ? "Primer cuadro del tramo \u2014 arrastr\u00e1"
+                                       : "\u00daltimo cuadro del tramo \u2014 arrastr\u00e1";
+          mango.onpointerdown = (ev) => this._arrastrarTramo(ev, borde, pista, total, tramo);
+          t.appendChild(mango);
+        }
         pista.appendChild(t);
       }
+      // doble clic en un hueco de la regla: volver a toda la escena
+      pista.ondblclick = (ev) => {
+        if (ev.target.closest(".tl2-mango")) return;
+        this._escribirTramo(1, 0);
+        this.render();
+        if (this.status) this.status("Tramo activo: toda la escena");
+      };
       regla.appendChild(pista);
       cont.appendChild(regla);
 
