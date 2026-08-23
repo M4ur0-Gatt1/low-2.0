@@ -85,6 +85,61 @@ Arrastrar el círculo de un hueso mueve **el hueso entero**: es el gesto para
 acomodar la cadena. Para correr solo su **pivote**, arrastralo con **Alt**
 apretado, o usá el botón **Pivote** con el hueso elegido.
 
+### Animar a lo largo de los cuadros
+
+Un personaje riggeado se anima **con poses, no redibujándolo**: el mismo dibujo
+se sostiene a lo largo de la escena y lo que cambia cuadro a cuadro son las
+claves del rig. Por eso, con el modo rig abierto, **agregar un cuadro sostiene
+al personaje** en vez de dar una hoja en blanco. Fuera del rig el botón sigue
+creando un dibujo nuevo, como siempre.
+
+Poné una pose cada tantos cuadros: LOW rellena el medio solo. Si caés en un
+cuadro donde el personaje no está expuesto no hay nada que posar, y la barra de
+estado lo dice en vez de quedarse callada; se arregla sosteniendo su dibujo con
+**↔** en la hoja de tiempos.
+
+### El timing: curvas de interpolacion
+
+Las claves dicen **que** pose y **cuando**; la curva dice **como** se va de una
+a la otra. Sin curva el movimiento sale a velocidad pareja de punta a punta, y
+eso es lo que hace que una animacion parezca mecanica.
+
+La seccion **Curva** del panel muestra el tramo donde estas parado, con la recta
+de referencia punteada y la linea vertical del cuadro actual. Los cinco botones
+son los timings de siempre: **Recta**, **Suave**, **Arranca lento**, **Frena** y
+**Escalon** (sostiene la pose entera y salta en la clave siguiente). Para
+afinarlo, arrastra las dos manijas.
+
+Si llevas una manija **por debajo del marco**, el valor se pasa para el otro lado
+antes de arrancar: eso es la **anticipacion**, y es la razon por la que las
+manijas pueden salirse del cuadrado.
+
+Cambiar la curva **no toca ninguna pose**: se puede ajustar el timing todas las
+veces que haga falta sin perder lo clavado.
+
+### Varios dibujos en una misma pieza
+
+Una mano no rota: se **cambia** por otra mano. Lo mismo el pie, o la boca en la
+sincronia labial. Por eso una pieza puede tener varios dibujos, y el cuadro
+decide cual se ve.
+
+Dibuja la otra version en la mesa, seleccionala, y con la pieza elegida toca
+**Sumar dibujo** en la seccion **Dibujos de la pieza**. Despues, parado en el
+cuadro donde tiene que cambiar, hace clic en el dibujo de la lista: vale **desde
+ahi hasta el proximo cambio**. Un dibujo no se interpola.
+
+**Sin cambio aca** borra el cambio de ese cuadro y deja que siga mandando el
+anterior. **Quitar** saca el dibujo de la pieza sin borrarlo del dibujo: si era
+el que la pieza estaba usando, la pieza pasa a usar el que queda.
+
+### El personaje de ejemplo
+
+**Ayuda -> Abrir el personaje de ejemplo** (o el boton al principio del tutorial
+dentro del programa) arma un muneco de siete piezas ya riggeado y animado: tres
+niveles de jerarquia, el dibujo sostenido a lo largo de trece cuadros, un saludo
+de tres claves y un codo con topes puestos. Sirve para seguir estos pasos
+tocando algo que ya funciona en vez de armarlo a ciegas.
+
 ---
 
 ## Los tres modos
@@ -206,6 +261,42 @@ siempre el hueso entero, y el botón Pivote solo actuaba sobre piezas del dibujo
 no había ninguna forma de correr el pivote de un hueso. Ahora **Alt+arrastrar**
 mueve solo el pivote (verificado: el pivote pasó de 511,239 a 551,279 con la
 cabeza y la punta del hueso intactas).
+
+### Arreglado en la v3.29.51
+
+**Agregar cuadros vaciaba la escena y el rig se quedaba sin nada que mover.** El
+botón de cuadro nuevo creaba un dibujo en blanco, así que apenas se extendía la
+animación el personaje desaparecía y ningún control del rig tenía efecto — la
+causa concreta de «no funciona nada». Con el modo rig abierto, un cuadro nuevo
+ahora sostiene el mismo dibujo. Fuera del rig no cambia nada.
+
+**Un cuadro sin el personaje no avisaba.** Ahora la barra de estado explica que
+ese cuadro no lo tiene expuesto y cómo sostenerlo.
+
+### Nuevo en la v3.29.51: curvas de interpolacion
+
+La interpolacion era **solo lineal**: no habia ease, ni Bezier, ni editor de
+curvas, asi que todo movimiento salia mecanico. Ahora cada clave lleva dos
+manijas —como sale hacia la siguiente y como llega desde la anterior, igual que
+un cubic-bezier— con cinco presets y un editor grafico en el panel.
+
+El detalle que importaba para que se notara: la pose interpolada la termina
+decidiendo el **canal**, que pisa al calculo de `rigPose`. Curvar solo el lerp
+de la pose no hubiera cambiado nada en pantalla; la curva se aplica en los dos
+lugares.
+
+### Nuevo en la v3.29.51: sustituciones de dibujo
+
+El modelo ya tenia slots y attachments enteros, pero la interfaz no exponia ni
+un control, y `activeAttachmentId` era un valor unico: una sustitucion que no
+cambia por cuadro no sirve para sincronia labial. Ahora las claves de
+sustitucion viven en `rig.switches` —que estaba declarado y sin usar— y el panel
+las maneja.
+
+Lo que habia que cuidar: el rig **nunca** puede hornear su vista dentro del
+dibujo guardado. Las variantes escondidas se marcan con `data-rig-var` y
+`dzRigStrip` las devuelve como estaban; `dzCanvasInner` pasa por ahi antes de
+guardar, asi que el dibujo se guarda con todas sus versiones visibles.
 
 ### Siguen abiertos
 

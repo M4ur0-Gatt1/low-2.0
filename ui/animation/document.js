@@ -677,16 +677,31 @@
 
     _syncRigPoseChannels(rig, id, keys) {
       for (const property of ["x", "y", "r", "sx", "sy"]) {
-        const path = animation.rigChannelPath(id, property), values = {};
+        const path = animation.rigChannelPath(id, property), values = {}, ease = {};
         for (const [frame, pose] of Object.entries(keys || {})) {
           const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
           const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
           values[frame] = property === "sx" ? sx : property === "sy" ? sy : (+pose[property] || 0);
+          // el canal es el que termina interpolando: sin esto la curva no se veria
+          if (pose && pose.ease) ease[frame] = animation.rigEaseData(pose.ease);
         }
         if (Object.keys(values).length) rig.channels[path] = animation.rigChannelData(path,
-          { ...(rig.channels[path] || {}), keys: values });
+          { ...(rig.channels[path] || {}), keys: values, ease });
         else delete rig.channels[path];
       }
+    }
+
+    /** La curva de una clave: `eo` como sale, `ei` como llega, `hold` escalon. */
+    setRigKeyEase(id, frame, ease) {
+      if (!id) return false;
+      return this._rigChange("Cambiar la curva de una clave", (rig) => {
+        const node = rig.nodes[id], f = Math.max(1, Math.round(frame));
+        if (!node || !node.keys[f]) return false;
+        if (ease) node.keys[f].ease = animation.rigEaseData(ease);
+        else delete node.keys[f].ease;
+        this._syncRigPoseChannels(rig, id, node.keys);
+        return true;
+      });
     }
 
     _rigChange(label, mutate) {
@@ -759,8 +774,17 @@
         const node = rig.nodes[id] || this._ensureRigArtLink(rig, { id });
         const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
         const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
-        node.keys[Math.max(1, Math.round(frame))] = { x: +pose.x || 0, y: +pose.y || 0,
-          r: +pose.r || 0, sx, sy };
+        // Los topes del hueso valen para TODA clave, venga de donde venga. El
+        // solver de IK ya los respetaba; posar a mano en FK los ignoraba, asi
+        // que un codo con tope se doblaba igual para el lado imposible.
+        const r = Math.max(node.limits?.min ?? -180,
+          Math.min(node.limits?.max ?? 180, +pose.r || 0));
+        const f = Math.max(1, Math.round(frame));
+        // Volver a posar sobre una clave no le borra la curva que ya tenia:
+        // el animador ajusta el timing una vez y despues corrige la pose.
+        const ease = pose.ease || node.keys[f]?.ease;
+        node.keys[f] = { x: +pose.x || 0, y: +pose.y || 0, r, sx, sy };
+        if (ease) node.keys[f].ease = animation.rigEaseData(ease);
         this._syncRigPoseChannels(rig, id, node.keys);
         return true;
       });
@@ -898,6 +922,81 @@
           slotId, attachmentId, elementId };
         rig.slots[slotId].activeAttachmentId = attachmentId;
         rig.nodes = rig.bones;
+        return true;
+      });
+    }
+
+    /** Suma un dibujo alternativo al slot de una pieza: la otra mano, la otra
+     *  boca. No lo activa — eso lo decide una clave de sustitucion. */
+    addRigVariant(boneId, elementId, name) {
+      if (!boneId || !elementId || !this.scene.rigNode(boneId)) return null;
+      const slotId = `slot:${boneId}`;
+      let creado = null;
+      this._rigChange("Sumar un dibujo a la pieza", (rig) => {
+        if (!rig.slots[slotId]) return false;
+        const ya = Object.values(rig.attachments)
+          .find((a) => a.slotId === slotId && a.elementId === elementId);
+        if (ya) { creado = ya.id; return false; }
+        const hermanos = Object.values(rig.attachments).filter((a) => a.slotId === slotId);
+        const id = `attachment:${boneId}:${elementId}`;
+        rig.attachments[id] = { id, slotId, type: "drawing", elementId,
+          name: name || elementId, levelId: null, drawingNumber: null, order: hermanos.length };
+        creado = id;
+        return true;
+      });
+      return creado;
+    }
+
+    removeRigVariant(attachmentId) {
+      return this._rigChange("Quitar un dibujo de la pieza", (rig) => {
+        const a = rig.attachments[attachmentId];
+        if (!a) return false;
+        const hermanos = Object.values(rig.attachments).filter((x) => x.slotId === a.slotId);
+        if (hermanos.length < 2) return false;          // el ultimo dibujo no se saca
+        delete rig.attachments[attachmentId];
+        const sw = (rig.switches || {})[a.slotId];
+        if (sw) {
+          for (const f of Object.keys(sw.keys)) if (sw.keys[f] === attachmentId) delete sw.keys[f];
+          if (!Object.keys(sw.keys).length) delete rig.switches[a.slotId];
+        }
+        const queda = hermanos.find((x) => x.id !== attachmentId) || null;
+        const slot = rig.slots[a.slotId];
+        if (slot && slot.activeAttachmentId === attachmentId)
+          slot.activeAttachmentId = queda ? queda.id : null;
+        // Si la pieza apuntaba justo al dibujo que se saca, hay que repuntarla:
+        // si no, queda mostrando un dibujo que ya no es una de sus versiones y
+        // se terminan viendo los dos a la vez.
+        const bone = queda && rig.bones[slot?.boneId];
+        if (bone && bone.elementId === a.elementId) {
+          bone.elementId = queda.elementId;
+          if (bone.binding) bone.binding.elementId = queda.elementId;
+          const bind = rig.bindings[`binding:${bone.id}`];
+          if (bind) { bind.elementId = queda.elementId; bind.attachmentId = queda.id; }
+        }
+        return true;
+      });
+    }
+
+    /** Clava que dibujo se ve en este cuadro. Un dibujo no se interpola: vale
+     *  desde su clave hasta la siguiente. */
+    setRigSwitchKey(slotId, frame, attachmentId) {
+      return this._rigChange("Cambiar el dibujo en el cuadro", (rig) => {
+        const f = Math.max(1, Math.round(frame));
+        if (!rig.slots[slotId] || !rig.attachments[attachmentId]) return false;
+        rig.switches = rig.switches || {};
+        rig.switches[slotId] = rig.switches[slotId] || { slotId, keys: {} };
+        if (rig.switches[slotId].keys[f] === attachmentId) return false;
+        rig.switches[slotId].keys[f] = attachmentId;
+        return true;
+      });
+    }
+
+    deleteRigSwitchKey(slotId, frame) {
+      return this._rigChange("Borrar el cambio de dibujo", (rig) => {
+        const f = Math.max(1, Math.round(frame)), sw = (rig.switches || {})[slotId];
+        if (!sw || !sw.keys[f]) return false;
+        delete sw.keys[f];
+        if (!Object.keys(sw.keys).length) delete rig.switches[slotId];
         return true;
       });
     }

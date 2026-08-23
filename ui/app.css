@@ -2713,3 +2713,45 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .dz-rig-rot-arm { stroke: var(--red); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .75; pointer-events: none; }
 .dz-rig-rot-handle { fill: var(--red); stroke: #fff; stroke-width: 1.5; cursor: grab; }
 .dz-rig-rot-handle.selected { stroke-width: 2.5; }
+
+/* Abrir el personaje de ejemplo desde el propio tutorial: el paso siguiente
+   natural despues de leer como se riggea es tocar uno que ya funciona. */
+.rigdoc-abrir { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  margin: 0 0 1.1rem; padding: .8rem .9rem; border: 1px solid var(--line);
+  border-left: 3px solid var(--red); background: var(--panel); border-radius: 4px; }
+.rigdoc-abrir small { color: var(--muted); flex: 1; min-width: 14rem; }
+
+/* Editor de curvas: el timing de un tramo se ve y se agarra. Las poses no se
+   tocan — lo unico que cambia es CUANDO pasa lo que ya esta clavado. */
+.rig2-curva { display: block; width: 100%; height: 132px; margin: .35rem 0 .5rem;
+  background: var(--panel2, var(--panel)); border: 1px solid var(--line); border-radius: 4px; }
+.rig2-curva .ec-marco { fill: none; stroke: var(--line); stroke-width: 1; }
+.rig2-curva .ec-recta { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.rig2-curva .ec-curva { fill: none; stroke: var(--red); stroke-width: 2.5; stroke-linecap: round; }
+.rig2-curva .ec-brazo { stroke: var(--muted); stroke-width: 1.2; }
+.rig2-curva .ec-ancla { fill: var(--muted); }
+.rig2-curva .ec-manija { fill: var(--red); stroke: var(--panel); stroke-width: 1.5; cursor: grab; }
+.rig2-curva .ec-manija:hover { stroke: var(--red); }
+.rig2-curva .ec-hit { fill: transparent; cursor: grab; }
+.rig2-curva .ec-ahora { stroke: var(--acc, var(--red)); stroke-width: 1.2; opacity: .6; }
+.rig2-curva .ec-vacio { fill: var(--muted); font: 500 9px system-ui, sans-serif; text-anchor: middle; }
+.rig2-ease { flex-wrap: wrap; gap: .3rem; }
+.rig2-ease button { font-size: .72rem; padding: .28rem .5rem; }
+.rig2-ease button.on { border-color: var(--red); color: var(--red); }
+.rig2-hint { margin: .1rem 0 0; font-size: .72rem; color: var(--muted); line-height: 1.4; }
+
+/* Dibujos de una pieza (sustitucion de dibujo): manos, pies, bocas. El que
+   tiene clave en este cuadro se marca; el resto son un clic para cambiarlo. */
+.rig2-vars { display: flex; flex-direction: column; gap: .18rem; margin: .3rem 0 .5rem;
+  max-height: 9.5rem; overflow-y: auto; }
+.rig2-var { display: flex; align-items: center; gap: .45rem; width: 100%;
+  padding: .3rem .45rem; border: 1px solid var(--line); background: transparent;
+  color: var(--fg); font-size: .78rem; text-align: left; cursor: pointer; border-radius: 3px; }
+.rig2-var:hover { border-color: var(--red); }
+.rig2-var.activo { border-color: var(--red); color: var(--red); font-weight: 600; }
+.rig2-var.elegido { background: var(--panel2, var(--panel)); }
+.rig2-var .pt { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong, var(--line)); flex: none; }
+.rig2-var.activo .pt { background: var(--red); }
+.rig2-var .clv { margin-left: auto; font-size: .68rem; color: var(--muted); }
+.rig2-var.activo .clv { color: var(--red); }
+.rig2-vars .vacio { font-size: .74rem; color: var(--muted); padding: .35rem .15rem; }

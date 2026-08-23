@@ -888,6 +888,10 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigIkDelete").onclick = dzRigDeleteIK;
   $("#rigIkFlip").onclick = dzRigFlipIK;
   $("#rigConstraint").onchange = e => { DZ.rigConstraintId = e.target.value || null; dzRigPanelSync(); dzRigOverlayRender(); };
+  document.querySelectorAll(".rig2-ease button").forEach(b => b.onclick = () => dzRigEasePreset(b.dataset.ease));
+  $("#rigVarAdd").onclick = dzRigVarAdd;
+  $("#rigVarDel").onclick = dzRigVarDel;
+  $("#rigVarClear").onclick = dzRigVarClear;
   $("#perfRec").onclick = dzPerfRec;
   $("#perfPlay").onclick = dzPerfPlay;
   $("#perfSmooth").onclick = dzPerfSmooth;
@@ -6144,6 +6148,19 @@ async function dzFrameAdd() {
     if (ly.locked) return dzSetStatus("La capa está bloqueada");
     dzDocCommit();
     const f = (DZ.doc.scene.lastFrame() || 0) + 1;
+    // EN RIG, un cuadro nuevo SOSTIENE el mismo dibujo. Un muneco riggeado se
+    // anima con poses, no redibujandolo: si aca crearamos un dibujo vacio, el
+    // personaje desapareceria del cuadro nuevo y el rig se quedaria sin nada
+    // que mover. Era el motivo por el que "agregar cuadros" rompia el rig.
+    if (DZ.rigMode && dzRigHayNodos()) {
+      const actual = ly.cellAt(DZ.doc.frame);
+      if (actual != null) {
+        DZ.doc.setCell(f, actual);
+        DZ.doc.goTo(f);
+        dzSetStatus("F" + f + ": el personaje sigue expuesto · posalo y queda la clave");
+        return;
+      }
+    }
     const n = lv.nextNumber();
     DZ.doc.setCell(f, n);
     DZ.doc.goTo(f);
@@ -6585,16 +6602,61 @@ function dzRigStrip(root) {
     if (b) n.setAttribute("transform", b); else n.removeAttribute("transform");
     n.removeAttribute("data-rigbase");
   });
+  // las variantes escondidas vuelven a estar: `dzCanvasInner` pasa por aca
+  // antes de guardar, asi que el dibujo nunca queda con piezas ocultas.
+  (root || document).querySelectorAll("[data-rig-var]").forEach(n => {
+    n.style.display = n.getAttribute("data-rig-var") || "";
+    n.removeAttribute("data-rig-var");
+  });
+}
+/** El elemento que le toca dibujar a una pieza en un cuadro, escondiendo las
+ *  otras variantes. Sin variantes extra devuelve el de siempre y no toca nada:
+ *  el 99% de las piezas tiene un solo dibujo y no paga ningun costo. */
+function dzRigDibujoDe(node, num, svg) {
+  const porDefecto = node.elementId || node.id;
+  const sc = DZ.doc && DZ.doc.scene;
+  if (!sc || !svg) return porDefecto;
+  const slotId = "slot:" + node.id;
+  const variantes = sc.rigVariants ? sc.rigVariants(slotId) : [];
+  if (!variantes.length) return porDefecto;
+  if (variantes.length < 2)
+    return variantes[0].elementId || porDefecto;   // la unica manda, coincida o no
+  const activo = sc.rigActiveAttachment(slotId, num);
+  const elegido = (activo && activo.elementId) || porDefecto;
+  for (const v of variantes) {
+    const el = svg.querySelector("#" + CSS.escape(v.elementId));
+    if (!el) continue;
+    // se recuerda el display propio del dibujo para poder devolverselo: el rig
+    // NUNCA hornea su vista dentro del dibujo guardado.
+    if (!el.hasAttribute("data-rig-var")) el.setAttribute("data-rig-var", el.style.display || "");
+    el.style.display = v.elementId === elegido ? "" : "none";
+  }
+  return elegido;
+}
+
+/** Cuantos nodos tiene el rig de la escena. */
+function dzRigHayNodos() {
+  return !!(DZ.doc && DZ.doc.scene.rig &&
+    Object.keys(DZ.doc.scene.rig.nodes || {}).length);
 }
 function dzRigApplyLive(num, overrides = {}) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   dzRigStrip(svg);
   if (DZ.doc && DZ.doc.scene.rig) {
-    for (const node of Object.values(DZ.doc.scene.rig.nodes)) {
-      const el = svg.querySelector("#" + CSS.escape(node.elementId || node.id));
-      if (el) dzRigApplyMatrix(el, DZ.doc.scene.rigWorldMatrix(node.id, num, overrides));
+    const nodos = Object.values(DZ.doc.scene.rig.nodes);
+    let hallados = 0;
+    for (const node of nodos) {
+      // Que dibujo va en este cuadro: una pieza puede tener varios (la mano
+      // abierta, el puño) y las claves de sustitucion deciden cual se ve.
+      const objetivo = dzRigDibujoDe(node, num, svg);
+      const el = svg.querySelector("#" + CSS.escape(objetivo));
+      if (el) { hallados++; dzRigApplyMatrix(el, DZ.doc.scene.rigWorldMatrix(node.id, num, overrides)); }
     }
+    // Un cuadro donde el personaje no esta expuesto no tiene nada que posar, y
+    // sin aviso parece que el rig "dejo de funcionar". Se dice en voz alta.
+    if (DZ.rigMode && nodos.length && !hallados)
+      dzSetStatus("F" + num + ": este cuadro no tiene al personaje · sostené su dibujo (↔ en la hoja de tiempos) para poder posarlo");
     dzPositionHandle(); dzRigOverlayRender(); return;
   }
   const rig = dzRigTracks();
@@ -6610,7 +6672,9 @@ function dzRigView(svgText, num) {
   const svg = tmp.querySelector("svg"); if (!svg) return svgText;
   for (const id of ids) {
     const node = DZ.doc && DZ.doc.scene.rigNode(id);
-    const el = svg.querySelector("#" + CSS.escape((node && node.elementId) || id)); if (!el) continue;
+    // el export tiene que sacar el mismo dibujo que se ve en la mesa
+    const objetivo = node ? dzRigDibujoDe(node, num, svg) : id;
+    const el = svg.querySelector("#" + CSS.escape(objetivo)); if (!el) continue;
     const chunk = node ? dzRigMatrixChunk(DZ.doc.scene.rigWorldMatrix(id, num)) : dzRigChunk(el, dzRigAt(id, num));
     if (!chunk) continue;
     const base = el.getAttribute("transform") || ""; el.setAttribute("transform", chunk + (base ? " " + base : ""));
@@ -6650,7 +6714,19 @@ function dzRigParentDelta(id, dx, dy, frame) {
 }
 function dzRigSelectedNode() {
   if (!DZ.doc) return null;
-  return DZ.doc.scene.rigNode(DZ.rigSelectedId || DZ.sel?.id) || null;
+  const node = DZ.doc.scene.rigNode(DZ.rigSelectedId || DZ.sel?.id) || null;
+  // Seleccionar en la mesa algo que no es del rig borra la pieza elegida, y
+  // esta bien que asi sea. Pero sumarle un dibujo a una pieza obliga a elegir
+  // justamente un dibujo que todavia NO es del rig: para ese caso se recuerda
+  // cual fue la ultima pieza.
+  if (node) DZ.rigUltimaPieza = node.id;
+  return node;
+}
+/** La pieza elegida, o la ultima que lo estuvo. Para acciones que necesitan la
+ *  pieza aunque la mesa este apuntando a otro dibujo. */
+function dzRigPiezaDestino() {
+  return dzRigSelectedNode() ||
+    (DZ.rigUltimaPieza && DZ.doc?.scene.rigNode(DZ.rigUltimaPieza)) || null;
 }
 function dzRigSelectNode(id) {
   const node = DZ.doc?.scene.rigNode(id); if (!node) return false;
@@ -6964,7 +7040,10 @@ function dzRigBoneFKDrag(e, node, mode) {
       pose.x = (k0.x || 0) + local.x; pose.y = (k0.y || 0) + local.y;
     } else {
       const a = Math.atan2(p.y - pivot.y, p.x - pivot.x);
-      pose.r = (k0.r || 0) + (a - a0) * 180 / Math.PI;
+      // frenado EN VIVO contra los topes del hueso: si solo se clampeara al
+      // soltar, el brazo pasaria de largo y despues pegaria un salto atras.
+      pose.r = Math.max(node.limits?.min ?? -180, Math.min(node.limits?.max ?? 180,
+        (k0.r || 0) + (a - a0) * 180 / Math.PI));
     }
     DZ.rigLivePose = { [node.id]: pose };
     dzRigApplyLive(frame, DZ.rigLivePose);
@@ -7116,6 +7195,37 @@ function dzRigFlipIK() {
   const target = DZ.doc.scene.rigTargetAt(c.id, dzRigCur()); if (target) DZ.doc.setRigIKTarget(c.id, dzRigCur(), target);
   dzRigApplyLive(dzRigCur()); dzRigPanelSync();
 }
+/** Si el extremo quedo lejos del objetivo, POR QUE. Sin esto el brazo se queda
+ *  corto y no hay forma de saber si falta alcance o lo frena un tope. */
+function dzRigIKPorQueNoLlega(constraintId, target) {
+  const sc = DZ.doc && DZ.doc.scene, c = sc && sc.rigConstraint(constraintId);
+  if (!c || !target) return null;
+  const root = sc.rigNode(c.rootId), mid = sc.rigNode(c.midId), end = sc.rigNode(c.effectorId);
+  if (!root || !mid || !end || !root.pivot || !mid.pivot || !end.pivot) return null;
+  const frame = dzRigCur();
+  const donde = sc.rigWorldPoint(end.id, frame, end.pivot);
+  const error = Math.hypot(donde.x - target.x, donde.y - target.y);
+  if (error <= 2) return null;                       // llego: nada que explicar
+
+  const l1 = Math.hypot(mid.pivot.x - root.pivot.x, mid.pivot.y - root.pivot.y);
+  const l2 = Math.hypot(end.pivot.x - mid.pivot.x, end.pivot.y - mid.pivot.y);
+  const base = sc.rigWorldPoint(root.id, frame, root.pivot);
+  const dist = Math.hypot(target.x - base.x, target.y - base.y);
+  if (dist > l1 + l2 + 1)
+    return `El objetivo est\u00e1 m\u00e1s lejos de lo que da el brazo (${Math.round(dist)} px ` +
+      `contra ${Math.round(l1 + l2)} de alcance) \u00b7 se estir\u00f3 todo lo que pudo`;
+
+  // esta al alcance y aun asi no llega: lo frena un tope
+  const pegado = [root, mid].find(n => {
+    const r = sc.rigPose(n.id, frame).r;
+    return Math.abs(r - (n.limits?.min ?? -180)) < 0.5 || Math.abs(r - (n.limits?.max ?? 180)) < 0.5;
+  });
+  if (pegado)
+    return `El tope de \u00ab${pegado.id}\u00bb no lo deja llegar \u00b7 prob\u00e1 ` +
+      `«Invertir» o ampli\u00e1 su l\u00edmite`;
+  return `Qued\u00f3 a ${Math.round(error)} px del objetivo`;
+}
+
 function dzRigIKDrag(e, constraintId) {
   if (!DZ.doc) return;
   e.preventDefault(); e.stopPropagation(); const pointerId = e.pointerId;
@@ -7136,7 +7246,9 @@ function dzRigIKDrag(e, constraintId) {
     }
     DZ.rigIKPreview = null;
     if (value && DZ.doc.setRigIKTarget(constraintId, dzRigCur(), value.target)) {
-      dzRigApplyLive(dzRigCur()); dzTimelineBadges(); dzRigPanelSync(); dzSetStatus(`Pose IK clavada en F${dzRigCur()}`);
+      dzRigApplyLive(dzRigCur()); dzTimelineBadges(); dzRigPanelSync();
+      dzSetStatus(dzRigIKPorQueNoLlega(constraintId, value.target) ||
+        `Pose IK clavada en F${dzRigCur()}`);
     }
   };
   document.addEventListener("pointermove", preview); document.addEventListener("pointerup", finish); document.addEventListener("pointercancel", cancel);
@@ -7338,6 +7450,8 @@ function dzRigPanelSync() {
   $("#rigSX").value = Math.round((k.sx == null ? (k.s == null ? 1 : k.s) : k.sx) * 100) / 100;
   $("#rigSY").value = Math.round((k.sy == null ? (k.s == null ? 1 : k.s) : k.sy) * 100) / 100;
   $("#rigMin").value = current?.limits?.min ?? -180; $("#rigMax").value = current?.limits?.max ?? 180;
+  dzRigCurvaRender();
+  dzRigVarsRender();
   $("#rigPin").classList.toggle("on", !!current?.pinned); $("#rigPin").textContent = current?.pinned ? "Raíz fijada" : "Fijar raíz";
   const parent = $("#rigParent"); parent.innerHTML = '<option value="">— sin padre —</option>';
   nodes.filter(n => !current || n.id !== current.id).forEach(n => { const o = document.createElement("option"); o.value = n.id; o.textContent = n.id; o.selected = !!current && current.parentId === n.id; parent.appendChild(o); });
@@ -7393,6 +7507,369 @@ function dzRigToggle() {
    jerarquía se arma en la mesa y no en la línea de tiempo como en Harmony u
    OpenToonz. Esto vive dentro del programa (Ayuda → Cómo se riggea un
    personaje) porque un tutorial que hay que ir a buscar afuera no se lee. */
+/* == DIBUJOS DE UNA PIEZA (sustitucion de dibujo) ===========================
+   Una mano no rota: se cambia por otra mano. Lo mismo el pie o la boca en la
+   sincronia labial. Aca una pieza puede tener varios dibujos y una clave por
+   cuadro decide cual se ve. El dibujo NO se interpola: vale desde su clave
+   hasta la siguiente. */
+function dzRigSlotDe(node) { return node ? "slot:" + node.id : null; }
+
+function dzRigVarsRender() {
+  const caja = $("#rigVars");
+  if (!caja) return;
+  const node = dzRigSelectedNode(), sc = DZ.doc && DZ.doc.scene;
+  const frame = dzRigCur();
+  const eti = $("#rigVarFrame"); if (eti) eti.textContent = "F" + frame;
+  caja.innerHTML = "";
+  if (!node || !sc) {
+    caja.innerHTML = '<div class="vacio">Eleg\u00ed una pieza para ver sus dibujos.</div>';
+    return;
+  }
+  const slotId = dzRigSlotDe(node), variantes = sc.rigVariants(slotId);
+  if (!variantes.length) {
+    caja.innerHTML = '<div class="vacio">Esta pieza todav\u00eda no tiene dibujo vinculado.</div>';
+    return;
+  }
+  const activo = sc.rigActiveAttachment(slotId, frame);
+  const sw = sc.rigSwitch(slotId), claveAca = sw && sw.keys[frame];
+  for (const v of variantes) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "rig2-var" + (activo && activo.id === v.id ? " activo" : "") +
+      (claveAca === v.id ? " elegido" : "");
+    const pt = document.createElement("span"); pt.className = "pt"; b.appendChild(pt);
+    const nom = document.createElement("span"); nom.textContent = v.name || v.elementId;
+    b.appendChild(nom);
+    const marca = document.createElement("span"); marca.className = "clv";
+    marca.textContent = claveAca === v.id ? "clave ac\u00e1" : (activo && activo.id === v.id ? "se ve" : "");
+    b.appendChild(marca);
+    b.title = "Mostrar \u00ab" + (v.name || v.elementId) + "\u00bb desde F" + frame;
+    b.onclick = () => dzRigVarUsar(v.id);
+    caja.appendChild(b);
+  }
+  const pista = $("#rigVarHint");
+  if (pista) pista.textContent = variantes.length < 2
+    ? "Dibuj\u00e1 otra versi\u00f3n en la mesa, seleccionala y toc\u00e1 Sumar dibujo."
+    : "Un clic cambia el dibujo desde este cuadro en adelante, hasta el pr\u00f3ximo cambio.";
+}
+
+function dzRigVarUsar(attachmentId) {
+  const node = dzRigSelectedNode();
+  if (!node || !DZ.doc) return;
+  const slotId = dzRigSlotDe(node), frame = dzRigCur();
+  if (!DZ.doc.setRigSwitchKey(slotId, frame, attachmentId)) return dzRigVarsRender();
+  const a = DZ.doc.scene.rigAttachment(attachmentId);
+  dzRigApplyLive(frame); dzRigVarsRender(); dzTimelineBadges(); dzMarkDirty();
+  dzSetStatus("Desde F" + frame + ", \u00ab" + node.id + "\u00bb muestra \u00ab" +
+    ((a && (a.name || a.elementId)) || attachmentId) + "\u00bb");
+}
+
+function dzRigVarAdd() {
+  const node = dzRigPiezaDestino();
+  if (!node || !DZ.doc) return dzSetStatus("Eleg\u00ed primero la pieza del esqueleto");
+  const el = DZ.sel;
+  if (!el || !el.id) return dzSetStatus(
+    "Seleccion\u00e1 en la mesa el dibujo que quer\u00e9s sumar como otra versi\u00f3n de \u00ab" + node.id + "\u00bb");
+  if (el.id === (node.elementId || node.id))
+    return dzSetStatus("Ese ya es el dibujo de la pieza \u00b7 seleccion\u00e1 la otra versi\u00f3n");
+  const id = DZ.doc.addRigVariant(node.id, el.id, el.id);
+  if (!id) return dzSetStatus("No se pudo sumar ese dibujo");
+  // la mesa quedo apuntando al dibujo nuevo, que no es una pieza: se vuelve a
+  // la pieza para que el panel muestre sus dibujos y se pueda elegir cual va
+  dzRigSelectNode(node.id);
+  dzRigVarsRender(); dzRigApplyLive(dzRigCur()); dzMarkDirty();
+  dzSetStatus("\u00ab" + el.id + "\u00bb sumado a \u00ab" + node.id +
+    "\u00bb \u00b7 toc\u00e1lo en la lista para mostrarlo desde un cuadro");
+}
+
+function dzRigVarDel() {
+  const node = dzRigSelectedNode(), sc = DZ.doc && DZ.doc.scene;
+  if (!node || !sc) return;
+  const slotId = dzRigSlotDe(node), frame = dzRigCur();
+  const activo = sc.rigActiveAttachment(slotId, frame);
+  if (!activo) return dzSetStatus("No hay ning\u00fan dibujo elegido");
+  if (sc.rigVariants(slotId).length < 2)
+    return dzSetStatus("Es el \u00fanico dibujo de la pieza: no se puede quitar");
+  const nombre = activo.name || activo.elementId;
+  if (!DZ.doc.removeRigVariant(activo.id)) return dzSetStatus("No se pudo quitar ese dibujo");
+  dzRigVarsRender(); dzRigApplyLive(frame); dzMarkDirty();
+  dzSetStatus("El dibujo «" + nombre + "» salió de las versiones de «" +
+    node.id + "» · el dibujo sigue en la mesa");
+}
+
+function dzRigVarClear() {
+  const node = dzRigSelectedNode();
+  if (!node || !DZ.doc) return;
+  const frame = dzRigCur();
+  if (!DZ.doc.deleteRigSwitchKey(dzRigSlotDe(node), frame))
+    return dzSetStatus("En F" + frame + " no hay ning\u00fan cambio de dibujo para borrar");
+  dzRigApplyLive(frame); dzRigVarsRender(); dzTimelineBadges(); dzMarkDirty();
+  dzSetStatus("F" + frame + " ya no cambia el dibujo de \u00ab" + node.id +
+    "\u00bb \u00b7 sigue el del cambio anterior");
+}
+
+/* == EDITOR DE CURVAS =======================================================
+   El timing de un tramo, aparte de las poses. Se edita el tramo donde estas
+   parado: la manija de SALIDA de la clave anterior y la de ENTRADA de la
+   siguiente, igual que un cubic-bezier. Cambiar la curva no toca ni una pose:
+   lo unico que cambia es CUANDO pasa lo que ya esta clavado. */
+const DZ_EASE_PRESETS = {
+  recta: { eo: [1 / 3, 1 / 3], ei: [2 / 3, 2 / 3] },
+  suave: { eo: [0.65, 0], ei: [0.35, 1] },
+  lento: { eo: [0.6, 0], ei: [0.85, 0.6] },
+  frena: { eo: [0.15, 0.4], ei: [0.4, 1] },
+  hold:  { eo: [1 / 3, 1 / 3], ei: [2 / 3, 2 / 3], hold: true }
+};
+
+/** El tramo que contiene el cuadro actual: la clave de la que se sale y a la
+ *  que se llega. null si la pieza no tiene dos claves que lo abracen. */
+function dzRigTramo() {
+  const node = dzRigSelectedNode();
+  if (!node || !DZ.doc) return null;
+  const nums = Object.keys(node.keys || {}).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (nums.length < 2) return null;
+  const f = dzRigCur();
+  let a = null, b = null;
+  for (const k of nums) { if (k <= f) a = k; else { b = k; break; } }
+  if (a == null) { a = nums[0]; b = nums[1]; }
+  else if (b == null) { a = nums[nums.length - 2]; b = nums[nums.length - 1]; }
+  return { node, a, b, f: Math.max(a, Math.min(b, f)) };
+}
+
+function dzRigEaseDe(node, frame) {
+  const e = (node.keys[frame] || {}).ease || {};
+  const nx = (m, dx, dy) => Array.isArray(m) && m.length === 2 ? [+m[0], +m[1]] : [dx, dy];
+  return { eo: nx(e.eo, 1 / 3, 1 / 3), ei: nx(e.ei, 2 / 3, 2 / 3), hold: !!e.hold };
+}
+
+function dzRigCurvaRender() {
+  const svg = $("#rigCurva"), quien = $("#rigEaseWho"), pista = $("#rigEaseHint");
+  if (!svg) return;
+  const tramo = dzRigTramo();
+  svg.innerHTML = "";
+  const ns = "http://www.w3.org/2000/svg";
+  const nodo = (tag, attrs, cls) => {
+    const e = document.createElementNS(ns, tag);
+    for (const k of Object.keys(attrs)) e.setAttribute(k, attrs[k]);
+    if (cls) e.setAttribute("class", cls);
+    svg.appendChild(e); return e;
+  };
+
+  if (!tramo) {
+    if (quien) quien.textContent = "sin claves";
+    nodo("rect", { x: 0, y: 0, width: 100, height: 100 }, "ec-marco");
+    const txt = nodo("text", { x: 50, y: 54 }, "ec-vacio");
+    txt.textContent = "hacen falta dos claves";
+    if (pista) pista.textContent = "Pone al menos dos claves en esta pieza y el tramo aparece aca.";
+    document.querySelectorAll(".rig2-ease button").forEach(b => b.classList.remove("on"));
+    return;
+  }
+
+  const node = tramo.node, a = tramo.a, b = tramo.b, f = tramo.f;
+  if (quien) quien.textContent = "F" + a + " \u2192 F" + b;
+  const ea = dzRigEaseDe(node, a), eb = dzRigEaseDe(node, b);
+  // el lienzo va de (0,100) abajo-izquierda a (100,0) arriba-derecha
+  const X = v => v * 100, Y = v => 100 - v * 100;
+  const p1 = { x: X(ea.eo[0]), y: Y(ea.eo[1]) }, p2 = { x: X(eb.ei[0]), y: Y(eb.ei[1]) };
+
+  nodo("rect", { x: 0, y: 0, width: 100, height: 100 }, "ec-marco");
+  nodo("line", { x1: 0, y1: 100, x2: 100, y2: 0 }, "ec-recta");
+  if (b > a) {
+    const px = X((f - a) / (b - a));
+    nodo("line", { x1: px, y1: -8, x2: px, y2: 108 }, "ec-ahora");
+  }
+
+  if (ea.hold) {
+    nodo("path", { d: "M0 100 L100 100 L100 0" }, "ec-curva");
+    if (pista) pista.textContent = "Escalon: la pose se sostiene entera y salta recien en la clave siguiente.";
+  } else {
+    nodo("line", { x1: 0, y1: 100, x2: p1.x, y2: p1.y }, "ec-brazo");
+    nodo("line", { x1: 100, y1: 0, x2: p2.x, y2: p2.y }, "ec-brazo");
+    nodo("path", { d: "M0 100 C" + p1.x + " " + p1.y + " " + p2.x + " " + p2.y + " 100 0" }, "ec-curva");
+    nodo("circle", { cx: 0, cy: 100, r: 3 }, "ec-ancla");
+    nodo("circle", { cx: 100, cy: 0, r: 3 }, "ec-ancla");
+    [["eo", p1, a], ["ei", p2, b]].forEach(par => {
+      const cual = par[0], punto = par[1], frame = par[2];
+      nodo("circle", { cx: punto.x, cy: punto.y, r: 4.5 }, "ec-manija");
+      const hit = nodo("circle", { cx: punto.x, cy: punto.y, r: 11 }, "ec-hit");
+      hit.onpointerdown = ev => dzRigCurvaDrag(ev, frame, cual);
+    });
+    if (pista) pista.textContent = "Arrastra las manijas para cambiar el timing sin tocar las poses.";
+  }
+
+  const cual = ea.hold ? "hold" : dzRigPresetDe(ea, eb);
+  document.querySelectorAll(".rig2-ease button").forEach(x => x.classList.toggle("on", x.dataset.ease === cual));
+}
+
+/** Que preset coincide con las manijas actuales, si alguno. */
+function dzRigPresetDe(ea, eb) {
+  const cerca = (u, v) => Math.abs(u - v) < 0.02;
+  for (const nombre of Object.keys(DZ_EASE_PRESETS)) {
+    const v = DZ_EASE_PRESETS[nombre];
+    if (v.hold) continue;
+    if (cerca(ea.eo[0], v.eo[0]) && cerca(ea.eo[1], v.eo[1]) &&
+        cerca(eb.ei[0], v.ei[0]) && cerca(eb.ei[1], v.ei[1])) return nombre;
+  }
+  return null;
+}
+
+function dzRigCurvaDrag(e, frame, cual) {
+  e.preventDefault(); e.stopPropagation();
+  const svg = $("#rigCurva"), node = dzRigSelectedNode();
+  if (!svg || !node) return;
+  const pointerId = e.pointerId;
+  const punto = ev => {                       // pantalla -> 0..1 del lienzo
+    // getScreenCTM y no una regla de tres sobre la caja: el viewBox se ajusta
+    // con preserveAspectRatio, asi que sobran margenes que la regla ignora.
+    const m = svg.getScreenCTM();
+    let vx, vy;
+    if (m) {
+      const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+      const local = pt.matrixTransform(m.inverse()); vx = local.x; vy = local.y;
+    } else {
+      const caja = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+      vx = vb.x + (ev.clientX - caja.left) / caja.width * vb.width;
+      vy = vb.y + (ev.clientY - caja.top) / caja.height * vb.height;
+    }
+    // x se queda dentro del tramo o la curva deja de ser funcion del tiempo;
+    // y puede pasarse de 0..1: eso es el rebote, y es deseable.
+    return [Math.max(0, Math.min(1, vx / 100)),
+            Math.max(-0.6, Math.min(1.6, (100 - vy) / 100))];
+  };
+  const mover = ev => {
+    if (ev.pointerId !== pointerId) return;
+    const actual = dzRigEaseDe(node, frame);
+    actual[cual] = punto(ev);
+    DZ.doc.setRigKeyEase(node.id, frame, actual);
+    dzRigCurvaRender(); dzRigApplyLive(dzRigCur());
+  };
+  const soltar = ev => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", mover);
+    document.removeEventListener("pointerup", soltar);
+    const v = dzRigEaseDe(node, frame)[cual];
+    dzSetStatus("Curva de \u00ab" + node.id + "\u00bb en F" + frame + ": " +
+      (cual === "eo" ? "salida" : "entrada") + " " + v[0].toFixed(2) + ", " + v[1].toFixed(2));
+    dzMarkDirty();
+  };
+  document.addEventListener("pointermove", mover);
+  document.addEventListener("pointerup", soltar);
+}
+
+function dzRigEasePreset(nombre) {
+  const tramo = dzRigTramo();
+  if (!tramo) return dzSetStatus("Pone dos claves en esta pieza para tener un tramo que curvar");
+  const v = DZ_EASE_PRESETS[nombre];
+  if (!v) return;
+  const node = tramo.node, a = tramo.a, b = tramo.b;
+  const ea = dzRigEaseDe(node, a); ea.eo = v.eo; ea.hold = !!v.hold;
+  const eb = dzRigEaseDe(node, b); eb.ei = v.ei;
+  DZ.doc.setRigKeyEase(node.id, a, ea);
+  DZ.doc.setRigKeyEase(node.id, b, eb);
+  dzRigCurvaRender(); dzRigApplyLive(dzRigCur()); dzMarkDirty();
+  const comoSuena = { recta: "velocidad pareja", suave: "arranca y termina despacio",
+    lento: "arranca despacio", frena: "llega despacio", hold: "sostiene y salta" };
+  dzSetStatus("F" + a + " \u2192 F" + b + " de \u00ab" + node.id + "\u00bb: " + comoSuena[nombre]);
+}
+
+/* ══ PERSONAJE DE EJEMPLO ═══════════════════════════════════════════════════
+   Un muñeco ya riggeado y animado, para aprender el flujo tocando algo que
+   funciona en vez de armarlo a ciegas desde cero. Cinco piezas, tres niveles
+   de jerarquía y un saludo de tres claves: alcanza para ver la cadena, los
+   pivotes, el sostener del dibujo y la interpolación, todo junto. */
+const DZ_EJEMPLO_SVG = [
+  '<g id="pierna_izq"><rect x="372" y="452" width="44" height="120" rx="18" fill="#8d6f56" stroke="#2b2b2b" stroke-width="3"/></g>',
+  '<g id="pierna_der"><rect x="432" y="452" width="44" height="120" rx="18" fill="#8d6f56" stroke="#2b2b2b" stroke-width="3"/></g>',
+  '<g id="torso"><rect x="360" y="252" width="128" height="208" rx="26" fill="#c9b8a4" stroke="#2b2b2b" stroke-width="3"/></g>',
+  '<g id="cabeza"><circle cx="424" cy="196" r="54" fill="#f0c9ad" stroke="#2b2b2b" stroke-width="3"/>',
+  '<circle cx="406" cy="188" r="6" fill="#2b2b2b"/><circle cx="442" cy="188" r="6" fill="#2b2b2b"/>',
+  '<path d="M406 216 Q424 230 442 216" fill="none" stroke="#2b2b2b" stroke-width="3" stroke-linecap="round"/></g>',
+  '<g id="brazo"><rect x="482" y="270" width="112" height="42" rx="20" fill="#d8846a" stroke="#2b2b2b" stroke-width="3"/></g>',
+  '<g id="antebrazo"><rect x="588" y="273" width="102" height="38" rx="18" fill="#e0a184" stroke="#2b2b2b" stroke-width="3"/></g>',
+  '<g id="mano"><circle cx="706" cy="292" r="25" fill="#f0c9ad" stroke="#2b2b2b" stroke-width="3"/></g>'
+].join("");
+
+// pieza: [pivote x, pivote y, de quién cuelga]
+const DZ_EJEMPLO_RIG = {
+  torso:      [424, 452, null],
+  cabeza:     [424, 250, "torso"],
+  brazo:      [488, 291, "torso"],
+  antebrazo:  [592, 292, "brazo"],
+  mano:       [692, 292, "antebrazo"],
+  pierna_izq: [394, 456, "torso"],
+  pierna_der: [454, 456, "torso"]
+};
+
+// un saludo: tres claves y LOW rellena el medio
+const DZ_EJEMPLO_CLAVES = {
+  brazo:     { 1: 0, 7: -68, 13: -12 },
+  antebrazo: { 1: 0, 7: -46, 13: 8 },
+  mano:      { 1: 0, 7: -18, 13: 6 },
+  cabeza:    { 1: 0, 7: -7, 13: 2 }
+};
+const DZ_EJEMPLO_LARGO = 13;
+
+async function dzRigEjemplo() {
+  if (DZ.dirty || (DZ.doc && DZ.doc.scene.lastFrame() > 1)) {
+    const sigo = await dzRigEjemploConfirmar();
+    if (!sigo) return;
+  }
+  // Se puede entrar por Ayuda sin haber abierto nunca el entorno de dibujo:
+  // entonces no hay lienzo, ni panel del rig, ni nada donde poner al muneco.
+  if ($("#designView").hidden) {
+    try {
+      const r = await api.new_design();
+      if (r && r.path) await openDesign(r.path);
+    } catch (_) { /* sin backend seguimos con el lienzo que haya */ }
+    if ($("#designView").hidden) return dzSetStatus("Abrí o creá un lienzo primero");
+  }
+  // El panel del rig vive dentro del dock de animacion: con el dock cerrado se
+  // abre el modo rig y no se ve ni un control. Se abre ANTES de armar nada.
+  if (!DZ.anim && $("#dzAnimationDock")?.hidden) await dzAnimToggle();
+  if (!dzCanvasSet(DZ_EJEMPLO_SVG)) return dzSetStatus("No hay lienzo donde poner el ejemplo");
+  dzSyncCanvasDocument(true);
+  if (!DZ.doc) await dzDocInit(); else dzDocCommit();
+  if (!DZ.doc) return dzSetStatus("No se pudo abrir el personaje de ejemplo");
+
+  for (const [id, [px, py, padre]] of Object.entries(DZ_EJEMPLO_RIG)) {
+    DZ.doc.ensureRigBone(id, { name: id, elementId: id });
+    DZ.doc.bindRigElement(id, id);
+    DZ.doc.setRigPivot(id, { x: px, y: py });
+    if (padre) DZ.doc.setRigParent(id, padre);
+  }
+  DZ.doc.setRigPinned("torso", true);
+  // un codo que no se dobla para el lado imposible: el tope se ve en accion
+  DZ.doc.setRigLimits("antebrazo", -150, 5);
+
+  // el personaje SOSTENIDO a lo largo de la escena: un rig se anima con poses
+  const capa = DZ.doc.layer, celda = capa && capa.cellAt(1);
+  if (capa && celda != null)
+    for (let f = 2; f <= DZ_EJEMPLO_LARGO; f++) DZ.doc.setCell(f, celda, capa.id);
+
+  for (const [id, claves] of Object.entries(DZ_EJEMPLO_CLAVES))
+    for (const [frame, r] of Object.entries(claves))
+      DZ.doc.setRigKey(id, +frame, { x: 0, y: 0, r, sx: 1, sy: 1 });
+
+  DZ.doc.goTo(1);
+  await dzRigOpen();                    // monta el panel y abre el modo, en orden
+  dzRigSetMode("fk");
+  dzRigSelectNode("brazo");
+  dzMarkDirty();
+  dzSetStatus("Personaje de ejemplo listo · dale a reproducir, o agarrá la manija del brazo y posalo");
+}
+
+function dzRigEjemploConfirmar() {
+  return new Promise(resolve => {
+    openModal(`<h2>Abrir el personaje de ejemplo</h2>
+      <p class="sub">Reemplaza lo que hay en la mesa por un muñeco ya riggeado y animado.
+      Lo que tengas sin guardar se pierde.</p>
+      <div class="m-actions"><button class="ghost" id="dzEjX">Cancelar</button>
+      <button class="primary" id="dzEjOk">Abrir el ejemplo</button></div>`);
+    $("#dzEjX").onclick = () => { closeModal(); resolve(false); };
+    $("#dzEjOk").onclick = () => { closeModal(); resolve(true); };
+  });
+}
+
 function dzRigTutorial() {
   const paso = (n, t) => `<li><b>${n}</b> ${t}</li>`;
   openModal(`<h2>Cómo se riggea un personaje</h2>
@@ -7403,6 +7880,9 @@ function dzRigTutorial() {
       recortes por un lado y el esqueleto por otro. Acá hay <b>una sola cosa</b>: el nodo. Una
       «pieza» y un «hueso» son el mismo objeto — el hueso además tiene cuerpo, y por eso se lo
       puede agarrar y rotar desde el medio.</p>
+
+      <div class="rigdoc-abrir"><button class="primary" id="rigdocEjemplo">Abrir el personaje de ejemplo</button>
+      <small>Un muñeco ya riggeado y animado, para seguir estos pasos tocando algo que funciona.</small></div>
 
       <h3>A · El personaje ya está dibujado por partes</h3>
       <ol>
@@ -7433,6 +7913,44 @@ function dzRigTutorial() {
       <p><b>IK:</b> elegí hombro, codo y extremo —tres nodos seguidos de la misma cadena—, tocá
       <b>Crear IK</b> y arrastrá el rombo. <b>Invertir</b> cambia para qué lado dobla el codo.</p>
 
+      <h3>Animar el rig a lo largo de los cuadros</h3>
+      <p>Un personaje riggeado se anima <b>con poses, no redibujándolo</b>: el mismo dibujo se
+      sostiene a lo largo de la escena y lo que cambia cuadro a cuadro son las claves del rig.
+      Por eso, con el modo rig abierto, <b>agregar un cuadro sostiene al personaje</b> en vez de
+      darte una hoja en blanco. Fuera del rig, el botón sigue creando un dibujo nuevo, como
+      siempre.</p>
+      <p>Poné una pose cada tantos cuadros; LOW rellena el medio solo. Con claves en F1, F5 y F9
+      los siete cuadros intermedios salen interpolados: no hay que tocarlos.</p>
+      <p class="rigdoc-tip">Si caés en un cuadro donde el personaje no está expuesto, no hay nada
+      que posar y la barra de estado te lo dice. Sostené su dibujo con <b>↔</b> en la hoja de
+      tiempos y volvés a tener el muñeco.</p>
+
+      <h3>El timing: curvas de interpolación</h3>
+      <p>Las claves dicen <b>qué</b> pose y <b>cuándo</b>; la curva dice <b>cómo</b> se va de
+      una a la otra. Sin curva, el movimiento sale a velocidad pareja de punta a punta, que es
+      justo lo que hace que una animación parezca mecánica.</p>
+      <p>La sección <b>Curva</b> del panel muestra el tramo donde estás parado —<i>F1 → F7</i>—
+      con la recta de referencia punteada y la línea vertical del cuadro actual. Los cinco
+      botones son los timings de siempre: <b>Recta</b>, <b>Suave</b> (arranca y termina
+      despacio), <b>Arranca lento</b>, <b>Frena</b> y <b>Escalón</b>, que sostiene la pose
+      entera y salta recién en la clave siguiente.</p>
+      <p>Para afinarlo a mano, arrastrá las dos manijas. Si llevás una <b>por debajo del
+      marco</b>, el valor se pasa para el otro lado antes de arrancar: eso es la
+      <b>anticipación</b>, y es la razón por la que las manijas pueden salirse.</p>
+      <p class="rigdoc-tip">Cambiar la curva no toca ninguna pose. Podés ajustar el timing todas
+      las veces que quieras sin perder lo que clavaste.</p>
+
+      <h3>Varios dibujos en una misma pieza</h3>
+      <p>Una mano no rota: se <b>cambia</b> por otra mano. Lo mismo el pie, o la boca en la
+      sincronía labial. Por eso una pieza puede tener varios dibujos y el cuadro decide cuál
+      se ve.</p>
+      <p>Dibujá la otra versión en la mesa, seleccionala, y con la pieza elegida tocá
+      <b>Sumar dibujo</b> en la sección <b>Dibujos de la pieza</b>. Después, parado en el cuadro
+      donde tiene que cambiar, hacé clic en el dibujo de la lista: vale <b>desde ahí hasta el
+      próximo cambio</b>. Un dibujo no se interpola.</p>
+      <p><b>Sin cambio acá</b> borra el cambio de este cuadro y deja que siga mandando el
+      anterior. <b>Quitar</b> saca el dibujo de la pieza sin borrarlo del dibujo.</p>
+
       <h3>Qué es cada cosa en la mesa</h3>
       <ul class="rigdoc-simb">
         <li><i class="s-pivot"></i> el pivote: el punto sobre el que gira</li>
@@ -7453,6 +7971,8 @@ function dzRigTutorial() {
     </div>
     <div class="m-actions"><button class="primary" id="mCancel">Entendido</button></div>`);
   $("#mCancel").onclick = closeModal;
+  const abrir = $("#rigdocEjemplo");
+  if (abrir) abrir.onclick = () => { closeModal(); dzRigEjemplo(); };
 }
 
 async function dzRigOpen() {
@@ -7988,6 +8508,7 @@ function dzMenuAction(act) {
     grabar: dzRecToggle, claveia: dzAIKeyModal, esqueleto: dzRigOpen,
     camara: dzCamToggle, clavecam: dzCamKeyToggle,
     tutorialrig: dzRigTutorial,
+    ejemplorig: dzRigEjemplo,
     acerca: () => {
       openModal(`<h2>LOW Estudio</h2>
         <div class="sub">Editor de vectores y animación 2D con IA integrada, dentro de LOW v${S.version || ""}.

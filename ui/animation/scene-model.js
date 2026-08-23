@@ -43,12 +43,82 @@
     sx: pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx,
     sy: pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy });
 
+  /* ── CURVAS DE INTERPOLACION ──────────────────────────────────────────
+     Cada clave lleva dos manijas: `eo` gobierna como SALE hacia la clave
+     siguiente y `ei` como LLEGA desde la anterior. El tramo A->B usa la de
+     salida de A y la de entrada de B, igual que un cubic-bezier de CSS.
+     Con las manijas por defecto la curva es exactamente la recta, asi que
+     todo lo que ya estaba animado se sigue viendo igual. */
+  const EASE_OUT_LINEAL = [1 / 3, 1 / 3];
+  const EASE_IN_LINEAL = [2 / 3, 2 / 3];
+  const clampX = (v, d) => Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : d;
+  const manija = (m, dx, dy) => Array.isArray(m) && m.length === 2
+    ? [clampX(m[0], dx), Number.isFinite(+m[1]) ? +m[1] : dy] : [dx, dy];
+
+  const rigEaseData = (e = {}) => ({
+    eo: manija(e.eo, EASE_OUT_LINEAL[0], EASE_OUT_LINEAL[1]),
+    ei: manija(e.ei, EASE_IN_LINEAL[0], EASE_IN_LINEAL[1]),
+    hold: !!e.hold });
+
+  const bezX = (s, x1, x2) => { const u = 1 - s;
+    return 3 * u * u * s * x1 + 3 * u * s * s * x2 + s * s * s; };
+  const bezY = (s, y1, y2) => { const u = 1 - s;
+    return 3 * u * u * s * y1 + 3 * u * s * s * y2 + s * s * s; };
+
+  /** El parametro de la curva cuyo avance horizontal es `t`. Newton primero,
+   *  biseccion de respaldo: Newton solo se planta en tramos casi verticales. */
+  function bezSolve(t, x1, x2) {
+    let s = t;
+    for (let i = 0; i < 8; i++) {
+      const dx = bezX(s, x1, x2) - t;
+      if (Math.abs(dx) < 1e-6) return s;
+      const u = 1 - s;
+      const d = 3 * u * u * x1 + 6 * u * s * (x2 - x1) + 3 * s * s * (1 - x2);
+      if (Math.abs(d) < 1e-6) break;
+      s -= dx / d;
+    }
+    let lo = 0, hi = 1; s = t;
+    for (let i = 0; i < 30; i++) {
+      const x = bezX(s, x1, x2);
+      if (Math.abs(x - t) < 1e-6) break;
+      if (x < t) lo = s; else hi = s;
+      s = (lo + hi) / 2;
+    }
+    return s;
+  }
+
+  /** Curva el avance `t` (0..1) de un tramo segun las manijas de sus extremos. */
+  function rigEaseT(t, easeA, easeB) {
+    const a = rigEaseData(easeA), b = rigEaseData(easeB);
+    if (a.hold) return 0;                       // escalon: sostiene hasta la proxima
+    const [x1, y1] = a.eo, [x2, y2] = b.ei;
+    if (Math.abs(x1 - EASE_OUT_LINEAL[0]) < 1e-9 && Math.abs(y1 - EASE_OUT_LINEAL[1]) < 1e-9 &&
+        Math.abs(x2 - EASE_IN_LINEAL[0]) < 1e-9 && Math.abs(y2 - EASE_IN_LINEAL[1]) < 1e-9)
+      return t;                                 // recta: sin cuentas de mas
+    return bezY(bezSolve(t, x1, x2), y1, y2);
+  }
+
   const rigChannelPath = (boneId, property) =>
     `bones/${encodeURIComponent(boneId)}/pose/${property}`;
 
+  /** Claves de sustitucion de dibujo por slot. Se descartan las que apunten a
+   *  un dibujo que ya no existe: si no, el slot quedaria vacio en ese cuadro. */
+  const rigSwitchesData = (source = {}, attachments = {}) => {
+    const out = {};
+    for (const [slotId, sw] of Object.entries(source || {})) {
+      const keys = {};
+      for (const [frame, attachmentId] of Object.entries((sw && sw.keys) || {})) {
+        const f = Math.max(1, Math.round(+frame));
+        if (Number.isFinite(f) && attachments[attachmentId]) keys[f] = attachmentId;
+      }
+      if (Object.keys(keys).length) out[slotId] = { slotId, keys };
+    }
+    return out;
+  };
+
   const rigChannelData = (path, raw = {}) => ({ path,
     valueType: raw.valueType || "number", interpolation: raw.interpolation || "linear",
-    keys: clone(raw.keys || {}) });
+    keys: clone(raw.keys || {}), ease: clone(raw.ease || {}) });
 
   const rigConstraintData = (id, raw = {}, index = 0) => ({ ...clone(raw), id,
     type: raw.type || "transform", enabled: raw.enabled !== false,
@@ -161,11 +231,12 @@
         bones[id].binding = { mode: n.binding?.mode || "rigid", elementId };
       }
       for (const property of ["x", "y", "r", "sx", "sy"]) {
-        const path = rigChannelPath(id, property), keys = {};
+        const path = rigChannelPath(id, property), keys = {}, ease = {};
         for (const [frame, pose] of Object.entries(n.keys || {})) {
           const normalized = rigPoseData(pose); keys[frame] = normalized[property];
+          if (pose && pose.ease) ease[frame] = rigEaseData(pose.ease);
         }
-        if (Object.keys(keys).length) channels[path] = rigChannelData(path, { keys });
+        if (Object.keys(keys).length) channels[path] = rigChannelData(path, { keys, ease });
       }
       if (!source.bones) {
         const slotId = `slot:${id}`, attachmentId = `attachment:${id}`, bindingId = `binding:${id}`;
@@ -192,7 +263,7 @@
       bones, slots, attachments, bindings, meshes: clone(source.meshes || {}),
       deformers: clone(source.deformers || {}), constraints,
       constraintOrder: [...requestedOrder, ...remainder], controllers: clone(source.controllers || {}),
-      actions: clone(source.actions || {}), channels, switches: clone(source.switches || {}),
+      actions: clone(source.actions || {}), channels, switches: rigSwitchesData(source.switches, attachments),
       physics: clone(source.physics || {}), diagnostics: { valid: true, errors: [], warnings: [] } };
     // `nodes` es sólo el nombre de compatibilidad usado por la UI v3. Comparte
     // la misma referencia que `bones`; el JSON canónico nunca serializa ambos.
@@ -513,9 +584,40 @@
     rigBone(id) { return this.rigNode(id); }
     rigSlot(id) { return this.rig.slots[id] || null; }
     rigAttachment(id) { return this.rig.attachments[id] || null; }
-    rigActiveAttachment(slotId) {
+    /** El dibujo que va en un slot. Con `frame` respeta las claves de
+     *  sustitucion; sin `frame`, el que este activo en el slot.
+     *  Un dibujo NO se interpola: vale el de la ultima clave <= frame. */
+    rigActiveAttachment(slotId, frame) {
       const slot = this.rigSlot(slotId);
-      return slot && slot.activeAttachmentId ? this.rigAttachment(slot.activeAttachmentId) : null;
+      if (!slot) return null;
+      if (frame != null) {
+        const id = this.rigSwitchAt(slotId, frame);
+        if (id) return this.rigAttachment(id);
+      }
+      return slot.activeAttachmentId ? this.rigAttachment(slot.activeAttachmentId) : null;
+    }
+
+    /** Todos los dibujos disponibles para un slot, en orden de creacion. */
+    rigVariants(slotId) {
+      return Object.values(this.rig.attachments || {})
+        .filter((a) => a.slotId === slotId)
+        .sort((a, b) => (a.order || 0) - (b.order || 0) || a.id.localeCompare(b.id));
+    }
+
+    rigSwitch(slotId) { return (this.rig.switches || {})[slotId] || null; }
+
+    /** El attachment vigente en un cuadro segun las claves de sustitucion. */
+    rigSwitchAt(slotId, frame) {
+      const sw = this.rigSwitch(slotId), keys = sw && sw.keys;
+      if (!keys) return null;
+      const nums = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!nums.length) return null;
+      const f = Number(frame) || 1;
+      if (f < nums[0]) return null;            // antes de la primera, manda el slot
+      let elegido = nums[0];
+      for (const k of nums) { if (k <= f) elegido = k; else break; }
+      const id = keys[elegido];
+      return this.rig.attachments[id] ? id : null;
     }
     rigOrderedConstraints() {
       return rigOrderedConstraintIds(this.rig).map((id) => this.rig.constraints[id]).filter(Boolean);
@@ -533,7 +635,10 @@
       for (const k of frames) { if (k <= f) a = k; else { b = k; break; } }
       if (channel.interpolation === "step" || typeof keys[a] !== "number" || typeof keys[b] !== "number")
         return clone(keys[a]);
-      return keys[a] + (keys[b] - keys[a]) * ((f - a) / (b - a));
+      // El canal pisa a la pose interpolada, asi que la curva tiene que
+      // aplicarse TAMBIEN aca o no se notaria nada.
+      const ease = channel.ease || {};
+      return keys[a] + (keys[b] - keys[a]) * rigEaseT((f - a) / (b - a), ease[a], ease[b]);
     }
     validateRig() {
       this.rig.diagnostics = rigDiagnostics(this.rig);
@@ -561,7 +666,8 @@
       }
       let a = frames[0], b = frames.at(-1);
       for (const k of frames) { if (k <= f) a = k; else { b = k; break; } }
-      const t = (f - a) / (b - a), p = keys[a], q = keys[b];
+      const p = keys[a], q = keys[b];
+      const t = rigEaseT((f - a) / (b - a), p.ease, q.ease);
       const lerp = (x, y) => Number(x || 0) + (Number(y || 0) - Number(x || 0)) * t;
       pose = { x: lerp(p.x, q.x), y: lerp(p.y, q.y), r: lerp(p.r, q.r),
         sx: lerp(p.sx == null ? (p.s == null ? 1 : p.s) : p.sx, q.sx == null ? (q.s == null ? 1 : q.s) : q.sx),
@@ -703,6 +809,8 @@
   animation.rigData = rigData;
   animation.rigToJSON = rigToJSON;
   animation.rigChannelPath = rigChannelPath;
+  animation.rigEaseData = rigEaseData;
+  animation.rigEaseT = rigEaseT;
   animation.rigChannelData = rigChannelData;
   animation.rigConstraintData = rigConstraintData;
   animation.rigDiagnostics = rigDiagnostics;
