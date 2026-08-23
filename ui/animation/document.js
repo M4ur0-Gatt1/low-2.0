@@ -774,11 +774,11 @@
         const node = rig.nodes[id] || this._ensureRigArtLink(rig, { id });
         const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
         const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
-        // Los topes del hueso valen para TODA clave, venga de donde venga. El
-        // solver de IK ya los respetaba; posar a mano en FK los ignoraba, asi
-        // que un codo con tope se doblaba igual para el lado imposible.
-        const r = Math.max(node.limits?.min ?? -180,
-          Math.min(node.limits?.max ?? 180, +pose.r || 0));
+        // Los topes del hueso valen para TODA clave, venga de donde venga —el
+        // solver de IK ya los respetaba y posar a mano los ignoraba—, PERO el
+        // rango completo no es un tope: con -180/180 el hueso gira libre y
+        // puede dar vueltas enteras.
+        const r = animation.rigAplicarTope(node.limits, +pose.r || 0);
         const f = Math.max(1, Math.round(frame));
         // Volver a posar sobre una clave no le borra la curva que ya tenia:
         // el animador ajusta el timing una vez y despues corrige la pose.

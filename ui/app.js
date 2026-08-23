@@ -7080,6 +7080,12 @@ function dzRigBoneFKDrag(e, node, mode) {
     : (node.head ? DZ.doc.scene.rigWorldPoint(node.id, frame, node.head) : { x: 0, y: 0 });
   const k0 = dzRigLocalAt(node.id, frame) || { x: 0, y: 0, r: 0, sx: 1, sy: 1 };
   const a0 = Math.atan2(start.y - pivot.y, start.x - pivot.x);
+  let tocaElTope = false;   // para poder explicar por que dejo de girar
+  // El giro se ACUMULA: atan2 devuelve entre -180 y 180, asi que al cruzar esa
+  // linea el angulo salta al otro extremo y el gesto no podia pasar de media
+  // vuelta —parecia que el hueso hacia tope—. Se lleva la cuenta del recorrido
+  // real para poder dar vueltas enteras.
+  let aPrevio = a0, giroAcumulado = 0;
   const move = (ev) => {
     if (ev.pointerId !== pointerId) return;
     const p = dzToUser(ev.clientX, ev.clientY), pose = { ...k0 };
@@ -7090,8 +7096,15 @@ function dzRigBoneFKDrag(e, node, mode) {
       const a = Math.atan2(p.y - pivot.y, p.x - pivot.x);
       // frenado EN VIVO contra los topes del hueso: si solo se clampeara al
       // soltar, el brazo pasaria de largo y despues pegaria un salto atras.
-      pose.r = Math.max(node.limits?.min ?? -180, Math.min(node.limits?.max ?? 180,
-        (k0.r || 0) + (a - a0) * 180 / Math.PI));
+      // Sin tope (el rango completo) gira libre: tiene que poder dar la vuelta.
+      let paso = a - aPrevio;
+      if (paso > Math.PI) paso -= 2 * Math.PI;
+      else if (paso < -Math.PI) paso += 2 * Math.PI;
+      giroAcumulado += paso;
+      aPrevio = a;
+      const crudo = (k0.r || 0) + giroAcumulado * 180 / Math.PI;
+      pose.r = LOW.animation.rigAplicarTope(node.limits, crudo);
+      tocaElTope = Math.abs(pose.r - crudo) > 0.5;
     }
     DZ.rigLivePose = { [node.id]: pose };
     dzRigApplyLive(frame, DZ.rigLivePose);
@@ -7112,7 +7125,12 @@ function dzRigBoneFKDrag(e, node, mode) {
       }
       DZ.rigLivePose = null;
       dzRigSetKey(node.id, frame, pose);
-      dzSetStatus("Hueso «" + node.id + "» posado en F" + frame + (mode === "translate" ? " (mover)" : " (rotar)"));
+      // Si dejo de girar antes de donde lo llevabas, no es que se colgo: lo paro
+      // su tope. Decirlo evita que parezca una falla del programa.
+      dzSetStatus(tocaElTope
+        ? "«" + node.id + "» llegó a su tope de giro (" + (node.limits?.min ?? -180) +
+          "° a " + (node.limits?.max ?? 180) + "°) · se cambia en Construir"
+        : "Hueso «" + node.id + "» posado en F" + frame + (mode === "translate" ? " (mover)" : " (rotar)"));
     } else {
       DZ.rigLivePose = null;
       dzRigApplyLive(frame); dzRigOverlayRender();
@@ -7520,6 +7538,9 @@ function dzRigPanelSync() {
   $("#rigSX").value = Math.round((k.sx == null ? (k.s == null ? 1 : k.s) : k.sx) * 100) / 100;
   $("#rigSY").value = Math.round((k.sy == null ? (k.s == null ? 1 : k.s) : k.sy) * 100) / 100;
   $("#rigMin").value = current?.limits?.min ?? -180; $("#rigMax").value = current?.limits?.max ?? 180;
+  const etiquetaTope = document.querySelector(".rig2-limits > span");
+  if (etiquetaTope) etiquetaTope.textContent =
+    LOW.animation.rigSinTope(current?.limits) ? "Tope de giro · sin tope" : "Tope de giro";
   dzRigCurvaRender();
   dzRigVarsRender();
   dzRigDoblarSync();
@@ -8151,8 +8172,9 @@ async function dzRigEjemplo() {
     if (padre) DZ.doc.setRigParent(id, padre);
   }
   DZ.doc.setRigPinned("torso", true);
-  // un codo que no se dobla para el lado imposible: el tope se ve en accion
-  DZ.doc.setRigLimits("antebrazo", -150, 5);
+  // El ejemplo va SIN topes: es para aprender a animar, y encontrarse con un
+  // codo que frena parece una falla del programa antes que una restriccion
+  // puesta a proposito. Los topes se explican en el tutorial.
 
   // el personaje SOSTENIDO a lo largo de la escena: un rig se anima con poses
   const capa = DZ.doc.layer, celda = capa && capa.cellAt(1);

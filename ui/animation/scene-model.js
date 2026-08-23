@@ -225,6 +225,17 @@
     };
   }
 
+  /** Un hueso con el rango completo (-180 a 180) NO tiene tope: gira todo lo
+   *  que haga falta, varias vueltas si hace falta —una helice, una rueda, un
+   *  brazo que da la vuelta—. Recortar ahi impedia dar el giro entero, que es
+   *  justo lo que un tope NO tiene que hacer. */
+  const rigSinTope = (limits) =>
+    (limits?.min ?? -180) <= -180 && (limits?.max ?? 180) >= 180;
+
+  /** Aplica el tope de un hueso a un angulo. Sin tope, lo deja pasar entero. */
+  const rigAplicarTope = (limits, r) => rigSinTope(limits) ? r
+    : Math.max(limits.min, Math.min(limits.max, r));
+
   const rigChannelPath = (boneId, property) =>
     `bones/${encodeURIComponent(boneId)}/pose/${property}`;
 
@@ -948,7 +959,7 @@
       const rootAngle = Math.atan2(dy, dx) - Math.atan2(l2 * Math.sin(joint), l1 + l2 * Math.cos(joint));
       const base1 = Math.atan2(b.y - root.pivot.y, b.x - root.pivot.x);
       const base2 = Math.atan2(e.y - b.y, e.x - b.x);
-      const clamp = (value, node) => Math.max(node.limits?.min ?? -180, Math.min(node.limits?.max ?? 180, value));
+      const clamp = (value, node) => rigAplicarTope(node.limits, value);
       const rootRotation = clamp((rootAngle - base1) * 180 / Math.PI, root);
       const midRotation = clamp((joint - (base2 - base1)) * 180 / Math.PI, mid);
       return { target: { x: +wanted.x || 0, y: +wanted.y || 0 },
@@ -1004,6 +1015,8 @@
   animation.rigToJSON = rigToJSON;
   animation.rigChannelPath = rigChannelPath;
   animation.rigEaseData = rigEaseData;
+  animation.rigSinTope = rigSinTope;
+  animation.rigAplicarTope = rigAplicarTope;
   animation.rigDeformador = rigDeformador;
   animation.rigEaseT = rigEaseT;
   animation.rigChannelData = rigChannelData;
