@@ -2822,3 +2822,27 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .tl2-mango.out { right: -1px; }
 .tl2-mango.out::before { right: 0; border-left: 6px solid transparent; }
 .tl2-mango:hover::before { border-top-width: 9px; }
+
+/* ARCO: la trayectoria de la pieza en el tramo activo. Los puntos son cuadros:
+   juntos = lento, separados = rapido. Los mas grandes son las claves. */
+.dz-rig-arco { fill: none; stroke: var(--cyan); stroke-width: 1.6; opacity: .8;
+  stroke-linejoin: round; pointer-events: none; }
+.dz-rig-arco-p { fill: var(--cyan); opacity: .75; pointer-events: none; }
+.dz-rig-arco-p.clave { fill: var(--orange); opacity: 1; }
+.dz-rig-arco-p.ahora { fill: var(--red); opacity: 1; }
+
+/* CARTA DE TIEMPOS: el arco del timing en cuadros reales. Cada marca es un
+   cuadro, ubicado donde cae dentro del recorrido — amontonadas es lento. */
+.rig2-curva { height: 168px; }
+.rig2-curva .ec-carta-eje { stroke: var(--line); stroke-width: 1; }
+.rig2-curva .ec-carta-m { stroke: var(--cyan); stroke-width: 1.4; }
+.rig2-curva .ec-carta-m.extremo { stroke: var(--orange); stroke-width: 2; }
+.rig2-curva .ec-carta-m.ahora { stroke: var(--red); stroke-width: 2.2; }
+.rig2-curva .ec-carta-txt { fill: var(--muted); font: 500 8px system-ui, sans-serif; text-anchor: middle; }
+
+/* Panel de principios: los cuatro que se pueden calcular. */
+.rig2-princ { flex-wrap: wrap; gap: .3rem; align-items: center; }
+.rig2-princ button { font-size: .74rem; padding: .26rem .55rem; }
+.rig2-princ button.on { border-color: var(--red); color: var(--red); }
+.rig2-mini { display: inline-flex; align-items: center; gap: .25rem; font-size: .7rem; color: var(--muted); }
+.rig2-mini input { width: 3.2rem; }

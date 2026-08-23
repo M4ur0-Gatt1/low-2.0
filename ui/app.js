@@ -898,6 +898,12 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigIkFlip").onclick = dzRigFlipIK;
   $("#rigConstraint").onchange = e => { DZ.rigConstraintId = e.target.value || null; dzRigPanelSync(); dzRigOverlayRender(); };
   document.querySelectorAll(".rig2-ease button").forEach(b => b.onclick = () => dzRigEasePreset(b.dataset.ease));
+  $("#rigArco").onclick = dzRigArcoToggle;
+  $("#rigVolumen").onclick = dzPrincipioVolumen;
+  $("#rigDesfasar").onclick = () => dzPrincipioDesfase(+$("#rigDesfase").value || 2);
+  $("#rigExagerar").onclick = () => dzPrincipioExagerar(+$("#rigExagFactor").value || 1.25);
+  $("#rigBlocking").onclick = () => dzPrincipioBlocking(true);
+  $("#rigBlockingOff").onclick = () => dzPrincipioBlocking(false);
   $("#rigDefAdd").onclick = dzRigDoblarCrear;
   $("#rigDefDel").onclick = dzRigDoblarQuitar;
   $("#rigDefClear").onclick = dzRigDoblarLimpiar;
@@ -7537,6 +7543,10 @@ function dzRigOverlayRender() {
       get("lp", "line", { x1: selectedPoint.x, y1: selectedPoint.y, x2: p.x - cv.left, y2: p.y - cv.top }, "dz-rig-link-preview");
     }
   }
+  // ARCO: por donde pasa la pieza a lo largo del tramo. Un movimiento biologico
+  // no viaja en linea recta, y sin ver la trayectoria no hay forma de saber si
+  // la que hiciste es un arco o una escalera de tramos rectos.
+  if (DZ.rigArco && selected) dzRigArcoDibujar(get, selected, cv, num);
   for (const c of Object.values(doc.scene.rig.constraints || {})) {
     const raw = DZ.rigIKPreview?.constraintId === c.id ? DZ.rigIKPreview.target : doc.scene.rigTargetAt(c.id, num); if (!raw) continue;
     const s = dzFromUser(raw.x, raw.y); if (!s) continue; const x = s.x - cv.left, y = s.y - cv.top;
@@ -7561,6 +7571,8 @@ function dzRigPanelSync() {
   dzRigCurvaRender();
   dzRigVarsRender();
   dzRigDoblarSync();
+  const quePieza = $("#rigPrincipiosQue");
+  if (quePieza) { const n = dzRigPiezaDestino(); quePieza.textContent = n ? n.id : "—"; }
   $("#rigPin").classList.toggle("on", !!current?.pinned); $("#rigPin").textContent = current?.pinned ? "Raíz fijada" : "Fijar raíz";
   const parent = $("#rigParent"); parent.innerHTML = '<option value="">— sin padre —</option>';
   nodes.filter(n => !current || n.id !== current.id).forEach(n => { const o = document.createElement("option"); o.value = n.id; o.textContent = n.id; o.selected = !!current && current.parentId === n.id; parent.appendChild(o); });
@@ -7596,8 +7608,19 @@ function dzRigPanelSync() {
   $("#rigIkStatus").textContent = active ? "activa" : "sin cadena"; $("#rigTarget").textContent = target ? `${Math.round(target.x)}, ${Math.round(target.y)}` : "—";
 }
 function dzRigReadPanel() {
-  return { x: +$("#rigX").value || 0, y: +$("#rigY").value || 0, r: +$("#rigR").value || 0,
+  const lectura = { x: +$("#rigX").value || 0, y: +$("#rigY").value || 0, r: +$("#rigR").value || 0,
     sx: +$("#rigSX").value || 1, sy: +$("#rigSY").value || 1 };
+  // ESTIRAR Y ENCOGER CON VOLUMEN: el eje que no tocaste compensa al que si,
+  // para que la pieza se deforme en vez de inflarse.
+  if (DZ.rigVolumen) {
+    const node = dzRigSelectedNode();
+    const previo = node ? (dzRigLocalAt(node.id, dzRigCur()) || { sx: 1, sy: 1 }) : { sx: 1, sy: 1 };
+    const cambioX = Math.abs(lectura.sx - (previo.sx == null ? 1 : previo.sx)) > 1e-6;
+    const cambioY = Math.abs(lectura.sy - (previo.sy == null ? 1 : previo.sy)) > 1e-6;
+    if (cambioX && !cambioY && Math.abs(lectura.sx) > 1e-6) lectura.sy = 1 / lectura.sx;
+    else if (cambioY && !cambioX && Math.abs(lectura.sy) > 1e-6) lectura.sx = 1 / lectura.sy;
+  }
+  return lectura;
 }
 function dzRigToggle() {
   if (!DZ.anim && !DZ.doc) { sysMsg("Abrí una animación antes de armar el esqueleto."); return; }
@@ -7734,6 +7757,190 @@ function dzRigDoblarLimpiar() {
     return dzSetStatus("En F" + f + " no hay ning\u00fan doblez clavado");
   dzRigApplyLive(f); dzRigOverlayRender(); dzRigPanelSync(); dzMarkDirty();
   dzSetStatus("F" + f + " ya no dobla a \u00ab" + node.id + "\u00bb");
+}
+
+/* == PRINCIPIOS DE ANIMACION AUTOMATIZABLES =================================
+   Cuatro de los doce se pueden calcular; el resto es criterio y no hay boton
+   que lo reemplace. Estos operan sobre las claves que ya pusiste: ninguno
+   inventa poses, todos transforman las tuyas. */
+
+/** Los descendientes de una pieza, con su profundidad (hijo 1, nieto 2...). */
+function dzRigDescendientes(nodeId) {
+  const sc = DZ.doc && DZ.doc.scene;
+  if (!sc) return [];
+  const salida = [];
+  const bajar = (padre, nivel) => {
+    for (const n of Object.values(sc.rig.nodes)) {
+      if (n.parentId !== padre) continue;
+      salida.push({ id: n.id, nivel });
+      bajar(n.id, nivel + 1);
+    }
+  };
+  bajar(nodeId, 1);
+  return salida;
+}
+
+/** ACCION COMPLEMENTARIA Y SUPERPUESTA (5): las partes que cuelgan llegan
+ *  TARDE. Se corren las claves de cada descendiente tantos cuadros como su
+ *  profundidad, y la cadena deja de moverse en bloque como un robot. */
+function dzPrincipioDesfase(cuadros) {
+  const node = dzRigPiezaDestino();
+  if (!node || !DZ.doc) return dzSetStatus("Eleg\u00ed la pieza de la que cuelga la cadena");
+  const paso = Math.max(1, Math.round(cuadros || 1));
+  const hijos = dzRigDescendientes(node.id);
+  if (!hijos.length) return dzSetStatus("\u00ab" + node.id + "\u00bb no tiene piezas colgando");
+  const sc = DZ.doc.scene;
+  let movidas = 0;
+  for (const { id, nivel } of hijos) {
+    const claves = sc.rigNode(id).keys || {};
+    const nums = Object.keys(claves).map(Number).filter(Number.isFinite).sort((a, b) => b - a);
+    if (!nums.length) continue;
+    const copia = {};
+    for (const f of nums) copia[f + paso * nivel] = JSON.parse(JSON.stringify(claves[f]));
+    DZ.doc.replaceRigKeys(id, copia, "Desfasar la cadena");
+    movidas += nums.length;
+  }
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzTimelineBadges?.(); dzMarkDirty();
+  dzSetStatus("Cadena de \u00ab" + node.id + "\u00bb desfasada " + paso + " cuadro" +
+    (paso > 1 ? "s" : "") + " por nivel \u00b7 " + movidas + " claves corridas");
+}
+
+/** POSE A POSE / BLOCKING (4): todas las claves del tramo pasan a escalon, para
+ *  mirar solo las poses sin que la interpolacion las disimule. Volver a suave
+ *  las devuelve. */
+function dzPrincipioBlocking(prender) {
+  const node = dzRigPiezaDestino();
+  if (!node || !DZ.doc) return dzSetStatus("Eleg\u00ed una pieza");
+  const claves = DZ.doc.scene.rigNode(node.id).keys || {};
+  const nums = Object.keys(claves).map(Number).filter(Number.isFinite);
+  if (!nums.length) return dzSetStatus("\u00ab" + node.id + "\u00bb no tiene claves todav\u00eda");
+  for (const f of nums) {
+    const actual = dzRigEaseDe(DZ.doc.scene.rigNode(node.id), f);
+    actual.hold = !!prender;
+    if (prender) { actual.eo = [1/3, 1/3]; actual.ei = [2/3, 2/3]; }
+    DZ.doc.setRigKeyEase(node.id, f, actual);
+  }
+  dzRigApplyLive(dzRigCur()); dzRigCurvaRender?.(); dzMarkDirty();
+  dzSetStatus(prender
+    ? "\u00ab" + node.id + "\u00bb en bloques: " + nums.length + " poses secas, sin intermedios"
+    : "\u00ab" + node.id + "\u00bb vuelve a interpolar entre poses");
+}
+
+/** EXAGERACION (10): amplifica lo que ya animaste. Cada clave se aleja mas de
+ *  la pose de reposo; con un factor menor a 1, se acerca (suaviza la actuacion). */
+function dzPrincipioExagerar(factor) {
+  const node = dzRigPiezaDestino();
+  if (!node || !DZ.doc) return dzSetStatus("Eleg\u00ed una pieza");
+  const sc = DZ.doc.scene, nodo = sc.rigNode(node.id);
+  const claves = nodo.keys || {};
+  const nums = Object.keys(claves).map(Number).filter(Number.isFinite);
+  if (nums.length < 1) return dzSetStatus("\u00ab" + node.id + "\u00bb no tiene claves para exagerar");
+  const k = Number(factor) || 1.25;
+  const base = nodo.rest || { x: 0, y: 0, r: 0, sx: 1, sy: 1 };
+  const copia = {};
+  for (const f of nums) {
+    const c = claves[f];
+    copia[f] = { ...JSON.parse(JSON.stringify(c)),
+      x: (base.x || 0) + ((c.x || 0) - (base.x || 0)) * k,
+      y: (base.y || 0) + ((c.y || 0) - (base.y || 0)) * k,
+      r: (base.r || 0) + ((c.r || 0) - (base.r || 0)) * k };
+  }
+  DZ.doc.replaceRigKeys(node.id, copia, k >= 1 ? "Exagerar" : "Suavizar la actuaci\u00f3n");
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzMarkDirty();
+  dzSetStatus("\u00ab" + node.id + "\u00bb " + (k >= 1 ? "exagerada" : "suavizada") +
+    " \u00d7" + k.toFixed(2) + " sobre su reposo \u00b7 " + nums.length + " claves");
+}
+
+/** ESTIRAR Y ENCOGER CON VOLUMEN (1): al escalar un eje, el otro compensa, asi
+ *  la masa no cambia. Sin esto, estirar infla la pieza en vez de deformarla. */
+function dzPrincipioVolumen() {
+  DZ.rigVolumen = !DZ.rigVolumen;
+  $("#rigVolumen")?.classList.toggle("on", DZ.rigVolumen);
+  dzSetStatus(DZ.rigVolumen
+    ? "Volumen conservado: al estirar un eje, el otro se encoge solo"
+    : "Volumen libre: cada eje se escala por su cuenta");
+}
+
+/* == ARCOS: la trayectoria de una pieza ====================================
+   El septimo principio. Los movimientos vivos describen curvas, no rectas, y
+   la unica forma de corregir un arco es verlo: se dibuja por donde pasa el
+   pivote de la pieza en cada cuadro del tramo, con los cuadros clave marcados.
+
+   Los puntos muy juntos son cuadros lentos y los separados, rapidos: el mismo
+   dibujo cuenta el arco Y el espaciado. */
+
+/** Los puntos por donde pasa una pieza, cuadro a cuadro, en el tramo activo. */
+function dzRigArcoPuntos(nodeId) {
+  const sc = DZ.doc && DZ.doc.scene, node = sc && sc.rigNode(nodeId);
+  if (!node) return [];
+  const r = sc.playRange();
+  // Se sigue el EXTREMO de la pieza, no su pivote: el pivote de un brazo es el
+  // hombro y no se mueve cuando el brazo rota — el arco lo describe la punta.
+  let ancla = node.tail;
+  if (!ancla) {
+    const hijo = Object.values(sc.rig.nodes).find(n => n.parentId === node.id && n.pivot);
+    ancla = hijo ? hijo.pivot : null;
+  }
+  if (!ancla) {
+    const svg = $("#dzCanvas")?.querySelector(":scope > svg");
+    const el = svg && svg.querySelector("#" + CSS.escape(node.elementId || node.id));
+    try { const b = el && el.getBBox();
+      if (b) ancla = { x: b.x + b.width / 2, y: b.y + b.height / 2 }; } catch (_) { /* sin caja */ }
+  }
+  if (!ancla) ancla = node.pivot || node.head || { x: 0, y: 0 };
+  const claves = new Set(Object.keys(node.keys || {}).map(Number));
+  const salida = [];
+  for (let f = r.in; f <= r.out; f++) {
+    const w = sc.rigWorldPoint(nodeId, f, ancla);
+    salida.push({ f, x: w.x, y: w.y, clave: claves.has(f) });
+  }
+  return salida;
+}
+
+function dzRigArcoDibujar(get, node, cv, num) {
+  const puntos = dzRigArcoPuntos(node.id);
+  if (puntos.length < 2) return;
+  const enPantalla = puntos.map(q => {
+    const s = dzFromUser(q.x, q.y);
+    return s && { ...q, sx: s.x - cv.left, sy: s.y - cv.top };
+  }).filter(Boolean);
+  if (enPantalla.length < 2) return;
+  // ¿se movio de verdad? un pivote quieto no tiene arco que mostrar
+  const dx = Math.max(...enPantalla.map(q => q.sx)) - Math.min(...enPantalla.map(q => q.sx));
+  const dy = Math.max(...enPantalla.map(q => q.sy)) - Math.min(...enPantalla.map(q => q.sy));
+  if (dx < 2 && dy < 2) return;
+
+  get("arco", "polyline", { points: enPantalla.map(q => q.sx + "," + q.sy).join(" ") }, "dz-rig-arco");
+  for (const q of enPantalla) {
+    get("arcp:" + q.f, "circle", { cx: q.sx, cy: q.sy, r: q.clave ? 3.6 : 2 },
+      "dz-rig-arco-p" + (q.clave ? " clave" : "") + (q.f === num ? " ahora" : ""));
+  }
+}
+
+/** Prende o apaga la trayectoria. */
+function dzRigArcoToggle() {
+  DZ.rigArco = !DZ.rigArco;
+  $("#rigArco")?.classList.toggle("on", DZ.rigArco);
+  dzRigOverlayRender();
+  const node = dzRigSelectedNode();
+  dzSetStatus(!DZ.rigArco ? "Arco oculto"
+    : (node ? "Arco de \u00ab" + node.id + "\u00bb \u00b7 los puntos juntos son cuadros lentos, los separados r\u00e1pidos"
+            : "Eleg\u00ed una pieza para ver su arco"));
+}
+
+/** Cuanto se aparta la trayectoria de una curva suave: sirve para saber si el
+ *  arco quedo quebrado antes y despues de suavizarlo. */
+function dzRigArcoQuiebre(nodeId) {
+  const puntos = dzRigArcoPuntos(nodeId);
+  if (puntos.length < 3) return 0;
+  let suma = 0;
+  for (let i = 1; i < puntos.length - 1; i++) {
+    const a = puntos[i - 1], b = puntos[i], c = puntos[i + 1];
+    // distancia del punto del medio a la recta entre sus vecinos
+    const vx = c.x - a.x, vy = c.y - a.y, largo = Math.hypot(vx, vy) || 1;
+    suma += Math.abs((b.x - a.x) * vy - (b.y - a.y) * vx) / largo;
+  }
+  return +(suma / (puntos.length - 2)).toFixed(2);
 }
 
 /* == TRAMO ACTIVO DE LA LINEA DE TIEMPO =====================================
@@ -8177,6 +8384,23 @@ function dzRigCurvaRender() {
     });
     if (pista) pista.textContent = "Arrastra las manijas para cambiar el timing sin tocar las poses.";
   }
+
+  // CARTA DE TIEMPOS: donde cae cada cuadro intermedio dentro del recorrido.
+  // Es el arco del TIMING, la reglita de toda la vida: marcas amontonadas =
+  // ahi va lento, marcas separadas = ahi va rapido. La curva de arriba dice la
+  // misma verdad, pero esto se lee de un vistazo y en cuadros reales.
+  nodo("line", { x1: 0, y1: 122, x2: 100, y2: 122 }, "ec-carta-eje");
+  const easeT = LOW.animation.rigEaseT;
+  for (let f = a; f <= b; f++) {
+    const avance = (b > a) ? (f - a) / (b - a) : 0;
+    const donde = ea.hold ? (f >= b ? 1 : 0) : easeT(avance, node.keys[a]?.ease, node.keys[b]?.ease);
+    const x = Math.max(0, Math.min(1, donde)) * 100;
+    const extremo = f === a || f === b;
+    nodo("line", { x1: x, y1: extremo ? 114 : 117, x2: x, y2: extremo ? 130 : 127 },
+      "ec-carta-m" + (extremo ? " extremo" : "") + (f === tramo.f ? " ahora" : ""));
+  }
+  const leyenda = nodo("text", { x: 50, y: 141 }, "ec-carta-txt");
+  leyenda.textContent = (b - a + 1) + " cuadros \u00b7 juntas = lento";
 
   const cual = ea.hold ? "hold" : dzRigPresetDe(ea, eb);
   document.querySelectorAll(".rig2-ease button").forEach(x => x.classList.toggle("on", x.dataset.ease === cual));
