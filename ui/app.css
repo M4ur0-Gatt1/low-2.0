@@ -2762,3 +2762,33 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   stroke-dasharray: 6 4; opacity: .85; pointer-events: none; }
 .dz-rig-def-punto { fill: var(--ok, #2f9e63); stroke: #fff; stroke-width: 1.5; cursor: grab; }
 .dz-rig-def-punto.extremo { fill: none; stroke: var(--ok, #2f9e63); stroke-width: 2; }
+
+/* DOS ESTADOS: Construir arma el muneco, Animar lo posa. Cada uno muestra solo
+   sus controles — tener todo visible siempre era lo que hacia imposible saber
+   que estaba haciendo cada boton. */
+.rig2-estados { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; margin: .5rem 0 .4rem; }
+.rig2-estados button { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem;
+  padding: .5rem .65rem; border: 1px solid var(--line-strong, var(--line)); background: transparent;
+  color: var(--muted); cursor: pointer; border-radius: 4px; text-align: left; }
+.rig2-estados button b { font-size: .88rem; font-weight: 700; }
+.rig2-estados button small { font-size: .68rem; opacity: .85; }
+.rig2-estados button:hover { border-color: var(--red); color: var(--fg); }
+.rig2-estados button.on { border-color: var(--red); background: var(--red); color: #fff; }
+.rig2-estados button.on small { opacity: .9; }
+
+.rig2-gesto { margin: .1rem 0 .5rem; padding: .45rem .6rem; font-size: .74rem; line-height: 1.45;
+  color: var(--fg); background: var(--panel2, var(--panel)); border-left: 2px solid var(--red);
+  border-radius: 0 3px 3px 0; }
+
+.rig2-submodo { display: flex; align-items: center; gap: .3rem; margin: 0 0 .5rem; }
+.rig2-submodo span { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin-right: .15rem; }
+.rig2-submodo button { font-size: .74rem; padding: .22rem .55rem; }
+.rig2-submodo button.on { border-color: var(--red); color: var(--red); }
+/* construir no posa: el submodo no aplica */
+.rig2[data-estado="construir"] .rig2-submodo { display: none; }
+
+/* que se ve en cada estado */
+.rig2[data-estado="construir"] [data-rig-section="pose"],
+.rig2[data-estado="construir"] [data-rig-section="curva"] { display: none; }
+.rig2[data-estado="animar"] [data-rig-section="build"] { display: none; }

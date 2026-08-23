@@ -561,19 +561,26 @@
       <div class="dz-onionpanel rig2" id="dzRigPanel" hidden>
         <div class="dz-op-head" id="dzRigHead"><svg class="ico"><use href="#i-key"/></svg> ESQUELETO · CUT-OUT
           <span class="dz-op-x" id="dzRigClose" title="Cerrar">×</span></div>
-        <div class="rig2-modes" role="tablist" aria-label="Modo de esqueleto">
-          <button id="rigModeBuild" class="on" title="Registrar piezas, pivotes y vínculos">Armado</button>
-          <button id="rigModeFk" title="Posar cada articulación directamente">FK</button>
-          <button id="rigModeIk" title="Mover un extremo y resolver la cadena">IK</button>
+        <div class="rig2-estados" role="tablist" aria-label="Estado del esqueleto">
+          <button id="rigModeBuild" class="on" title="Armar el muñeco: piezas, pivotes, jerarquía, topes. Acá no se crean claves.">
+            <b>Construir</b><small>armar el muñeco</small></button>
+          <button id="rigModeAnim" title="Posar el muñeco. Cada gesto deja una clave en el cuadro actual.">
+            <b>Animar</b><small>posar por cuadro</small></button>
+        </div>
+        <p class="rig2-gesto" id="rigGesto"></p>
+        <div class="rig2-submodo" id="rigSubmodo" aria-label="Cómo posar">
+          <span>cómo posar</span>
+          <button id="rigModeFk" class="on" title="Rotar cada pieza por su pivote; los hijos siguen">Directa</button>
+          <button id="rigModeIk" title="Arrastrar el extremo y que la cadena se acomode sola">Inversa</button>
         </div>
         <div class="rig2-tools" id="rigTools" role="toolbar" aria-label="Herramientas de huesos">
           <button id="rigToolSelect" class="on" title="Seleccionar un hueso o pieza con un clic (sin moverlo)">Seleccionar</button>
-          <button id="rigToolPose" title="Posar: arrastrar el cuerpo o la punta para rotar, la articulación para mover">Posar</button>
+          <button id="rigToolPose" title="Posar: arrastrar la manija para rotar, la articulación para mover">Posar</button>
           <button id="rigToolCreate" title="Crear hueso: arrastrar desde la articulación hasta la punta">Crear hueso</button>
         </div>
         <section class="rig2-section" data-rig-section="build">
           <div class="rig2-title"><b>Cut-out por piezas</b><span id="rigCount">0</span></div>
-          <div class="rig2-flow"><span>1 Piezas</span><i>›</i><span>2 Pivotes</span><i>›</i><span>3 Vínculos</span><i>›</i><span>4 Pose</span></div>
+          <div class="rig2-flow"><span>1 Piezas</span><i>›</i><span>2 Pivotes</span><i>›</i><span>3 Vínculos</span><i>›</i><span>4 Listo para animar</span></div>
           <div class="rig2-actions rig2-prepare"><button class="primary" id="rigAuto" title="Registra las piezas dibujables sin inventar una anatomía ni una jerarquía">Registrar piezas del dibujo</button></div>
           <div class="rig2-row rig2-wide"><input type="text" id="rigId" placeholder="nombre de la pieza" title="ID estable de la pieza">
             <button id="rigAdd" title="Registrar la selección como pieza del esqueleto">Añadir</button>
@@ -584,6 +591,9 @@
             <button id="rigPin" title="Fijar o liberar esta pieza como raíz">Fijar raíz</button>
             <button id="rigBind" title="Qué dibujo arrastra este hueso: seleccioná la pieza en la mesa y tocá acá">Mueve el dibujo</button>
           </div>
+          <div class="rig2-limits"><span>Tope de giro</span>
+            <label>mín<input type="number" id="rigMin" value="-180" min="-360" max="360"></label>
+            <label>máx<input type="number" id="rigMax" value="180" min="-360" max="360"></label></div>
           <div class="rig2-tree" id="rigTree" aria-label="Jerarquía del personaje"></div>
         </section>
         <section class="rig2-section" data-rig-section="pose">
@@ -595,9 +605,6 @@
             <label>Esc X<input type="number" id="rigSX" value="1" step="0.05"></label>
             <label>Esc Y<input type="number" id="rigSY" value="1" step="0.05"></label>
           </div>
-          <div class="rig2-limits"><span>Límite</span>
-            <label>mín<input type="number" id="rigMin" value="-180" min="-360" max="360"></label>
-            <label>máx<input type="number" id="rigMax" value="180" min="-360" max="360"></label></div>
           <div class="rig2-actions">
             <button class="primary" id="rigKey" title="Crear clave para la pieza activa">Clave</button>
             <button id="rigKeyAll" title="Crear una clave para todas las piezas">Clave global</button>
@@ -832,37 +839,37 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=3.29.53"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=3.29.54"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=3.29.53"></script>
-<script src="animation/palette.js?v=3.29.53"></script>
-<script src="animation/scene-model.js?v=3.29.53"></script>
-<script src="animation/exposures.js?v=3.29.53"></script>
-<script src="animation/onion.js?v=3.29.53"></script>
-<script src="animation/document.js?v=3.29.53"></script>
-<script src="animation/xsheet-view.js?v=3.29.53"></script>
-<script src="animation/timeline-view.js?v=3.29.53"></script>
-<script src="animation/level-strip.js?v=3.29.53"></script>
-<script src="animation/palette-view.js?v=3.29.53"></script>
-<script src="animation/audio.js?v=3.29.53"></script>
-<script src="animation/shortcuts.js?v=3.29.53"></script>
-<script src="animation/model-tests.js?v=3.29.53"></script>
-<script src="animation/timeline.js?v=3.29.53"></script>
-<script src="animation/xsheet.js?v=3.29.53"></script>
-<script src="animation/playback.js?v=3.29.53"></script>
-<script src="animation/camera.js?v=3.29.53"></script>
-<script src="drawing/stabilization.js?v=3.29.53"></script>
-<script src="drawing/pointer-input.js?v=3.29.53"></script>
-<script src="drawing/brushes.js?v=3.29.53"></script>
-<script src="drawing/stroke-engine.js?v=3.29.53"></script>
-<script src="workspace/panels.js?v=3.29.53"></script>
-<script src="workspace/workspaces.js?v=3.29.53"></script>
-<script src="workspace/windows.js?v=3.29.53"></script>
-<script src="workspace/layouts.js?v=3.29.53"></script>
-<script src="workspace/recovery.js?v=3.29.53"></script>
-<script src="ai/commands.js?v=3.29.53"></script>
-<script src="ai/task-runner.js?v=3.29.53"></script>
-<script src="ai/recovery.js?v=3.29.53"></script>
-<script src="app.js?v=3.29.53"></script>
+<script src="core/history.js?v=3.29.54"></script>
+<script src="animation/palette.js?v=3.29.54"></script>
+<script src="animation/scene-model.js?v=3.29.54"></script>
+<script src="animation/exposures.js?v=3.29.54"></script>
+<script src="animation/onion.js?v=3.29.54"></script>
+<script src="animation/document.js?v=3.29.54"></script>
+<script src="animation/xsheet-view.js?v=3.29.54"></script>
+<script src="animation/timeline-view.js?v=3.29.54"></script>
+<script src="animation/level-strip.js?v=3.29.54"></script>
+<script src="animation/palette-view.js?v=3.29.54"></script>
+<script src="animation/audio.js?v=3.29.54"></script>
+<script src="animation/shortcuts.js?v=3.29.54"></script>
+<script src="animation/model-tests.js?v=3.29.54"></script>
+<script src="animation/timeline.js?v=3.29.54"></script>
+<script src="animation/xsheet.js?v=3.29.54"></script>
+<script src="animation/playback.js?v=3.29.54"></script>
+<script src="animation/camera.js?v=3.29.54"></script>
+<script src="drawing/stabilization.js?v=3.29.54"></script>
+<script src="drawing/pointer-input.js?v=3.29.54"></script>
+<script src="drawing/brushes.js?v=3.29.54"></script>
+<script src="drawing/stroke-engine.js?v=3.29.54"></script>
+<script src="workspace/panels.js?v=3.29.54"></script>
+<script src="workspace/workspaces.js?v=3.29.54"></script>
+<script src="workspace/windows.js?v=3.29.54"></script>
+<script src="workspace/layouts.js?v=3.29.54"></script>
+<script src="workspace/recovery.js?v=3.29.54"></script>
+<script src="ai/commands.js?v=3.29.54"></script>
+<script src="ai/task-runner.js?v=3.29.54"></script>
+<script src="ai/recovery.js?v=3.29.54"></script>
+<script src="app.js?v=3.29.54"></script>
 </body>
 </html>

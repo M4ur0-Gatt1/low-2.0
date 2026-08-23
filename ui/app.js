@@ -827,6 +827,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigModeBuild").onclick = () => dzRigSetMode("build");
   $("#rigModeFk").onclick = () => dzRigSetMode("fk");
   $("#rigModeIk").onclick = () => dzRigSetMode("ik");
+  $("#rigModeAnim").onclick = () => dzRigSetMode(DZ.rigSubmode === "ik" ? "ik" : "fk");
   $("#rigToolSelect").onclick = () => dzRigSetTool("select");
   $("#rigToolPose").onclick = () => dzRigSetTool("pose");
   $("#rigToolCreate").onclick = () => dzRigSetTool("create");
@@ -6918,14 +6919,28 @@ function dzRigSetMode(mode) {
   // build → seleccionar;  fk/ik → posar (para que arrastrar ya pose, sin pasos extra)
   if (DZ.rigSubmode === "build") dzRigSetTool("select");
   else dzRigSetTool(DZ.rigTool === "create" || DZ.rigTool === "select" ? "pose" : DZ.rigTool);
-  $("#dzRigPanel").dataset.mode = DZ.rigSubmode;
-  $("#rigToolPose").disabled = DZ.rigSubmode === "build";
-  $("#rigToolCreate").disabled = DZ.rigSubmode !== "build";
-  [["rigModeBuild", "build"], ["rigModeFk", "fk"], ["rigModeIk", "ik"]].forEach(([id, value]) =>
-    $("#" + id).classList.toggle("on", DZ.rigSubmode === value));
-  const hints = { build: "Armado: círculo = pivote; cuadrado = vínculo. Arrastrá el cuadrado al pivote de su padre, o a un área vacía para romper el vínculo. En un hueso, arrastrar el círculo mueve el hueso y con Alt mueve solo su pivote. «Crear hueso» dibuja la cadena y toma el dibujo que queda debajo.",
-    fk: "FK: la articulación mueve; la MANIJA que sale hacia el dibujo rota (en un hueso, también su cuerpo o su punta). El pivote se cambia en Armado. Cada gesto crea una clave si Auto-clave está activo.",
-    ik: "IK: elegí una cadena y arrastrá el rombo. Ambos huesos se clavan en una sola operación." };
+  const construyendo = DZ.rigSubmode === "build";
+  const panel = $("#dzRigPanel");
+  panel.dataset.mode = DZ.rigSubmode;
+  panel.dataset.estado = construyendo ? "construir" : "animar";   // gobierna que secciones se ven
+  $("#rigToolPose").disabled = construyendo;
+  $("#rigToolCreate").disabled = !construyendo;
+  // Dos estados: Construir arma el muneco, Animar lo posa. Directa/Inversa son
+  // dos formas de posar DENTRO de Animar, no un tercer modo hermano: mezclarlos
+  // era lo que hacia imposible saber en que se estaba parado.
+  $("#rigModeBuild").classList.toggle("on", construyendo);
+  $("#rigModeAnim")?.classList.toggle("on", !construyendo);
+  $("#rigModeFk").classList.toggle("on", DZ.rigSubmode === "fk");
+  $("#rigModeIk").classList.toggle("on", DZ.rigSubmode === "ik");
+  const gesto = $("#rigGesto");
+  if (gesto) gesto.textContent = construyendo
+    ? "Ac\u00e1 se arma. Nada de lo que toques queda como clave."
+    : (DZ.rigSubmode === "ik"
+      ? "Arrastr\u00e1 el ROMBO verde: la cadena entera se acomoda sola."
+      : "Arrastr\u00e1 la MANIJA (el punto al final de la l\u00ednea punteada) para rotar, o la ARTICULACI\u00d3N para mover. Cada gesto deja una clave en este cuadro.");
+  const hints = { build: "Círculo = pivote, cuadrado = vínculo. Arrastrá el cuadrado al pivote del padre para colgarlo, o a un área vacía para soltarlo. En un hueso, arrastrar el círculo mueve el hueso; con Alt, sólo su pivote.",
+    fk: "El pivote sólo se cambia en Construir. Sin Auto-clave, el gesto es una prueba: Enter la clava, Esc la descarta.",
+    ik: "Elegí una cadena y arrastrá el rombo: los dos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
 }
 
@@ -8182,21 +8197,35 @@ function dzRigTutorial() {
       <div class="rigdoc-abrir"><button class="primary" id="rigdocEjemplo">Abrir el personaje de ejemplo</button>
       <small>Un muñeco ya riggeado y animado, para seguir estos pasos tocando algo que funciona.</small></div>
 
+      <h3>Dos estados, y nada más</h3>
+      <p>Arriba del panel hay dos botones y son <b>todo</b> el sistema:</p>
+      <ul class="rigdoc-simb">
+        <li><b>Construir</b> — armás el muñeco: registrás las piezas, movés los pivotes, decís
+        de quién cuelga cada una, ponés topes. Acá <b>no se crean claves</b>: nada de lo que
+        toques queda grabado en la animación, y la manija de posar ni siquiera aparece.</li>
+        <li><b>Animar</b> — posás. La herramienta de posar queda puesta sola y cada gesto deja
+        una clave en el cuadro donde estés parado. Los controles de armado desaparecen, así no
+        rompés el rig sin querer.</li>
+      </ul>
+      <p>Dentro de <b>Animar</b> elegís <b>cómo</b> posar: <b>Directa</b> rota cada pieza por su
+      pivote y los hijos siguen; <b>Inversa</b> te deja arrastrar la punta y acomoda la cadena
+      sola. El renglón bajo los botones siempre dice qué gesto hace qué.</p>
+
       <h3>A · El personaje ya está dibujado por partes</h3>
       <ol>
-        ${paso("1", "<b>Armado → Registrar piezas del dibujo.</b> Toma todas las partes sueltas del dibujo y les pone un pivote en el centro.")}
+        ${paso("1", "<b>Construir → Registrar piezas del dibujo.</b> Toma todas las partes sueltas del dibujo y les pone un pivote en el centro.")}
         ${paso("2", "Elegí la pieza y tocá <b>Pivote</b>; después hacé clic donde tiene que girar: en un brazo, el hombro. El punto va a la pieza ELEGIDA aunque el clic caiga encima de otra —el hombro está sobre el torso y eso es normal—. Alt+clic lo saca.")}
         ${paso("3", "Decile de quién cuelga: el desplegable <b>Cuelga de</b>, o arrastrá el <b>cuadrado</b> hasta el <b>círculo</b> del padre.")}
         ${paso("4", "La cadera o el torso van con <b>Fijar raíz</b>.")}
-        ${paso("5", "Pasá a <b>FK</b> y posá.")}
+        ${paso("5", "Pasá a <b>Animar</b>: ahí ya se posa, y cada gesto deja una clave.")}
       </ol>
 
       <h3>B · Querés una cadena articulada</h3>
       <ol>
-        ${paso("1", "<b>Armado → Crear hueso</b> y arrastrá desde la articulación hasta la punta.")}
+        ${paso("1", "<b>Construir → Crear hueso</b> y arrastrá desde la articulación hasta la punta.")}
         ${paso("2", "Para seguir la cadena, empezá el próximo arrastre <b>sobre la punta del anterior</b>: se engancha solo.")}
         ${paso("3", "El hueso toma el dibujo que tenga debajo. Si agarró otro, seleccioná la pieza correcta en la mesa y tocá <b>Mueve el dibujo</b>.")}
-        ${paso("4", "Pasá a <b>FK</b> y posá.")}
+        ${paso("4", "Pasá a <b>Animar</b> y posá.")}
       </ol>
 
       <h3>El pivote de un hueso</h3>

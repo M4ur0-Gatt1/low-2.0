@@ -117,6 +117,26 @@ manijas pueden salirse del cuadrado.
 Cambiar la curva **no toca ninguna pose**: se puede ajustar el timing todas las
 veces que haga falta sin perder lo clavado.
 
+### Dos estados: Construir y Animar
+
+Arriba del panel hay dos botones y son todo el sistema.
+
+**Construir** arma el muneco: registrar piezas, mover pivotes, decir de quien
+cuelga cada una, poner topes, dar curva. Aca **no se crean claves** — nada de lo
+que toques queda grabado en la animacion, y la manija de posar ni siquiera
+aparece en la mesa.
+
+**Animar** posa. La herramienta de posar queda puesta sola y cada gesto deja una
+clave en el cuadro donde estes parado. Los controles de armado desaparecen, asi
+no se rompe el rig sin querer.
+
+Dentro de Animar se elige **como** posar: **Directa** rota cada pieza por su
+pivote y los hijos siguen; **Inversa** deja arrastrar la punta y acomoda la
+cadena sola. El renglon bajo los botones dice siempre que gesto hace que.
+
+Antes habia tres modos hermanos —Armado, FK, IK— mas tres herramientas, y nada
+indicaba si estabas construyendo o animando.
+
 ### Varios dibujos en una misma pieza
 
 Una mano no rota: se **cambia** por otra mano. Lo mismo el pie, o la boca en la
