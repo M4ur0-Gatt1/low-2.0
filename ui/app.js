@@ -1001,6 +1001,15 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     if (e.ctrlKey && e.key.toLowerCase() === "d" && DZ.sel) {
       e.preventDefault(); dzDuplicate();
     }
+    // Ctrl+C / Ctrl+V sobre la escena: copiar un cuadro y hacer el siguiente
+    // encima de la copia. Si hay texto seleccionado manda el copiar de siempre.
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey &&
+        DZ.doc && !$("#designView").hidden) {
+      const tecla = e.key.toLowerCase();
+      const hayTextoElegido = (window.getSelection() || "").toString().trim().length > 0;
+      if (tecla === "c" && !hayTextoElegido) { e.preventDefault(); dzCuadroCopiar(); return; }
+      if (tecla === "v" && DZ.clipCuadro) { e.preventDefault(); dzCuadroPegar(); return; }
+    }
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "s" && DZ.doc) {
       e.preventDefault(); dzSceneSave(false); return;
     }
@@ -7717,6 +7726,52 @@ function dzRigDoblarLimpiar() {
     return dzSetStatus("En F" + f + " no hay ning\u00fan doblez clavado");
   dzRigApplyLive(f); dzRigOverlayRender(); dzRigPanelSync(); dzMarkDirty();
   dzSetStatus("F" + f + " ya no dobla a \u00ab" + node.id + "\u00bb");
+}
+
+/* == COPIAR Y PEGAR UN CUADRO ===============================================
+   El gesto mas usado de la animacion tradicional: copiar el dibujo y hacer el
+   siguiente encima de la copia.
+
+   Pegar crea un dibujo NUEVO con el mismo contenido, no una segunda exposicion
+   del mismo: si compartieran dibujo, retocar uno cambiaria los dos y no se
+   podria animar. Para compartir esta el sostener (la manija de la hoja de
+   tiempos), que es otra cosa. */
+
+function dzCuadroCopiar() {
+  if (!DZ.doc) return false;
+  dzDocCommit();                       // lo que este en la mesa, primero adentro
+  const dibujo = DZ.doc.drawing;
+  if (!dibujo) { dzSetStatus("Este cuadro no tiene dibujo para copiar"); return true; }
+  DZ.clipCuadro = { numero: dibujo.number, contenido: dibujo.content || "",
+                    desde: DZ.doc.frame, capa: DZ.doc.layerId,
+                    ultimoDestino: DZ.doc.frame };
+  dzSetStatus("Cuadro F" + DZ.doc.frame + " copiado \u00b7 Ctrl+V lo pega en el siguiente");
+  return true;
+}
+
+function dzCuadroPegar() {
+  if (!DZ.doc) return false;
+  const clip = DZ.clipCuadro;
+  if (!clip) { dzSetStatus("Todav\u00eda no copiaste ning\u00fan cuadro (Ctrl+C)"); return true; }
+  const capa = DZ.doc.layer;
+  if (!capa) { dzSetStatus("No hay capa activa"); return true; }
+  if (capa.locked) { dzSetStatus("La capa est\u00e1 bloqueada"); return true; }
+
+  // Si seguis parado donde dejo el ultimo pegado, el destino es el cuadro
+  // siguiente: asi Ctrl+V repetido va encadenando copias, que es como se hace
+  // una tira para ir modificandola. Si te moviste vos, pega donde estas.
+  const destino = DZ.doc.frame === clip.ultimoDestino ? DZ.doc.frame + 1 : DZ.doc.frame;
+
+  dzDocCommit();
+  const copia = DZ.doc.duplicateDrawing(clip.numero);
+  if (!copia) { dzSetStatus("No se pudo copiar ese dibujo"); return true; }
+  DZ.doc.setCell(destino, copia.number, capa.id);
+  DZ.doc.goTo(destino);
+  clip.ultimoDestino = destino;
+  dzMarkDirty();
+  dzSetStatus("Pegado en F" + destino + " como dibujo " + copia.number +
+    " \u00b7 es una copia aparte: retocarla no toca el original");
+  return true;
 }
 
 /* == DEFORMADOR: aplicar la curva al dibujo =================================
