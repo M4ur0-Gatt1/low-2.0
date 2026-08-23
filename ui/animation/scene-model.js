@@ -98,6 +98,133 @@
     return bezY(bezSolve(t, x1, x2), y1, y2);
   }
 
+
+  /* == DEFORMADOR DE CURVA ==================================================
+     Hasta aca una pieza solo podia ROTAR entera: sirve para un brazo, no para
+     el pelo, una cola o una manga. El deformador dobla el dibujo a lo largo de
+     una curva de control.
+
+     Como: cada punto del dibujo se guarda en coordenadas curvilineas respecto
+     de la curva EN REPOSO —cuanto avanzo a lo largo (s) y cuanto me separo en
+     perpendicular (d)— y se lo vuelve a colocar sobre la curva POSADA con el
+     mismo (s, d). Si las dos curvas son iguales, el punto no se mueve: por eso
+     un deformador recien creado no cambia nada. */
+
+  const CURVA_MUESTRAS = 96;      // suficiente para que no se vean facetas
+
+  /** Catmull-Rom: pasa POR los puntos de control, que es lo que espera quien
+   *  los arrastra. Con Bezier habria que explicar manijas que nadie pidio. */
+  function curvaPunto(pts, t) {
+    const n = pts.length;
+    if (n === 0) return { x: 0, y: 0 };
+    if (n === 1) return { x: pts[0].x, y: pts[0].y };
+    if (n === 2) return { x: pts[0].x + (pts[1].x - pts[0].x) * t,
+                          y: pts[0].y + (pts[1].y - pts[0].y) * t };
+    const seg = Math.min(Math.floor(t * (n - 1)), n - 2);
+    const u = t * (n - 1) - seg;
+    const p0 = pts[Math.max(0, seg - 1)], p1 = pts[seg], p2 = pts[seg + 1],
+          p3 = pts[Math.min(n - 1, seg + 2)];
+    const u2 = u * u, u3 = u2 * u;
+    return {
+      x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * u +
+        (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * u2 +
+        (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * u3),
+      y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * u +
+        (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * u2 +
+        (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * u3)
+    };
+  }
+
+  /** Muestreo con longitud de arco acumulada: sin esto, los tramos largos de
+   *  la curva comprimirian el dibujo y los cortos lo estirarian. */
+  function curvaMuestrear(pts) {
+    const ms = [];
+    let largo = 0;
+    let previo = curvaPunto(pts, 0);
+    ms.push({ ...previo, s: 0 });
+    for (let i = 1; i <= CURVA_MUESTRAS; i++) {
+      const q = curvaPunto(pts, i / CURVA_MUESTRAS);
+      largo += Math.hypot(q.x - previo.x, q.y - previo.y);
+      ms.push({ ...q, s: largo });
+      previo = q;
+    }
+    if (largo > 1e-9) for (const m of ms) m.s /= largo;   // normalizado 0..1
+    return { ms, largo };
+  }
+
+  /** Tangente unitaria en la muestra i. */
+  function curvaTangente(ms, i) {
+    const a = ms[Math.max(0, i - 1)], b = ms[Math.min(ms.length - 1, i + 1)];
+    const dx = b.x - a.x, dy = b.y - a.y, h = Math.hypot(dx, dy);
+    return h < 1e-9 ? { x: 1, y: 0 } : { x: dx / h, y: dy / h };
+  }
+
+  /** Punto y marco (tangente/normal) a lo largo de la curva, en s de 0 a 1. */
+  function curvaEnS(muestreo, s) {
+    const ms = muestreo.ms;
+    const t = Math.max(0, Math.min(1, s));
+    let i = 0;
+    while (i < ms.length - 2 && ms[i + 1].s < t) i++;
+    const a = ms[i], b = ms[i + 1] || a;
+    const span = (b.s - a.s) || 1e-9;
+    const u = Math.max(0, Math.min(1, (t - a.s) / span));
+    const ta = curvaTangente(ms, i), tb = curvaTangente(ms, Math.min(ms.length - 1, i + 1));
+    const tx = ta.x + (tb.x - ta.x) * u, ty = ta.y + (tb.y - ta.y) * u;
+    const h = Math.hypot(tx, ty) || 1;
+    return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u,
+             tx: tx / h, ty: ty / h, nx: -ty / h, ny: tx / h };
+  }
+
+  /** Coordenadas curvilineas de un punto respecto de una curva: cuanto avanza
+   *  a lo largo (s, 0..1) y cuanto se separa en perpendicular (d, con signo).
+   *  Fuera de los extremos se extiende la recta tangente, para que un dibujo
+   *  mas largo que su curva no se amontone en las puntas. */
+  function curvaCoordenadas(muestreo, punto) {
+    const ms = muestreo.ms;
+    let mejor = { dist2: Infinity, i: 0, u: 0 };
+    for (let i = 0; i < ms.length - 1; i++) {
+      const a = ms[i], b = ms[i + 1];
+      const vx = b.x - a.x, vy = b.y - a.y;
+      const len2 = vx * vx + vy * vy;
+      let u = len2 < 1e-12 ? 0 : ((punto.x - a.x) * vx + (punto.y - a.y) * vy) / len2;
+      u = Math.max(0, Math.min(1, u));
+      const px = a.x + vx * u, py = a.y + vy * u;
+      const dist2 = (punto.x - px) ** 2 + (punto.y - py) ** 2;
+      if (dist2 < mejor.dist2) mejor = { dist2, i, u };
+    }
+    const a = ms[mejor.i], b = ms[mejor.i + 1];
+    const s = a.s + (b.s - a.s) * mejor.u;
+    const marco = curvaEnS(muestreo, s);
+    const d = (punto.x - marco.x) * marco.nx + (punto.y - marco.y) * marco.ny;
+    // avance mas alla del extremo, medido en unidades de la curva
+    let extra = 0;
+    if (s <= 1e-6 || s >= 1 - 1e-6) {
+      const fin = s <= 1e-6 ? curvaEnS(muestreo, 0) : curvaEnS(muestreo, 1);
+      extra = (punto.x - fin.x) * fin.tx + (punto.y - fin.y) * fin.ty;
+      if (s <= 1e-6 && extra > 0) extra = 0;      // adentro: no es desborde
+      if (s >= 1 - 1e-6 && extra < 0) extra = 0;
+    }
+    return { s, d, extra };
+  }
+
+  /** Recoloca un punto: mismas coordenadas curvilineas, otra curva. */
+  function curvaAplicar(muestreoPosado, coord, escalaLargo) {
+    const marco = curvaEnS(muestreoPosado, coord.s);
+    const extra = (coord.extra || 0) * (escalaLargo || 1);
+    return { x: marco.x + marco.nx * coord.d + marco.tx * extra,
+             y: marco.y + marco.ny * coord.d + marco.ty * extra };
+  }
+
+  /** Un deformador listo para usar: mapea puntos del reposo a la pose. */
+  function rigDeformador(reposo, posado) {
+    const a = curvaMuestrear(reposo), b = curvaMuestrear(posado);
+    const escala = a.largo > 1e-9 ? b.largo / a.largo : 1;
+    return {
+      largoReposo: a.largo, largoPosado: b.largo,
+      punto(p) { return curvaAplicar(b, curvaCoordenadas(a, p), escala); }
+    };
+  }
+
   const rigChannelPath = (boneId, property) =>
     `bones/${encodeURIComponent(boneId)}/pose/${property}`;
 
@@ -112,6 +239,28 @@
         if (Number.isFinite(f) && attachments[attachmentId]) keys[f] = attachmentId;
       }
       if (Object.keys(keys).length) out[slotId] = { slotId, keys };
+    }
+    return out;
+  };
+
+  /** Deformadores por pieza. Se descartan los que no tengan una curva usable:
+   *  con menos de dos puntos no hay nada que doblar. */
+  const rigDeformersData = (source = {}) => {
+    const punto = (q) => ({ x: +q.x || 0, y: +q.y || 0 });
+    const lista = (arr) => Array.isArray(arr) ? arr.filter((q) => q && Number.isFinite(+q.x)
+      && Number.isFinite(+q.y)).map(punto) : [];
+    const out = {};
+    for (const [boneId, d] of Object.entries(source || {})) {
+      const rest = lista(d && d.rest);
+      if (rest.length < 2) continue;
+      const keys = {};
+      for (const [frame, pts] of Object.entries((d && d.keys) || {})) {
+        const f = Math.max(1, Math.round(+frame)), curva = lista(pts);
+        // una clave con otra cantidad de puntos no se puede mezclar con el reposo
+        if (Number.isFinite(f) && curva.length === rest.length) keys[f] = curva;
+      }
+      out[boneId] = { id: d.id || `deformer:${boneId}`, boneId, type: "curve",
+        enabled: d.enabled !== false, rest, keys };
     }
     return out;
   };
@@ -261,7 +410,7 @@
       setup: { mode: source.setup?.mode || "cutout", restFrame: Math.max(1, Math.round(source.setup?.restFrame || 1)),
         units: source.setup?.units || "px" },
       bones, slots, attachments, bindings, meshes: clone(source.meshes || {}),
-      deformers: clone(source.deformers || {}), constraints,
+      deformers: rigDeformersData(source.deformers), constraints,
       constraintOrder: [...requestedOrder, ...remainder], controllers: clone(source.controllers || {}),
       actions: clone(source.actions || {}), channels, switches: rigSwitchesData(source.switches, attachments),
       physics: clone(source.physics || {}), diagnostics: { valid: true, errors: [], warnings: [] } };
@@ -606,6 +755,43 @@
 
     rigSwitch(slotId) { return (this.rig.switches || {})[slotId] || null; }
 
+    rigDeformer(boneId) { return (this.rig.deformers || {})[boneId] || null; }
+
+    /** La curva de control de una pieza en un cuadro. Los puntos se interpolan
+     *  linealmente entre claves; sin claves vale la curva en reposo, o sea el
+     *  dibujo sin doblar. */
+    rigDeformerAt(boneId, frame) {
+      const d = this.rigDeformer(boneId);
+      if (!d || !Array.isArray(d.rest) || d.rest.length < 2) return null;
+      const keys = d.keys || {};
+      const nums = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!nums.length) return clone(d.rest);
+      const f = Number(frame) || 1;
+      const mezcla = (A, B, t) => A.map((pt, i) => ({
+        x: pt.x + (((B[i] || pt).x) - pt.x) * t,
+        y: pt.y + (((B[i] || pt).y) - pt.y) * t }));
+      if (keys[f]) return clone(keys[f]);
+      if (f <= nums[0]) return clone(keys[nums[0]]);
+      if (f >= nums.at(-1)) return clone(keys[nums.at(-1)]);
+      let a = nums[0], b = nums.at(-1);
+      for (const k of nums) { if (k <= f) a = k; else { b = k; break; } }
+      return mezcla(keys[a], keys[b], (f - a) / (b - a));
+    }
+
+    /** El mapeador listo para usar en un cuadro, o null si no hay que doblar
+     *  nada. Devuelve null tambien cuando la curva esta en reposo: asi el
+     *  dibujo original se deja intacto en vez de reescribirlo por gusto. */
+    rigDeformadorAt(boneId, frame) {
+      const d = this.rigDeformer(boneId);
+      if (!d || d.enabled === false) return null;
+      const posado = this.rigDeformerAt(boneId, frame);
+      if (!posado) return null;
+      const quieto = d.rest.every((pt, i) =>
+        Math.abs(pt.x - posado[i].x) < 1e-6 && Math.abs(pt.y - posado[i].y) < 1e-6);
+      if (quieto) return null;
+      return rigDeformador(d.rest, posado);
+    }
+
     /** El attachment vigente en un cuadro segun las claves de sustitucion. */
     rigSwitchAt(slotId, frame) {
       const sw = this.rigSwitch(slotId), keys = sw && sw.keys;
@@ -709,6 +895,14 @@
       return matPoint(this.rigWorldMatrix(id, frame, overrides), point || { x: 0, y: 0 });
     }
 
+    /** El camino de vuelta: de coordenadas del lienzo al espacio propio de la
+     *  pieza. Lo necesita cualquier cosa que se arrastre en la mesa y se guarde
+     *  en el dibujo —la curva del deformador—, porque el dibujo vive antes de
+     *  que se le aplique la matriz del hueso. */
+    rigLocalPoint(id, frame, point, overrides = {}) {
+      return matPoint(matInverse(this.rigWorldMatrix(id, frame, overrides)), point || { x: 0, y: 0 });
+    }
+
     rigConstraint(id) { return (this.rig.constraints || {})[id] || null; }
 
     rigTargetAt(id, frame) {
@@ -810,6 +1004,7 @@
   animation.rigToJSON = rigToJSON;
   animation.rigChannelPath = rigChannelPath;
   animation.rigEaseData = rigEaseData;
+  animation.rigDeformador = rigDeformador;
   animation.rigEaseT = rigEaseT;
   animation.rigChannelData = rigChannelData;
   animation.rigConstraintData = rigConstraintData;

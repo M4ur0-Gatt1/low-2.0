@@ -2755,3 +2755,10 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .rig2-var .clv { margin-left: auto; font-size: .68rem; color: var(--muted); }
 .rig2-var.activo .clv { color: var(--red); }
 .rig2-vars .vacio { font-size: .74rem; color: var(--muted); padding: .35rem .15rem; }
+
+/* Curva del deformador: verde, para no confundirla con el hueso (rojo) ni con
+   la jerarquia. Los puntos del medio son mas grandes: son los que se doblan. */
+.dz-rig-def-curva { fill: none; stroke: var(--ok, #2f9e63); stroke-width: 2;
+  stroke-dasharray: 6 4; opacity: .85; pointer-events: none; }
+.dz-rig-def-punto { fill: var(--ok, #2f9e63); stroke: #fff; stroke-width: 1.5; cursor: grab; }
+.dz-rig-def-punto.extremo { fill: none; stroke: var(--ok, #2f9e63); stroke-width: 2; }

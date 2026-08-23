@@ -889,6 +889,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigIkFlip").onclick = dzRigFlipIK;
   $("#rigConstraint").onchange = e => { DZ.rigConstraintId = e.target.value || null; dzRigPanelSync(); dzRigOverlayRender(); };
   document.querySelectorAll(".rig2-ease button").forEach(b => b.onclick = () => dzRigEasePreset(b.dataset.ease));
+  $("#rigDefAdd").onclick = dzRigDoblarCrear;
+  $("#rigDefDel").onclick = dzRigDoblarQuitar;
+  $("#rigDefClear").onclick = dzRigDoblarLimpiar;
   $("#rigVarAdd").onclick = dzRigVarAdd;
   $("#rigVarDel").onclick = dzRigVarDel;
   $("#rigVarClear").onclick = dzRigVarClear;
@@ -6608,6 +6611,12 @@ function dzRigStrip(root) {
     n.style.display = n.getAttribute("data-rig-var") || "";
     n.removeAttribute("data-rig-var");
   });
+  // y el doblez: se devuelve el `d` original de cada trazo deformado
+  (root || document).querySelectorAll("[data-defbase]").forEach(n => {
+    const d = n.getAttribute("data-defbase");
+    if (d) n.setAttribute("d", d);
+    n.removeAttribute("data-defbase");
+  });
 }
 /** El elemento que le toca dibujar a una pieza en un cuadro, escondiendo las
  *  otras variantes. Sin variantes extra devuelve el de siempre y no toca nada:
@@ -6651,7 +6660,15 @@ function dzRigApplyLive(num, overrides = {}) {
       // abierta, el puño) y las claves de sustitucion deciden cual se ve.
       const objetivo = dzRigDibujoDe(node, num, svg);
       const el = svg.querySelector("#" + CSS.escape(objetivo));
-      if (el) { hallados++; dzRigApplyMatrix(el, DZ.doc.scene.rigWorldMatrix(node.id, num, overrides)); }
+      if (el) {
+        hallados++;
+        // primero se dobla la geometria, despues se la ubica: la matriz del
+        // hueso se aplica ENCIMA del dibujo ya deformado.
+        const doblez = DZ.doc.scene.rigDeformadorAt
+          ? DZ.doc.scene.rigDeformadorAt(node.id, num) : null;
+        if (doblez) dzDeformarElemento(el, doblez, svg);
+        dzRigApplyMatrix(el, DZ.doc.scene.rigWorldMatrix(node.id, num, overrides));
+      }
     }
     // Un cuadro donde el personaje no esta expuesto no tiene nada que posar, y
     // sin aviso parece que el rig "dejo de funcionar". Se dice en voz alta.
@@ -7409,6 +7426,28 @@ function dzRigOverlayRender() {
         mangoHit.onpointerdown = rotar;
       }
     }
+    // CURVA DEL DEFORMADOR: los puntos con los que se dobla la pieza. Viven en
+    // el espacio del dibujo, asi que hay que pasarlos por la matriz del hueso
+    // para dibujarlos donde el ojo los espera.
+    const curva = doc.scene.rigDeformerAt ? doc.scene.rigDeformerAt(node.id, num) : null;
+    if (curva && curva.length > 1) {
+      const enPantalla = curva.map(q => {
+        const w = doc.scene.rigWorldPoint(node.id, num, q, live), s = dzFromUser(w.x, w.y);
+        return s && { x: s.x - cv.left, y: s.y - cv.top };
+      });
+      if (enPantalla.every(Boolean)) {
+        get("dc:" + node.id, "polyline",
+          { points: enPantalla.map(q => q.x + "," + q.y).join(" ") }, "dz-rig-def-curva");
+        enPantalla.forEach((q, i) => {
+          const extremo = i === 0 || i === enPantalla.length - 1;
+          get("dp:" + node.id + ":" + i, "circle", { cx: q.x, cy: q.y, r: extremo ? 4.5 : 5.5,
+            "data-id": node.id }, "dz-rig-def-punto" + (extremo ? " extremo" : ""));
+          const hit = get("dh:" + node.id + ":" + i, "circle",
+            { cx: q.x, cy: q.y, r: 12, "data-id": node.id, "data-def": i }, "dz-rig-hit dz-rig-def-hit");
+          hit.onpointerdown = e => dzRigDeformadorDrag(e, node, i);
+        });
+      }
+    }
     if (selectedId === node.id) {
       const label = get("lb:" + node.id, "text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label");
       label.textContent = node.id;
@@ -7452,6 +7491,7 @@ function dzRigPanelSync() {
   $("#rigMin").value = current?.limits?.min ?? -180; $("#rigMax").value = current?.limits?.max ?? 180;
   dzRigCurvaRender();
   dzRigVarsRender();
+  dzRigDoblarSync();
   $("#rigPin").classList.toggle("on", !!current?.pinned); $("#rigPin").textContent = current?.pinned ? "Raíz fijada" : "Fijar raíz";
   const parent = $("#rigParent"); parent.innerHTML = '<option value="">— sin padre —</option>';
   nodes.filter(n => !current || n.id !== current.id).forEach(n => { const o = document.createElement("option"); o.value = n.id; o.textContent = n.id; o.selected = !!current && current.parentId === n.id; parent.appendChild(o); });
@@ -7507,6 +7547,248 @@ function dzRigToggle() {
    jerarquía se arma en la mesa y no en la línea de tiempo como en Harmony u
    OpenToonz. Esto vive dentro del programa (Ayuda → Cómo se riggea un
    personaje) porque un tutorial que hay que ir a buscar afuera no se lee. */
+/** Arrastrar un punto de la curva doblа la pieza y deja la clave en el cuadro.
+ *  El punto se guarda en el espacio del DIBUJO —no en el de la pantalla—, o el
+ *  doblez saldria torcido en cuanto la pieza tuviera rotacion. */
+function dzRigDeformadorDrag(e, node, indice) {
+  if (!DZ.doc) return;
+  e.preventDefault(); e.stopPropagation();
+  dzRigSelectNode(node.id);
+  const frame = dzRigCur(), pointerId = e.pointerId;
+  const sc = DZ.doc.scene;
+  const partida = sc.rigDeformerAt(node.id, frame);
+  if (!partida) return;
+  let ultimo = null;
+  const mover = ev => {
+    if (ev.pointerId !== pointerId) return;
+    const enUsuario = dzToUser(ev.clientX, ev.clientY);
+    const local = sc.rigLocalPoint(node.id, frame, enUsuario);
+    ultimo = partida.map((q, i) => i === indice ? { x: local.x, y: local.y } : q);
+    DZ.doc.setRigDeformerKey(node.id, frame, ultimo);
+    dzRigApplyLive(frame); dzRigOverlayRender();
+  };
+  const soltar = ev => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", mover);
+    document.removeEventListener("pointerup", soltar);
+    if (!ultimo) return;
+    dzRigPanelSync(); dzMarkDirty();
+    dzSetStatus("\u00ab" + node.id + "\u00bb doblada en F" + frame +
+      " \u00b7 punto " + (indice + 1) + " de " + partida.length);
+  };
+  document.addEventListener("pointermove", mover);
+  document.addEventListener("pointerup", soltar);
+}
+
+/** La curva de reposo que le corresponde a una pieza: su eje largo, con tres
+ *  puntos. Es la que hace que doblar "para arriba" doble como uno espera. */
+function dzDeformadorCurvaDe(el) {
+  let caja = null;
+  try { caja = el.getBBox(); } catch (_) { return null; }
+  if (!caja || (!caja.width && !caja.height)) return null;
+  const cx = caja.x + caja.width / 2, cy = caja.y + caja.height / 2;
+  return caja.width >= caja.height
+    ? [{ x: caja.x, y: cy }, { x: cx, y: cy }, { x: caja.x + caja.width, y: cy }]
+    : [{ x: cx, y: caja.y }, { x: cx, y: cy }, { x: cx, y: caja.y + caja.height }];
+}
+
+/** Le da a la pieza elegida una curva para doblarse. Convierte sus formas a
+ *  trazos —un rect no se puede doblar— y deja eso guardado en el dibujo, no
+ *  como un efecto pasajero: si no, al cambiar de cuadro volveria el rect. */
+function dzRigDoblarCrear() {
+  const node = dzRigPiezaDestino();
+  if (!node || !DZ.doc) return dzSetStatus("Eleg\u00ed primero la pieza que quer\u00e9s doblar");
+  if (DZ.doc.scene.rigDeformer(node.id))
+    return dzSetStatus("\u00ab" + node.id + "\u00bb ya tiene una curva \u00b7 arrastr\u00e1 sus puntos en la mesa");
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
+  const el = svg && svg.querySelector("#" + CSS.escape(node.elementId || node.id));
+  if (!el) return dzSetStatus("No encuentro el dibujo de \u00ab" + node.id + "\u00bb en la mesa");
+
+  // 1 · a trazos, y que quede en el dibujo
+  const formas = el.tagName.toLowerCase() === "g"
+    ? [...el.querySelectorAll("rect,circle,ellipse,line,polyline,polygon")]
+    : (el.tagName.toLowerCase() === "path" ? [] : [el]);
+  let convertidas = 0;
+  for (const forma of formas) if (dzFormaConvertir(forma)) convertidas++;
+  if (convertidas) { dzDocCommit(); dzBuildLayers && dzBuildLayers(); }
+
+  // 2 · la curva de reposo, por el eje largo de la pieza
+  const objetivo = svg.querySelector("#" + CSS.escape(node.elementId || node.id));
+  const reposo = dzDeformadorCurvaDe(objetivo);
+  if (!reposo) return dzSetStatus("Esa pieza no tiene forma medible para doblar");
+  if (!DZ.doc.createRigDeformer(node.id, reposo))
+    return dzSetStatus("No se pudo crear la curva");
+
+  DZ.rigDoblando = true;
+  dzRigApplyLive(dzRigCur()); dzRigOverlayRender(); dzRigPanelSync(); dzMarkDirty();
+  dzSetStatus("\u00ab" + node.id + "\u00bb ya se puede doblar" +
+    (convertidas ? " (" + convertidas + " forma" + (convertidas > 1 ? "s" : "") + " pas\u00f3 a trazo)" : "") +
+    " \u00b7 arrastr\u00e1 los puntos verdes de su curva");
+}
+
+/** El panel dice si la pieza es rigida, si tiene curva y si este cuadro la
+ *  dobla: los tres estados que cambian lo que hacen los botones. */
+function dzRigDoblarSync() {
+  const eti = $("#rigDefEstado"), pista = $("#rigDefHint");
+  if (!eti) return;
+  const node = dzRigSelectedNode(), sc = DZ.doc && DZ.doc.scene;
+  if (!node || !sc) { eti.textContent = "sin pieza";
+    if (pista) pista.textContent = "Elegí una pieza para darle una curva.";
+    return; }
+  const d = sc.rigDeformer(node.id);
+  if (!d) { eti.textContent = "rígida";
+    if (pista) pista.textContent = "Una pieza rígida sólo rota. Con curva, se dobla: para el pelo, una cola o una manga.";
+    return; }
+  const f = dzRigCur(), claves = Object.keys(d.keys || {}).map(Number).sort((a, b) => a - b);
+  eti.textContent = claves.length ? "curva · " + claves.length + (claves.length > 1 ? " claves" : " clave") : "curva";
+  if (pista) pista.textContent = d.keys[f]
+    ? "F" + f + " tiene su propio doblez · arrastrá los puntos verdes para cambiarlo."
+    : "Arrastrá los puntos verdes en la mesa y el doblez queda clavado en F" + f + ".";
+}
+
+function dzRigDoblarQuitar() {
+  const node = dzRigPiezaDestino();
+  if (!node || !DZ.doc) return;
+  if (!DZ.doc.removeRigDeformer(node.id))
+    return dzSetStatus("Esa pieza no tiene curva para sacar");
+  // el dibujo vuelve a su forma: los trazos ya no se reescriben
+  dzRigStrip($("#dzCanvas").querySelector(":scope > svg"));
+  dzRigApplyLive(dzRigCur()); dzRigOverlayRender(); dzRigPanelSync(); dzMarkDirty();
+  dzSetStatus("\u00ab" + node.id + "\u00bb vuelve a ser r\u00edgida \u00b7 el dibujo queda como estaba");
+}
+
+function dzRigDoblarLimpiar() {
+  const node = dzRigPiezaDestino();
+  if (!node || !DZ.doc) return;
+  const f = dzRigCur();
+  if (!DZ.doc.deleteRigDeformerKey(node.id, f))
+    return dzSetStatus("En F" + f + " no hay ning\u00fan doblez clavado");
+  dzRigApplyLive(f); dzRigOverlayRender(); dzRigPanelSync(); dzMarkDirty();
+  dzSetStatus("F" + f + " ya no dobla a \u00ab" + node.id + "\u00bb");
+}
+
+/* == DEFORMADOR: aplicar la curva al dibujo =================================
+   Doblar no es transformar: hay que REESCRIBIR la geometria, punto por punto.
+   El original se guarda en `data-defbase` y `dzRigStrip` lo devuelve, asi que
+   el doblez nunca se hornea dentro del dibujo guardado — igual que las poses. */
+
+/** El `d` exacto de una forma simple. Se convierte al crear el deformador:
+ *  un rect no se puede doblar, un trazo si. */
+function dzFormaAPath(el) {
+  const n = (a) => +(el.getAttribute(a) || 0);
+  switch (el.tagName.toLowerCase()) {
+    case "path": return el.getAttribute("d") || "";
+    case "line": return `M${n("x1")} ${n("y1")} L${n("x2")} ${n("y2")}`;
+    case "polyline": case "polygon": {
+      const pts = (el.getAttribute("points") || "").trim().split(/[\s,]+/).map(Number);
+      if (pts.length < 4) return "";
+      let d = `M${pts[0]} ${pts[1]}`;
+      for (let i = 2; i < pts.length - 1; i += 2) d += ` L${pts[i]} ${pts[i + 1]}`;
+      return d + (el.tagName.toLowerCase() === "polygon" ? " Z" : "");
+    }
+    case "circle": {
+      const cx = n("cx"), cy = n("cy"), r = n("r");
+      return `M${cx - r} ${cy} A${r} ${r} 0 1 0 ${cx + r} ${cy} A${r} ${r} 0 1 0 ${cx - r} ${cy} Z`;
+    }
+    case "ellipse": {
+      const cx = n("cx"), cy = n("cy"), rx = n("rx"), ry = n("ry");
+      return `M${cx - rx} ${cy} A${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A${rx} ${ry} 0 1 0 ${cx - rx} ${cy} Z`;
+    }
+    case "rect": {
+      const x = n("x"), y = n("y"), w = n("width"), h = n("height");
+      let rx = el.hasAttribute("rx") ? n("rx") : 0, ry = el.hasAttribute("ry") ? n("ry") : rx;
+      rx = Math.min(rx || ry, w / 2); ry = Math.min(ry || rx, h / 2);
+      if (!rx && !ry) return `M${x} ${y} H${x + w} V${y + h} H${x} Z`;
+      return `M${x + rx} ${y} H${x + w - rx} A${rx} ${ry} 0 0 1 ${x + w} ${y + ry}` +
+        ` V${y + h - ry} A${rx} ${ry} 0 0 1 ${x + w - rx} ${y + h}` +
+        ` H${x + rx} A${rx} ${ry} 0 0 1 ${x} ${y + h - ry}` +
+        ` V${y + ry} A${rx} ${ry} 0 0 1 ${x + rx} ${y} Z`;
+    }
+    default: return "";
+  }
+}
+
+/** Reemplaza una forma por un <path> equivalente, conservando todo lo demas.
+ *  Devuelve el path nuevo, o el mismo elemento si ya era path. */
+function dzFormaConvertir(el) {
+  if (el.tagName.toLowerCase() === "path") return el;
+  const d = dzFormaAPath(el);
+  if (!d) return null;
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  for (const a of el.attributes)
+    if (!["x", "y", "width", "height", "rx", "ry", "cx", "cy", "r",
+          "x1", "y1", "x2", "y2", "points"].includes(a.name))
+      path.setAttribute(a.name, a.value);
+  path.setAttribute("d", d);
+  el.replaceWith(path);
+  return path;
+}
+
+/** Los subpaths de un `d`, cada uno con sus puntos ya aplanados. Se muestrea
+ *  con getPointAtLength: lo resuelve el navegador, que sabe leer cualquier
+ *  comando —arcos incluidos— mejor que un parser hecho a mano. */
+function dzPathAPuntos(d, svg) {
+  const tramos = [];
+  const partes = String(d).split(/(?=[Mm])/).filter(s => s.trim());
+  const medidor = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  medidor.style.display = "none";
+  svg.appendChild(medidor);
+  try {
+    for (const parte of partes) {
+      medidor.setAttribute("d", parte);
+      let largo = 0;
+      try { largo = medidor.getTotalLength(); } catch (_) { continue; }
+      if (!(largo > 0)) {
+        const m = parte.match(/-?[\d.]+/g);
+        if (m && m.length >= 2) tramos.push({ pts: [{ x: +m[0], y: +m[1] }], cerrado: false });
+        continue;
+      }
+      // un punto cada ~3 px: por debajo de eso el doblez ya no se ve mejor y
+      // el `d` se vuelve enorme
+      const n = Math.max(2, Math.min(600, Math.ceil(largo / 3)));
+      const pts = [];
+      for (let i = 0; i <= n; i++) {
+        const q = medidor.getPointAtLength(largo * i / n);
+        pts.push({ x: q.x, y: q.y });
+      }
+      const cerrado = /[Zz]\s*$/.test(parte.trim());
+      if (cerrado && pts.length > 1) pts.pop();       // el cierre lo pone la Z
+      tramos.push({ pts, cerrado });
+    }
+  } finally { medidor.remove(); }
+  return tramos;
+}
+
+function dzPuntosAPath(tramos) {
+  const r = (v) => Math.round(v * 100) / 100;
+  return tramos.map(({ pts, cerrado }) => {
+    if (!pts.length) return "";
+    let d = "M" + r(pts[0].x) + " " + r(pts[0].y);
+    for (let i = 1; i < pts.length; i++) d += "L" + r(pts[i].x) + " " + r(pts[i].y);
+    return d + (cerrado ? "Z" : "");
+  }).filter(Boolean).join("");
+}
+
+/** Doblа un elemento (o los dibujables de un grupo) con el mapeador dado. */
+function dzDeformarElemento(el, mapeador, svg) {
+  if (!el || !mapeador) return 0;
+  const hijos = el.tagName.toLowerCase() === "g"
+    ? [...el.querySelectorAll("path,rect,circle,ellipse,line,polyline,polygon")]
+    : [el];
+  let tocados = 0;
+  for (const hijo of hijos) {
+    if (hijo.tagName.toLowerCase() !== "path") continue;   // ya se convirtio al crear
+    if (!hijo.hasAttribute("data-defbase")) hijo.setAttribute("data-defbase", hijo.getAttribute("d") || "");
+    const base = hijo.getAttribute("data-defbase");
+    if (!base) continue;
+    const tramos = dzPathAPuntos(base, svg);
+    for (const tramo of tramos) tramo.pts = tramo.pts.map(q => mapeador.punto(q));
+    hijo.setAttribute("d", dzPuntosAPath(tramos));
+    tocados++;
+  }
+  return tocados;
+}
+
 /* == DIBUJOS DE UNA PIEZA (sustitucion de dibujo) ===========================
    Una mano no rota: se cambia por otra mano. Lo mismo el pie o la boca en la
    sincronia labial. Aca una pieza puede tener varios dibujos y una clave por
@@ -7950,6 +8232,17 @@ function dzRigTutorial() {
       próximo cambio</b>. Un dibujo no se interpola.</p>
       <p><b>Sin cambio acá</b> borra el cambio de este cuadro y deja que siga mandando el
       anterior. <b>Quitar</b> saca el dibujo de la pieza sin borrarlo del dibujo.</p>
+
+      <h3>Doblar una pieza</h3>
+      <p>Una pieza rígida sólo <b>rota</b>: sirve para un brazo, no para el pelo, una cola o
+      una manga. Con <b>Dar curva</b>, la pieza pasa a doblarse.</p>
+      <p>Aparecen tres puntos verdes sobre el dibujo. Arrastralos y la pieza se dobla siguiendo
+      esa curva; el doblez queda clavado en el cuadro donde estás, así que se anima como
+      cualquier otra cosa. <b>Sin doblez acá</b> borra el de este cuadro; <b>Quitar curva</b>
+      devuelve la pieza a rígida y el dibujo a su forma.</p>
+      <p class="rigdoc-tip">Para poder doblarse, la pieza pasa de forma a <b>trazo</b> — un
+      rectángulo no se dobla. El programa lo hace solo al dar la curva y te lo avisa. El grosor
+      del dibujo se mantiene: lo que cambia es por dónde pasa.</p>
 
       <h3>Qué es cada cosa en la mesa</h3>
       <ul class="rigdoc-simb">

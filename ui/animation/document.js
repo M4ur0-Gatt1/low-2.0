@@ -1001,6 +1001,53 @@
       });
     }
 
+    /** Le pone a una pieza una curva de control para doblarse. `rest` es la
+     *  curva en reposo: mientras la pose sea igual, el dibujo no cambia. */
+    createRigDeformer(boneId, rest) {
+      if (!boneId || !this.scene.rigNode(boneId)) return false;
+      const pts = (rest || []).map((q) => ({ x: +q.x || 0, y: +q.y || 0 }));
+      if (pts.length < 2) return false;
+      return this._rigChange("Crear deformador de curva", (rig) => {
+        rig.deformers = rig.deformers || {};
+        if (rig.deformers[boneId]) return false;
+        rig.deformers[boneId] = { id: `deformer:${boneId}`, boneId, type: "curve",
+          enabled: true, rest: pts, keys: {} };
+        const bone = rig.bones[boneId];
+        if (bone && bone.binding) bone.binding.mode = "curve";
+        return true;
+      });
+    }
+
+    removeRigDeformer(boneId) {
+      return this._rigChange("Quitar el deformador", (rig) => {
+        if (!rig.deformers || !rig.deformers[boneId]) return false;
+        delete rig.deformers[boneId];
+        const bone = rig.bones[boneId];
+        if (bone && bone.binding) bone.binding.mode = "rigid";
+        return true;
+      });
+    }
+
+    /** Clava la forma de la curva en un cuadro. */
+    setRigDeformerKey(boneId, frame, pts) {
+      return this._rigChange("Doblar la pieza", (rig) => {
+        const d = rig.deformers && rig.deformers[boneId];
+        if (!d) return false;
+        const curva = (pts || []).map((q) => ({ x: +q.x || 0, y: +q.y || 0 }));
+        if (curva.length !== d.rest.length) return false;
+        d.keys[Math.max(1, Math.round(frame))] = curva;
+        return true;
+      });
+    }
+
+    deleteRigDeformerKey(boneId, frame) {
+      return this._rigChange("Borrar el doblez de este cuadro", (rig) => {
+        const d = rig.deformers && rig.deformers[boneId], f = Math.max(1, Math.round(frame));
+        if (!d || !d.keys[f]) return false;
+        delete d.keys[f]; return true;
+      });
+    }
+
     setRigActiveAttachment(slotId, attachmentId) {
       return this._rigChange("Cambiar sustitución del rig", (rig) => {
         const slot = rig.slots[slotId], attachment = rig.attachments[attachmentId];

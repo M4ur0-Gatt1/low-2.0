@@ -132,6 +132,20 @@ ahi hasta el proximo cambio**. Un dibujo no se interpola.
 anterior. **Quitar** saca el dibujo de la pieza sin borrarlo del dibujo: si era
 el que la pieza estaba usando, la pieza pasa a usar el que queda.
 
+### Doblar una pieza
+
+Una pieza rigida solo **rota**: sirve para un brazo, no para el pelo, una cola o
+una manga. Con **Dar curva** la pieza pasa a doblarse.
+
+Aparecen tres puntos verdes sobre el dibujo. Arrastralos y la pieza se dobla
+siguiendo esa curva; el doblez queda clavado en el cuadro donde estas, asi que
+se anima como cualquier otra cosa. **Sin doblez aca** borra el de ese cuadro;
+**Quitar curva** devuelve la pieza a rigida y el dibujo a su forma.
+
+Para poder doblarse la pieza pasa de forma a **trazo** —un rectangulo no se
+dobla—. El programa lo hace solo al dar la curva y lo avisa. El grosor del dibujo
+se mantiene: lo que cambia es por donde pasa.
+
 ### El personaje de ejemplo
 
 **Ayuda -> Abrir el personaje de ejemplo** (o el boton al principio del tutorial
@@ -297,6 +311,22 @@ Lo que habia que cuidar: el rig **nunca** puede hornear su vista dentro del
 dibujo guardado. Las variantes escondidas se marcan con `data-rig-var` y
 `dzRigStrip` las devuelve como estaban; `dzCanvasInner` pasa por ahi antes de
 guardar, asi que el dibujo se guarda con todas sus versiones visibles.
+
+### Nuevo en la v3.29.52: deformadores de curva
+
+`binding.mode` ya aceptaba `curve`, `envelope`, `warp` y `weightedMesh`, pero el
+unico modo implementado era `rigid`: nada se doblaba. Ahora una pieza puede
+llevar una curva de control de tres puntos, animable por cuadro.
+
+Como funciona: cada punto del dibujo se guarda en coordenadas curvilineas
+respecto de la curva EN REPOSO —cuanto avanza a lo largo y cuanto se separa en
+perpendicular— y se lo vuelve a colocar sobre la curva POSADA con las mismas
+coordenadas. Si las dos curvas son iguales el dibujo no se mueve, que es por que
+dar una curva no cambia nada hasta que se la toca.
+
+Doblar no es transformar: hay que **reescribir la geometria**. El `d` original se
+guarda en `data-defbase` y `dzRigStrip` lo devuelve antes de serializar, asi que
+el doblez tampoco se hornea en el dibujo guardado.
 
 ### Siguen abiertos
 
