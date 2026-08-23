@@ -2655,15 +2655,31 @@ function dzPanMaybe(e, force) {
   e.preventDefault(); e.stopPropagation();
   const x0 = e.clientX - (DZ.panX || 0), y0 = e.clientY - (DZ.panY || 0);
   const cv = $("#dzCanvas");
+  const pid = e.pointerId != null ? e.pointerId : 1;
   cv.style.cursor = "grabbing";
-  const move = (ev) => { DZ.panX = ev.clientX - x0; DZ.panY = ev.clientY - y0; dzApplyZoom(); };
-  const up = () => {
-    document.removeEventListener("mousemove", move);
-    document.removeEventListener("mouseup", up);
+  // El arrastre se sigue con eventos de PUNTERO, no de mouse. Aca se entra por
+  // un pointerdown y se hace preventDefault, y eso suprime los eventos de mouse
+  // compatibles: con lapiz de tableta el `mouseup` no llegaba NUNCA, el listener
+  // quedaba vivo y el lienzo se quedaba pegado al cursor para siempre.
+  const move = (ev) => {
+    if (ev.pointerId != null && ev.pointerId !== pid) return;
+    DZ.panX = ev.clientX - x0; DZ.panY = ev.clientY - y0; dzApplyZoom();
+  };
+  const soltar = (ev) => {
+    if (ev && ev.pointerId != null && ev.pointerId !== pid) return;
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", soltar);
+    document.removeEventListener("pointercancel", soltar);
+    window.removeEventListener("blur", soltar);
+    try { cv.releasePointerCapture(pid); } catch (_) { /* ya estaba libre */ }
     cv.style.cursor = DZ.spaceDown ? "grab" : ((DZ.tool || "select") in DZ_CURSORS ? DZ_CURSORS[DZ.tool || "select"] : "crosshair");
   };
-  document.addEventListener("mousemove", move);
-  document.addEventListener("mouseup", up);
+  // con captura, soltar fuera del lienzo tambien termina el paneo
+  try { cv.setPointerCapture(pid); } catch (_) { /* WebView sin captura */ }
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", soltar);
+  document.addEventListener("pointercancel", soltar);
+  window.addEventListener("blur", soltar);   // alt-tab a mitad del arrastre
   return true;
 }
 function dzZoom(delta) { DZ.zoom = Math.min(4, Math.max(0.2, Math.round((DZ.zoom + delta) * 100) / 100)); dzApplyZoom(); }
