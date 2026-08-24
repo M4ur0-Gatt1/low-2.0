@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { Joystick3D, type JoyMode } from './joystick3d';
+import { NavCubo3D, type NavVista } from './navcubo3d';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
@@ -257,6 +258,7 @@ export class WebGLDesign3D {
    *  usa, y nunca estan los dos a la vez porque se pisarian los blancos. */
   private joy?: Joystick3D;
   private joyOn = false;
+  navCubo?: NavCubo3D;
   /** El objeto se envuelve en un proxy centrado SOLO mientras dura el gesto.
    *  Rotar o escalar el grupo crudo lo haria alrededor del origen del mundo
    *  (los puntos del trazo son mundiales y el grupo esta en 0,0,0), y dejarlo
@@ -437,6 +439,21 @@ export class WebGLDesign3D {
     this.joy = new Joystick3D();
     this.scene.add(this.joy.root);
 
+    // NAVEGADOR DE CÁMARA: el círculo con el cubo. Orbitar arrastrando encima
+    // del dibujo compite con dibujar; acá la vista se gira en un rincón, sin
+    // ambigüedad sobre qué hace cada arrastre.
+    this.navCubo = new NavCubo3D({
+      onOrbitar: (dx, dy) => this.orbitarVista(dx, dy),
+      onVista: (v: NavVista) => this.setView(v),
+      onPerspectiva: () => this.setView('persp'),
+    });
+    Object.assign(this.navCubo.canvas.style, {
+      position: 'absolute', right: '16px', bottom: '16px', zIndex: '6',
+    } as CSSStyleDeclaration);
+    this.navCubo.canvas.title =
+      'Navegador: arrastrá para girar la vista · tocá una cara para ir a ella · al centro, perspectiva';
+    container.appendChild(this.navCubo.canvas);
+
     // overlay SVG para los puntos de fuga (guía pura, no se dibuja ni exporta)
     this.vpEl = document.createElementNS(NS, 'svg') as SVGSVGElement;
     Object.assign(this.vpEl.style, {
@@ -528,9 +545,38 @@ export class WebGLDesign3D {
     this.lassoEl?.remove();
     this.vpEl?.remove();
     this.gizmo?.dispose();
+    this.navCubo?.dispose();
     this.controls?.dispose();
     this.scene?.traverse((o) => this.disposeNode(o));
     this.renderer?.dispose();
+  }
+
+  /** Pone el cubo del navegador en la orientación de la cámara y lo dibuja.
+   *  Se llama desde el bucle y también en cada cambio de vista: con la ventana
+   *  en segundo plano requestAnimationFrame se pausa, y el widget no puede
+   *  quedar mostrando desde dónde mirabas hace un rato. */
+  private refrescarNavCubo(): void {
+    if (!this.navCubo) return;
+    this.navCubo.sync(this.camera as THREE.Camera, this.controls.target);
+    this.navCubo.render();
+  }
+
+  /** Gira la cámara alrededor del punto que mira, como el arrastre derecho de
+   *  siempre. Se hace en esféricas para no acumular deriva ni pasar el polo. */
+  private orbitarVista(dx: number, dy: number): void {
+    const cam = this.camera as THREE.Camera & { position: THREE.Vector3 };
+    const t = this.controls.target;
+    const off = new THREE.Vector3().subVectors(cam.position, t);
+    const esf = new THREE.Spherical().setFromVector3(off);
+    esf.theta -= dx;
+    // el polo da vuelta la escena y desorienta: se frena justo antes
+    esf.phi = Math.max(0.02, Math.min(Math.PI - 0.02, esf.phi + dy));
+    cam.position.copy(t).add(new THREE.Vector3().setFromSpherical(esf));
+    cam.lookAt(t);
+    // girar a mano deja de ser una vista con nombre: pasa a perspectiva libre
+    if (this.view !== 'persp') this.view = 'persp';
+    this.controls.update();
+    this.refrescarNavCubo();
   }
 
   private makeControls(): void {
@@ -697,6 +743,7 @@ export class WebGLDesign3D {
     this.camera.updateMatrixWorld(true);
     this.applyOrthoFrustum();
     if (this.gizmo) this.gizmo.camera = this.camera as THREE.Camera;
+    this.refrescarNavCubo();   // el cubo tiene que reflejar la vista al instante
     this.lastOnionSig = ''; // fuerza recalcular el onion-skin en la nueva vista
     // OJO: acá NO se reorienta el plano activo. Un plano de dibujo es una PARED
     // FIJA en el espacio: se crea encarando la vista en la que nació y se queda
@@ -4999,6 +5046,9 @@ export class WebGLDesign3D {
     this.controls.update();
     this.joyRefresh();
     this.renderer.render(this.scene, this.camera as THREE.Camera);
+    // el cubo copia la orientación de la cámara y se dibuja aparte: su canvas
+    // no entra en el picking del dibujo ni en el export
+    this.refrescarNavCubo();
     if (this.showAxes) this.updateVPOverlay();
     // onion-skin por profundidad (depende de la cámara): solo si la vista es
     // ortogonal Y la cámara/target/cantidad de trazos cambió desde el frame
