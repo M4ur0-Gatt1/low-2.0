@@ -6082,9 +6082,14 @@ function dzSvgToPng(svgText, maxPx) {
   });
 }
 function dzExportModal() {
-  if (!DZ.anim || !DZ.anim.frames.length) return;
+  // El modelo nuevo no llena DZ.anim.frames: preguntarle a la escena.
+  const cuadros = DZ.doc ? dzExportCuadros() : null;
+  const cuantos = cuadros ? cuadros.length : (DZ.anim ? DZ.anim.frames.length : 0);
+  if (!cuantos) return dzSetStatus("No hay cuadros para exportar");
+  const tramo = cuadros && cuadros.length
+    ? ` (F${cuadros[0]} a F${cuadros.at(-1)})` : "";
   openModal(`<h2> Exportar animación</h2>
-    <div class="sub">${DZ.anim.frames.length} cuadros a ${$("#tlFps").value || 12} fps  carpeta export/ del proyecto.</div>
+    <div class="sub">${cuantos} cuadros${tramo} a ${$("#tlFps").value || 12} fps  carpeta export/ del proyecto.</div>
     <div class="m-actions" style="flex-wrap:wrap">
       <button class="primary" data-x="mp4">Video MP4</button>
       <button class="ghost" data-x="gif">GIF animado</button>
@@ -6097,6 +6102,9 @@ function dzExportModal() {
 }
 async function dzDoExport(kind) {
   await dzPersist();
+  // Escena del modelo nuevo: los cuadros salen de la escena, no de una lista
+  // de archivos en disco que ya no se llena.
+  if (DZ.doc) return dzDoExportDoc(kind);
   const [lo, hi] = dzPlayRange();                // exporta solo el rango In/Out
   const frames = DZ.anim.frames.slice(lo, hi + 1);
   dzSetStatus(" Rasterizando " + frames.length + " cuadros…");
@@ -7757,6 +7765,92 @@ function dzRigDoblarLimpiar() {
     return dzSetStatus("En F" + f + " no hay ning\u00fan doblez clavado");
   dzRigApplyLive(f); dzRigOverlayRender(); dzRigPanelSync(); dzMarkDirty();
   dzSetStatus("F" + f + " ya no dobla a \u00ab" + node.id + "\u00bb");
+}
+
+/* == EXPORTAR DESDE EL MODELO NUEVO =========================================
+   El export recorria `DZ.anim.frames`, la lista de archivos del modelo viejo.
+   En una escena de LowDoc esa lista esta vacia, asi que el dialogo de exportar
+   ni siquiera abria. Aca se arma cada cuadro desde la escena. */
+
+/** El SVG completo de un cuadro: todas las capas compuestas, con la resolucion
+ *  de la escena y la hoja de la paleta —sin ella los colores por paleta salen
+ *  en negro—. Devuelve "" si el cuadro esta vacio. */
+function dzCuadroSvgTexto(frame) {
+  const sc = DZ.doc && DZ.doc.scene;
+  if (!sc) return "";
+  const partes = [];
+  for (const ly of sc.layers) {
+    if (ly.visible === false) continue;
+    const dw = sc.drawingAt(ly.id, frame);
+    if (dw && dw.content) partes.push(dw.content);
+  }
+  if (!partes.length) return "";
+  const w = sc.width || 1920, h = sc.height || 1080;
+  // la hoja de la paleta viaja adentro: el PNG se rasteriza aparte del documento
+  const viva = $("#dzCanvas")?.querySelector(":scope > svg > style.dz-palcss");
+  const estilos = viva ? viva.outerHTML : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" ` +
+         `viewBox="0 0 ${w} ${h}">${estilos}${partes.join("")}</svg>`;
+}
+
+/** Los cuadros que entran en el export: el tramo activo de la escena. */
+function dzExportCuadros() {
+  const sc = DZ.doc && DZ.doc.scene;
+  if (!sc) return [];
+  const r = sc.playRange();
+  const salida = [];
+  for (let f = r.in; f <= r.out; f++) salida.push(f);
+  return salida;
+}
+
+async function dzDoExportDoc(kind) {
+  dzDocCommit();
+  const cuadros = dzExportCuadros();
+  if (!cuadros.length) return dzSetStatus("No hay cuadros para exportar");
+  const throughCam = dzHasCam();
+  const pngs = [];
+  for (let i = 0; i < cuadros.length; i++) {
+    const f = cuadros[i];
+    let txt = dzCuadroSvgTexto(f);
+    if (!txt) continue;                       // cuadro vacio: se saltea
+    txt = dzRigView(txt, f);                  // las poses del rig, aplicadas
+    if (throughCam) txt = dzCamView(txt, dzCamAt(f));
+    const du = await dzSvgToPng(txt, kind === "sheet" ? 512 : 1080);
+    if (du) pngs.push(du);
+    dzSetStatus("Rasterizando" + (throughCam ? " por c\u00e1mara" : "") +
+      "\u2026 " + (i + 1) + "/" + cuadros.length);
+  }
+  if (!pngs.length) return dzSetStatus("No pude rasterizar ning\u00fan cuadro");
+  const fps = Math.max(1, Math.min(60, +$("#tlFps").value || DZ.doc.scene.fps || 12));
+  if (kind === "sheet") return dzExportSpritesheet(pngs, fps);
+  dzSetStatus({ mp4: "Codificando MP4 con ffmpeg\u2026", webm: "Codificando WebM\u2026",
+                gif: "Armando el GIF\u2026" }[kind] || "Guardando la secuencia\u2026");
+  const r = await api.export_anim(DZ.path, pngs, fps, kind);
+  const detalle = { mp4: " (MP4 a " + fps + " fps)", webm: " (WebM a " + fps + " fps)",
+                    gif: " (GIF a " + fps + " fps)" }[kind] || " (" + pngs.length + " PNGs)";
+  dzSetStatus(r && r.error ? r.error
+    : "Exportado " + ((r && r.path) || "export/") + detalle + " \u00b7 " +
+      pngs.length + " cuadros (F" + cuadros[0] + " a F" + cuadros.at(-1) + ")");
+  try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
+}
+
+/** La grilla del spritesheet, compartida por los dos caminos. */
+async function dzExportSpritesheet(pngs, fps) {
+  const imgs = await Promise.all(pngs.map(du => new Promise(res => {
+    const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = du;
+  })));
+  const ok = imgs.filter(Boolean);
+  if (!ok.length) return dzSetStatus("No pude armar el spritesheet");
+  const cols = Math.ceil(Math.sqrt(ok.length)), rows = Math.ceil(ok.length / cols);
+  const fw = ok[0].naturalWidth, fh = ok[0].naturalHeight;
+  const c = document.createElement("canvas"); c.width = cols * fw; c.height = rows * fh;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, c.width, c.height);
+  ok.forEach((im, i) => ctx.drawImage(im, (i % cols) * fw, Math.floor(i / cols) * fh, fw, fh));
+  const r = await api.export_anim(DZ.path, [c.toDataURL("image/png")], fps, "sheet");
+  dzSetStatus(r && r.error ? r.error
+    : "Spritesheet exportado (" + cols + "\u00d7" + rows + ") \u00b7 " + ((r && r.path) || "export/"));
+  try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
 }
 
 /* == PRINCIPIOS DE ANIMACION AUTOMATIZABLES =================================
