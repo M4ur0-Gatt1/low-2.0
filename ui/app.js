@@ -898,6 +898,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigIkFlip").onclick = dzRigFlipIK;
   $("#rigConstraint").onchange = e => { DZ.rigConstraintId = e.target.value || null; dzRigPanelSync(); dzRigOverlayRender(); };
   document.querySelectorAll(".rig2-ease button").forEach(b => b.onclick = () => dzRigEasePreset(b.dataset.ease));
+  $("#dzAnchoFijo").onclick = dzAnchoFijoToggle;
   $("#rigArco").onclick = dzRigArcoToggle;
   $("#rigVolumen").onclick = dzPrincipioVolumen;
   $("#rigDesfasar").onclick = () => dzPrincipioDesfase(+$("#rigDesfase").value || 2);
@@ -4264,6 +4265,11 @@ function dzRefineStroke(pts) {
    Puntas redondeadas + taper progresivo en los extremos. */
 function dzBrushRibbon(pts, baseW, color) {
   if (pts.length < 2) return null;
+  // ANCHO FIJO: el trazo sale del mismo grosor de punta a punta, sin escuchar
+  // la presion ni adelgazar en los extremos. Es lo que hace falta para
+  // entintar parejo —contornos, tipografia, tecnico— donde un trazo que
+  // engorda y adelgaza segun como apoyaste el lapiz arruina el dibujo.
+  const fijo = !!DZ.anchoFijo;
   const L = [], R = [];
   for (let i = 0; i < pts.length; i++) {
     const p0 = pts[Math.max(0, i - 1)], p1 = pts[Math.min(pts.length - 1, i + 1)];
@@ -4274,7 +4280,8 @@ function dzBrushRibbon(pts, baseW, color) {
     const tIn = Math.min(1, i / 5);
     const tOut = Math.min(1, (pts.length - 1 - i) / 5);
     const tip = tIn * tOut;
-    const w = Math.max(0.2, baseW * (pts[i][2] || 0.5) * tip);
+    const w = fijo ? baseW * 0.5
+      : Math.max(0.2, baseW * (pts[i][2] || 0.5) * tip);
     L.push([pts[i][0] - ty * w, pts[i][1] + tx * w]);
     R.push([pts[i][0] + ty * w, pts[i][1] - tx * w]);
   }
@@ -4285,8 +4292,16 @@ function dzBrushRibbon(pts, baseW, color) {
   const el = document.createElementNS(SVGNS, "path");
   el.setAttribute("d", d);
   el.setAttribute("fill", color);
-  el.setAttribute("stroke", "none");
+  // con grosor parejo las puntas se rematan redondas: sin el taper, un corte
+  // recto deja el trazo con los extremos cuadrados y se nota el empalme
+  if (fijo) {
+    el.setAttribute("stroke", color);
+    el.setAttribute("stroke-width", Math.max(0.2, baseW * 0.5) * 2);
+    el.setAttribute("stroke-linejoin", "round");
+    el.setAttribute("stroke-linecap", "round");
+  } else el.setAttribute("stroke", "none");
   el.setAttribute("data-low", "brush");
+  if (fijo) el.setAttribute("data-ancho", "fijo");
   return el;
 }
 
@@ -7955,6 +7970,16 @@ function dzPrincipioVolumen() {
     : "Volumen libre: cada eje se escala por su cuenta");
 }
 
+/** Pincel de ancho fijo: el trazo sale parejo de punta a punta. */
+function dzAnchoFijoToggle() {
+  DZ.anchoFijo = !DZ.anchoFijo;
+  $("#dzAnchoFijo")?.classList.toggle("on", DZ.anchoFijo);
+  try { localStorage.setItem("low.anchoFijo", DZ.anchoFijo ? "1" : "0"); } catch (_) { /* sin storage */ }
+  dzSetStatus(DZ.anchoFijo
+    ? "Pincel de ancho fijo: el trazo sale parejo, sin seguir la presi\u00f3n"
+    : "Pincel sensible a la presi\u00f3n: el trazo engorda y adelgaza con el l\u00e1piz");
+}
+
 /* == ARCOS: la trayectoria de una pieza ====================================
    El septimo principio. Los movimientos vivos describen curvas, no rectas, y
    la unica forma de corregir un arco es verlo: se dibuja por donde pasa el
@@ -10341,7 +10366,9 @@ window.lowAnimationPanelCommand = async ({ action, payload }) => {
   else if (action === "toggle-onion-fixed") {
     const frame = Math.max(1, Math.round(+(payload && payload.frame) || 1));
     dzOnionCfgSet(LOW.animation.onion.toggleFixed(dzOnionCfgActual(), frame));
-    DZ.onionOn = true; if (DZ.anim) DZ.anim.onion = true;
+    DZ.onionOn = true;
+  try { DZ.anchoFijo = localStorage.getItem("low.anchoFijo") === "1"; } catch (_) { /* sin storage */ }
+  $("#dzAnchoFijo")?.classList.toggle("on", !!DZ.anchoFijo); if (DZ.anim) DZ.anim.onion = true;
   }
   else if (action === "undo") dzUndo();
   else if (action === "redo") dzRedo();
