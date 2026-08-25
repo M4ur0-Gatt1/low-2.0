@@ -3372,9 +3372,17 @@ function dzGroupSel(unwrap) {
   const inDom = [...svg.children].filter(n => pack.includes(n));
   svg.insertBefore(g, inDom[inDom.length - 1].nextSibling);
   inDom.forEach(n => { n.classList.remove("dz-msel"); g.appendChild(n); });
+  // Una carpeta con nombre: un <g> anonimo en la lista es una fila muda que no
+  // se puede buscar ni nombrar, y el panel se vuelve ilegible en cuanto hay
+  // dos. Se numera segun cuantas carpetas haya ya, y el doble clic la renombra.
+  if (!g.id) {
+    const yaHay = svg.querySelectorAll('g[id^="grupo_"]').length;
+    g.id = "grupo_" + (yaHay + 1);
+  }
   DZ.multi = [];
   dzSelect(g); dzMarkDirty(); dzBuildLayers();
-  dzSetStatus(" Grupo de " + inDom.length + " elementos (Ctrl+Shift+G desagrupa)");
+  dzSetStatus("Carpeta \u00ab" + g.id + "\u00bb con " + inDom.length +
+    " elementos \u00b7 el tri\u00e1ngulo la pliega \u00b7 Ctrl+Shift+G desagrupa");
 }
 
 /* ══ importar imagen como referencia/calco (nivel de imagen de OpenToonz) ══ */
@@ -11921,23 +11929,33 @@ function dzBuildLayers() {
     '<span class="dz-lh-op" title="Opacidad %">OP</span>' +
     '<span class="dz-lh-z" title="Profundidad Z (superposición/multiplano)">Z</span></div>';
   // en DOM el último dibuja arriba  mostramos al frente primero (como Illustrator)
-  [...kids].reverse().forEach(el => {
-    box.appendChild(dzLayerRow(el, 0));
-    // jerarquía: un grupo muestra sus hijos directos indentados (rig/superposición)
-    if (el.tagName.toLowerCase() === "g" && !el.hasAttribute("data-collapsed")) {
+  // La jerarquía baja hasta el fondo: antes se mostraba UN solo nivel, asi que
+  // un grupo dentro de un grupo desaparecia de la lista y no habia forma de
+  // llegar a lo que tenia adentro.
+  const MAX_HONDO = 8;   // tope de cortesia: una anidacion mas honda no se lee
+  const bajar = (nodos, nivel) => {
+    [...nodos].reverse().forEach(el => {
+      box.appendChild(dzLayerRow(el, nivel));
+      if (el.tagName.toLowerCase() !== "g") return;
+      if (el.hasAttribute("data-collapsed")) return;     // plegado: no se abre
+      if (nivel >= MAX_HONDO) return;
       const sub = [...el.children].filter(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase()));
-      [...sub].reverse().forEach(ch => box.appendChild(dzLayerRow(ch, 1)));
-    }
-  });
+      if (sub.length) bajar(sub, nivel + 1);
+    });
+  };
+  bajar(kids, 0);
   dzZPanelRender();   // el diorama refleja los cambios de capas al instante
 }
 
 function dzLayerRow(el, depth) {
-  const isGroup = el.tagName.toLowerCase() === "g" && depth === 0
+  // Un grupo es carpeta a CUALQUIER profundidad: antes solo contaba en el
+  // primer nivel, y los grupos anidados no tenian con que plegarse.
+  const isGroup = el.tagName.toLowerCase() === "g"
     && [...el.children].some(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase()));
   const row = document.createElement("div");
   row.className = "dz-lay-row" + (el === DZ.sel ? " sel" : "") + (depth ? " child" : "");
-  if (!depth) row.draggable = true;
+  row.dataset.nivel = String(depth);   // la sangria dice de quien cuelga
+  row.draggable = true;   // reordenar y emparentar valen a cualquier profundidad
   //  visibilidad
   const hidden = el.getAttribute("display") === "none";
   const eye = document.createElement("span");
@@ -11960,11 +11978,16 @@ function dzLayerRow(el, depth) {
   // ▦ color / disclosure de grupo
   const chip = document.createElement("span");
   if (isGroup) {
-    chip.className = "dz-lay-disc";
-    chip.textContent = el.hasAttribute("data-collapsed") ? "" : "";
-    chip.title = "Plegar / desplegar el grupo";
+    const plegado = el.hasAttribute("data-collapsed");
+    chip.className = "dz-lay-disc" + (plegado ? " plegado" : "");
+    // el triangulo estaba VACIO: la carpeta se podia plegar pero no habia nada
+    // que tocar, asi que en la practica no se podian esconder los subelementos
+    chip.textContent = plegado ? "\u25b8" : "\u25be";
+    const cuantos = [...el.children].filter(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase())).length;
+    chip.title = (plegado ? "Desplegar" : "Plegar") + " la carpeta (" + cuantos +
+      (cuantos === 1 ? " elemento)" : " elementos)");
     chip.onclick = (e) => { e.stopPropagation();
-      if (el.hasAttribute("data-collapsed")) el.removeAttribute("data-collapsed");
+      if (plegado) el.removeAttribute("data-collapsed");
       else el.setAttribute("data-collapsed", "1");
       dzBuildLayers(); };
   } else {
