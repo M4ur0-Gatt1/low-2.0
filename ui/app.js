@@ -850,6 +850,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     e.preventDefault(); dzRigRegisterSelected();
   });
   $("#rigAuto").onclick = dzRigPrepareDrawing;
+  $("#rigRepartir").onclick = dzRigRepartirDibujo;
   $("#rigAdd").onclick = dzRigRegisterSelected;
   $("#rigRemove").onclick = dzRigRemoveSelected;
   $("#rigPivotTool").onclick = () => {
@@ -7970,6 +7971,111 @@ function dzPrincipioVolumen() {
     : "Volumen libre: cada eje se escala por su cuenta");
 }
 
+/* == RIG DIBUJANDO EL ALAMBRE ==============================================
+   El camino corto para armar un muñeco: dibujás el monigote de alambre encima
+   del personaje —hueso por hueso, como quien traza un esqueleto— y después el
+   programa reparte el dibujo entre esos huesos.
+
+   Antes había que ir pieza por pieza: elegirla, ponerle el pivote, decirle de
+   quién cuelga y vincularla. Con veinte piezas eso son ochenta pasos, y por eso
+   armar un personaje no se podía. Acá el alambre YA dice todo eso: dónde están
+   las articulaciones, de quién cuelga cada parte y qué pedazo del dibujo le
+   toca a cada hueso. */
+
+/** Distancia de un punto al segmento de un hueso. */
+function dzDistanciaASegmento(px, py, ax, ay, bx, by) {
+  const vx = bx - ax, vy = by - ay;
+  const largo2 = vx * vx + vy * vy;
+  if (largo2 < 1e-9) return Math.hypot(px - ax, py - ay);
+  let u = ((px - ax) * vx + (py - ay) * vy) / largo2;
+  u = Math.max(0, Math.min(1, u));
+  return Math.hypot(px - (ax + vx * u), py - (ay + vy * u));
+}
+
+/** Los puntos con los que se mide una pieza: el centro y las esquinas de su
+ *  caja. Con el centro solo, una pieza larga y torcida —un brazo en diagonal—
+ *  puede quedar más cerca del hueso equivocado. */
+function dzPuntosDeMuestra(el) {
+  let b = null;
+  try { b = el.getBBox(); } catch (_) { return []; }
+  if (!b || (!b.width && !b.height)) return [];
+  const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+  return [
+    { x: cx, y: cy },
+    { x: b.x + b.width * 0.25, y: b.y + b.height * 0.25 },
+    { x: b.x + b.width * 0.75, y: b.y + b.height * 0.25 },
+    { x: b.x + b.width * 0.25, y: b.y + b.height * 0.75 },
+    { x: b.x + b.width * 0.75, y: b.y + b.height * 0.75 },
+  ];
+}
+
+/** Reparte el dibujo entre los huesos ya dibujados: cada pieza va al hueso que
+ *  le pasa más cerca. Es la operación que convierte un alambre en un rig. */
+function dzRigRepartirDibujo() {
+  if (!DZ.doc) return dzSetStatus("Abr\u00ed una animaci\u00f3n primero");
+  const sc = DZ.doc.scene;
+  const huesos = Object.values(sc.rig.nodes).filter(n => n.head && n.tail);
+  if (!huesos.length) return dzSetStatus(
+    "Primero dibuj\u00e1 el alambre: Construir \u2192 Crear hueso, y arrastr\u00e1 desde cada articulaci\u00f3n");
+
+  // Se lee la mesa, pero la mesa puede estar a medio repintar —crear huesos
+  // dispara un repintado— y entonces la busqueda no encontraria nada y el
+  // reparto fallaria en silencio. Si el dibujo tiene contenido y la mesa no,
+  // se la pone al dia antes de mirar.
+  const svg = $("#dzCanvas")?.querySelector(":scope > svg");
+  const delDibujo = DZ.doc.drawing?.content || "";
+  if (svg && !svg.children.length && delDibujo) dzCanvasSet(delDibujo);
+
+  const piezas = dzRigDrawableElements();
+  if (!piezas.length) return dzSetStatus(delDibujo
+    ? "El dibujo tiene contenido pero la mesa está vacía · cambiá de cuadro y volvé"
+    : "No encuentro piezas de dibujo en la mesa");
+
+  // qué elementos ya están tomados por algún hueso: no se les toca el vínculo
+  const tomados = new Set(Object.values(sc.rig.nodes).map(n => n.elementId).filter(Boolean));
+  // el largo del alambre da la escala: una pieza más lejos que eso no es del
+  // muñeco (un fondo, una nota al margen) y se deja afuera
+  const largoTotal = huesos.reduce((s, n) =>
+    s + Math.hypot(n.tail.x - n.head.x, n.tail.y - n.head.y), 0);
+  const alcance = Math.max(40, (largoTotal / huesos.length) * 1.6);
+
+  let asignadas = 0, lejos = 0;
+  const reparto = [];
+  for (const el of piezas) {
+    if (!el.id) el.id = dzUniqueId("pieza_");
+    if (tomados.has(el.id)) continue;
+    const muestras = dzPuntosDeMuestra(el);
+    if (!muestras.length) continue;
+    let mejor = null, mejorD = Infinity;
+    for (const n of huesos) {
+      // se suma la distancia de todas las muestras: gana el hueso que le pasa
+      // más cerca en conjunto, no el que roza una esquina
+      let suma = 0;
+      for (const m of muestras)
+        suma += dzDistanciaASegmento(m.x, m.y, n.head.x, n.head.y, n.tail.x, n.tail.y);
+      const d = suma / muestras.length;
+      if (d < mejorD) { mejorD = d; mejor = n; }
+    }
+    if (!mejor) continue;
+    if (mejorD > alcance) { lejos++; continue; }
+    if (DZ.doc.bindRigElement(mejor.id, el.id)) {
+      tomados.add(el.id);
+      asignadas++;
+      reparto.push(el.id + " \u2192 " + mejor.id);
+    }
+  }
+
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
+  if (!asignadas) return dzSetStatus(lejos
+    ? "Ninguna pieza cay\u00f3 cerca del alambre \u00b7 dibujalo ENCIMA del personaje"
+    : "Todas las piezas ya ten\u00edan hueso");
+  dzSetStatus(asignadas + (asignadas === 1 ? " pieza repartida" : " piezas repartidas") +
+    " entre " + huesos.length + " huesos" +
+    (lejos ? " \u00b7 " + lejos + " quedaron lejos del alambre y sin asignar" : "") +
+    " \u00b7 pas\u00e1 a Animar y pos\u00e1");
+  return reparto;
+}
+
 /** Pincel de ancho fijo: el trazo sale parejo de punta a punta. */
 function dzAnchoFijoToggle() {
   DZ.anchoFijo = !DZ.anchoFijo;
@@ -8722,6 +8828,19 @@ function dzRigTutorial() {
       <p>Dentro de <b>Animar</b> elegís <b>cómo</b> posar: <b>Directa</b> rota cada pieza por su
       pivote y los hijos siguen; <b>Inversa</b> te deja arrastrar la punta y acomoda la cadena
       sola. El renglón bajo los botones siempre dice qué gesto hace qué.</p>
+
+      <h3>El camino corto: dibujar el alambre</h3>
+      <p>Armar el muñeco pieza por pieza —elegirla, ponerle el pivote, decir de quién cuelga,
+      vincularla— son cuatro pasos por parte. Con veinte partes, ochenta pasos. Hay un camino
+      más corto:</p>
+      <ol>
+        ${paso("1", "En <b>Construir</b>, tocá <b>Crear hueso</b> y dibujá el monigote de alambre <b>encima</b> del personaje: arrastrá desde cada articulación hasta la siguiente. Empezá por el torso; si arrancás desde la punta del hueso anterior, la cadena se encadena sola.")}
+        ${paso("2", "Tocá <b>Repartir el dibujo en el alambre</b>. Cada parte del dibujo se va con el hueso que le pasa más cerca.")}
+        ${paso("3", "Pasá a <b>Animar</b>. Ya está: el alambre tenía adentro los pivotes, la jerarquía y qué pedazo mueve cada hueso.")}
+      </ol>
+      <p class="rigdoc-tip">Lo que quede lejos del alambre no se asigna, y la barra de estado te
+      dice cuántas quedaron afuera. Si una parte se fue al hueso equivocado, arreglala con
+      <b>Mueve el dibujo</b>.</p>
 
       <h3>A · El personaje ya está dibujado por partes</h3>
       <ol>
