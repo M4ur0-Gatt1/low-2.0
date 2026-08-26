@@ -5,6 +5,15 @@ name: build
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag existente que se debe compilar y publicar (vX.Y.Z)"
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 permissions:
   contents: write
@@ -14,8 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - name: Crear release (si no existe)
-        run: gh release create "$GITHUB_REF_NAME" --title "LOW $GITHUB_REF_NAME" --generate-notes || true
+        run: gh release create "$RELEASE_TAG" --title "LOW $RELEASE_TAG" --generate-notes || true
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -24,6 +35,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -32,17 +45,19 @@ jobs:
       - name: Versionar desde el tag
         shell: bash
         run: bash .github/set_version.sh
+        env:
+          LOW_RELEASE_TAG: ${{ env.RELEASE_TAG }}
       - name: Compilar exe
         run: pyinstaller LOW.spec --noconfirm
       - name: Instalador (Inno Setup)
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          $ver = "$env:GITHUB_REF_NAME" -replace '^v',''
+          $ver = "$env:RELEASE_TAG" -replace '^v',''
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$ver" low_installer.iss
       - name: Subir al release
         shell: bash
-        run: gh release upload "$GITHUB_REF_NAME" Output/*.exe dist/LOW.exe --clobber
+        run: gh release upload "$RELEASE_TAG" Output/*.exe dist/LOW.exe --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -51,6 +66,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -58,12 +75,14 @@ jobs:
         run: pip install -r requirements.txt pyinstaller
       - name: Versionar desde el tag
         run: bash .github/set_version.sh
+        env:
+          LOW_RELEASE_TAG: ${{ env.RELEASE_TAG }}
       - name: Compilar
         run: pyinstaller LOW.spec --noconfirm
       - name: Empaquetar
         run: cd dist && zip -r LOW-macos.zip LOW*
       - name: Subir al release
-        run: gh release upload "$GITHUB_REF_NAME" dist/LOW-macos.zip --clobber
+        run: gh release upload "$RELEASE_TAG" dist/LOW-macos.zip --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -72,6 +91,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -81,11 +102,13 @@ jobs:
           pip install "pywebview[qt]"
       - name: Versionar desde el tag
         run: bash .github/set_version.sh
+        env:
+          LOW_RELEASE_TAG: ${{ env.RELEASE_TAG }}
       - name: Compilar
         run: pyinstaller LOW.spec --noconfirm
       - name: Subir al release
         run: |
           mv dist/LOW dist/LOW-linux
-          gh release upload "$GITHUB_REF_NAME" dist/LOW-linux --clobber
+          gh release upload "$RELEASE_TAG" dist/LOW-linux --clobber
         env:
           GH_TOKEN: ${{ github.token }}
