@@ -48,7 +48,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.65"
+LOW_VERSION = "3.29.66"
 
 
 def atomic_write_text(path, content, encoding="utf-8"):
@@ -1712,7 +1712,9 @@ class Api:
         Página en blanco de verdad, lista para dibujar — sin carteles."""
         starter = (
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 1080" width="1020" height="1080" preserveAspectRatio="xMidYMid meet">\n'
-            '  <rect x="0" y="0" width="1020" height="1080" fill="#ffffff"/>\n'
+            '  <rect data-low-page="1" x="0" y="0" width="1020" height="1080" fill="#ffffff"/>\n'
+            '  <g data-low-art="colour" aria-label="Color"></g>\n'
+            '  <g data-low-art="line" aria-label="Línea"></g>\n'
             '</svg>\n')
         d = s._base() / "disenos"
         d.mkdir(parents=True, exist_ok=True)

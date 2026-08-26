@@ -527,6 +527,8 @@ function bind() {
   document.querySelectorAll("#dzSelBox .dz-sh").forEach(sh =>
     sh.addEventListener("pointerdown", e =>
       dzBoxHandleDown(e, +sh.dataset.hx, +sh.dataset.hy)));
+  $("#dzCornerWidget").addEventListener("pointerdown", dzCornerDown);
+  $("#dzCornerWidget").addEventListener("dblclick", dzCornerExact);
   $("#dzExt").onclick = () => { if (DZ.path) api.preview_html(DZ.path, $("#dzCanvas").innerHTML); };
   $("#dzZoomIn").onclick = () => dzZoom(0.15);
   $("#dzZoomOut").onclick = () => dzZoom(-0.15);
@@ -642,6 +644,8 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
         disabled:!selected, action:() => dzGroupSel(isGroup) },
       { icon:"↑", label:"Traer al frente", disabled:!selected, action:() => dzMenuAction("alfrente") },
       { icon:"↓", label:"Enviar atrás", disabled:!selected, action:() => dzMenuAction("atras") },
+      { icon:"╱", label:"Mover a Línea", disabled:!selected, action:() => dzArtMoveSelection("line") },
+      { icon:"●", label:"Mover a Color", disabled:!selected, action:() => dzArtMoveSelection("colour") },
       { icon:"◇", label:"Renombrar…", disabled:!selected, action:() => dzMenuAction("renombrar") },
       { icon:"▣", label:"Bloquear", disabled:!selected, action:() => dzMenuAction("bloquear") },
       "separator",
@@ -2803,23 +2807,88 @@ function dzPositionHandle() {
   if (!DZ.sel) { pin.hidden = true; if (rot) rot.hidden = true; if (box) box.hidden = true; return; }
   try {
     const cvRect = $("#dzCanvas").getBoundingClientRect();
-    const b = DZ.sel.getBoundingClientRect();
-    if (box) {
-      box.style.left = (b.left - cvRect.left) + "px";
-      box.style.top = (b.top - cvRect.top) + "px";
-      box.style.width = Math.max(1, b.width) + "px";
-      box.style.height = Math.max(1, b.height) + "px";
-      box.hidden = false;
+    const pack = (DZ.multi || []).length > 1 ? DZ.multi.filter(n => n?.isConnected) : [DZ.sel];
+    let left, top, width, height, angle = 0, topCenter, up = { x: 0, y: -1 };
+    if (pack.length === 1) {
+      const el = pack[0], lb = el.getBBox(), m = el.getScreenCTM();
+      const point = (x, y) => {
+        const p = el.ownerSVGElement.createSVGPoint(); p.x = x; p.y = y;
+        return p.matrixTransform(m);
+      };
+      const p0 = point(lb.x, lb.y), px = point(lb.x + lb.width, lb.y), py = point(lb.x, lb.y + lb.height);
+      const vx = { x: px.x - p0.x, y: px.y - p0.y }, vy = { x: py.x - p0.x, y: py.y - p0.y };
+      left = p0.x - cvRect.left; top = p0.y - cvRect.top;
+      width = Math.max(1, Math.hypot(vx.x, vx.y)); height = Math.max(1, Math.hypot(vy.x, vy.y));
+      angle = Math.atan2(vx.y, vx.x) * 180 / Math.PI;
+      topCenter = { x: p0.x + vx.x / 2, y: p0.y + vx.y / 2 };
+      const vl = Math.max(1, Math.hypot(vy.x, vy.y)); up = { x: -vy.x / vl, y: -vy.y / vl };
+    } else {
+      const rects = pack.map(n => n.getBoundingClientRect());
+      const l = Math.min(...rects.map(r => r.left)), t = Math.min(...rects.map(r => r.top));
+      const r = Math.max(...rects.map(r => r.right)), b = Math.max(...rects.map(r => r.bottom));
+      left = l - cvRect.left; top = t - cvRect.top; width = Math.max(1, r - l); height = Math.max(1, b - t);
+      topCenter = { x: (l + r) / 2, y: t };
     }
-    pin.style.left = (b.left - cvRect.left + 4) + "px";
-    pin.style.top = (b.top - cvRect.top) + "px";
+    if (box) {
+      box.style.left = left + "px"; box.style.top = top + "px";
+      box.style.width = width + "px"; box.style.height = height + "px";
+      box.style.transformOrigin = "0 0";
+      box.style.transform = angle ? `rotate(${angle}deg)` : "none";
+      box.hidden = false;
+      const cw = $("#dzCornerWidget"), rect = pack.length === 1 && pack[0].tagName.toLowerCase() === "rect" ? pack[0] : null;
+      if (cw && rect) {
+        const rw = Math.max(1, +rect.getAttribute("width") || rect.getBBox().width);
+        const rh = Math.max(1, +rect.getAttribute("height") || rect.getBBox().height);
+        const radius = Math.min(rw / 2, rh / 2, +(rect.getAttribute("rx") || 0));
+        cw.style.left = Math.max(14, radius / rw * width) + "px";
+        cw.style.top = Math.max(14, radius / rh * height) + "px";
+        cw.hidden = false;
+      } else if (cw) cw.hidden = true;
+    }
+    pin.style.left = (left + 4) + "px";
+    pin.style.top = top + "px";
     pin.hidden = false;
     if (rot) {
-      rot.style.left = ((b.left + b.right) / 2 - cvRect.left) + "px";
-      rot.style.top = (b.top - cvRect.top - 22) + "px";
+      rot.style.left = (topCenter.x + up.x * 22 - cvRect.left) + "px";
+      rot.style.top = (topCenter.y + up.y * 22 - cvRect.top) + "px";
       rot.hidden = false;
     }
   } catch (e) { pin.hidden = true; if (rot) rot.hidden = true; if (box) box.hidden = true; }
+}
+
+function dzCornerSet(el, radius) {
+  const max = Math.max(0, Math.min((+el.getAttribute("width") || 0) / 2, (+el.getAttribute("height") || 0) / 2));
+  const r = Math.max(0, Math.min(max, Number(radius) || 0));
+  if (r < .01) { el.removeAttribute("rx"); el.removeAttribute("ry"); }
+  else { el.setAttribute("rx", r.toFixed(1)); el.setAttribute("ry", r.toFixed(1)); }
+  dzPositionHandle(); dzBuildInspector(el);
+}
+function dzCornerDown(e) {
+  const el = DZ.sel;
+  if (!el || el.tagName.toLowerCase() !== "rect") return;
+  e.preventDefault(); e.stopPropagation(); dzSnapshot();
+  const pointerId = e.pointerId, lb = el.getBBox();
+  const local = ev => {
+    const p = el.ownerSVGElement.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+    return p.matrixTransform(el.getScreenCTM().inverse());
+  };
+  const move = ev => {
+    if (ev.pointerId !== pointerId) return;
+    const p = local(ev); dzCornerSet(el, Math.min(p.x - lb.x, p.y - lb.y));
+  };
+  const up = ev => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); document.removeEventListener("pointercancel", up);
+    dzMarkDirty();
+  };
+  document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
+}
+function dzCornerExact(e) {
+  e.preventDefault(); e.stopPropagation();
+  const el = DZ.sel; if (!el || el.tagName.toLowerCase() !== "rect") return;
+  const value = prompt("Radio de las esquinas:", el.getAttribute("rx") || "0");
+  if (value == null || !isFinite(+value)) return;
+  dzSnapshot(); dzCornerSet(el, +value); dzMarkDirty();
 }
 /* resize desde cualquiera de los 8 tiradores, anclado al tirador OPUESTO
    (transformación libre de Photoshop). hx,hy ∈ {-1,0,1}. */
@@ -2829,12 +2898,14 @@ function dzBoxHandleDown(e, hx, hy) {
   const pointerId = e.pointerId;
   dzSnapshot();
   const el = DZ.sel;
-  const start = dzToUser(e.clientX, e.clientY);
-  const bb = el.getBoundingClientRect();
-  const p1 = dzToUser(bb.left, bb.top), p2 = dzToUser(bb.right, bb.bottom);
-  const w0 = Math.max(1, p2.x - p1.x), h0 = Math.max(1, p2.y - p1.y);
   let lb = null; try { lb = el.getBBox(); } catch (err) { /* sin bbox */ }
   if (!lb) return;
+  const local = ev => {
+    const p = el.ownerSVGElement.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+    return p.matrixTransform(el.getScreenCTM().inverse());
+  };
+  const start = local(e);
+  const w0 = Math.max(1, lb.width), h0 = Math.max(1, lb.height);
   const tr0 = el.getAttribute("transform") || "";
   // ancla LOCAL = tirador opuesto (si agarro la derecha, fijo la izquierda)
   const axL = hx > 0 ? lb.x : hx < 0 ? lb.x + lb.width : lb.x + lb.width / 2;
@@ -2842,7 +2913,7 @@ function dzBoxHandleDown(e, hx, hy) {
   const corner = hx !== 0 && hy !== 0;
   const move = (ev) => {
     if (ev.pointerId !== pointerId) return;
-    const p = dzToUser(ev.clientX, ev.clientY);
+    const p = local(ev);
     const dx = (p.x - start.x) * hx, dy = (p.y - start.y) * hy;
     let kx = hx ? Math.max(0.05, (w0 + dx) / w0) : 1;
     let ky = hy ? Math.max(0.05, (h0 + dy) / h0) : 1;
@@ -2897,7 +2968,7 @@ function dzPivotClick(e) {
     return dzSetStatus("Ahí no hay ninguna pieza · elegí primero la pieza o el hueso, o hacé clic encima del dibujo");
   }
   let target = el;
-  const grp = el.closest && el.closest('#dzCanvas svg > g:not(.dz-onion)');
+  const grp = el.closest && el.closest('#dzCanvas svg > g:not(.dz-onion):not([data-low-art])');
   if (grp && !e.altKey) target = grp;            // en un rig, la parte suele ser un grupo
   if (target.tagName.toLowerCase() === "svg") return;
   dzSnapshot();
@@ -2939,14 +3010,15 @@ function dzRotateDown(e) {
   const pointerId = e.pointerId;
   dzSnapshot();
   const el = DZ.sel;
-  const b = el.getBoundingClientRect();
-  const cx = (b.left + b.right) / 2, cy = (b.top + b.bottom) / 2;
-  let c = dzToUser(cx, cy);                      // centro en coords de usuario
+  let lb; try { lb = el.getBBox(); } catch (_) { return; }
+  let c = { x: lb.x + lb.width / 2, y: lb.y + lb.height / 2 };
   const pv = el.getAttribute("data-pivot");
   if (pv) {
     const [px, py] = pv.split(/[\s,]+/).map(Number);
     if (!isNaN(px) && !isNaN(py)) c = { x: px, y: py };   // rig: gira desde el pivote
   }
+  const cs = dzFromUser(c.x, c.y);
+  const cx = cs?.x ?? e.clientX, cy = cs?.y ?? e.clientY;
   const a0 = Math.atan2(e.clientY - cy, e.clientX - cx);
   const base = el.getAttribute("transform") || "";
   const move = (ev) => {
@@ -3026,13 +3098,13 @@ function dzPointerDown(e) {
   if (!["select", "direct"].includes(DZ.tool || "select")) return;   // otras: pointer events
   if (e.isPrimary === false) return;
   let el = e.target;
-  if (!el || el === $("#dzCanvas") || el.tagName.toLowerCase() === "svg") { dzMarqueeStart(e); return; }
+  if (!el || el === $("#dzCanvas") || el.tagName.toLowerCase() === "svg" || dzIsCanvasBackground(el)) { dzMarqueeStart(e); return; }
   if (el.closest && el.closest("g.dz-onion")) { dzDeselect(); return; }
   if (el.closest && el.closest("[data-locked]")) { dzDeselect(); return; }   // capa bloqueada 🔒
   // clic dentro de un grupo real (<g> guardado): seleccionar el GRUPO (como
   // Illustrator); doble clic entraría al hijo — acá con Shift+clic alcanza
-  const grp = el.closest && el.closest('#dzCanvas svg > g:not(.dz-onion)');
-  if (grp && !e.altKey && DZ.tool !== "direct") el = grp;   // flecha blanca: pieza directa
+  const grp = el.closest && el.closest('#dzCanvas svg > g:not(.dz-onion):not([data-low-art])');
+  if (grp && DZ.tool !== "direct") el = grp;   // flecha blanca: pieza directa; Alt queda libre para duplicar
   e.preventDefault();
   dzCapturePointer(e);
   const pointerId = e.pointerId;
@@ -3054,8 +3126,8 @@ function dzPointerDown(e) {
   if (DZ.multi.length && !DZ.multi.includes(el)) dzClearMulti();
   if (el !== DZ.sel) dzSelect(el);
   const start = dzToUser(e.clientX, e.clientY);
-  const pack = (DZ.multi.length > 1 && DZ.multi.includes(el)) ? DZ.multi : [el];
-  const bases = pack.map(n => ({ n, base: dzReadPos(n) }));
+  let pack = (DZ.multi.length > 1 && DZ.multi.includes(el)) ? DZ.multi.slice() : [el];
+  let bases = pack.map(n => ({ n, base: dzReadPos(n) }));
   let moved = false;
   // referencias de alineación: se calculan UNA vez al empezar el gesto (leer
   // getBoundingClientRect de todo el dibujo en cada pointermove arrastraría)
@@ -3101,7 +3173,14 @@ function dzPointerDown(e) {
     const p = dzToUser(ev.clientX, ev.clientY);
     const dx = p.x - start.x, dy = p.y - start.y;
     if (!moved && Math.abs(dx) + Math.abs(dy) < 1) return;
-    if (!moved && !rigDrag) dzSnapshot();              // primer movimiento real
+    if (!moved && !rigDrag) {
+      dzSnapshot();                                    // primer movimiento real
+      if (ev.altKey) {
+        pack = dzDuplicatePackForDrag(pack);
+        bases = pack.map(n => ({ n, base: dzReadPos(n) }));
+        el = pack[pack.length - 1];
+      }
+    }
     moved = true;
     if (rigDrag) {
       let pose;
@@ -3164,9 +3243,40 @@ function dzPointerDown(e) {
   document.addEventListener("pointerup", up);
   document.addEventListener("pointercancel", up);
 }
+function dzUniqueCloneIds(root) {
+  const nodes = [root, ...root.querySelectorAll("[id]")];
+  nodes.forEach(n => {
+    if (!n.id) return;
+    const base = n.id.replace(/_copia(?:_\d+)?$/, ""); let id = base + "_copia", i = 2;
+    while (document.getElementById(id)) id = base + "_copia_" + i++;
+    n.id = id;
+  });
+}
+function dzDuplicatePackForDrag(pack) {
+  const copies = pack.map(source => {
+    const clone = source.cloneNode(true); dzUniqueCloneIds(clone);
+    source.parentNode.insertBefore(clone, source.nextSibling); return clone;
+  });
+  dzClearMulti(); DZ.multi = copies.slice();
+  copies.forEach(n => n.classList.add("dz-msel"));
+  dzSelect(copies[copies.length - 1]);
+  dzSetStatus(" Copia creada · soltá para ubicarla");
+  return copies;
+}
 function dzClearMulti() {
   (DZ.multi || []).forEach(n => n.classList && n.classList.remove("dz-msel"));
   DZ.multi = [];
+}
+
+function dzIsCanvasBackground(el) {
+  if (!el || el.tagName?.toLowerCase() !== "rect") return false;
+  if (el.hasAttribute("data-low-page")) return true;
+  const svg = el.parentElement;
+  if (!svg || svg.tagName?.toLowerCase() !== "svg") return false;
+  const vb = (svg.getAttribute("viewBox") || "").trim().split(/\s+/).map(Number);
+  return vb.length === 4 && (+el.getAttribute("x") || 0) === vb[0] && (+el.getAttribute("y") || 0) === vb[1]
+    && Math.abs((+el.getAttribute("width") || 0) - vb[2]) < .01
+    && Math.abs((+el.getAttribute("height") || 0) - vb[3]) < .01;
 }
 
 /* ── selección por marquee (arrastrar un rectángulo en el fondo del lienzo) ──
@@ -3209,10 +3319,12 @@ function dzMarqueeStart(e) {
 function dzMarqueeSelect(l, t, r, b, additive, contained) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
-  const kids = [...svg.children].filter(n =>
+  const direct = [...svg.children].filter(n => !n.hasAttribute("data-low-art"));
+  const art = [...svg.querySelectorAll(':scope > g[data-low-art] > *')];
+  const kids = [...direct, ...art].filter(n =>
     !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase()) &&
     !(n.classList && (n.classList.contains("dz-onion") || n.classList.contains("dz-penui"))) &&
-    !n.hasAttribute("data-locked") && n.getAttribute("display") !== "none");
+    !n.hasAttribute("data-locked") && n.getAttribute("display") !== "none" && !dzIsCanvasBackground(n));
   if (!additive) dzClearMulti();
   DZ.multi = DZ.multi || [];
   kids.forEach(el => {
@@ -3227,6 +3339,41 @@ function dzMarqueeSelect(l, t, r, b, additive, contained) {
     dzSelect(DZ.multi[DZ.multi.length - 1]);   // el "activo" es el último; la multi manda al mover
     dzSetStatus(" " + DZ.multi.length + " elemento(s) seleccionado(s) — Ctrl+G agrupa · arrastrá para moverlos juntos · Shift suma · Alt = solo los de adentro");
   } else { dzDeselect(); dzSetStatus("Nada en el rango"); }
+}
+
+/* Dos planos de arte por nivel: Color siempre debajo y Línea encima. */
+function dzArtEnsure(svg) {
+  if (!svg) return null;
+  let colour = svg.querySelector(':scope > g[data-low-art="colour"]');
+  let line = svg.querySelector(':scope > g[data-low-art="line"]');
+  let changed = false;
+  if (!colour) { colour = document.createElementNS("http://www.w3.org/2000/svg", "g"); colour.setAttribute("data-low-art", "colour"); colour.setAttribute("aria-label", "Color"); changed = true; }
+  if (!line) { line = document.createElementNS("http://www.w3.org/2000/svg", "g"); line.setAttribute("data-low-art", "line"); line.setAttribute("aria-label", "Línea"); changed = true; }
+  if (!colour.parentNode) svg.appendChild(colour);
+  if (!line.parentNode) svg.appendChild(line);
+  [...svg.children].filter(n => n !== colour && n !== line && !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase())
+    && !dzIsCanvasBackground(n) && !(n.classList?.contains("dz-onion") || n.classList?.contains("dz-penui")))
+    .forEach(n => { line.appendChild(n); changed = true; });
+  if (colour.nextSibling !== line) svg.insertBefore(colour, line);
+  return { colour, line, changed };
+}
+function dzArtHost(svg, mode) {
+  const arts = dzArtEnsure(svg); if (!arts) return svg;
+  return (mode || DZ.artMode || "line") === "colour" ? arts.colour : arts.line;
+}
+function dzArtAppend(svg, el, mode) { dzArtHost(svg, mode).appendChild(el); return el; }
+function dzArtSetMode(mode) {
+  DZ.artMode = mode === "colour" ? "colour" : "line";
+  const arts = dzArtEnsure($("#dzCanvas").querySelector(":scope > svg"));
+  if (arts?.changed) { dzMarkDirty(); dzBuildLayers(); }
+  dzToolOptsRender(); dzSetStatus(DZ.artMode === "line" ? "Plano Línea activo — el contorno queda arriba" : "Plano Color activo — pintás debajo del contorno");
+}
+function dzArtMoveSelection(mode) {
+  const svg = $("#dzCanvas").querySelector(":scope > svg"), pack = DZ.multi?.length > 1 ? DZ.multi.slice() : (DZ.sel ? [DZ.sel] : []);
+  if (!svg || !pack.length) return dzSetStatus("Seleccioná uno o más elementos primero");
+  dzSnapshot(); const host = dzArtHost(svg, mode); pack.forEach(n => host.appendChild(n));
+  DZ.artMode = mode; dzMarkDirty(); dzBuildLayers(); dzPositionHandle(); dzToolOptsRender();
+  dzSetStatus(pack.length + (mode === "line" ? " elemento(s) movidos a Línea" : " elemento(s) movidos a Color (debajo del contorno)"));
 }
 
 /* posición base de un elemento según su tipo (para mover con el mouse) */
@@ -3371,7 +3518,7 @@ function dzAddShape(kind) {
     el.setAttribute("font-family", "Figtree"); el.setAttribute("font-size", Math.round(H * 0.06));
     el.setAttribute("fill", FILL); el.textContent = "Texto";
   }
-  svg.appendChild(el);
+  dzArtAppend(svg, el);
   dzSelect(el); dzMarkDirty();
 }
 function dzDeleteSelected() {
@@ -3909,7 +4056,11 @@ function dzToolCursorMove(e) {
   const tool = DZ.tool || "select";
   const icon = DZ_TOOL_CURSOR_ICONS[tool];
   const cursor = $("#dzToolCursor"), cv = $("#dzCanvas");
-  if (!cursor || !cv || !icon || dzOnUiPanel(e)) { dzToolCursorHide(); return; }
+  // En Pivotes el esqueleto es un overlay interactivo. Considerarlo un panel
+  // ocultaba el cursor propio mientras el CSS también ocultaba el nativo:
+  // resultado, el puntero desaparecía justo al intentar colocar el eje.
+  const overRigPivot = tool === "pivot" && DZ.rigMode && e.target?.closest?.("#dzRigOverlay");
+  if (!cursor || !cv || !icon || (dzOnUiPanel(e) && !overRigPivot)) { dzToolCursorHide(); return; }
   const rect = cv.getBoundingClientRect();
   cursor.style.left = (e.clientX - rect.left + cv.scrollLeft) + "px";
   cursor.style.top = (e.clientY - rect.top + cv.scrollTop) + "px";
@@ -4156,7 +4307,7 @@ function _drawBeginTrack(e, svg) {
     dzStyleTag(track.el, "ink");            // mientras se traza son segmentos
   }
   if ((DZ.drawOpacity || 1) < .999) track.el.setAttribute("opacity", DZ.drawOpacity.toFixed(2));
-  svg.appendChild(track.el);
+  dzArtAppend(svg, track.el);
   return track;
 }
 
@@ -4412,7 +4563,7 @@ function dzPenDown(p) {
     PEN.el.setAttribute("stroke-linejoin", "round");
     PEN.guide.setAttribute("class", "dz-penui");       // capa guía: solo pantalla
     PEN.guide.setAttribute("pointer-events", "none");
-    svg.appendChild(PEN.el);
+    dzArtAppend(svg, PEN.el);
     svg.appendChild(PEN.guide);
     dzSetStatus("🖋 Pluma: clic = esquina · arrastrar = curva · clic en el 1er punto cierra · Backspace borra el último · Enter termina · Esc cancela");
   }
@@ -4969,16 +5120,41 @@ function dzEraseStart(e) {
 
 /* ══ cuentagotas (I) y balde (G) ══ */
 function dzDropperPick(e) {
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  if (!el || !el.closest || !el.closest("#dzCanvas svg")) return;
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
+  if (!svg) return;
+  // elementsFromPoint permite saltar manijas, guías, el papel y los grupos
+  // estructurales. elementFromPoint a secas solía devolver uno de esos y el
+  // cuentagotas parecía decorativo aunque el evento sí llegaba.
+  const el = document.elementsFromPoint(e.clientX, e.clientY).find(n =>
+    n !== svg && svg.contains(n) && n.tagName &&
+    !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase()) &&
+    !n.matches?.('[data-low-art],.dz-onion,.dz-penui,[data-dz3d]') &&
+    !n.closest?.('.dz-onion,.dz-penui,[data-dz3d]') && !dzIsCanvasBackground(n));
+  if (!el) return dzSetStatus("💧 No hay color muestreable en ese punto");
   const cs = getComputedStyle(el);
   const fill = dzHex(el.getAttribute("fill") || cs.fill);
   const stroke = dzHex(el.getAttribute("stroke") || cs.stroke);
-  if (fill) { DZ.fillColor = fill; const i = $("#dzPFill"); if (i) i.value = fill; }
-  if (stroke) { DZ.drawColor = stroke; const i = $("#dzPStroke"); if (i) i.value = stroke; }
+  if (!fill && !stroke) return dzSetStatus("💧 Ese elemento no tiene relleno ni trazo visible");
+  if (fill) DZ.fillColor = fill;
+  if (stroke) DZ.drawColor = stroke;
+  // Una línea no tiene relleno: su trazo también pasa a ser el color de
+  // relleno activo para que el color copiado sirva inmediatamente en formas.
+  if (!fill && stroke) DZ.fillColor = stroke;
   const sw = parseFloat(el.getAttribute("stroke-width") || cs.strokeWidth);
-  if (sw) { DZ.drawW = Math.round(sw); const i = $("#dzDrawW"); if (i) i.value = DZ.drawW; }
-  dzSetStatus("💧 Tomé relleno " + (fill || "—") + " · trazo " + (stroke || "—"));
+  if (Number.isFinite(sw) && sw > 0) DZ.drawW = Math.max(1, Math.round(sw));
+  const sync = (id, value) => { const i = $(id); if (i && value) i.value = value; };
+  sync("#dzPFill", DZ.fillColor); sync("#dzPStroke", DZ.drawColor);
+  sync("#toFill", DZ.fillColor); sync("#toColor", DZ.drawColor);
+  if ($("#dzDrawW")) $("#dzDrawW").value = DZ.drawW;
+  if ($("#toW")) $("#toW").value = DZ.drawW;
+  dzPaletteRemember(fill || stroke);
+  dzSetStatus("💧 Color copiado: " + (fill || stroke) + (stroke && fill ? " · contorno " + stroke : ""));
+}
+
+function dzPaletteRemember(color) {
+  if (!color) return;
+  const palette = dzPaletteLoad().filter(c => String(c).toLowerCase() !== color.toLowerCase());
+  palette.unshift(color); dzPaletteSave(palette); dzPaletteRender();
 }
 /* ══ Balde (G): RELLENO POR ÁREA (flood fill, estilo Toon Boom). Clic dentro
    de una zona cerrada por líneas y la pinta con una forma vectorial nueva,
@@ -6942,7 +7118,7 @@ function dzRigPieceSpec(el, index, requestedId) {
   let pivot = { x: 0, y: 0 }, area = 0;
   try {
     const box = el.getBoundingClientRect();
-    pivot = dzToUser((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+    pivot = dzRigDefaultPivot(el);
     area = Math.max(1, box.width) * Math.max(1, box.height);
   } catch (_) { /* una pieza sin caja sigue siendo registrable */ }
   el.setAttribute("data-pivot", `${Math.round(pivot.x)} ${Math.round(pivot.y)}`);
@@ -7007,6 +7183,55 @@ function dzRigTogglePin() {
   const node = dzRigSelectedNode(); if (!node) return dzSetStatus("Elegí una pieza del esqueleto");
   DZ.doc.setRigPinned(node.id, !node.pinned); dzRigPanelSync(); dzRigOverlayRender();
 }
+
+/* Pivote automático proximal. Si ya hay un alambre, usa la articulación
+   superior que cae dentro de la pieza; sin alambre usa el centro de su corte
+   superior. El centro geométrico era correcto matemáticamente pero inútil para
+   hombros, caderas y cuellos. */
+function dzRigDefaultPivot(el) {
+  let box;
+  try { box = el.getBoundingClientRect(); } catch (_) { return { x: 0, y: 0 }; }
+  const upper = { x: (box.left + box.right) / 2, y: box.top };
+  const fallback = dzToUser(upper.x, upper.y);
+  const bones = Object.values(DZ.doc?.scene?.rig?.bones || {});
+  const margin = Math.max(8, Math.min(box.width, box.height) * .12);
+  let best = null;
+  for (const bone of bones) {
+    const local = bone.head || bone.pivot; if (!local) continue;
+    let user = local;
+    try { user = DZ.doc.scene.rigWorldPoint(bone.id, dzRigCur(), local); } catch (_) { /* reposo */ }
+    const screen = dzFromUser(user.x, user.y); if (!screen) continue;
+    if (screen.x < box.left - margin || screen.x > box.right + margin ||
+        screen.y < box.top - margin || screen.y > box.bottom + margin) continue;
+    const dx = screen.x - upper.x, dy = screen.y - upper.y;
+    // Se prioriza el corte superior y, en empate, el más cercano al eje medio.
+    const score = Math.max(0, dy) * 1.35 + Math.abs(dx) * .45 + Math.hypot(dx, dy) * .25;
+    if (!best || score < best.score) best = { score, point: user };
+  }
+  return best ? { x: best.point.x, y: best.point.y } : fallback;
+}
+
+function dzRigUpgradeLegacyPivots() {
+  if (!DZ.doc) return 0;
+  let changed = 0;
+  for (const node of Object.values(DZ.doc.scene.rig.nodes || {})) {
+    const el = dzRigNodeElement(node); if (!el || !node.pivot) continue;
+    let center;
+    try {
+      const b = el.getBoundingClientRect(); center = dzToUser((b.left + b.right) / 2, (b.top + b.bottom) / 2);
+    } catch (_) { continue; }
+    // Solo migrar el viejo valor automático (centro exacto); jamás pisar un
+    // pivote que el usuario haya colocado deliberadamente.
+    if (Math.hypot(node.pivot.x - center.x, node.pivot.y - center.y) > 2) continue;
+    const pivot = dzRigDefaultPivot(el);
+    if (Math.hypot(pivot.x - node.pivot.x, pivot.y - node.pivot.y) < 2) continue;
+    DZ.doc.setRigPivot(node.id, pivot);
+    el.setAttribute("data-pivot", `${Math.round(pivot.x)} ${Math.round(pivot.y)}`);
+    changed++;
+  }
+  if (changed) { dzMarkDirty(); dzRigApplyLive(dzRigCur()); }
+  return changed;
+}
 function dzRigRefreshToolButtons(tool) {
   ["select", "pose", "create", "draw", "cut", "pivot"].forEach(value => {
     const id = "#rigTool" + value[0].toUpperCase() + value.slice(1);
@@ -7032,6 +7257,7 @@ function dzRigSetTool(tool) {
     DZ.rigToolSync = true;
     try { dzSetTool(canvasTool); } finally { DZ.rigToolSync = false; }
   }
+  const upgraded = tool === "pivot" ? dzRigUpgradeLegacyPivots() : 0;
   const n = dzRigSelectedNode();
   const status = {
     draw: "Dibujar: el alambre queda visible como guía pero no captura la tableta",
@@ -7040,7 +7266,7 @@ function dzRigSetTool(tool) {
       ? `Pivote de «${n.id}»: hacé clic donde articula · Alt+clic lo quita`
       : "Pivotes: elegí una pieza o tocala donde debe articular"
   }[tool];
-  if (status) dzSetStatus(status);
+  if (status) dzSetStatus(status + (upgraded ? ` · ${upgraded} pivote(s) centrados en su unión superior` : ""));
   dzRigOverlayRender();
 }
 function dzRigSetMode(mode) {
@@ -9574,6 +9800,8 @@ function dzMenuAction(act) {
       const clean = name.trim().replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]/g, "_");
       if (clean) DZ.sel.id = clean; else DZ.sel.removeAttribute("id");
       dzMarkDirty(); dzBuildLayers(); },
+    "art-line": () => dzArtMoveSelection("line"),
+    "art-colour": () => dzArtMoveSelection("colour"),
     pivote: () => dzSetTool("pivot"),
     timeline: dzAnimToggle, cuadro: dzFrameAdd, insertar: () => dzFrameInsert(false),
     clave: dzKeyToggle, intercalar: dzTweenModal, interpolar: dzMoveTween,
@@ -9639,7 +9867,8 @@ function dzToolOptsRender() {
   if (!box) return;
   const t = DZ.tool || "select";
   const sm = DZ.smooth === undefined ? 40 : DZ.smooth;
-  let html = `<span class="dz-to-name">${DZ_TOOL_NAMES[t] || t}</span>`;
+  let html = `<span class="dz-to-name">${DZ_TOOL_NAMES[t] || t}</span>
+    <span class="dz-artmodes" title="Plano de arte activo"><button id="toArtLine" class="${(DZ.artMode || "line") === "line" ? "on" : ""}" title="Dibujar contorno arriba">╱</button><button id="toArtColour" class="${DZ.artMode === "colour" ? "on" : ""}" title="Dibujar color debajo">●</button></span>`;
   if (["pencil", "brush", "pen"].includes(t)) {
     const presets = window.LOW?.drawing?.brushes?.all?.() || [];
     const presetSelect = t !== "pen" && presets.length ? `<label>Pincel <select id="toBrushPreset" class="langsel">${presets.map(p =>
@@ -9689,9 +9918,11 @@ function dzToolOptsRender() {
       <button class="ghost" id="toCamKey">${dzCamKeys()[dzCamFrame()] ? "Quitar clave" : "Crear clave"}</button>
       <button class="ghost" id="toCamReset">Restablecer</button>`;
   } else {
-    html += `<span class="dz-hint">clic selecciona · arrastrá mueve · Shift+clic suma a la selección · Alt+clic entra al grupo</span>`;
+    html += `<span class="dz-hint">clic selecciona · marco vacío selecciona varios · Shift suma · Alt+arrastrar duplica · flecha blanca entra al grupo</span>`;
   }
   box.innerHTML = html;
+  $("#toArtLine").onclick = () => dzArtSetMode("line");
+  $("#toArtColour").onclick = () => dzArtSetMode("colour");
   const preset = $("#toBrushPreset"); if (preset) preset.onchange = e => {
     const brush = LOW.drawing.brushes.get(e.target.value); if (!brush) return;
     DZ.brushPreset = brush.id; DZ.drawW = brush.size || DZ.drawW;
@@ -13956,14 +14187,23 @@ function dzWire(el, isText) {
 // normaliza un color SVG (nombre/hex/rgb) a #rrggbb para el <input type=color>
 function dzHex(c) {
   c = (c || "").trim();
+  if (!c || /^(none|transparent|currentcolor|inherit)$/i.test(c)) return null;
   if (/^#[0-9a-f]{6}$/i.test(c)) return c;
   if (/^#[0-9a-f]{3}$/i.test(c)) return "#" + c.slice(1).split("").map(x => x + x).join("");
+  const rgb = c.match(/^rgba?\(\s*([\d.]+)(?:\s*,|\s+)\s*([\d.]+)(?:\s*,|\s+)\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i);
+  if (rgb) {
+    if (rgb[4] && (rgb[4] === "0" || rgb[4] === "0%")) return null;
+    const byte = n => Math.max(0, Math.min(255, Math.round(+n))).toString(16).padStart(2, "0");
+    return "#" + byte(rgb[1]) + byte(rgb[2]) + byte(rgb[3]);
+  }
   try {
     const cx = document.createElement("canvas").getContext("2d");
-    cx.fillStyle = "#000"; cx.fillStyle = c;
+    cx.fillStyle = "#010203"; cx.fillStyle = c;
+    if (cx.fillStyle === "#010203" && c.toLowerCase() !== "#010203") return null;
     if (/^#[0-9a-f]{6}$/i.test(cx.fillStyle)) return cx.fillStyle;
+    if (/^#[0-9a-f]{3}$/i.test(cx.fillStyle)) return "#" + cx.fillStyle.slice(1).split("").map(x => x + x).join("");
   } catch (e) { /* */ }
-  return "#000000";
+  return null;
 }
 
 async function dzSave() {
