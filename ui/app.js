@@ -199,24 +199,39 @@ let ctxMenu = null;
 function closeCtxMenu() {
   if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
 }
+function showCtxMenu(e, items) {
+  e.preventDefault(); e.stopPropagation(); closeCtxMenu();
+  ctxMenu = document.createElement("div");
+  ctxMenu.className = "ctx-menu ctx-command-menu";
+  ctxMenu.setAttribute("role", "menu");
+  for (const entry of items) {
+    if (entry === "separator") {
+      const sep = document.createElement("div"); sep.className = "ctx-separator"; ctxMenu.appendChild(sep); continue;
+    }
+    const item = document.createElement("button"); item.className = "ctx-item"; item.type = "button";
+    item.disabled = !!entry.disabled; item.setAttribute("role", "menuitem");
+    item.innerHTML = `<span class="ctx-symbol" aria-hidden="true">${entry.icon || ""}</span>` +
+      `<span class="ctx-label"></span>${entry.shortcut ? `<kbd>${entry.shortcut}</kbd>` : ""}`;
+    item.querySelector(".ctx-label").textContent = entry.label;
+    item.onclick = () => { closeCtxMenu(); if (!entry.disabled) entry.action?.(); };
+    ctxMenu.appendChild(item);
+  }
+  document.body.appendChild(ctxMenu);
+  const box = ctxMenu.getBoundingClientRect(), gap = 8;
+  ctxMenu.style.left = Math.max(gap, Math.min(e.clientX, innerWidth - box.width - gap)) + "px";
+  ctxMenu.style.top = Math.max(gap, Math.min(e.clientY, innerHeight - box.height - gap)) + "px";
+  requestAnimationFrame(() => ctxMenu.querySelector("button:not(:disabled)")?.focus({ preventScroll:true }));
+  return ctxMenu;
+}
 document.addEventListener("contextmenu", (e) => {
   if (!e.target.closest("#msgs")) return;
   e.preventDefault();
-  closeCtxMenu();
   const sel = window.getSelection().toString();
   const bubble = e.target.closest(".m-user, .m-txt, .m-sys, .step, .card-b, .think-body");
   const text = sel || (bubble ? bubble.textContent : "");
   if (!text) return;
-  ctxMenu = document.createElement("div");
-  ctxMenu.className = "ctx-menu";
-  ctxMenu.innerHTML = '<div class="ctx-item">Copiar</div>';
-  ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 150) + "px";
-  ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 50) + "px";
-  ctxMenu.querySelector(".ctx-item").onclick = () => {
-    navigator.clipboard.writeText(text).catch(() => {});
-    closeCtxMenu();
-  };
-  document.body.appendChild(ctxMenu);
+  showCtxMenu(e, [{ icon:"⧉", label:"Copiar", shortcut:"Ctrl+C",
+    action:() => navigator.clipboard.writeText(text).catch(() => {}) }]);
 });
 document.addEventListener("click", closeCtxMenu);
 document.addEventListener("scroll", closeCtxMenu, true);
@@ -609,7 +624,33 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   }, { passive: false });
   // regla: clic derecho fija punto de fuga  prevenir menú contextual
   $("#dzCanvas").addEventListener("contextmenu", (e) => {
-    if (DZ.tool === "ruler") e.preventDefault();
+    if (DZ.tool === "ruler") { e.preventDefault(); return; }
+    const svg = $("#dzCanvas").querySelector(":scope > svg");
+    if (!svg) return;
+    const hit = document.elementsFromPoint(e.clientX, e.clientY).find(el =>
+      el !== svg && svg.contains(el) && el.tagName &&
+      !DZ_SKIP_TAGS.includes(el.tagName.toLowerCase()) && !el.closest?.("g.dz-onion"));
+    if (hit && !hit.closest?.("[data-locked]")) dzSelect(hit);
+    const selected = !!DZ.sel;
+    const isGroup = selected && DZ.sel.tagName?.toLowerCase() === "g";
+    showCtxMenu(e, [
+      { icon:"↶", label:"Deshacer", shortcut:"Ctrl+Z", action:dzUndo },
+      { icon:"↷", label:"Rehacer", shortcut:"Ctrl+Y", action:dzRedo },
+      "separator",
+      { icon:"⧉", label:"Duplicar", shortcut:"Ctrl+D", disabled:!selected, action:dzDuplicate },
+      { icon:isGroup ? "⌁" : "▣", label:isGroup ? "Desagrupar" : "Agrupar", shortcut:isGroup ? "Ctrl+Shift+G" : "Ctrl+G",
+        disabled:!selected, action:() => dzGroupSel(isGroup) },
+      { icon:"↑", label:"Traer al frente", disabled:!selected, action:() => dzMenuAction("alfrente") },
+      { icon:"↓", label:"Enviar atrás", disabled:!selected, action:() => dzMenuAction("atras") },
+      { icon:"◇", label:"Renombrar…", disabled:!selected, action:() => dzMenuAction("renombrar") },
+      { icon:"▣", label:"Bloquear", disabled:!selected, action:() => dzMenuAction("bloquear") },
+      "separator",
+      { icon:"▤", label:"Copiar cuadro", shortcut:"Ctrl+C", disabled:!DZ.doc, action:dzCuadroCopiar },
+      { icon:"▥", label:"Pegar como cuadro nuevo", shortcut:"Ctrl+V", disabled:!DZ.doc || !DZ.clipCuadro, action:dzCuadroPegar },
+      { icon:"＋", label:"Cuadro vacío", disabled:!DZ.doc, action:() => dzFrameInsert(true) },
+      "separator",
+      { icon:"⌫", label:"Eliminar", shortcut:"Supr", disabled:!selected, action:dzDeleteSelected }
+    ]);
   });
   // animación
   $("#dzAnim").onclick = dzAnimToggle;
@@ -839,6 +880,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigToolSelect").onclick = () => dzRigSetTool("select");
   $("#rigToolPose").onclick = () => dzRigSetTool("pose");
   $("#rigToolCreate").onclick = () => dzRigSetTool("create");
+  $("#rigToolDraw").onclick = () => dzRigSetTool("draw");
+  $("#rigToolCut").onclick = () => dzRigSetTool("cut");
+  $("#rigToolPivot").onclick = () => dzRigSetTool("pivot");
   $("#rigAutoKey").onchange = e => {
     DZ.rigAutoKey = !!e.target.checked;
     dzSetStatus(DZ.rigAutoKey
@@ -853,13 +897,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigRepartir").onclick = dzRigRepartirDibujo;
   $("#rigAdd").onclick = dzRigRegisterSelected;
   $("#rigRemove").onclick = dzRigRemoveSelected;
-  $("#rigPivotTool").onclick = () => {
-    dzSetTool("pivot");
-    const n = dzRigSelectedNode();
-    dzSetStatus(n
-      ? `Pivote de «${n.id}»: hacé clic donde articula (el hombro, el codo…) · Alt+clic lo quita`
-      : "Pivote: elegí antes la pieza o el hueso, o hacé clic encima de la pieza que querés articular");
-  };
+  $("#rigPivotTool").onclick = () => dzRigSetTool("pivot");
   $("#rigPin").onclick = dzRigTogglePin;
   $("#rigBind").onclick = dzRigBindSelection;
   ["rigX", "rigY", "rigR", "rigSX", "rigSY"].forEach(id => {
@@ -3971,6 +4009,14 @@ function dzSetTool(t) {
   if (!["select", "direct", "nodes", "dropper", "bucket", "iron", "magnet"].includes(t)) dzDeselect();
   dzSbTool(); dzToolOptsRender();
   dz3dApplyToolClass();         // 🔒 solo el plano activo recibe eventos en modo dibujo
+  // Si se elige una herramienta desde la barra principal mientras se arma el
+  // rig, el overlay debe ceder el puntero. Antes el icono cambiaba pero los
+  // agarres invisibles del esqueleto seguían capturando mouse/tableta.
+  if (!DZ.rigToolSync && DZ.rigMode && (DZ.rigSubmode || "build") === "build") {
+    const rigTool = ({ pencil:"draw", brush:"draw", pen:"draw", eraser:"draw",
+      bucket:"draw", iron:"draw", magnet:"draw", pliers:"cut", pivot:"pivot" })[t];
+    if (rigTool && DZ.rigTool !== rigTool) dzRigAdoptCanvasTool(rigTool);
+  }
 }
 /* los clics del lienzo hacen preventDefault (para dibujar/arrastrar), y eso
    BLOQUEA el cambio de foco: si venías de escribir en el chat del dock, el
@@ -6958,14 +7004,40 @@ function dzRigTogglePin() {
   const node = dzRigSelectedNode(); if (!node) return dzSetStatus("Elegí una pieza del esqueleto");
   DZ.doc.setRigPinned(node.id, !node.pinned); dzRigPanelSync(); dzRigOverlayRender();
 }
+function dzRigRefreshToolButtons(tool) {
+  ["select", "pose", "create", "draw", "cut", "pivot"].forEach(value => {
+    const id = "#rigTool" + value[0].toUpperCase() + value.slice(1);
+    $(id)?.classList.toggle("on", value === tool);
+  });
+  $("#rigBoneTool")?.classList.toggle("on", tool === "create");
+}
+function dzRigAdoptCanvasTool(tool) {
+  DZ.rigTool = tool;
+  DZ.rigBoneTool = false;
+  DZ.rigBonePreview = null;
+  dzRigRefreshToolButtons(tool);
+  dzRigOverlayRender();
+}
 function dzRigSetTool(tool) {
-  if (!["select", "pose", "create"].includes(tool)) tool = "select";
+  if (!["select", "pose", "create", "draw", "cut", "pivot"].includes(tool)) tool = "select";
+  if ((DZ.rigSubmode || "build") !== "build" && ["create", "draw", "cut", "pivot"].includes(tool)) tool = "pose";
   DZ.rigTool = tool;
   DZ.rigBoneTool = tool === "create";
-  $("#rigToolSelect")?.classList.toggle("on", tool === "select");
-  $("#rigToolPose")?.classList.toggle("on", tool === "pose");
-  $("#rigToolCreate")?.classList.toggle("on", tool === "create");
-  $("#rigBoneTool")?.classList.toggle("on", DZ.rigBoneTool);
+  dzRigRefreshToolButtons(tool);
+  const canvasTool = { draw:"pencil", cut:"pliers", pivot:"pivot" }[tool];
+  if (canvasTool) {
+    DZ.rigToolSync = true;
+    try { dzSetTool(canvasTool); } finally { DZ.rigToolSync = false; }
+  }
+  const n = dzRigSelectedNode();
+  const status = {
+    draw: "Dibujar: el alambre queda visible como guía pero no captura la tableta",
+    cut: "Cortes: tocá el trazo donde termina una pieza y empieza la articulación",
+    pivot: n
+      ? `Pivote de «${n.id}»: hacé clic donde articula · Alt+clic lo quita`
+      : "Pivotes: elegí una pieza o tocala donde debe articular"
+  }[tool];
+  if (status) dzSetStatus(status);
   dzRigOverlayRender();
 }
 function dzRigSetMode(mode) {
@@ -6980,6 +7052,9 @@ function dzRigSetMode(mode) {
   panel.dataset.estado = construyendo ? "construir" : "animar";   // gobierna que secciones se ven
   $("#rigToolPose").disabled = construyendo;
   $("#rigToolCreate").disabled = !construyendo;
+  ["rigToolDraw", "rigToolCut", "rigToolPivot"].forEach(id => {
+    const button = $("#" + id); if (button) button.disabled = !construyendo;
+  });
   // Dos estados: Construir arma el muneco, Animar lo posa. Directa/Inversa son
   // dos formas de posar DENTRO de Animar, no un tercer modo hermano: mezclarlos
   // era lo que hacia imposible saber en que se estaba parado.
@@ -6993,7 +7068,7 @@ function dzRigSetMode(mode) {
     : (DZ.rigSubmode === "ik"
       ? "Arrastr\u00e1 el ROMBO verde: la cadena entera se acomoda sola."
       : "Arrastr\u00e1 la MANIJA (el punto al final de la l\u00ednea punteada) para rotar, o la ARTICULACI\u00d3N para mover. Cada gesto deja una clave en este cuadro.");
-  const hints = { build: "Círculo = pivote, cuadrado = vínculo. Arrastrá el cuadrado al pivote del padre para colgarlo, o a un área vacía para soltarlo. En un hueso, arrastrar el círculo mueve el hueso; con Alt, sólo su pivote.",
+  const hints = { build: "Alambre → Cortes → Pivotes → Repartir. Al dibujar o cortar, el overlay se aparta automáticamente y no bloquea la tableta.",
     fk: "El pivote sólo se cambia en Construir. Sin Auto-clave, el gesto es una prueba: Enter la clava, Esc la descarta.",
     ik: "Elegí una cadena y arrastrá el rombo: los dos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
@@ -7381,7 +7456,7 @@ function dzRigOverlayRender() {
   if (empty) {
     if (overlay) {
       overlay.setAttribute("hidden", ""); overlay.innerHTML = "";
-      overlay.classList.remove("bone-create"); overlay.onpointerdown = null;
+      overlay.classList.remove("bone-create", "rig-pass-through"); overlay.onpointerdown = null;
       overlay.__rigCache = null;
     } return;
   }
@@ -7400,6 +7475,7 @@ function dzRigOverlayRender() {
   overlay.dataset.mode = DZ.rigSubmode || "build";
   overlay.dataset.tool = DZ.rigTool || "select";
   overlay.classList.toggle("bone-create", !!DZ.rigBoneTool && DZ.rigSubmode === "build");
+  overlay.classList.toggle("rig-pass-through", ["draw", "cut", "pivot"].includes(DZ.rigTool));
   overlay.onpointerdown = e => {
     if (!DZ.rigBoneTool) return;
     // Los joints/tips manejan su propio pointerdown (encadenar/editar) y hacen
@@ -8039,8 +8115,11 @@ function dzRigRepartirDibujo() {
     ? "El dibujo tiene contenido pero la mesa está vacía · cambiá de cuadro y volvé"
     : "No encuentro piezas de dibujo en la mesa");
 
-  // qué elementos ya están tomados por algún hueso: no se les toca el vínculo
+  // Los vínculos existentes no se pisan. Cada hueso rígido recibe una sola
+  // pieza: asignar varias al mismo hueso reemplazaba silenciosamente las
+  // anteriores y después sólo se movía la última.
   const tomados = new Set(Object.values(sc.rig.nodes).map(n => n.elementId).filter(Boolean));
+  const huesosTomados = new Set(huesos.filter(n => n.elementId).map(n => n.id));
   // el largo del alambre da la escala: una pieza más lejos que eso no es del
   // muñeco (un fondo, una nota al margen) y se deja afuera
   const largoTotal = huesos.reduce((s, n) =>
@@ -8049,28 +8128,36 @@ function dzRigRepartirDibujo() {
 
   let asignadas = 0, lejos = 0;
   const reparto = [];
+  const candidatos = [];
   for (const el of piezas) {
     if (!el.id) el.id = dzUniqueId("pieza_");
     if (tomados.has(el.id)) continue;
     const muestras = dzPuntosDeMuestra(el);
     if (!muestras.length) continue;
-    let mejor = null, mejorD = Infinity;
+    let mejorD = Infinity;
     for (const n of huesos) {
+      if (huesosTomados.has(n.id)) continue;
       // se suma la distancia de todas las muestras: gana el hueso que le pasa
       // más cerca en conjunto, no el que roza una esquina
       let suma = 0;
       for (const m of muestras)
         suma += dzDistanciaASegmento(m.x, m.y, n.head.x, n.head.y, n.tail.x, n.tail.y);
       const d = suma / muestras.length;
-      if (d < mejorD) { mejorD = d; mejor = n; }
+      mejorD = Math.min(mejorD, d);
+      if (d <= alcance) candidatos.push({ el, hueso:n, distancia:d });
     }
-    if (!mejor) continue;
     if (mejorD > alcance) { lejos++; continue; }
-    if (DZ.doc.bindRigElement(mejor.id, el.id)) {
-      tomados.add(el.id);
-      asignadas++;
-      reparto.push(el.id + " \u2192 " + mejor.id);
-    }
+  }
+
+  // Emparejamiento voraz global: primero se asegura la pareja más clara de
+  // toda la figura; luego se retiran esa pieza y ese hueso. Es más estable que
+  // decidir pieza por pieza según el orden del SVG.
+  candidatos.sort((a, b) => a.distancia - b.distancia);
+  for (const par of candidatos) {
+    if (tomados.has(par.el.id) || huesosTomados.has(par.hueso.id)) continue;
+    if (!DZ.doc.bindRigElement(par.hueso.id, par.el.id)) continue;
+    tomados.add(par.el.id); huesosTomados.add(par.hueso.id); asignadas++;
+    reparto.push(par.el.id + " \u2192 " + par.hueso.id);
   }
 
   dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
@@ -8078,7 +8165,7 @@ function dzRigRepartirDibujo() {
     ? "Ninguna pieza cay\u00f3 cerca del alambre \u00b7 dibujalo ENCIMA del personaje"
     : "Todas las piezas ya ten\u00edan hueso");
   dzSetStatus(asignadas + (asignadas === 1 ? " pieza repartida" : " piezas repartidas") +
-    " entre " + huesos.length + " huesos" +
+    " entre " + huesos.length + " huesos, sin reemplazar vínculos" +
     (lejos ? " \u00b7 " + lejos + " quedaron lejos del alambre y sin asignar" : "") +
     " \u00b7 pas\u00e1 a Animar y pos\u00e1");
   return reparto;
@@ -9971,6 +10058,7 @@ async function dzTlGridRender() {
       c.dataset.i = i;
       c.onclick = e => dzTimelineCellActivate(i, false, e);
       c.ondblclick = e => dzTimelineCellActivate(i, true, e);
+      c.oncontextmenu = e => dzTimelineContextMenu(e, i);
       cells.appendChild(c);
     });
     row.appendChild(cells);
@@ -9991,14 +10079,38 @@ async function dzTlGridRender() {
     c.dataset.i = i;
     c.onclick = e => dzTimelineCellActivate(i, false, e);
     c.ondblclick = e => dzTimelineCellActivate(i, true, e);
+    c.oncontextmenu = e => dzTimelineContextMenu(e, i);
     camCells.appendChild(c);
   });
   camRow.appendChild(camCells);
   rows.appendChild(camRow);
   $("#dzTlgCols").querySelectorAll(".dz-tlg-col").forEach(c =>
     { c.onclick = e => dzTimelineCellActivate(+c.dataset.i, false, e);
-      c.ondblclick = e => dzTimelineCellActivate(+c.dataset.i, true, e); });
+      c.ondblclick = e => dzTimelineCellActivate(+c.dataset.i, true, e);
+      c.oncontextmenu = e => dzTimelineContextMenu(e, +c.dataset.i); });
   dzPublishAnimationPanelState(perFrame, order, displayCount);
+}
+
+function dzTimelineContextMenu(e, index) {
+  dzTimelineCellActivate(index, false, e);
+  const command = (action, payload = {}) => () => window.lowAnimationPanelCommand?.({ action, payload:{ index, ...payload } });
+  showCtxMenu(e, [
+    { icon:"＋", label:"Nuevo dibujo", action:command("new-drawing") },
+    { icon:"□", label:"Cuadro vacío", action:command("add-blank") },
+    { icon:"⧉", label:"Duplicar exposición", action:command("add") },
+    "separator",
+    { icon:"✂", label:"Cortar celdas", shortcut:"Ctrl+X", action:command("cut-cells") },
+    { icon:"▤", label:"Copiar celdas", shortcut:"Ctrl+C", action:command("copy-cells") },
+    { icon:"▥", label:"Pegar celdas", shortcut:"Ctrl+V", action:command("paste-cells") },
+    { icon:"∅", label:"Vaciar exposición", action:command("clear-cells") },
+    "separator",
+    { icon:"2", label:"Trabajar en doses", action:command("step-2") },
+    { icon:"↔", label:"Extender exposición", action:command("longer-exposure") },
+    { icon:"⇄", label:"Invertir selección", action:command("reverse-cells") },
+    { icon:"⌁", label:"Ida y vuelta", action:command("swing-cells") },
+    "separator",
+    { icon:"⌫", label:"Eliminar cuadros", shortcut:"Supr", action:command("delete") }
+  ]);
 }
 
 function dzAnimationPanelExtras(state) {
@@ -12032,6 +12144,28 @@ function dzLayerRow(el, depth) {
     dzMarkDirty(); dzBuildLayers(); };
   row.append(eye, lock, chip, lbl, op, z);
   row.onclick = () => { if (!el.hasAttribute("data-locked")) dzSelect(el); };
+  row.oncontextmenu = e => {
+    const oculto = el.getAttribute("display") === "none", bloqueado = el.hasAttribute("data-locked");
+    if (!bloqueado) dzSelect(el);
+    const renombrar = () => {
+      const nombre = prompt("Nombre de la capa:", el.id || "capa");
+      if (!nombre || nombre.trim() === (el.id || "")) return;
+      dzSnapshot(); el.id = dzUniqueId(nombre.trim()); dzMarkDirty(); dzBuildLayers();
+    };
+    showCtxMenu(e, [
+      { icon:oculto ? "◉" : "○", label:oculto ? "Mostrar" : "Ocultar", action:() => eye.click() },
+      { icon:bloqueado ? "◇" : "▣", label:bloqueado ? "Desbloquear" : "Bloquear", action:() => lock.click() },
+      { icon:"◇", label:"Renombrar…", action:renombrar },
+      "separator",
+      { icon:"⧉", label:"Duplicar capa", shortcut:"Ctrl+D", disabled:bloqueado, action:dzDuplicate },
+      { icon:isGroup ? "⌁" : "▣", label:isGroup ? "Desagrupar" : "Agrupar", disabled:bloqueado, action:() => dzGroupSel(isGroup) },
+      { icon:"↑", label:"Subir", disabled:bloqueado, action:() => dzLayerMove(1) },
+      { icon:"↓", label:"Bajar", disabled:bloqueado, action:() => dzLayerMove(-1) },
+      { icon:"⇣", label:"Combinar hacia abajo", disabled:bloqueado, action:dzLayerMergeDown },
+      "separator",
+      { icon:"⌫", label:"Eliminar capa", shortcut:"Supr", disabled:bloqueado, action:dzDeleteSelected }
+    ]);
+  };
   if (!depth) {
     row.ondragstart = (e) => { DZ.dragLayer = el; e.dataTransfer.effectAllowed = "move"; };
     row.ondragover = (e) => { e.preventDefault(); row.classList.add("dz-dropover"); };
@@ -12606,8 +12740,14 @@ async function dzSceneSave(comoNuevo) {
     if (r && r.path) {
       DZ.doc.path = r.path;
       DZ.doc.dirty = false;
+      try { localStorage.removeItem(DZ_SCENE_KEY); } catch (_) { /* sin storage */ }
       dzSetStatus(" Escena guardada: " + (r.name || r.path));
       return true;
+    }
+    if (r && r.error) {
+      DZ.doc.dirty = true;
+      sysMsg(" Guardado incompleto: " + r.error +
+        ". La versión guardada anterior sigue intacta. Podés reintentar o usar Guardar como.");
     }
   } catch (err) { sysMsg(" No pude guardar la escena: " + (err.message || err)); }
   return false;

@@ -4,6 +4,17 @@
 
 ## Reglas de trabajo acordadas
 
+- Los doce principios clásicos de la animación son criterios permanentes de
+  producto. LOW hace visibles pose, arco, spacing y timing; automatiza sólo
+  transformaciones previsibles, editables y reversibles. Actuación, staging,
+  dibujo sólido y atractivo permanecen bajo decisión del artista. Referencia:
+  `docs/FILOSOFIA_DE_ANIMACION.md`.
+- Los problemas reales de usuarios de software de animación se convierten en
+  regresiones, no sólo en ideas de UX. La matriz vigente está en
+  `docs/LOW_2D_REGRESSION_MATRIX.md`; sus P0 obligatorios son guardado integral,
+  Undo explicable, recuperación, separación documento/workspace e integridad
+  Level/Palette/Style.
+
 - Base histórica obligatoria del bloque 2D: `v3.29.37`, commit `9c00773`.
 - Trabajar sobre la arquitectura existente. No crear variantes paralelas como
   `timeline-new.js`, `xsheet-new.js`, `animation-v2.js`, `opentoonz-mode.js` o

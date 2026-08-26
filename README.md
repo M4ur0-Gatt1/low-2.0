@@ -7,6 +7,18 @@ mediante modelos de lenguaje dentro de un flujo de trabajo común.
 La aplicación combina en una interfaz directa ideas de herramientas profesionales
 de dibujo, animación, rigging, composición y creación tridimensional.
 
+## Filosofía creativa
+
+LOW toma los doce principios clásicos de la animación como criterios de diseño
+del software. Pose, trayectoria, spacing y timing deben ser visibles y
+editables; la automatización debe ser reversible y responder a la intención del
+artista. El programa puede ayudar con arcos, interpolación, volumen, desfases y
+consistencia, pero no pretende reemplazar actuación, puesta en escena, dibujo
+sólido ni atractivo con un botón.
+
+La filosofía completa y su traducción a funciones concretas se documentan en
+[`docs/FILOSOFIA_DE_ANIMACION.md`](docs/FILOSOFIA_DE_ANIMACION.md).
+
 ## Autoría
 
 LOW es una obra de **Mauro Gatti y Tropa Circa**.

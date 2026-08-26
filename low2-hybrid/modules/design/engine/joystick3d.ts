@@ -44,23 +44,23 @@ export type JoyPart =
 export type JoyMode = '2d' | '3d';
 
 const COL = {
-  x: 0xe5484d,
-  y: 0x30a46c,
-  z: 0x3b82f6,
-  ball: 0xd8dbe3,
-  screen: 0xf5c451,
+  x: 0xf05a5f,
+  y: 0x45b97c,
+  z: 0x5596f6,
+  ball: 0xe6e7e9,
+  screen: 0xf2be52,
   activo: 0xffffff,
 };
 
 /** Radios del widget, en unidades del propio widget (después se escala para que
  *  se vea siempre del mismo tamaño en pantalla). */
 const R = {
-  ball: 0.3,
+  ball: 0.265,
   vastago: 0.9,      // largo del eje hasta la base del cono
   cono: 0.22,        // alto del cono
-  conoAncho: 0.1,
-  anillo: 0.68,      // radio de los anillos de rotación
-  tubo: 0.035,       // grosor del anillo (y de su blanco de agarre)
+  conoAncho: 0.085,
+  anillo: 0.7,       // radio de los anillos de rotación
+  tubo: 0.022,       // anillo visual fino; el blanco invisible sigue siendo amplio
   tirador: 0.13,     // radio de los tiradores del joystick 2D
   brazo: 0.95,       // a qué distancia del centro van los tiradores 2D
 };
@@ -152,7 +152,7 @@ export class Joystick3D {
       // vástago + cono: el cono es el blanco real, el vástago dice a qué eje
       // pertenece (un cono suelto en el aire no se lee)
       const vastago = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.012, 0.012, R.vastago, 8), mMover);
+        new THREE.CylinderGeometry(0.009, 0.009, R.vastago, 8), mMover);
       const cono = new THREE.Mesh(
         new THREE.ConeGeometry(R.conoAncho, R.cono, 16), mMover);
       // un cono de 0.22 es un blanco chico para el dedo o el mouse: se le pone
@@ -192,7 +192,7 @@ export class Joystick3D {
     }
     // esfera central: trackball
     const ball = new THREE.Mesh(
-      new THREE.SphereGeometry(R.ball, 24, 16), this.mat('trackball', COL.ball, 0.45));
+      new THREE.SphereGeometry(R.ball, 28, 18), this.mat('trackball', COL.ball, 0.28));
     this.registrar(ball, 'trackball');
     this.grupo3d.add(ball);
   }
@@ -200,7 +200,7 @@ export class Joystick3D {
   private armar2d(): void {
     // centro: mover en el plano de la pantalla
     const centro = new THREE.Mesh(
-      new THREE.SphereGeometry(R.ball * 1.15, 24, 16), this.mat('move-screen', COL.screen, 0.55));
+      new THREE.SphereGeometry(R.ball * 1.15, 28, 18), this.mat('move-screen', COL.screen, 0.38));
     this.registrar(centro, 'move-screen');
     this.grupo2d.add(centro);
 

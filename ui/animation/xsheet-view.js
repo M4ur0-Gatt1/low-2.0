@@ -228,6 +228,30 @@
         document.addEventListener("pointermove", mover); document.addEventListener("pointerup", soltar);
       };
       c.dataset.layerId = ly.id; c.dataset.frame = String(f);
+      c.oncontextmenu = (e) => {
+        doc.selectLayer(ly.id);
+        doc.goTo(f);
+        this.sel = doc.selectCellRange(ly.id, f, ly.id, f);
+        const run = (action, payload = {}) => () => global.lowAnimationPanelCommand?.({
+          action, payload: { index: f - 1, ...payload }
+        });
+        if (typeof global.showCtxMenu === "function") global.showCtxMenu(e, [
+          { icon:"＋", label:"Nuevo dibujo", shortcut:"D", action:run("new-drawing") },
+          { icon:"□", label:"Frame vacío", action:run("add-blank") },
+          { icon:"⧉", label:"Duplicar exposición", action:run("add") },
+          "separator",
+          { icon:"✂", label:"Cortar celdas", shortcut:"Ctrl+X", action:run("cut-cells") },
+          { icon:"▣", label:"Copiar celdas", shortcut:"Ctrl+C", action:run("copy-cells") },
+          { icon:"▤", label:"Pegar celdas", shortcut:"Ctrl+V", action:run("paste-cells") },
+          { icon:"×", label:"Vaciar exposición", shortcut:"Supr", action:run("clear-cells") },
+          "separator",
+          { icon:"Ⅱ", label:"Trabajar en doses", action:run("step-2") },
+          { icon:"↦", label:"Extender exposición", action:run("longer-exposure") },
+          { icon:"⇄", label:"Invertir selección", action:run("reverse-cells") },
+          { icon:"⌫", label:"Quitar tiempo", action:run("delete") }
+        ]);
+        else e.preventDefault();
+      };
       c.ondragover = (e) => {
         if (!Array.from(e.dataTransfer.types || []).includes("application/x-low-level-drawings")) return;
         e.preventDefault(); c.classList.add("drop-target");

@@ -439,6 +439,14 @@
         reopenedSkeleton.scene.rigBone("root").elementId == null &&
         reopenedSkeleton.scene.rigActiveAttachment("body-slot").elementId === "svg_body_front");
 
+      skeleton.ensureRigBone("mano", { head: { x: 100, y: 30 }, tail: { x: 140, y: 30 } });
+      skeleton.bindRigElement("mano", "mano_boceto");
+      skeleton.bindRigElement("mano", "mano_final");
+      ok("revincular una pieza actualiza hueso, binding y attachment juntos",
+        skeleton.scene.rigBone("mano").elementId === "mano_final" &&
+        skeleton.scene.rig.bindings["binding:mano"].elementId === "mano_final" &&
+        skeleton.scene.rig.attachments["attachment:mano"].elementId === "mano_final");
+
       const doc = new animation.LowDoc();
       const history = new LOW.core.HistoryManager(); doc.setHistory(history);
       doc.ensureRigNode("cabeza", { elementId: "frente" });
@@ -598,11 +606,11 @@
         hoja.includes('[data-stk="1"]{stroke:#00aa55'));
       ok("y el color viejo ya no gobierna nada", !hoja.includes("#1a1a1a"));
 
-      doc.removeStyle(3);
-      ok("borrar un estilo deja el dibujo intacto",
-        doc.level.byNumber(2).content === contenidoAntes);
-      ok("y las referencias sueltas quedan senaladas",
-        JSON.stringify(P.orphans(doc.scene, pal)) === "[3]",
+      ok("un estilo usado no se puede borrar", doc.removeStyle(3) === false);
+      ok("rechazar el borrado deja dibujo y paleta intactos",
+        doc.level.byNumber(2).content === contenidoAntes && !!pal.byIndex(3));
+      ok("la integridad referencial impide estilos sueltos",
+        JSON.stringify(P.orphans(doc.scene, pal)) === "[]",
         JSON.stringify(P.orphans(doc.scene, pal)));
 
       const nuevo = doc.addStyle("#112233", "Contorno").index;
@@ -623,7 +631,7 @@
 
       const doc2 = LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
       ok("al reabrir vuelve la paleta con sus numeros y colores",
-        doc2.palette.byIndex(1).color === "#00aa55" && doc2.palette.byIndex(3) === null,
+        doc2.palette.byIndex(1).color === "#00aa55" && doc2.palette.byIndex(3).color === "#ffffff",
         doc2.palette.styles.map((s) => s.index + ":" + s.color).join(" "));
     }
 
@@ -655,6 +663,75 @@
       doc.adoptColors();
       ok("adoptar de nuevo no agrega referencias repetidas",
         doc.level.byNumber(1).content === antes);
+    }
+
+    // 22. Regresiones nacidas de fallos reales de producción: guardar significa
+    //     reconstruir TODO el proyecto, no sólo la planilla visible.
+    {
+      const { LowDoc } = animation;
+      const doc = new LowDoc();
+      const lv2 = doc.scene.addLevel("Fondos");
+      const ly2 = doc.scene.addLayer(lv2.id, "Fondo ciudad");
+      lv2.addDrawing(1, '<path id="edificios" data-fil="3"/>');
+      doc.scene.expose(ly2.id, 1, 1);
+      doc.scene.camera.keys[8] = { cx: 410, cy: 220, w: 720, rot: 3 };
+      doc.onionCfg = { before: 2, after: 1, alpha: .4 };
+      doc.setStyleColor(3, "#d4b38a");
+      const reopened = LowDoc.fromJSON(JSON.stringify(doc.toJSON()));
+      ok("Ctrl+S lógico conserva todos los levels y dibujos",
+        reopened.scene.levels.length === 2 && reopened.scene.level(lv2.id).byNumber(1).content.includes("edificios"));
+      ok("Ctrl+S lógico conserva exposiciones y cámara",
+        reopened.scene.layer(ly2.id).cellAt(1) === 1 && reopened.scene.camera.keys[8].w === 720);
+      ok("Ctrl+S lógico conserva paleta y papel cebolla",
+        reopened.palette.byIndex(3).color === "#d4b38a" && reopened.onionCfg.before === 2);
+      ok("un archivo reabierto queda limpio", reopened.dirty === false);
+    }
+
+    // 23. Undo se explica: la interfaz puede decir exactamente qué deshace y
+    //     qué rehace, en vez de dejar Ctrl+Z como una caja negra.
+    {
+      const h = new LOW.core.HistoryManager();
+      const estados = []; h.onChange = (s) => estados.push(s);
+      let valor = 2;
+      h.push({ label: "Mover celdas", before: 1, after: 2, apply: (_dir, v) => { valor = v; } });
+      h.undo();
+      ok("History anuncia la próxima acción de redo",
+        valor === 1 && estados.at(-1).redoLabel === "Mover celdas", JSON.stringify(estados.at(-1)));
+      h.redo();
+      ok("History anuncia la próxima acción de undo",
+        valor === 2 && estados.at(-1).undoLabel === "Mover celdas", JSON.stringify(estados.at(-1)));
+    }
+
+    // 24. Recovery es producto, no filesystem: identifica documento, contenido,
+    //     metadata y permite descartar la copia sin tocar el original.
+    {
+      const memoria = new Map();
+      const storage = { setItem:(k,v)=>memoria.set(k,v), getItem:k=>memoria.get(k) || null,
+        removeItem:k=>memoria.delete(k) };
+      const recovery = new LOW.workspace.DocumentRecovery(storage);
+      ok("recovery guarda inmediatamente un checkpoint válido",
+        recovery.saveNow("plano_03.lowscene", "contenido nuevo", { command:"Brush Stroke" }) === true);
+      const found = recovery.get("plano_03.lowscene");
+      ok("recovery explica de qué documento y operación viene",
+        found.path === "plano_03.lowscene" && found.content === "contenido nuevo" && found.metadata.command === "Brush Stroke");
+      recovery.clear("plano_03.lowscene");
+      ok("descartar recovery no deja una restauración fantasma", recovery.get("plano_03.lowscene") === null);
+    }
+
+    // 25. Room/Workspace jamás forma parte del documento: resetear la interfaz
+    //     no puede cambiar frame, selección, onion, dibujos ni historial.
+    {
+      const memoria = new Map();
+      const storage = { setItem:(k,v)=>memoria.set(k,v), getItem:k=>memoria.get(k) || null,
+        removeItem:k=>memoria.delete(k) };
+      const ws = new LOW.workspace.Workspaces(storage);
+      const doc = new animation.LowDoc(); doc.goTo(7); doc.writeDrawing('<path id="pose"/>');
+      doc.onionCfg = { before:1, after:1 }; const before = JSON.stringify(doc.toJSON());
+      ws.save("animation", [{ id:"canvas", dock:"right" }], "Animación rota");
+      ws.reset("animation");
+      ok("Reset Current Room recupera el preset", ws.get("animation").panels.some((p) => p.id === "xsheet"));
+      ok("resetear Room no modifica el documento", JSON.stringify(doc.toJSON()).replace(/\"savedAt\":\"[^\"]+\"/, '"savedAt":"x"') ===
+        before.replace(/\"savedAt\":\"[^\"]+\"/, '"savedAt":"x"'));
     }
 
     const fallan = res.filter((r) => !r.ok);

@@ -342,13 +342,15 @@
       }
       return true;
     }
-    /** Saca un estilo de la paleta. Los trazos que lo usaban se quedan con su
-     *  color literal y quedan senalados como sueltos: borrar un estilo no puede
-     *  cambiarle el color a un dibujo a espaldas de nadie. */
+    /** Saca un estilo únicamente cuando ya no tiene referencias. Un estilo
+     *  usado primero debe reasignarse: así ningún dibujo queda apuntando a una
+     *  identidad inexistente ni aparece misteriosamente con otro color. */
     removeStyle(index) {
       const pal = this.palette;
       const st = pal && pal.byIndex(index);
       if (!st || pal.locked) return false;
+      const uso = animation.palette?.usage(this.scene, pal)?.[Number(index)];
+      if (uso && uso.total) return false;
       const datos = st.toJSON();
       pal.removeStyle(st.id);
       this.touch(); this.emit("palette");
@@ -918,6 +920,10 @@
           drawOrder: Object.keys(rig.slots).length, activeAttachmentId: attachmentId, visible: true };
         rig.attachments[attachmentId] ||= { id: attachmentId, slotId, type: "drawing", elementId,
           name: bone.name || boneId, levelId: null, drawingNumber: null };
+        // Un re-vínculo debe actualizar también el attachment existente. Antes
+        // bone/binding apuntaban a la pieza nueva pero el slot seguía mostrando
+        // la anterior al guardar o resolver la pose.
+        rig.attachments[attachmentId].elementId = elementId;
         rig.bindings[bindingId] = { id: bindingId, mode: bone.binding.mode, boneId,
           slotId, attachmentId, elementId };
         rig.slots[slotId].activeAttachmentId = attachmentId;

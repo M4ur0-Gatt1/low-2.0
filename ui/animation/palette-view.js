@@ -229,12 +229,11 @@
         });
       }
       item("Borrar el estilo", () => {
-        if (u.total && !confirm(
-            `El estilo ${st.index} lo usan ${u.total} elemento(s).\n\n` +
-            "Borrarlo NO les cambia el color: se quedan con el que tienen y quedan " +
-            "señalados como sueltos, para reasignarlos cuando quieras.\n\n¿Borrarlo?"))
+        if (u.total) {
+          this._aviso(`No se puede borrar: ${u.total} elemento(s) usan el estilo ${st.index}. Reasignalos primero.`);
           return;
-        doc.removeStyle(st.index);
+        }
+        if (!doc.removeStyle(st.index)) this._aviso("El estilo no pudo borrarse");
       });
       document.body.appendChild(m);
       const cerrar = () => { m.remove(); document.removeEventListener("pointerdown", cerrar); };

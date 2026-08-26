@@ -76,12 +76,13 @@ const Section: React.FC<{ title: string; open: boolean; onToggle: () => void; ch
 );
 
 const iconBtn = (active: boolean): React.CSSProperties => ({
-  width: '40px', height: '40px', border: 'none', borderRadius: '6px',
-  backgroundColor: active ? LOW_ACCENT : 'transparent', color: active ? '#fff' : '#ccc',
+  width: '38px', height: '38px', border: '1px solid', borderRadius: '9px',
+  borderColor: active ? 'rgba(240,69,14,.72)' : 'transparent',
+  backgroundColor: active ? 'rgba(240,69,14,.18)' : 'transparent', color: active ? '#ff7448' : '#bbbcb9',
   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
 });
 const hoverIn = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => {
-  if (!active) { e.currentTarget.style.backgroundColor = '#3d3d3d'; e.currentTarget.style.color = '#fff'; }
+  if (!active) { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,.065)'; e.currentTarget.style.color = '#f2f2ef'; }
 };
 const hoverOut = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => {
   if (!active) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#ccc'; }
@@ -165,8 +166,9 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', gap: '2px', padding: '10px',
-      backgroundColor: '#2d2d2d', width: 156, maxHeight: 'calc(100vh - 90px)', overflowY: 'auto',
+      display: 'flex', flexDirection: 'column', gap: '3px', padding: '9px',
+      backgroundColor: 'rgba(22,23,25,.96)', width: 150, maxHeight: 'calc(100vh - 90px)', overflowY: 'auto',
+      borderBottomLeftRadius: 11, borderBottomRightRadius: 11,
     }}>
       <Section title="Dibujo" open={open.dibujo} onToggle={() => toggle('dibujo')}>
         {draw.map(toolBtn)}
@@ -216,7 +218,7 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
                 height: 24, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 10,
                 fontFamily: 'system-ui, sans-serif',
                 backgroundColor: joyOn ? LOW_ACCENT : 'transparent', color: joyOn ? '#fff' : '#ccc',
-              }}>Joystick</button>
+              }}><span aria-hidden="true" style={{ fontSize: 14, marginRight: 5 }}>◎</span>Joystick</button>
             {joyOn && (
               <div style={{ display: 'flex', gap: 2 }}>
                 {(['3d', '2d'] as const).map((m) => (

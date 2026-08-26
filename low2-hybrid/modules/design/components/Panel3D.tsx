@@ -61,8 +61,10 @@ export const Panel3D: React.FC<Props> = ({ title, initial, width, children }) =>
     position: 'absolute',
     ...(width ? { width } : {}),
     zIndex: 100,
-    borderRadius: 8,
-    boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
+    borderRadius: 12,
+    overflow: 'visible',
+    border: '1px solid rgba(255,255,255,.08)',
+    boxShadow: '0 16px 44px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.22)',
     // overflow visible: no clipar popovers (p. ej. el círculo cromático)
     ...(pos ? { left: pos.left, top: pos.top } : initial),
   };
@@ -75,18 +77,18 @@ export const Panel3D: React.FC<Props> = ({ title, initial, width, children }) =>
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '6px 10px',
-          background: '#3a3f4b',
-          color: '#dfe4ee',
-          fontSize: 11,
-          fontFamily: 'system-ui, sans-serif',
+          padding: '7px 9px 6px 11px',
+          background: 'rgba(28,29,32,.94)',
+          color: '#e8e8e6',
+          fontSize: 10,
+          fontFamily: 'Inter, Figtree, system-ui, sans-serif',
           textTransform: 'uppercase',
-          letterSpacing: '0.5px',
+          letterSpacing: '0.72px',
           cursor: 'grab',
           userSelect: 'none',
           touchAction: 'none',
-          borderTopLeftRadius: 8,
-          borderTopRightRadius: 8,
+          borderTopLeftRadius: 11,
+          borderTopRightRadius: 11,
         }}
       >
         <span>{title}</span>
@@ -95,8 +97,9 @@ export const Panel3D: React.FC<Props> = ({ title, initial, width, children }) =>
           onClick={() => setCollapsed((c) => !c)}
           title={collapsed ? 'Expandir' : 'Minimizar'}
           style={{
-            border: 'none', background: 'transparent', color: '#dfe4ee',
-            cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 4px',
+            width: 22, height: 22, border: 'none', borderRadius: 6,
+            background: 'transparent', color: '#aaa9a5', cursor: 'pointer',
+            fontSize: 13, lineHeight: 1, padding: 0,
           }}
         >
           {collapsed ? '▢' : '–'}

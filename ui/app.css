@@ -1047,6 +1047,11 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 }
 .dz-rig-overlay[hidden] { display: none; }
 .dz-rig-overlay.bone-create { pointer-events: all; cursor: crosshair; }
+/* Las herramientas de arte pertenecen al lienzo. Los hijos SVG que declaran
+   pointer-events:all/stroke pueden capturar la tableta aunque el padre use
+   pointer-events:none, por eso el paso transparente debe ser explícito. */
+.dz-rig-overlay.rig-pass-through,
+.dz-rig-overlay.rig-pass-through * { pointer-events: none !important; }
 .dz-rig-bone { stroke: #e98b55; stroke-width: 3; stroke-linecap: round; opacity: .86; pointer-events: none; }
 .dz-rig-overlay.bone-create .dz-rig-joint { cursor: crosshair; }
 .dz-rig-overlay.bone-create .dz-rig-bone-tip { cursor: copy; }
@@ -2861,3 +2866,81 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   display: inline-block; text-align: center; user-select: none; }
 .dz-lay-disc:hover { color: var(--red); }
 .dz-lay-disc.plegado { color: var(--txt); }
+
+/* ══ LOW 2D / interfaz compacta 2026 ═══════════════════════════════════════
+   Una sola densidad y jerarquía para mesa, timeline, Xsheet, capas y rig.
+   Las palabras largas viven en tooltips; la superficie muestra acciones. */
+#designView {
+  --dz-surface: color-mix(in srgb, var(--panel) 94%, #fff 6%);
+  --dz-raised: color-mix(in srgb, var(--panel2) 91%, #fff 9%);
+  --dz-hairline: rgba(255,255,255,.065);
+  --dz-radius: 8px;
+  font-size: 12px;
+  letter-spacing: -.005em;
+}
+#designView .dz-menubar {
+  min-height: 32px; padding: 0 8px; gap: 1px;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  border-bottom: 1px solid var(--dz-hairline);
+}
+#designView .dz-mb-brand { width: 36px; overflow: hidden; white-space: nowrap; font-size: 0; }
+#designView .dz-mb-brand::after { content:"LOW"; font: 750 11px/1 Figtree,sans-serif; letter-spacing:.08em; color:var(--txt); }
+#designView .dz-menu { padding: 7px 8px; border-radius: 6px; color: var(--mut); font-size: 11.5px; }
+#designView .dz-menu:hover,
+#designView .dz-menu.open { color:var(--txt); background:var(--dz-raised); }
+#designView .dz-ws { gap:2px; margin-left:5px; }
+#designView .dz-ws button { min-height:24px; padding:0 8px; border:0; border-radius:6px; background:transparent; color:var(--mut); }
+#designView .dz-ws button.on { background:var(--dz-raised); color:var(--txt); box-shadow:inset 0 0 0 1px var(--dz-hairline); }
+#designView .dz-menubar > .ibtn { width:28px; height:27px; border-color:transparent; border-radius:7px; }
+#designView .dz-menubar > .ibtn:hover { background:var(--dz-raised); border-color:var(--dz-hairline); }
+#designView .dz-toolopts { min-height:32px; padding:3px 8px; gap:8px; border-bottom-color:var(--dz-hairline); }
+#designView .dz-to-name { padding-right:8px; color:var(--txt); font-weight:650; text-transform:none; letter-spacing:0; }
+#designView .dz-tools { width:44px; padding:5px; gap:2px; border-right-color:var(--dz-hairline); }
+#designView .dz-tools .ibtn { width:34px; height:31px; border:0; border-radius:7px; }
+#designView .dz-tools .ibtn:hover { background:var(--dz-raised); }
+#designView .dz-tools .ibtn.active { background:var(--redsoft); color:var(--redh); box-shadow:inset 0 0 0 1px rgba(240,69,14,.22); }
+#designView .dz-tools .hsep { margin:4px 5px 2px; width:24px; height:1px; overflow:hidden; color:transparent; background:var(--dz-hairline); }
+#designView .dz-canvas { background-color:#101012; }
+#designView .dz-inspector { width:258px; padding:11px 10px; border-left-color:var(--dz-hairline); }
+#designView .dz-style-row { min-height:30px; gap:6px; }
+#designView .dz-lay-row { min-height:30px; padding:4px 6px; border-radius:7px; }
+#designView .dz-lay-row.sel { background:var(--redsoft); box-shadow:inset 2px 0 0 var(--red); }
+#designView .dz-lay-op,#designView .dz-lay-z { border:0; border-radius:5px; background:transparent; }
+#designView .dz-laytools { padding:7px; border:0; border-radius:9px; background:var(--dz-raised); box-shadow:inset 0 0 0 1px var(--dz-hairline); }
+#designView .dz-onionpanel,
+#designView .dz-zpanel,
+#designView .dz-xsheet {
+  border:1px solid var(--dz-hairline); border-radius:10px;
+  background:color-mix(in srgb,var(--panel) 94%,transparent);
+  backdrop-filter:blur(18px) saturate(120%);
+  box-shadow:0 16px 42px rgba(0,0,0,.34);
+}
+#designView .dz-op-head { min-height:31px; padding:6px 9px; border-bottom:1px solid var(--dz-hairline); font-size:10.5px; letter-spacing:.045em; }
+#designView .dz-op-x { width:22px; height:22px; display:grid; place-items:center; border-radius:6px; }
+#designView .dz-op-x:hover { background:var(--dz-raised); }
+#designView .rig2-tools { gap:3px; padding:5px; background:transparent; border-bottom-color:var(--dz-hairline); }
+#designView .rig2-tools button { display:flex; align-items:center; justify-content:center; gap:5px; min-height:30px; padding:3px 5px; border-color:transparent; border-radius:7px; }
+#designView .rig2-tools button b { font:500 16px/1 Figtree,sans-serif; }
+#designView .rig2-tools button span { font-size:10px; }
+#designView .rig2-tools button.on { background:var(--redsoft); border-color:rgba(240,69,14,.22); color:var(--txt); }
+#designView .rig2-flow { opacity:.78; }
+#designView .rig2-flow span { border:0; background:var(--dz-raised); border-radius:6px; }
+#designView .dz-timeline { min-height:38px; padding:4px 7px; gap:3px; border-top-color:var(--dz-hairline); }
+#designView .dz-timeline .ibtn { width:29px; height:29px; border-color:transparent; border-radius:7px; }
+#designView .dz-timeline .ibtn:hover { background:var(--dz-raised); }
+#designView .dz-tlgrid { border-top-color:var(--dz-hairline); background:var(--panel); }
+#designView .dz-tlg-lhead { background:var(--panel); border-right-color:var(--dz-hairline); }
+#designView .dz-tlg-cell,#designView .dz-tlg-col { border-color:var(--dz-hairline); }
+#designView .dz-tlg-cell:hover { background:var(--cyansoft); }
+
+.ctx-command-menu { min-width:220px; max-width:290px; padding:5px; border:1px solid var(--line); }
+.ctx-command-menu .ctx-item {
+  width:100%; min-height:30px; display:grid; grid-template-columns:20px 1fr auto;
+  align-items:center; gap:7px; border:0; background:transparent; color:var(--txt);
+  text-align:left; font:500 12px/1.2 Figtree,sans-serif; cursor:pointer;
+}
+.ctx-command-menu .ctx-item:hover,.ctx-command-menu .ctx-item:focus-visible { background:var(--surface-hover,var(--panel2)); outline:0; }
+.ctx-command-menu .ctx-item:disabled { opacity:.35; cursor:default; }
+.ctx-command-menu .ctx-symbol { color:var(--mut); text-align:center; font-size:14px; }
+.ctx-command-menu kbd { color:var(--faint); background:transparent; font:500 9.5px/1 JetBrains Mono,monospace; }
+.ctx-separator { height:1px; margin:4px 5px; background:var(--line); }

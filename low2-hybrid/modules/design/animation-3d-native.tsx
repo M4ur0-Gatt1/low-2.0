@@ -22,8 +22,49 @@ const bg: Record<Theme, string> = {
   // El claro NO llega al blanco puro. Arrancaba en #ffffff justo en el centro,
   // que es donde uno dibuja: contra ese fondo se perdían de vista el anillo del
   // pincel y el cursor. Un gris claro los deja siempre visibles y no cansa.
-  light: 'radial-gradient(120% 120% at 50% 10%, #eceef2 0%, #e2e6ee 70%, #d8dde7 100%)',
-  dark: 'radial-gradient(120% 120% at 50% 15%, #1b2030 0%, #0e0f13 60%, #08090c 100%)',
+  light: 'radial-gradient(120% 115% at 50% 8%, #f3f2ef 0%, #e7e6e2 68%, #d9d8d4 100%)',
+  dark: 'radial-gradient(120% 115% at 50% 10%, #202124 0%, #131416 62%, #0c0d0e 100%)',
+};
+
+const OrientationJoystick: React.FC<{
+  view: ViewName; dark: boolean; onView: (view: ViewName) => void;
+}> = ({ view, dark, onView }) => {
+  const surface = dark ? 'rgba(24,25,27,.88)' : 'rgba(250,250,248,.82)';
+  const line = dark ? 'rgba(255,255,255,.11)' : 'rgba(20,20,18,.12)';
+  const fg = dark ? '#c9cac7' : '#555650';
+  const nav = (v: ViewName, label: string, title: string, style: React.CSSProperties) => (
+    <button onClick={() => onView(v)} title={title} aria-label={title} style={{
+      position: 'absolute', width: 30, height: 30, padding: 0, borderRadius: 9,
+      border: `1px solid ${view === v ? 'rgba(240,69,14,.6)' : 'transparent'}`,
+      background: view === v ? 'rgba(240,69,14,.16)' : 'transparent',
+      color: view === v ? '#f05a32' : fg, cursor: 'pointer', font: '600 9px/1 Inter, system-ui',
+      transition: 'background .14s ease, color .14s ease, transform .14s ease', ...style,
+    }}>{label}</button>
+  );
+  return (
+    <div title="Navegador de vistas" aria-label="Navegador de orientación 3D" style={{
+      position: 'absolute', right: 16, bottom: 48, zIndex: 105, width: 116, height: 116,
+      borderRadius: '50%', background: surface, border: `1px solid ${line}`,
+      boxShadow: '0 14px 38px rgba(0,0,0,.22), inset 0 1px rgba(255,255,255,.08)',
+      backdropFilter: 'blur(16px)',
+    }}>
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 13, borderRadius: '50%', border: `1px solid ${line}` }} />
+      {nav('top', 'Y+', 'Vista superior', { left: 43, top: 4 })}
+      {nav('left', 'X−', 'Vista izquierda', { left: 4, top: 43 })}
+      {nav('right', 'X+', 'Vista derecha', { right: 4, top: 43 })}
+      {nav('front', 'Z+', 'Vista frontal', { left: 43, bottom: 4 })}
+      <button onClick={() => onView('persp')} title="Vista perspectiva" aria-label="Vista perspectiva" style={{
+        position: 'absolute', left: 38, top: 38, width: 40, height: 40, padding: 0,
+        borderRadius: 12, border: `1px solid ${view === 'persp' ? 'rgba(240,69,14,.72)' : line}`,
+        background: view === 'persp' ? 'rgba(240,69,14,.18)' : (dark ? '#2a2b2e' : '#eeede9'),
+        color: view === 'persp' ? '#f05a32' : fg, cursor: 'pointer',
+        boxShadow: '0 5px 14px rgba(0,0,0,.16)', font: '700 10px/1 Inter, system-ui',
+      }}><span aria-hidden="true" style={{ fontSize: 17, display: 'block', marginBottom: 1 }}>◇</span>3D</button>
+      <i aria-hidden="true" style={{ position: 'absolute', left: 57, top: 15, width: 1, height: 11, background: '#45b97c', opacity: .72 }} />
+      <i aria-hidden="true" style={{ position: 'absolute', left: 15, top: 57, width: 11, height: 1, background: '#f05a5f', opacity: .72 }} />
+      <i aria-hidden="true" style={{ position: 'absolute', left: 57, bottom: 15, width: 1, height: 11, background: '#5596f6', opacity: .72 }} />
+    </div>
+  );
 };
 
 interface Props {
@@ -83,8 +124,8 @@ export const Animation3DNative: React.FC<Props> = ({ projectId = 'default', onRe
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const dark = theme === 'dark';
-  const chipBg = dark ? 'rgba(20,22,28,0.6)' : 'rgba(255,255,255,0.7)';
-  const chipFg = dark ? '#8a93a6' : '#5b6472';
+  const chipBg = dark ? 'rgba(24,25,27,.86)' : 'rgba(250,250,248,.82)';
+  const chipFg = dark ? '#b5b6b2' : '#555650';
   const chipActive = LOW_ACCENT;
 
   const eng = () => engineRef.current;
@@ -262,14 +303,14 @@ ${m.path || '(ruta desconocida)'}` };
       onClick={onClick}
       title={title ?? label}
       style={{
-        height: 30,
-        padding: '0 10px',
-        borderRadius: 6,
-        border: 'none',
+        height: 30, minWidth: 30,
+        padding: '0 8px',
+        borderRadius: 8,
+        border: `1px solid ${active ? 'rgba(240,69,14,.65)' : 'transparent'}`,
         cursor: 'pointer',
-        background: active ? chipActive : 'transparent',
-        color: active ? '#fff' : chipFg,
-        fontSize: 12,
+        background: active ? 'rgba(240,69,14,.16)' : 'transparent',
+        color: active ? chipActive : chipFg,
+        fontSize: 12, fontWeight: 550,
       }}
     >
       {label}
@@ -287,39 +328,40 @@ ${m.path || '(ruta desconocida)'}` };
           right:250/294/356 y se superponían entre sí y con la barra central
           apenas la ventana se achicaba. Con una fila flex no puede pasar. */}
       <header style={{
-        position: 'absolute', top: 14, left: 14, right: 14, zIndex: 110,
+        position: 'absolute', top: 12, left: 12, right: 12, zIndex: 110,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 8, pointerEvents: 'none',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, pointerEvents: 'auto', flex: '0 0 auto' }}>
           {onRequestClose && (
             <button onClick={onRequestClose} title="Cerrar módulo 3D (Esc)" style={{
-              height: 36, padding: '0 12px', border: 'none', borderRadius: 8, cursor: 'pointer',
-              background: chipBg, color: chipFg, fontSize: 12,
-            }}>← Salir de 3D</button>
+              width: 36, height: 36, padding: 0, border: '1px solid rgba(127,127,127,.12)', borderRadius: 10, cursor: 'pointer',
+              background: chipBg, color: chipFg, fontSize: 17, backdropFilter: 'blur(14px)',
+            }} aria-label="Salir de 3D">←</button>
           )}
         </div>
 
         <div style={{
           display: 'flex', alignItems: 'center', gap: 2, padding: 4, borderRadius: 8,
-          background: chipBg, pointerEvents: 'auto', flex: '0 1 auto', overflowX: 'auto',
+          background: chipBg, border: '1px solid rgba(127,127,127,.12)', boxShadow: '0 10px 30px rgba(0,0,0,.12)',
+          backdropFilter: 'blur(14px)', pointerEvents: 'auto', flex: '0 1 auto', overflowX: 'auto',
         }}>
           {barBtn('⟲', () => eng()?.undo(), false, 'Deshacer (Ctrl+Z)')}
           {barBtn('⟳', () => eng()?.redo(), false, 'Rehacer (Ctrl+Alt+Z / Ctrl+Shift+Z)')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
-          {barBtn('Nuevo', () => {
+          {barBtn('＋', () => {
             setConfirmNuevo(true);
           }, false, 'Nuevo proyecto (descarta el dibujo actual)')}
-          {barBtn('Abrir', () => {
+          {barBtn('⌁', () => {
             if (window.parent !== window) openProjectViaHost(); else fileInputRef.current?.click();
           }, false, 'Abrir proyecto LOW 3D')}
-          {barBtn('Guardar', () => saveProject(false), false,
+          {barBtn('▣', () => saveProject(false), false,
             savedTick && projectPathRef.current
               ? `Guardar (Ctrl+S) — sobrescribe ${projectPathRef.current}`
               : 'Guardar proyecto LOW 3D (Ctrl+S)')}
-          {barBtn('Guardar como…', () => saveProject(true), false,
+          {barBtn('▣+', () => saveProject(true), false,
             'Guardar en otro archivo (Ctrl+Shift+S)')}
-          {barBtn('STL', pedirSTL, false,
+          {barBtn('⬡', pedirSTL, false,
             'Exportar como STL para impresión 3D — dice antes qué entra y qué queda afuera')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
           {/* vistas abreviadas: el nombre completo queda en el tooltip */}
@@ -331,9 +373,9 @@ ${m.path || '(ruta desconocida)'}` };
           {barBtn('Sup', () => applyView('top'), view === 'top', 'Arriba (ortogonal)')}
           {barBtn('Inf', () => applyView('bottom'), view === 'bottom', 'Abajo (ortogonal)')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
-          {barBtn('Unir', () => { eng()?.groupSelection(); }, false,
+          {barBtn('⌘', () => { eng()?.groupSelection(); }, false,
             'Agrupar lo seleccionado (Ctrl+G) — se elige, se mueve y se deforma como una sola pieza. Ctrl+Shift+G lo desarma')}
-          {barBtn('Volumen', () => { eng()?.solidifySelection(); }, false,
+          {barBtn('⬢', () => { eng()?.solidifySelection(); }, false,
             'Convertir lo seleccionado en un cuerpo con volumen (Ctrl+E): una silueta plana se extruye; trazos repartidos en el espacio se cierran por su casco. Los trazos de origen se conservan')}
           <span style={{ width: 1, height: 18, background: dark ? '#3a3f4b' : '#cfd4dd', margin: '0 4px' }} />
           {barBtn('XYZ', () => setAxes(!!eng()?.toggleAxes()), axes,
@@ -351,7 +393,7 @@ ${m.path || '(ruta desconocida)'}` };
           <button onClick={() => engineRef.current?.deleteGuide()}
             title="Borrar la última guía creada (los trazos se conservan) — para borrar cualquier otra, Goma + click sobre ella"
             style={{ height: 36, padding: '0 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-              background: chipBg, color: chipFg, fontSize: 12, whiteSpace: 'nowrap' }}>🗑 Borrar guía</button>
+              background: chipBg, color: chipFg, fontSize: 16, whiteSpace: 'nowrap' }} aria-label="Borrar guía">⌫</button>
           <button onClick={() => setTheme(dark ? 'light' : 'dark')} title="Fondo claro / oscuro"
             style={{ width: 36, height: 36, borderRadius: 8, border: 'none', cursor: 'pointer',
               background: chipBg, color: chipFg, fontSize: 16 }}>{dark ? '☀' : '☾'}</button>
@@ -531,17 +573,7 @@ ${m.path || '(ruta desconocida)'}` };
         <LayerManager3D engine={engineRef} />
       </Panel3D>
 
-      <div title="Joystick de orientación" style={{
-        position: 'absolute', right: 14, bottom: 62, zIndex: 105,
-        display: 'grid', gridTemplateColumns: 'repeat(3, 34px)', gap: 3,
-        padding: 6, borderRadius: 12, background: chipBg,
-      }}>
-        <span />{barBtn('Y+', () => applyView('top'), view === 'top', 'Vista superior')}<span />
-        {barBtn('X−', () => applyView('left'), view === 'left', 'Vista izquierda')}
-        {barBtn('3D', () => applyView('persp'), view === 'persp', 'Vista perspectiva')}
-        {barBtn('X+', () => applyView('right'), view === 'right', 'Vista derecha')}
-        <span />{barBtn('Z+', () => applyView('front'), view === 'front', 'Vista frontal')}<span />
-      </div>
+      <OrientationJoystick view={view} dark={dark} onView={applyView} />
 
 
       <div

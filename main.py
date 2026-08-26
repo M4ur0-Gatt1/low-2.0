@@ -17,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+import tempfile
 import urllib.parse
 import webbrowser
 from pathlib import Path
@@ -46,7 +47,36 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.63"
+LOW_VERSION = "3.29.64"
+
+
+def atomic_write_text(path, content, encoding="utf-8"):
+    """Escribe texto sin exponer un archivo parcial.
+
+    El temporal vive junto al destino para que ``os.replace`` sea atómico en
+    el mismo volumen. Si escribir o reemplazar falla, el archivo anterior queda
+    intacto y el temporal se elimina. Esta es la garantía detrás de Ctrl+S.
+    """
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+                mode="w", encoding=encoding, newline="", dir=target.parent,
+                prefix=f".{target.name}.", suffix=".tmp", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+            tmp.write(content)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+        os.replace(tmp_path, target)
+        return target
+    except Exception:
+        if tmp_path:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
 
 # Desafío por defecto del comparador: verificable automáticamente
 DEFAULT_TASK = ("Escribe un programa Python que imprima los primeros 10 numeros "
@@ -1956,9 +1986,13 @@ class Api:
                 return None
             path = r[0] if isinstance(r, (list, tuple)) else str(r)
         p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
-        return {"path": str(p), "name": p.name}
+        try:
+            atomic_write_text(p, content, encoding="utf-8")
+        except OSError as e:
+            log(f"save_file: escritura atómica falló para {p}: {e}")
+            return {"error": str(e), "path": str(p), "recoverable": True}
+        return {"path": str(p), "name": p.name, "bytes": len(content.encode("utf-8")),
+                "atomic": True}
 
     # ── ejecutar código ───────────────────────────────────
     GUI_LIBS = re.compile(r"\b(pygame|tkinter|turtle|PyQt5|PyQt6|PySide6|kivy|arcade)\b")
