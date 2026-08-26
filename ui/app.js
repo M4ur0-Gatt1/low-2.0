@@ -1027,6 +1027,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       || (t === "INPUT" && /^(text|search|email|url|password|)$/i.test(e.target.type || ""));
     if ((e.ctrlKey || e.metaKey) && !escribiendoTexto) {
       const k = e.key.toLowerCase();
+      if (k === "n") { e.preventDefault(); dzDocumentNew(); return; }
+      if (k === "o") { e.preventDefault(); dzSceneOpen(); return; }
+      if (k === "s") { e.preventDefault(); DZ.doc ? dzSceneSave(!!e.shiftKey) : dzSave(); return; }
       if (k === "z" && !e.shiftKey) { e.preventDefault(); dzUndo(); return; }
       if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); dzRedo(); return; }
     }
@@ -1063,9 +1066,6 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       const hayTextoElegido = (window.getSelection() || "").toString().trim().length > 0;
       if (tecla === "c" && !hayTextoElegido) { e.preventDefault(); dzCuadroCopiar(); return; }
       if (tecla === "v" && DZ.clipCuadro) { e.preventDefault(); dzCuadroPegar(); return; }
-    }
-    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "s" && DZ.doc) {
-      e.preventDefault(); dzSceneSave(false); return;
     }
     if (e.ctrlKey && e.key.toLowerCase() === "g") {
       e.preventDefault(); dzGroupSel(e.shiftKey);
@@ -1121,6 +1121,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   });
   $("#selLang").onchange = applyEditorMode;
   document.addEventListener("keydown", e => {
+    // El módulo 2D administra sus propios documentos y atajos. No crear una
+    // solapa de código ni guardar el editor que quedó detrás del lienzo.
+    if (!$("#designView").hidden && (e.ctrlKey || e.metaKey)) return;
     if (e.ctrlKey && e.key.toLowerCase() === "k") { e.preventDefault(); $("#q").focus(); }
     if (e.ctrlKey && e.key.toLowerCase() === "s") { e.preventDefault(); save(); }
     if (e.ctrlKey && e.key.toLowerCase() === "n") { e.preventDefault(); newTab(); }
@@ -9535,8 +9538,13 @@ function dzMenuAction(act) {
   // menú Ventana: comparte implementación con dzRunAction (atajos de teclado)
   if (act && (act.startsWith("win-") || act.startsWith("ws-"))) return dzRunAction(act);
   const A = {
-    nuevo: () => api.new_design().then(r => { if (r && r.path) openDesign(r.path); }),
-    documento: dzDocModal, guardar: () => dzSave(), importar: dzImportImage,
+    nuevo: dzDocumentNew,
+    "escena-abrir": dzSceneOpen,
+    documento: dzDocModal, guardar: () => DZ.doc ? dzSceneSave(false) : dzSave(),
+    "escena-guardar-como": () => DZ.doc ? dzSceneSave(true) : dzSave(),
+    "cerrar-documento": dzDocumentClose,
+    "borrar-documento": dzDocumentTrash,
+    importar: dzImportImage,
     exportar: dzExportModal, exportanim: dzExportModal,
     navegador: () => { if (DZ.path) api.preview_html(DZ.path, $("#dzCanvas").innerHTML); },
     cerrar: () => closeDesign(),
@@ -12730,6 +12738,89 @@ async function dzTlMount() {
    reabrir se ofrece lo último. */
 const DZ_SCENE_KEY = "low.scene.autosave";
 
+/** Descarta por completo el documento activo y todo estado visual asociado.
+ *  Es deliberadamente más fuerte que ocultar el módulo: un documento nuevo no
+ *  puede heredar rig, cámara, selección, historial ni recuperación del anterior. */
+function dzDocumentReset() {
+  if (DZ.anim?.playing) dzAnimStop();
+  if (DZ.perf?.rec) dzPerfRecEnd(false);
+  if (DZ.doc?.listeners?.clear) DZ.doc.listeners.clear();
+  ["xsView", "tlView", "lsView", "palView"].forEach((key) => {
+    try { DZ[key]?.dispose?.(); } catch (_) { /* la limpieza no debe bloquear */ }
+    DZ[key] = null;
+  });
+  if (DZ.playbackUiUnsub) { DZ.playbackUiUnsub(); DZ.playbackUiUnsub = null; }
+  if (DZ.playback?.stop) DZ.playback.stop();
+  DZ.playback = null;
+  DZ.doc = null;
+  DZ.anim = null;
+  DZ.scene = {};
+  DZ.sel = null;
+  DZ.multi = [];
+  DZ.rigMode = false;
+  DZ.rigSubmode = "build";
+  DZ.rigNodeId = null;
+  DZ.rigConstraintId = null;
+  DZ.rigLivePose = null;
+  DZ.rigIKPreview = null;
+  DZ.rigBoneTool = false;
+  DZ.path = null;
+  DZ.dirty = false;
+  DZ.onionOn = false;
+  try { localStorage.removeItem(DZ_SCENE_KEY); } catch (_) { /* sin storage */ }
+  $("#dzRigPanel")?.setAttribute("hidden", "");
+  $("#dzRigOverlay")?.setAttribute("hidden", "");
+  if ($("#dzRigOverlay")) $("#dzRigOverlay").innerHTML = "";
+  $("#dzRigBtn")?.classList.remove("active");
+  $("#tlRigOpen")?.classList.remove("active");
+  $("#dzTimeline")?.setAttribute("hidden", "");
+  $("#dzXs")?.setAttribute("hidden", "");
+  dzDeselect();
+}
+
+function dzDocumentMayDiscard(action) {
+  const dirty = !!(DZ.doc?.dirty || DZ.dirty);
+  return !dirty || confirm(`Hay cambios sin guardar. ¿${action} sin guardarlos?`);
+}
+
+async function dzDocumentNew() {
+  if (!dzDocumentMayDiscard("Crear un documento nuevo")) return false;
+  dzDocumentReset();
+  const r = await api.new_design();
+  if (!r?.path) return false;
+  await openDesign(r.path);
+  await dzDocInit();
+  DZ.doc.scene.name = (r.name || "Documento sin título").replace(/\.svg$/i, "");
+  DZ.doc.dirty = false;
+  dzSetStatus(" Documento nuevo · lienzo vacío");
+  return true;
+}
+
+function dzDocumentClose() {
+  if (!DZ.path && !DZ.doc) return false;
+  if (!dzDocumentMayDiscard("Cerrar el documento")) return false;
+  dzDocumentReset();
+  $("#designView").hidden = true;
+  $("#dzTitle").textContent = "Sin documento";
+  if (RULER) dzRulerClear();
+  return true;
+}
+
+async function dzDocumentTrash() {
+  const target = DZ.doc?.path || DZ.path;
+  if (!target) return sysMsg(" Este documento todavía no tiene un archivo para borrar.");
+  const name = String(target).split(/[\\/]/).pop();
+  if (!confirm(`¿Mover «${name}» a la papelera del proyecto? Podrás recuperarlo desde .low-trash.`)) return false;
+  const r = await api.trash_design(target);
+  if (!r || r.error) return sysMsg(" No pude moverlo a la papelera: " + ((r && r.error) || "error desconocido"));
+  dzDocumentReset();
+  $("#designView").hidden = true;
+  $("#dzTitle").textContent = "Sin documento";
+  try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (_) { /* evento del backend alcanza */ }
+  sysMsg(" Documento movido a la papelera del proyecto.");
+  return true;
+}
+
 async function dzSceneSave(comoNuevo) {
   if (!DZ.doc) return false;
   dzDocCommit();                      // lo que esté en el lienzo, adentro
@@ -12758,8 +12849,13 @@ async function dzSceneOpen() {
     const r = await api.open_dialog();
     if (!r || !r.content) return false;
     const doc = LOW.animation.LowDoc.fromJSON(r.content);
+    if (!dzDocumentMayDiscard("Abrir otro documento")) return false;
+    dzDocumentReset();
     doc.path = r.path || null;
     dzDocUse(doc);
+    $("#designView").hidden = false;
+    $("#dzTitle").textContent = r.name || doc.scene.name || "Documento de animación";
+    requestAnimationFrame(() => dzFitView());
     dzSetStatus(" Escena abierta: " + (r.name || r.path));
     return true;
   } catch (err) { sysMsg(" No pude abrir la escena: " + (err.message || err)); }

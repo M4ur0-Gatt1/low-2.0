@@ -12,6 +12,7 @@ import http.server
 import json
 import os
 import re
+import shutil
 import socketserver
 import subprocess
 import sys
@@ -47,7 +48,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.64"
+LOW_VERSION = "3.29.65"
 
 
 def atomic_write_text(path, content, encoding="utf-8"):
@@ -1719,6 +1720,38 @@ class Api:
         fp.write_text(starter, encoding="utf-8")
         s._push("ws", {"ws": s.ws, "tree": s._tree(), "branch": s._git_branch()})
         return {"path": str(fp), "name": fp.name}
+
+    def trash_design(s, path):
+        """Mueve un archivo creativo del workspace a una papelera recuperable.
+
+        Nunca acepta rutas externas al proyecto y nunca borra definitivamente.
+        La carpeta `.low-trash` queda fuera de la vista creativa normal, pero el
+        usuario puede recuperar el archivo manualmente si se arrepiente.
+        """
+        if not path:
+            return {"error": "no se indicó ningún archivo"}
+        base = s._base().resolve()
+        source = Path(path).resolve()
+        try:
+            source.relative_to(base)
+        except ValueError:
+            return {"error": "LOW solo puede borrar archivos dentro del proyecto abierto"}
+        if not source.exists() or not source.is_file():
+            return {"error": "el archivo ya no existe"}
+        trash = base / ".low-trash"
+        trash.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        destination = trash / f"{source.stem}_{stamp}{source.suffix}"
+        counter = 2
+        while destination.exists():
+            destination = trash / f"{source.stem}_{stamp}_{counter}{source.suffix}"
+            counter += 1
+        try:
+            shutil.move(str(source), str(destination))
+        except OSError as e:
+            return {"error": str(e)}
+        s._push("ws", {"ws": s.ws, "tree": s._tree(), "branch": s._git_branch()})
+        return {"trashed": True, "path": str(source), "recovery_path": str(destination)}
 
     # direcciones creativas del [Variacion]: cada variación explora un eje distinto
     VAR_DIRECTIONS = [

@@ -300,13 +300,17 @@
   <div class="dz-menubar" id="dzMenubar">
     <span class="dz-mb-brand">LOW Estudio</span>
     <div class="dz-menu" data-menu="archivo">Archivo<div class="dz-dd">
-      <span data-act="nuevo">Lienzo nuevo</span>
+      <span data-act="nuevo">Nuevo documento <kbd>Ctrl+N</kbd></span>
+      <span data-act="escena-abrir">Abrir documento… <kbd>Ctrl+O</kbd></span>
       <span data-act="documento">Configuración del archivo… <kbd>tamaño/fondo</kbd></span>
-      <span data-act="guardar">Guardar <kbd>Ctrl+S</kbd></span>
+      <span data-act="guardar">Guardar documento <kbd>Ctrl+S</kbd></span>
+      <span data-act="escena-guardar-como">Guardar documento como… <kbd>Ctrl+Shift+S</kbd></span>
       <span data-act="importar">Importar imagen de referencia…</span>
       <span data-act="exportar">Exportar animación… <kbd>GIF/PNG</kbd></span>
       <span data-act="navegador">Abrir en el navegador</span>
-      <hr><span data-act="cerrar">Cerrar el editor <kbd>Esc</kbd></span>
+      <hr><span data-act="cerrar-documento">Cerrar documento</span>
+      <span class="danger" data-act="borrar-documento">Mover documento a la papelera…</span>
+      <hr><span data-act="cerrar">Salir del módulo 2D <kbd>Esc</kbd></span>
     </div></div>
     <div class="dz-menu" data-menu="edicion">Edición<div class="dz-dd">
       <span data-act="deshacer">Deshacer <kbd>Ctrl+Z</kbd></span>
@@ -867,37 +871,37 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=3.29.64"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=3.29.65"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=3.29.64"></script>
-<script src="animation/palette.js?v=3.29.64"></script>
-<script src="animation/scene-model.js?v=3.29.64"></script>
-<script src="animation/exposures.js?v=3.29.64"></script>
-<script src="animation/onion.js?v=3.29.64"></script>
-<script src="animation/document.js?v=3.29.64"></script>
-<script src="animation/xsheet-view.js?v=3.29.64"></script>
-<script src="animation/timeline-view.js?v=3.29.64"></script>
-<script src="animation/level-strip.js?v=3.29.64"></script>
-<script src="animation/palette-view.js?v=3.29.64"></script>
-<script src="animation/audio.js?v=3.29.64"></script>
-<script src="animation/shortcuts.js?v=3.29.64"></script>
-<script src="animation/model-tests.js?v=3.29.64"></script>
-<script src="animation/timeline.js?v=3.29.64"></script>
-<script src="animation/xsheet.js?v=3.29.64"></script>
-<script src="animation/playback.js?v=3.29.64"></script>
-<script src="animation/camera.js?v=3.29.64"></script>
-<script src="drawing/stabilization.js?v=3.29.64"></script>
-<script src="drawing/pointer-input.js?v=3.29.64"></script>
-<script src="drawing/brushes.js?v=3.29.64"></script>
-<script src="drawing/stroke-engine.js?v=3.29.64"></script>
-<script src="workspace/panels.js?v=3.29.64"></script>
-<script src="workspace/workspaces.js?v=3.29.64"></script>
-<script src="workspace/windows.js?v=3.29.64"></script>
-<script src="workspace/layouts.js?v=3.29.64"></script>
-<script src="workspace/recovery.js?v=3.29.64"></script>
-<script src="ai/commands.js?v=3.29.64"></script>
-<script src="ai/task-runner.js?v=3.29.64"></script>
-<script src="ai/recovery.js?v=3.29.64"></script>
-<script src="app.js?v=3.29.64"></script>
+<script src="core/history.js?v=3.29.65"></script>
+<script src="animation/palette.js?v=3.29.65"></script>
+<script src="animation/scene-model.js?v=3.29.65"></script>
+<script src="animation/exposures.js?v=3.29.65"></script>
+<script src="animation/onion.js?v=3.29.65"></script>
+<script src="animation/document.js?v=3.29.65"></script>
+<script src="animation/xsheet-view.js?v=3.29.65"></script>
+<script src="animation/timeline-view.js?v=3.29.65"></script>
+<script src="animation/level-strip.js?v=3.29.65"></script>
+<script src="animation/palette-view.js?v=3.29.65"></script>
+<script src="animation/audio.js?v=3.29.65"></script>
+<script src="animation/shortcuts.js?v=3.29.65"></script>
+<script src="animation/model-tests.js?v=3.29.65"></script>
+<script src="animation/timeline.js?v=3.29.65"></script>
+<script src="animation/xsheet.js?v=3.29.65"></script>
+<script src="animation/playback.js?v=3.29.65"></script>
+<script src="animation/camera.js?v=3.29.65"></script>
+<script src="drawing/stabilization.js?v=3.29.65"></script>
+<script src="drawing/pointer-input.js?v=3.29.65"></script>
+<script src="drawing/brushes.js?v=3.29.65"></script>
+<script src="drawing/stroke-engine.js?v=3.29.65"></script>
+<script src="workspace/panels.js?v=3.29.65"></script>
+<script src="workspace/workspaces.js?v=3.29.65"></script>
+<script src="workspace/windows.js?v=3.29.65"></script>
+<script src="workspace/layouts.js?v=3.29.65"></script>
+<script src="workspace/recovery.js?v=3.29.65"></script>
+<script src="ai/commands.js?v=3.29.65"></script>
+<script src="ai/task-runner.js?v=3.29.65"></script>
+<script src="ai/recovery.js?v=3.29.65"></script>
+<script src="app.js?v=3.29.65"></script>
 </body>
 </html>
