@@ -3163,6 +3163,8 @@ async function designEntry() {
   if (r && r.path) {
     try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
     await openDesign(r.path);
+    await dzDocInit();
+    await dzEnsureAnimationWorkspace();
     try { dzFitView(); } catch (e) { /* */ }
     dzSetStatus(" Página en blanco lista — dibujá con las herramientas de la izquierda o pedile un diseño a LOW abajo.  cambia el tamaño del lienzo.");
   }
@@ -7355,6 +7357,26 @@ function dzRigDrawableElements() {
   [...svg.children].forEach(walk);
   return pieces.filter((el, index, all) => !all.some((parent, i) => i !== index && parent.contains(el)));
 }
+
+/* Un lienzo nuevo debe quedar listo para animar desde el primer momento.
+ * Mantiene el documento de dibujo, pero monta la Timeline y la X-sheet del
+ * mismo LowDoc para que no haya que descubrir el botón de Animación a mano. */
+async function dzEnsureAnimationWorkspace() {
+  if (!DZ.path) return false;
+  if (!DZ.anim) await dzAnimToggle();
+  if (!DZ.anim) return false;
+  const W = LOW.workspace?.workspaces;
+  const animationWs = W?.get?.("animation");
+  if (animationWs) W.activate("animation", dzWsAplicar);
+  // Un layout personalizado puede haber guardado la Timeline oculta. La
+  // creación de un documento nuevo tiene una promesa más básica: siempre
+  // deja visible al menos la Timeline (si estaba separada, sigue separada).
+  dzAnimationDock(true);
+  dzTimelineReveal();
+  if (!dzIsPanelDetached("timeline")) $("#dzTimeline")?.removeAttribute("hidden");
+  await dzTlMount();
+  return true;
+}
 /* La pieza de arte dibujable que queda debajo de un punto de pantalla. Sirve
    para que «Crear hueso» vincule el hueso al dibujo sin pasos extra: se mira
    el bounding box de cada pieza (robusto aunque el overlay esté encima). */
@@ -7587,10 +7609,10 @@ function dzRigSetMode(mode) {
   $("#rigModeIk").classList.toggle("on", DZ.rigSubmode === "ik");
   const gesto = $("#rigGesto");
   if (gesto) gesto.textContent = construyendo
-    ? "Ac\u00e1 se arma. Nada de lo que toques queda como clave."
+    ? "Dibujá el alambre y registrá las piezas."
     : (DZ.rigSubmode === "ik"
-      ? "Arrastr\u00e1 el ROMBO verde: la cadena entera se acomoda sola."
-      : "Arrastr\u00e1 la MANIJA (el punto al final de la l\u00ednea punteada) para rotar, o la ARTICULACI\u00d3N para mover. Cada gesto deja una clave en este cuadro.");
+      ? "Arrastrá el rombo para acomodar la cadena."
+      : "Arrastrá la manija para rotar o la articulación para mover.");
   const hints = { build: "Alambre → Cortes → Pivotes → Repartir. Al dibujar o cortar, el overlay se aparta automáticamente y no bloquea la tableta.",
     fk: "El pivote sólo se cambia en Construir. Sin Auto-clave, el gesto es una prueba: Enter la clava, Esc la descarta.",
     ik: "Elegí una cadena y arrastrá el rombo: los dos huesos se clavan en una sola operación." };
@@ -8212,6 +8234,8 @@ function dzRigPanelSync() {
   if ($("#dzRigPanel").hidden) return;
   const el = DZ.sel, num = dzRigCur(), nodes = DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : [], current = dzRigSelectedNode();
   $("#rigId").value = current?.id || (el && el.id) || ""; $("#rigCount").textContent = nodes.length; $("#rigFrame").textContent = "F" + num;
+  const detected = dzRigDrawableElements().length;
+  if ($("#rigObjectCount")) $("#rigObjectCount").textContent = detected + (detected === 1 ? " detectado" : " detectados");
   const k = (current && dzRigLocalAt(current.id, num)) || { x: 0, y: 0, r: 0, sx: 1, sy: 1 };
   $("#rigX").value = Math.round(k.x); $("#rigY").value = Math.round(k.y); $("#rigR").value = Math.round(k.r * 10) / 10;
   $("#rigSX").value = Math.round((k.sx == null ? (k.s == null ? 1 : k.s) : k.sx) * 100) / 100;
@@ -13367,6 +13391,7 @@ async function dzDocumentNew() {
   if (!r?.path) return false;
   await openDesign(r.path);
   await dzDocInit();
+  await dzEnsureAnimationWorkspace();
   DZ.doc.scene.name = (r.name || "Documento sin título").replace(/\.svg$/i, "");
   DZ.doc.dirty = false;
   dzSetStatus(" Documento nuevo · lienzo vacío");

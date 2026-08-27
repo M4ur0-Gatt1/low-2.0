@@ -580,6 +580,13 @@
             <b>Animar</b><small>posar por cuadro</small></button>
         </div>
         <p class="rig2-gesto" id="rigGesto"></p>
+        <div class="rig2-objectbar" id="rigObjectBar" aria-label="Objetos del rig">
+          <div class="rig2-objectbar-title"><b>Objetos</b><span id="rigObjectCount">0 detectados</span></div>
+          <div class="rig2-objectbar-actions">
+            <button class="primary" id="rigAuto" title="Detectar y registrar todas las piezas separadas del dibujo">Registrar</button>
+            <button id="rigRepartir" title="Emparejar cada pieza registrada con el hueso más cercano">Repartir</button>
+          </div>
+        </div>
         <div class="rig2-submodo" id="rigSubmodo" aria-label="Cómo posar">
           <span>cómo posar</span>
           <button id="rigModeFk" class="on" title="Rotar cada pieza por su pivote; los hijos siguen">Directa</button>
@@ -595,23 +602,24 @@
           <button id="rigToolPivot" aria-label="Colocar pivotes" title="Colocar ejes y pivotes sobre las piezas del dibujo"><b aria-hidden="true">⊙</b><span>Pivotes</span></button>
         </div>
         <section class="rig2-section" data-rig-section="build">
-          <div class="rig2-title"><b>Cut-out por piezas</b><span id="rigCount">0</span></div>
+          <div class="rig2-title"><b>Jerarquía</b><span><i id="rigCount">0</i> piezas</span></div>
           <div class="rig2-flow"><span>1 Alambre</span><i>›</i><span>2 Cortes</span><i>›</i><span>3 Pivotes</span><i>›</i><span>4 Repartir</span></div>
-          <div class="rig2-actions rig2-prepare"><button class="primary" id="rigAuto" title="Registra las piezas dibujables sin inventar una anatomía ni una jerarquía">Registrar piezas del dibujo</button></div>
-          <div class="rig2-actions rig2-prepare"><button id="rigRepartir" title="Dibujá el alambre encima del personaje y LOW empareja cada hueso con la pieza más cercana sin reemplazar vínculos">Repartir y auto-rig</button></div>
-          <div class="rig2-row rig2-wide"><input type="text" id="rigId" placeholder="nombre de la pieza" title="ID estable de la pieza">
-            <button id="rigAdd" title="Registrar la selección como pieza del esqueleto">Añadir</button>
-            <button id="rigRemove" title="Eliminar el hueso seleccionado; el dibujo permanece intacto">Borrar hueso</button></div>
-          <label class="rig2-field"><span>Cuelga de</span><select id="rigParent" title="De qué hueso cuelga esta pieza (jerarquía)"><option value="">— nada, es raíz —</option></select></label>
-          <div class="rig2-actions">
-            <button id="rigPivotTool" title="Colocar el pivote de la pieza en la mesa">Pivote</button>
-            <button id="rigPin" title="Fijar o liberar esta pieza como raíz">Fijar raíz</button>
-            <button id="rigBind" title="Qué dibujo arrastra este hueso: seleccioná la pieza en la mesa y tocá acá">Mueve el dibujo</button>
-          </div>
-          <div class="rig2-limits"><span>Tope de giro</span>
-            <label>mín<input type="number" id="rigMin" value="-180" min="-360" max="360"></label>
-            <label>máx<input type="number" id="rigMax" value="180" min="-360" max="360"></label></div>
           <div class="rig2-tree" id="rigTree" aria-label="Jerarquía del personaje"></div>
+          <details class="rig2-disclosure">
+            <summary>Ajustes de la pieza</summary>
+            <div class="rig2-row rig2-wide"><input type="text" id="rigId" placeholder="nombre de la pieza" title="ID estable de la pieza">
+              <button id="rigAdd" title="Registrar la selección como pieza del esqueleto">Añadir</button>
+              <button id="rigRemove" title="Eliminar el hueso seleccionado; el dibujo permanece intacto">Borrar</button></div>
+            <label class="rig2-field"><span>Cuelga de</span><select id="rigParent" title="De qué hueso cuelga esta pieza (jerarquía)"><option value="">— nada, es raíz —</option></select></label>
+            <div class="rig2-actions">
+              <button id="rigPivotTool" title="Colocar el pivote de la pieza en la mesa">Pivote</button>
+              <button id="rigPin" title="Fijar o liberar esta pieza como raíz">Fijar raíz</button>
+              <button id="rigBind" title="Qué dibujo arrastra este hueso: seleccioná la pieza en la mesa y tocá acá">Vincular</button>
+            </div>
+            <div class="rig2-limits"><span>Giro</span>
+              <label>mín<input type="number" id="rigMin" value="-180" min="-360" max="360"></label>
+              <label>máx<input type="number" id="rigMax" value="180" min="-360" max="360"></label></div>
+          </details>
         </section>
         <section class="rig2-section" data-rig-section="pose">
           <div class="rig2-title"><b>Transformación</b><span id="rigFrame">F1</span></div>
@@ -631,8 +639,8 @@
           <label class="rig2-check"><input type="checkbox" id="rigAutoKey" checked> Auto-clave al soltar <small>(desmarcá para probar sin grabar · Enter clava, Esc descarta)</small></label>
           <div class="dz-suggest rig2-keys" id="rigChips"></div>
         </section>
-        <section class="rig2-section" data-rig-section="curva">
-          <div class="rig2-title"><b>Curva</b><span id="rigEaseWho">sin claves</span></div>
+        <details class="rig2-section rig2-disclosure" data-rig-section="curva">
+          <summary><b>Curva</b><span id="rigEaseWho">sin claves</span></summary>
           <svg class="rig2-curva" id="rigCurva" viewBox="-22 -30 144 182"
                aria-label="Curva de interpolación entre dos claves"></svg>
           <div class="rig2-actions rig2-ease">
@@ -643,9 +651,9 @@
             <button data-ease="hold" title="Sostiene la pose y salta en la clave siguiente">Escalón</button>
           </div>
           <p class="rig2-hint" id="rigEaseHint">Arrastrá las manijas para cambiar el timing sin tocar las poses.</p>
-        </section>
-        <section class="rig2-section" data-rig-section="principios">
-          <div class="rig2-title"><b>Principios</b><span id="rigPrincipiosQue">—</span></div>
+        </details>
+        <details class="rig2-section rig2-disclosure" data-rig-section="principios">
+          <summary><b>Movimiento</b><span id="rigPrincipiosQue">—</span></summary>
           <div class="rig2-actions rig2-princ">
             <button id="rigArco" title="Ver por dónde pasa la pieza en el tramo: los puntos juntos son cuadros lentos">Arco</button>
             <button id="rigVolumen" title="Estirar y encoger conservando el volumen: al escalar un eje, el otro compensa">Volumen</button>
@@ -663,9 +671,9 @@
             <button id="rigBlockingOff" title="Volver a interpolar entre poses">Interpolar</button>
           </div>
           <p class="rig2-hint">Puesta en escena, dibujo sólido y atractivo no tienen botón: son tuyos.</p>
-        </section>
-        <section class="rig2-section" data-rig-section="dibujos">
-          <div class="rig2-title"><b>Dibujos de la pieza</b><span id="rigVarFrame">F1</span></div>
+        </details>
+        <details class="rig2-section rig2-disclosure" data-rig-section="dibujos">
+          <summary><b>Variantes</b><span id="rigVarFrame">F1</span></summary>
           <div class="rig2-vars" id="rigVars" aria-label="Dibujos disponibles para esta pieza"></div>
           <div class="rig2-actions">
             <button id="rigVarAdd" title="Sumar el dibujo seleccionado en la mesa como otra versión de esta pieza">Sumar dibujo</button>
@@ -673,16 +681,16 @@
             <button id="rigVarClear" title="Borrar el cambio de dibujo de este cuadro">Sin cambio acá</button>
           </div>
           <p class="rig2-hint" id="rigVarHint">Para manos, pies o bocas: varios dibujos en una misma pieza, y cuál se ve lo decide el cuadro.</p>
-        </section>
-        <section class="rig2-section" data-rig-section="doblar">
-          <div class="rig2-title"><b>Doblar</b><span id="rigDefEstado">rígida</span></div>
+        </details>
+        <details class="rig2-section rig2-disclosure" data-rig-section="doblar">
+          <summary><b>Deformar</b><span id="rigDefEstado">rígida</span></summary>
           <div class="rig2-actions">
             <button id="rigDefAdd" title="Darle a esta pieza una curva para doblarse (pelo, cola, manga)">Dar curva</button>
             <button id="rigDefDel" title="Sacar la curva: la pieza vuelve a ser rígida">Quitar curva</button>
             <button id="rigDefClear" title="Borrar el doblez de este cuadro">Sin doblez acá</button>
           </div>
           <p class="rig2-hint" id="rigDefHint">Una pieza rígida sólo rota. Con curva, se dobla: para el pelo, una cola o una manga.</p>
-        </section>
+        </details>
         <section class="rig2-section" data-rig-section="ik">
           <div class="rig2-title"><b>Cadena IK</b><span id="rigIkStatus">sin cadena</span></div>
           <label class="rig2-field"><span>Hombro</span><select id="rigIkRoot"></select></label>
@@ -879,37 +887,37 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=3.29.68"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=3.29.69"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=3.29.68"></script>
-<script src="animation/palette.js?v=3.29.68"></script>
-<script src="animation/scene-model.js?v=3.29.68"></script>
-<script src="animation/exposures.js?v=3.29.68"></script>
-<script src="animation/onion.js?v=3.29.68"></script>
-<script src="animation/document.js?v=3.29.68"></script>
-<script src="animation/xsheet-view.js?v=3.29.68"></script>
-<script src="animation/timeline-view.js?v=3.29.68"></script>
-<script src="animation/level-strip.js?v=3.29.68"></script>
-<script src="animation/palette-view.js?v=3.29.68"></script>
-<script src="animation/audio.js?v=3.29.68"></script>
-<script src="animation/shortcuts.js?v=3.29.68"></script>
-<script src="animation/model-tests.js?v=3.29.68"></script>
-<script src="animation/timeline.js?v=3.29.68"></script>
-<script src="animation/xsheet.js?v=3.29.68"></script>
-<script src="animation/playback.js?v=3.29.68"></script>
-<script src="animation/camera.js?v=3.29.68"></script>
-<script src="drawing/stabilization.js?v=3.29.68"></script>
-<script src="drawing/pointer-input.js?v=3.29.68"></script>
-<script src="drawing/brushes.js?v=3.29.68"></script>
-<script src="drawing/stroke-engine.js?v=3.29.68"></script>
-<script src="workspace/panels.js?v=3.29.68"></script>
-<script src="workspace/workspaces.js?v=3.29.68"></script>
-<script src="workspace/windows.js?v=3.29.68"></script>
-<script src="workspace/layouts.js?v=3.29.68"></script>
-<script src="workspace/recovery.js?v=3.29.68"></script>
-<script src="ai/commands.js?v=3.29.68"></script>
-<script src="ai/task-runner.js?v=3.29.68"></script>
-<script src="ai/recovery.js?v=3.29.68"></script>
-<script src="app.js?v=3.29.68"></script>
+<script src="core/history.js?v=3.29.69"></script>
+<script src="animation/palette.js?v=3.29.69"></script>
+<script src="animation/scene-model.js?v=3.29.69"></script>
+<script src="animation/exposures.js?v=3.29.69"></script>
+<script src="animation/onion.js?v=3.29.69"></script>
+<script src="animation/document.js?v=3.29.69"></script>
+<script src="animation/xsheet-view.js?v=3.29.69"></script>
+<script src="animation/timeline-view.js?v=3.29.69"></script>
+<script src="animation/level-strip.js?v=3.29.69"></script>
+<script src="animation/palette-view.js?v=3.29.69"></script>
+<script src="animation/audio.js?v=3.29.69"></script>
+<script src="animation/shortcuts.js?v=3.29.69"></script>
+<script src="animation/model-tests.js?v=3.29.69"></script>
+<script src="animation/timeline.js?v=3.29.69"></script>
+<script src="animation/xsheet.js?v=3.29.69"></script>
+<script src="animation/playback.js?v=3.29.69"></script>
+<script src="animation/camera.js?v=3.29.69"></script>
+<script src="drawing/stabilization.js?v=3.29.69"></script>
+<script src="drawing/pointer-input.js?v=3.29.69"></script>
+<script src="drawing/brushes.js?v=3.29.69"></script>
+<script src="drawing/stroke-engine.js?v=3.29.69"></script>
+<script src="workspace/panels.js?v=3.29.69"></script>
+<script src="workspace/workspaces.js?v=3.29.69"></script>
+<script src="workspace/windows.js?v=3.29.69"></script>
+<script src="workspace/layouts.js?v=3.29.69"></script>
+<script src="workspace/recovery.js?v=3.29.69"></script>
+<script src="ai/commands.js?v=3.29.69"></script>
+<script src="ai/task-runner.js?v=3.29.69"></script>
+<script src="ai/recovery.js?v=3.29.69"></script>
+<script src="app.js?v=3.29.69"></script>
 </body>
 </html>

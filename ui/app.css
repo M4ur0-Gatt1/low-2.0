@@ -1112,9 +1112,22 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .rig2-tools button { min-height: 27px; }
 .rig2-tools button.on { color: #fff; border-color: #4f8bb8; background: #254a63; }
 .rig2-tools button:disabled { opacity: .35; cursor: not-allowed; }
+.rig2[data-estado="construir"] #rigToolPose { display: none; }
+.rig2[data-estado="animar"] #rigToolCreate,
+.rig2[data-estado="animar"] #rigToolEdit,
+.rig2[data-estado="animar"] #rigToolDraw,
+.rig2[data-estado="animar"] #rigToolCut,
+.rig2[data-estado="animar"] #rigToolPivot { display: none; }
 .rig2-check { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--mut); font-size: 10px; }
 .rig2-check small { opacity: .65; }
 .rig2-check input { width: auto; height: auto; margin: 0; }
+.rig2-objectbar { margin: 5px 8px 6px; padding: 7px; border: 1px solid var(--line2); border-radius: 7px; background: var(--panel2); }
+.rig2-objectbar-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+.rig2-objectbar-title b { color: var(--txt); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.rig2-objectbar-title span { color: var(--mut); font-size: 9px; }
+.rig2-objectbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.rig2-objectbar-actions button { width: 100%; min-height: 30px; }
+.rig2[data-estado="animar"] .rig2-objectbar { display: none; }
 .rig2 button { min-height: 28px; padding: 4px 8px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel2); color: var(--mut); font: 600 11px Figtree,sans-serif; cursor: pointer; }
 .rig2 button:hover { color: var(--txt); background: var(--surface-hover); }
 .rig2 button.on,.rig2 button.primary { color: var(--txt); border-color: rgba(240,69,14,.65); background: var(--redsoft); }
@@ -1123,6 +1136,16 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .rig2[data-mode="ik"] .rig2-section[data-rig-section="ik"] { display: block; }
 .rig2-title { display: flex; align-items: center; justify-content: space-between; min-height: 24px; color: var(--mut); }
 .rig2-title b { color: var(--txt); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.rig2-title i { color: var(--txt); font-style: normal; }
+.rig2-disclosure { margin-top: 7px; border-top: 1px solid var(--line2); }
+.rig2-disclosure > summary { min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--mut); cursor: pointer; list-style: none; }
+.rig2-disclosure > summary::-webkit-details-marker { display: none; }
+.rig2-disclosure > summary::after { content: "›"; order: 3; color: var(--mut); font-size: 16px; transition: transform .16s ease; }
+.rig2-disclosure[open] > summary::after { transform: rotate(90deg); }
+.rig2-disclosure > summary b { color: var(--txt); font-size: 10.5px; text-transform: uppercase; letter-spacing: .045em; }
+.rig2-disclosure > summary span { margin-left: auto; font-size: 9px; }
+.rig2-section.rig2-disclosure { margin-top: 0; border-top: 0; }
+.rig2-section.rig2-disclosure > summary { margin: -2px 0; }
 .rig2-row,.rig2-field,.rig2-limits,.rig2-target { display: flex; align-items: center; gap: 6px; min-height: 31px; color: var(--mut); }
 .rig2-wide input { flex: 1; min-width: 0; }
 .rig2 input,.rig2 select { height: 27px; min-width: 0; border: 1px solid var(--line2); border-radius: 5px; padding: 3px 6px; background: #171615; color: var(--txt); font: 500 11px Figtree,sans-serif; }
@@ -1141,6 +1164,7 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .rig2-flow span { padding: 3px 4px; border: 1px solid var(--line2); border-radius: 4px; background: #171615; white-space: nowrap; }
 .rig2-flow i { opacity: .55; font-style: normal; }
 .rig2-tree { max-height: 132px; overflow: auto; margin-top: 7px; border: 1px solid var(--line2); border-radius: 5px; background: #171615; }
+.rig2-tree:empty::before { content: "Sin piezas registradas"; display: block; padding: 10px; color: var(--mut); font-size: 10px; text-align: center; }
 .rig2-node { display: flex; align-items: center; gap: 5px; min-height: 25px; padding: 3px 6px; color: var(--mut); cursor: pointer; }
 .rig2-node:hover { background: var(--surface-hover); color: var(--txt); }.rig2-node.on { color: var(--txt); background: var(--redsoft); }
 .rig2-node i { width: 10px; height: 10px; border: 1.5px solid #e98b55; border-radius: 50%; }.rig2-node.root i { border-radius: 2px; background: #4f8bb8; }
