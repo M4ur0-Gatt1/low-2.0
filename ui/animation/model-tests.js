@@ -447,6 +447,29 @@
         skeleton.scene.rig.bindings["binding:mano"].elementId === "mano_final" &&
         skeleton.scene.rig.attachments["attachment:mano"].elementId === "mano_final");
 
+      // Rig rígido mínimo: torso → brazo → antebrazo → mano. La geometría
+      // vinculada se evalúa con la matriz mundial del hueso y hereda padres.
+      const skin = new animation.LowDoc(), skinHistory = new LOW.core.HistoryManager();
+      skin.setHistory(skinHistory);
+      skin.ensureRigBone("torso", { head:{x:0,y:0}, tail:{x:0,y:20} });
+      skin.ensureRigBone("brazo", { parentId:"torso", head:{x:0,y:0}, tail:{x:10,y:0} });
+      skin.ensureRigBone("antebrazo", { parentId:"brazo", head:{x:10,y:0}, tail:{x:20,y:0} });
+      skin.ensureRigBone("mano", { parentId:"antebrazo", head:{x:20,y:0}, tail:{x:30,y:0} });
+      ["torso","brazo","antebrazo","mano"].forEach(id => skin.bindRigElement(id, "forma_" + id));
+      skinHistory.clear();
+      skin.setRigKey("antebrazo", 1, { x:0, y:0, r:45, sx:1, sy:1 });
+      const handPoint = skin.scene.rigWorldPoint("mano", 1, { x:30, y:0 });
+      const torsoPoint = skin.scene.rigWorldPoint("torso", 1, { x:0, y:20 });
+      ok("rotar el codo arrastra antebrazo y mano vinculados",
+        Math.abs(handPoint.x - (10 + 20 / Math.sqrt(2))) < .001 &&
+        Math.abs(handPoint.y - (20 / Math.sqrt(2))) < .001);
+      ok("rotar el codo deja estable el torso",
+        Math.abs(torsoPoint.x) < .001 && Math.abs(torsoPoint.y - 20) < .001);
+      skinHistory.undo();
+      const restoredHand = skin.scene.rigWorldPoint("mano", 1, { x:30, y:0 });
+      ok("undo devuelve exactamente la mano a la pose de vínculo",
+        Math.abs(restoredHand.x - 30) < .001 && Math.abs(restoredHand.y) < .001);
+
       const doc = new animation.LowDoc();
       const history = new LOW.core.HistoryManager(); doc.setHistory(history);
       doc.ensureRigNode("cabeza", { elementId: "frente" });
