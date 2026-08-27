@@ -499,7 +499,10 @@
         <span class="dz-sh sw" data-hx="-1" data-hy="1"></span>
         <span class="dz-sh s"  data-hx="0"  data-hy="1"></span>
         <span class="dz-sh se" data-hx="1"  data-hy="1"></span>
-        <span class="dz-corner-widget" id="dzCornerWidget" title="Arrastrá para redondear las esquinas · doble clic para escribir el radio" hidden></span>
+        <span class="dz-corner-widget" data-corner="tl" title="Arrastrá: todas las esquinas · Alt: solo esta esquina · doble clic: valor exacto" hidden></span>
+        <span class="dz-corner-widget" data-corner="tr" title="Arrastrá: todas las esquinas · Alt: solo esta esquina · doble clic: valor exacto" hidden></span>
+        <span class="dz-corner-widget" data-corner="br" title="Arrastrá: todas las esquinas · Alt: solo esta esquina · doble clic: valor exacto" hidden></span>
+        <span class="dz-corner-widget" data-corner="bl" title="Arrastrá: todas las esquinas · Alt: solo esta esquina · doble clic: valor exacto" hidden></span>
       </div>
       <div class="dz-rotate" id="dzRotate" title="Arrastrá para rotar · Shift: de a 15°" hidden></div>
       <!-- cámara (🎬): el encuadre animable — arrastrá para mover, esquina = zoom,  = rotar -->
@@ -712,15 +715,14 @@
     <div class="dz-inspector" id="dzInspector">
       <!-- estilo actual (Illustrator): aplica a la selección, o a lo próximo que dibujes -->
       <div class="dz-style" id="dzStyle">
-        <div class="dz-style-row">
-          <label class="dz-swatch-l" title="Relleno — clic derecho: sin relleno">
-            <input type="color" id="dzPFill" value="#E5322D"><span>Relleno</span>
-          </label>
-          <button class="dz-none" id="dzFillNone" title="Sin relleno">∅</button>
-          <label class="dz-swatch-l" title="Trazo — clic derecho: sin trazo">
-            <input type="color" id="dzPStroke" value="#1a1a1a"><span>Trazo</span>
-          </label>
-          <button class="dz-none" id="dzStrokeNone" title="Sin trazo">∅</button>
+        <div class="dz-style-row dz-paint-stack" aria-label="Relleno y contorno">
+          <div class="dz-paint-overlap" title="Relleno delante · Contorno detrás">
+            <label class="dz-paint-chip fill" title="Relleno"><input type="color" id="dzPFill" value="#E5322D"><span>Relleno</span></label>
+            <label class="dz-paint-chip stroke" title="Contorno"><input type="color" id="dzPStroke" value="#1a1a1a"><span>Contorno</span></label>
+          </div>
+          <button class="dz-swap-paint" id="dzSwapPaint" title="Intercambiar relleno y contorno (Shift+X)" aria-label="Intercambiar relleno y contorno">⇄</button>
+          <button class="dz-none" id="dzFillNone" title="Quitar relleno">∅R</button>
+          <button class="dz-none" id="dzStrokeNone" title="Quitar contorno">∅C</button>
           <input type="number" id="dzDrawW" value="6" min="0" max="120" title="Grosor de trazo" class="dz-win">
         </div>
         <div class="dz-style-row">
@@ -875,37 +877,37 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=3.29.66"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=3.29.67"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=3.29.66"></script>
-<script src="animation/palette.js?v=3.29.66"></script>
-<script src="animation/scene-model.js?v=3.29.66"></script>
-<script src="animation/exposures.js?v=3.29.66"></script>
-<script src="animation/onion.js?v=3.29.66"></script>
-<script src="animation/document.js?v=3.29.66"></script>
-<script src="animation/xsheet-view.js?v=3.29.66"></script>
-<script src="animation/timeline-view.js?v=3.29.66"></script>
-<script src="animation/level-strip.js?v=3.29.66"></script>
-<script src="animation/palette-view.js?v=3.29.66"></script>
-<script src="animation/audio.js?v=3.29.66"></script>
-<script src="animation/shortcuts.js?v=3.29.66"></script>
-<script src="animation/model-tests.js?v=3.29.66"></script>
-<script src="animation/timeline.js?v=3.29.66"></script>
-<script src="animation/xsheet.js?v=3.29.66"></script>
-<script src="animation/playback.js?v=3.29.66"></script>
-<script src="animation/camera.js?v=3.29.66"></script>
-<script src="drawing/stabilization.js?v=3.29.66"></script>
-<script src="drawing/pointer-input.js?v=3.29.66"></script>
-<script src="drawing/brushes.js?v=3.29.66"></script>
-<script src="drawing/stroke-engine.js?v=3.29.66"></script>
-<script src="workspace/panels.js?v=3.29.66"></script>
-<script src="workspace/workspaces.js?v=3.29.66"></script>
-<script src="workspace/windows.js?v=3.29.66"></script>
-<script src="workspace/layouts.js?v=3.29.66"></script>
-<script src="workspace/recovery.js?v=3.29.66"></script>
-<script src="ai/commands.js?v=3.29.66"></script>
-<script src="ai/task-runner.js?v=3.29.66"></script>
-<script src="ai/recovery.js?v=3.29.66"></script>
-<script src="app.js?v=3.29.66"></script>
+<script src="core/history.js?v=3.29.67"></script>
+<script src="animation/palette.js?v=3.29.67"></script>
+<script src="animation/scene-model.js?v=3.29.67"></script>
+<script src="animation/exposures.js?v=3.29.67"></script>
+<script src="animation/onion.js?v=3.29.67"></script>
+<script src="animation/document.js?v=3.29.67"></script>
+<script src="animation/xsheet-view.js?v=3.29.67"></script>
+<script src="animation/timeline-view.js?v=3.29.67"></script>
+<script src="animation/level-strip.js?v=3.29.67"></script>
+<script src="animation/palette-view.js?v=3.29.67"></script>
+<script src="animation/audio.js?v=3.29.67"></script>
+<script src="animation/shortcuts.js?v=3.29.67"></script>
+<script src="animation/model-tests.js?v=3.29.67"></script>
+<script src="animation/timeline.js?v=3.29.67"></script>
+<script src="animation/xsheet.js?v=3.29.67"></script>
+<script src="animation/playback.js?v=3.29.67"></script>
+<script src="animation/camera.js?v=3.29.67"></script>
+<script src="drawing/stabilization.js?v=3.29.67"></script>
+<script src="drawing/pointer-input.js?v=3.29.67"></script>
+<script src="drawing/brushes.js?v=3.29.67"></script>
+<script src="drawing/stroke-engine.js?v=3.29.67"></script>
+<script src="workspace/panels.js?v=3.29.67"></script>
+<script src="workspace/workspaces.js?v=3.29.67"></script>
+<script src="workspace/windows.js?v=3.29.67"></script>
+<script src="workspace/layouts.js?v=3.29.67"></script>
+<script src="workspace/recovery.js?v=3.29.67"></script>
+<script src="ai/commands.js?v=3.29.67"></script>
+<script src="ai/task-runner.js?v=3.29.67"></script>
+<script src="ai/recovery.js?v=3.29.67"></script>
+<script src="app.js?v=3.29.67"></script>
 </body>
 </html>

@@ -527,8 +527,10 @@ function bind() {
   document.querySelectorAll("#dzSelBox .dz-sh").forEach(sh =>
     sh.addEventListener("pointerdown", e =>
       dzBoxHandleDown(e, +sh.dataset.hx, +sh.dataset.hy)));
-  $("#dzCornerWidget").addEventListener("pointerdown", dzCornerDown);
-  $("#dzCornerWidget").addEventListener("dblclick", dzCornerExact);
+  document.querySelectorAll("#dzSelBox .dz-corner-widget").forEach(widget => {
+    widget.addEventListener("pointerdown", dzCornerDown);
+    widget.addEventListener("dblclick", dzCornerExact);
+  });
   $("#dzExt").onclick = () => { if (DZ.path) api.preview_html(DZ.path, $("#dzCanvas").innerHTML); };
   $("#dzZoomIn").onclick = () => dzZoom(0.15);
   $("#dzZoomOut").onclick = () => dzZoom(-0.15);
@@ -565,6 +567,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   // panel de estilo: color de relleno/trazo, grosor, opacidad, paleta
   $("#dzPFill").oninput = e => { DZ.fillColor = e.target.value; dzStyleApply("fill", e.target.value); };
   $("#dzPStroke").oninput = e => { DZ.drawColor = e.target.value; dzStyleApply("stroke", e.target.value); };
+  $("#dzSwapPaint").onclick = dzSwapPaint;
   $("#dzFillNone").onclick = () => dzStyleApply("fill", "none") || dzSetStatus("∅ Seleccioná un elemento para sacarle el relleno");
   $("#dzStrokeNone").onclick = () => dzStyleApply("stroke", "none") || dzSetStatus("∅ Seleccioná un elemento para sacarle el trazo");
   $("#dzDrawW").oninput = e => { DZ.drawW = +e.target.value || 6; dzStyleApply("stroke-width", DZ.drawW); };
@@ -1038,6 +1041,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); dzRedo(); return; }
     }
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(t)) return;
+    if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "x") {
+      e.preventDefault(); dzSwapPaint(); return;
+    }
     if (e.key === "Tab") { e.preventDefault(); dzZenToggle(); return; }   // modo dibujo
     if (e.key === "F7") { e.preventDefault(); dzLayersToggle(); return; } // capas
     if (e.ctrlKey && e.key.toLowerCase() === "r") { e.preventDefault(); dzRulersToggle(); return; } // reglas 2D
@@ -2835,19 +2841,21 @@ function dzPositionHandle() {
       box.style.transformOrigin = "0 0";
       box.style.transform = angle ? `rotate(${angle}deg)` : "none";
       box.hidden = false;
-      const cw = $("#dzCornerWidget"), rect = pack.length === 1 && pack[0].tagName.toLowerCase() === "rect" ? pack[0] : null;
-      if (cw && rect) {
-        const rw = Math.max(1, +rect.getAttribute("width") || rect.getBBox().width);
-        const rh = Math.max(1, +rect.getAttribute("height") || rect.getBBox().height);
-        const radius = Math.min(rw / 2, rh / 2, +(rect.getAttribute("rx") || 0));
-        cw.style.left = Math.max(14, radius / rw * width) + "px";
-        cw.style.top = Math.max(14, radius / rh * height) + "px";
-        cw.hidden = false;
-      } else if (cw) cw.hidden = true;
+      const info = pack.length === 1 ? dzCornerInfo(pack[0]) : null;
+      const widgets = [...document.querySelectorAll("#dzSelBox .dz-corner-widget")];
+      if (info) {
+        const pos = {
+          tl:[info.r[0] / info.w * width, info.r[0] / info.h * height],
+          tr:[width - info.r[1] / info.w * width, info.r[1] / info.h * height],
+          br:[width - info.r[2] / info.w * width, height - info.r[2] / info.h * height],
+          bl:[info.r[3] / info.w * width, height - info.r[3] / info.h * height]
+        };
+        widgets.forEach(w => { const p = pos[w.dataset.corner]; w.style.left = p[0] + "px"; w.style.top = p[1] + "px"; w.hidden = false; });
+      } else widgets.forEach(w => { w.hidden = true; });
     }
-    pin.style.left = (left + 4) + "px";
-    pin.style.top = top + "px";
-    pin.hidden = false;
+    // El globo de comentario permanente era el botón de «tres puntos» que
+    // ensuciaba cada selección. Los comentarios siguen en el panel contextual.
+    pin.hidden = true;
     if (rot) {
       rot.style.left = (topCenter.x + up.x * 22 - cvRect.left) + "px";
       rot.style.top = (topCenter.y + up.y * 22 - cvRect.top) + "px";
@@ -2856,25 +2864,57 @@ function dzPositionHandle() {
   } catch (e) { pin.hidden = true; if (rot) rot.hidden = true; if (box) box.hidden = true; }
 }
 
-function dzCornerSet(el, radius) {
-  const max = Math.max(0, Math.min((+el.getAttribute("width") || 0) / 2, (+el.getAttribute("height") || 0) / 2));
-  const r = Math.max(0, Math.min(max, Number(radius) || 0));
-  if (r < .01) { el.removeAttribute("rx"); el.removeAttribute("ry"); }
-  else { el.setAttribute("rx", r.toFixed(1)); el.setAttribute("ry", r.toFixed(1)); }
+function dzCornerInfo(el) {
+  if (!el) return null;
+  if (el.tagName.toLowerCase() === "rect") {
+    const x=+el.getAttribute("x")||0,y=+el.getAttribute("y")||0,w=Math.max(1,+el.getAttribute("width")||0),h=Math.max(1,+el.getAttribute("height")||0);
+    const r=Math.max(0,Math.min(w/2,h/2,+el.getAttribute("rx")||0)); return {x,y,w,h,r:[r,r,r,r]};
+  }
+  const geom=(el.getAttribute("data-low-rounded-rect")||"").split(/\s+/).map(Number);
+  const radii=(el.getAttribute("data-low-corners")||"").split(/\s+/).map(Number);
+  return geom.length===4&&radii.length===4 ? {x:geom[0],y:geom[1],w:geom[2],h:geom[3],r:radii} : null;
+}
+function dzRoundedRectD(i) {
+  const [tl,tr,br,bl]=i.r.map(v=>Math.max(0,Math.min(i.w/2,i.h/2,v||0))), x=i.x,y=i.y,w=i.w,h=i.h;
+  return `M ${x+tl} ${y} H ${x+w-tr} Q ${x+w} ${y} ${x+w} ${y+tr} V ${y+h-br} Q ${x+w} ${y+h} ${x+w-br} ${y+h} H ${x+bl} Q ${x} ${y+h} ${x} ${y+h-bl} V ${y+tl} Q ${x} ${y} ${x+tl} ${y} Z`;
+}
+function dzCornerAsPath(rect) {
+  if (rect.tagName.toLowerCase() !== "rect") return rect;
+  const info=dzCornerInfo(rect), path=document.createElementNS(SVGNS,"path");
+  [...rect.attributes].forEach(a => { if (!/^(x|y|width|height|rx|ry)$/.test(a.name)) path.setAttribute(a.name,a.value); });
+  path.setAttribute("data-low-rounded-rect",`${info.x} ${info.y} ${info.w} ${info.h}`);
+  path.setAttribute("data-low-corners",info.r.join(" ")); path.setAttribute("d",dzRoundedRectD(info));
+  rect.replaceWith(path); if (DZ.sel===rect) DZ.sel=path;
+  const mi=(DZ.multi||[]).indexOf(rect); if(mi>=0) DZ.multi[mi]=path;
+  path.classList.add("dz-sel"); return path;
+}
+function dzCornerSet(el, radius, corner, individual) {
+  const info=dzCornerInfo(el); if(!info) return el;
+  const r=Math.max(0,Math.min(info.w/2,info.h/2,Number(radius)||0));
+  if (individual) info.r[{tl:0,tr:1,br:2,bl:3}[corner]||0]=r; else info.r=[r,r,r,r];
+  if (el.tagName.toLowerCase()==="rect" && !individual) {
+    if(r<.01){el.removeAttribute("rx");el.removeAttribute("ry");}else{el.setAttribute("rx",r.toFixed(1));el.setAttribute("ry",r.toFixed(1));}
+  } else {
+    el.setAttribute("data-low-corners",info.r.map(v=>v.toFixed(1)).join(" ")); el.setAttribute("d",dzRoundedRectD(info));
+  }
   dzPositionHandle(); dzBuildInspector(el);
+  return el;
 }
 function dzCornerDown(e) {
-  const el = DZ.sel;
-  if (!el || el.tagName.toLowerCase() !== "rect") return;
+  let el = DZ.sel;
+  if (!dzCornerInfo(el)) return;
   e.preventDefault(); e.stopPropagation(); dzSnapshot();
-  const pointerId = e.pointerId, lb = el.getBBox();
+  const individual=e.altKey, corner=e.currentTarget.dataset.corner;
+  if(individual) el=dzCornerAsPath(el);
+  const pointerId = e.pointerId, info=dzCornerInfo(el), inv=el.getScreenCTM().inverse();
   const local = ev => {
     const p = el.ownerSVGElement.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
-    return p.matrixTransform(el.getScreenCTM().inverse());
+    return p.matrixTransform(inv);
   };
   const move = ev => {
     if (ev.pointerId !== pointerId) return;
-    const p = local(ev); dzCornerSet(el, Math.min(p.x - lb.x, p.y - lb.y));
+    const p=local(ev), d={tl:Math.min(p.x-info.x,p.y-info.y),tr:Math.min(info.x+info.w-p.x,p.y-info.y),br:Math.min(info.x+info.w-p.x,info.y+info.h-p.y),bl:Math.min(p.x-info.x,info.y+info.h-p.y)}[corner];
+    el=dzCornerSet(el,d,corner,individual);
   };
   const up = ev => {
     if (ev.pointerId !== pointerId) return;
@@ -2885,10 +2925,11 @@ function dzCornerDown(e) {
 }
 function dzCornerExact(e) {
   e.preventDefault(); e.stopPropagation();
-  const el = DZ.sel; if (!el || el.tagName.toLowerCase() !== "rect") return;
-  const value = prompt("Radio de las esquinas:", el.getAttribute("rx") || "0");
+  let el = DZ.sel; const info=dzCornerInfo(el); if (!info) return;
+  const corner=e.currentTarget.dataset.corner, individual=e.altKey;
+  const value = prompt(individual?"Radio de esta esquina:":"Radio de las cuatro esquinas:", info.r[{tl:0,tr:1,br:2,bl:3}[corner]||0]);
   if (value == null || !isFinite(+value)) return;
-  dzSnapshot(); dzCornerSet(el, +value); dzMarkDirty();
+  dzSnapshot(); if(individual) el=dzCornerAsPath(el); dzCornerSet(el,+value,corner,individual); dzMarkDirty();
 }
 /* resize desde cualquiera de los 8 tiradores, anclado al tirador OPUESTO
    (transformación libre de Photoshop). hx,hy ∈ {-1,0,1}. */
@@ -2900,9 +2941,10 @@ function dzBoxHandleDown(e, hx, hy) {
   const el = DZ.sel;
   let lb = null; try { lb = el.getBBox(); } catch (err) { /* sin bbox */ }
   if (!lb) return;
+  const inv = el.getScreenCTM().inverse();
   const local = ev => {
     const p = el.ownerSVGElement.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
-    return p.matrixTransform(el.getScreenCTM().inverse());
+    return p.matrixTransform(inv);
   };
   const start = local(e);
   const w0 = Math.max(1, lb.width), h0 = Math.max(1, lb.height);
@@ -3017,7 +3059,8 @@ function dzRotateDown(e) {
     const [px, py] = pv.split(/[\s,]+/).map(Number);
     if (!isNaN(px) && !isNaN(py)) c = { x: px, y: py };   // rig: gira desde el pivote
   }
-  const cs = dzFromUser(c.x, c.y);
+  const cp = el.ownerSVGElement.createSVGPoint(); cp.x = c.x; cp.y = c.y;
+  const cs = cp.matrixTransform(el.getScreenCTM());
   const cx = cs?.x ?? e.clientX, cy = cs?.y ?? e.clientY;
   const a0 = Math.atan2(e.clientY - cy, e.clientX - cx);
   const base = el.getAttribute("transform") || "";
@@ -4160,7 +4203,11 @@ function dzSetTool(t) {
   if (PEN && t !== "pen") dzPenFinish(true);
   if (t !== "nodes") dzNodesClear();
   // el gotero/balde/nodos trabajan SOBRE la selección o eligiendo elemento: no deseleccionar
-  if (!["select", "direct", "nodes", "dropper", "bucket", "iron", "magnet"].includes(t)) dzDeselect();
+  // Las herramientas de edición vectorial trabajan sobre la selección actual.
+  // Antes Inflador borraba la selección al activarse y después exigía una:
+  // quedaba inutilizable por diseño. Conservamos la selección en toda la mesa.
+  if (!["select", "direct", "nodes", "dropper", "bucket", "inflator", "handler",
+        "iron", "pliers", "magnet"].includes(t)) dzDeselect();
   dzSbTool(); dzToolOptsRender();
   dz3dApplyToolClass();         // 🔒 solo el plano activo recibe eventos en modo dibujo
   // Si se elige una herramienta desde la barra principal mientras se arma el
@@ -4171,6 +4218,25 @@ function dzSetTool(t) {
       bucket:"draw", iron:"draw", magnet:"draw", pliers:"cut", pivot:"pivot" })[t];
     if (rigTool && DZ.rigTool !== rigTool) dzRigAdoptCanvasTool(rigTool);
   }
+}
+function dzSwapPaint() {
+  const fill = DZ.fillColor || $("#dzPFill")?.value || "#E5322D";
+  const stroke = DZ.drawColor || $("#dzPStroke")?.value || "#1a1a1a";
+  DZ.fillColor = stroke; DZ.drawColor = fill;
+  if ($("#dzPFill")) $("#dzPFill").value = stroke;
+  if ($("#dzPStroke")) $("#dzPStroke").value = fill;
+  if ($("#toFill")) $("#toFill").value = stroke;
+  if ($("#toColor")) $("#toColor").value = fill;
+  const pack = (DZ.multi || []).length > 1 ? DZ.multi : (DZ.sel ? [DZ.sel] : []);
+  if (pack.length) {
+    dzSnapshot();
+    pack.forEach(el => {
+      const f = el.getAttribute("fill") || "none", s = el.getAttribute("stroke") || "none";
+      el.setAttribute("fill", s); el.setAttribute("stroke", f);
+    });
+    dzMarkDirty(); dzBuildLayers(); dzStyleSync(DZ.sel);
+  }
+  dzSetStatus("Relleno y contorno intercambiados · Shift+X");
 }
 /* los clics del lienzo hacen preventDefault (para dibujar/arrastrar), y eso
    BLOQUEA el cambio de foco: si venías de escribir en el chat del dock, el
@@ -4386,6 +4452,7 @@ function dzDrawMove(e) {
   if (PEN && !DRAW_TRACK) { dzPenHover(dzToUser(e.clientX, e.clientY)); return; }
   if (DZ.tool === "ruler" && RULER && RULER.a) { dzRulerMove(e); return; }
   if (DZ.tool === "inflator" && INFLATOR && INFLATOR.el) { dzInflatorMove(e); return; }
+  if (DZ.tool === "iron" && IRON && IRON.active) { dzIronApply(e); return; }
   if (DZ.tool === "magnet" && MAGNET && MAGNET.active) { dzMagnetMove(e); return; }
   if (DZ.tool === "handler" && HANDLER && HANDLER.el) { dzHandlerGlobalMove(e); return; }
   if (!DRAW_TRACK) return;
@@ -4413,6 +4480,7 @@ function dzDrawMove(e) {
 function dzDrawUp(e) {
   if (PEN && PEN.dragging) { dzPenUp(); return; }
   if (INFLATOR && INFLATOR.el) { dzInflatorUp(e); return; }
+  if (IRON && IRON.active) { dzIronUp(e); return; }
   if (MAGNET && MAGNET.active) { dzMagnetUp(e); return; }
   if (HANDLER && HANDLER.el) { dzHandlerUp(e); return; }
   if (!DRAW_TRACK) return;
@@ -5448,52 +5516,74 @@ function dzRulerClear() {
 /* ── Inflador: seleccioná una forma y arrastrá para inflarla (expandir)
    o Shift+arrastrar para desinflarla (contraer). Escala alrededor del
    centro geométrico con un factor proporcional a la distancia arrastrada. ── */
-let INFLATOR = null;   // { el, cx, cy, startR, startDist }
+let INFLATOR = null;   // gesto con geometría original (no acumula error por frame)
+
+function dzVectorElementAt(e, shapesOnly = false) {
+  const svg = $("#dzCanvas").querySelector(":scope > svg");
+  if (!svg) return null;
+  let el = e.target?.closest?.("path,line,polyline,polygon,circle,ellipse,rect");
+  if (el && svg.contains(el) && !el.closest("[data-locked],g.dz-onion")) {
+    if (!shapesOnly || el.tagName.toLowerCase() !== "line") return el;
+  }
+  return dzPickStroke(e.clientX, e.clientY, 22, true);
+}
+
+function dzPointInElement(el, clientX, clientY) {
+  try {
+    const svg = el.ownerSVGElement, p = svg.createSVGPoint(); p.x = clientX; p.y = clientY;
+    return p.matrixTransform(el.getScreenCTM().inverse());
+  } catch (_) { return dzToUser(clientX, clientY); }
+}
 
 function dzInflatorDown(e) {
   e.preventDefault(); e.stopPropagation();
-  const el = DZ.sel || DZ.multi?.[0];
+  const el = DZ.sel || DZ.multi?.[0] || dzVectorElementAt(e, true);
   if (!el) return dzSetStatus(" Seleccioná una forma primero para inflar/desinflar");
   const tag = el.tagName.toLowerCase();
   if (!["path", "rect", "circle", "ellipse", "polygon", "polyline"].includes(tag))
     return dzSetStatus(" El inflador funciona sobre formas (path, rect, círculo…)");
   dzSnapshot();
-  const bbox = el.getBBox({ stroke: true });
+  if (el !== DZ.sel) dzSelect(el);
+  const bbox = el.getBBox();
+  const centerScreen = (() => {
+    const p = el.ownerSVGElement.createSVGPoint(); p.x = bbox.x + bbox.width / 2; p.y = bbox.y + bbox.height / 2;
+    return p.matrixTransform(el.getScreenCTM());
+  })();
+  const original = tag === "path" ? dzPathParse(el.getAttribute("d") || "")
+    : tag === "polygon" || tag === "polyline" ? (el.getAttribute("points") || "").trim().split(/[\s,]+/).map(Number)
+    : Object.fromEntries(["x","y","width","height","cx","cy","r","rx","ry"].map(a => [a, +el.getAttribute(a) || 0]));
   INFLATOR = {
     el, cx: bbox.x + bbox.width / 2, cy: bbox.y + bbox.height / 2,
-    startR: Math.max(bbox.width, bbox.height) / 2,
-    startDist: 0, dir: e.shiftKey ? -1 : 1
+    startR: Math.max(1, Math.max(bbox.width, bbox.height) / 2),
+    screenR: Math.max(24, Math.max(el.getBoundingClientRect().width, el.getBoundingClientRect().height) / 2),
+    centerScreen, original,
+    startDist: Math.max(1, Math.hypot(e.clientX - centerScreen.x, e.clientY - centerScreen.y)),
+    dir: e.shiftKey ? -1 : 1
   };
   dzSetStatus("🎈 Inflando — soltá para aplicar · Shift desinfla");
 }
 
 function dzInflatorMove(e) {
   if (!INFLATOR || !INFLATOR.el) return;
-  const p = dzToUser(e.clientX, e.clientY);
-  const dx = p.x - INFLATOR.cx, dy = p.y - INFLATOR.cy;
-  const dist = Math.hypot(dx, dy);
-  if (!INFLATOR.startDist) INFLATOR.startDist = dist || 1;
+  const dist = Math.hypot(e.clientX - INFLATOR.centerScreen.x, e.clientY - INFLATOR.centerScreen.y);
   // factor: 1.0 en startDist, crece/decrece al alejarse/acercarse
-  const factor = INFLATOR.dir > 0
-    ? Math.max(0.05, 1 + (dist - INFLATOR.startDist) / INFLATOR.startR)
-    : Math.max(0.05, 1 - (INFLATOR.startDist - dist) / INFLATOR.startR);
+  const delta = (dist - INFLATOR.startDist) / INFLATOR.screenR;
+  const factor = Math.max(0.05, 1 + delta * INFLATOR.dir);
   const el = INFLATOR.el, tag = el.tagName.toLowerCase();
   if (tag === "rect") {
-    const x = +el.getAttribute("x"), y = +el.getAttribute("y"),
-          w = +el.getAttribute("width"), h = +el.getAttribute("height");
+    const { width:w, height:h } = INFLATOR.original;
     const nw = w * factor, nh = h * factor;
     el.setAttribute("x", INFLATOR.cx - nw / 2);
     el.setAttribute("y", INFLATOR.cy - nh / 2);
     el.setAttribute("width", nw); el.setAttribute("height", nh);
   } else if (tag === "circle") {
-    el.setAttribute("r", Math.max(0.5, INFLATOR.startR * factor * (el.tagName === "ellipse" ? 1 : 1)));
-    // circle solo r, ellipse usa rx/ry
+    el.setAttribute("r", Math.max(0.5, INFLATOR.original.r * factor));
   } else if (tag === "ellipse") {
-    const rx = +el.getAttribute("rx"), ry = +el.getAttribute("ry");
+    const rx = INFLATOR.original.rx, ry = INFLATOR.original.ry;
     el.setAttribute("rx", Math.max(0.5, rx * factor));
     el.setAttribute("ry", Math.max(0.5, ry * factor));
   } else if (tag === "polygon" || tag === "polyline") {
-    const pts = (el.getAttribute("points") || "").trim().split(/[\s,]+/).map(Number);
+    const pts = INFLATOR.original;
     const out = [];
     for (let i = 0; i < pts.length; i += 2) {
       out.push(INFLATOR.cx + (pts[i] - INFLATOR.cx) * factor);
@@ -5502,7 +5592,7 @@ function dzInflatorMove(e) {
     el.setAttribute("points", out.map(v => Math.round(v * 100) / 100).join(" "));
   } else if (tag === "path") {
     // escalar cada comando del path
-    const cmds = dzPathParse(el.getAttribute("d") || "");
+    const cmds = INFLATOR.original?.map(s => ({ c:s.c, n:s.n.slice() }));
     if (cmds) {
       for (const s of cmds) {
         for (let i = 0; i + 1 < s.n.length; i += 2) {
@@ -5553,26 +5643,36 @@ function dzStroked(el) {
   return s && s !== "none" &&
     ["path", "line", "polyline", "polygon", "circle", "ellipse", "rect"].includes(t);
 }
-function dzPickStroke(clientX, clientY, maxPx) {
+function dzEditableVector(el) {
+  if (!el || !el.getAttribute) return false;
+  const t = el.tagName.toLowerCase();
+  if (!["path", "line", "polyline", "polygon", "circle", "ellipse", "rect"].includes(t)) return false;
+  return dzStroked(el) || (t === "path" && el.getAttribute("fill") !== "none") ||
+    el.getAttribute("data-low") === "brush";
+}
+function dzPickStroke(clientX, clientY, maxPx, acceptFilled = true) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return null;
   const el = document.elementFromPoint(clientX, clientY);
   if (el && el.closest && el.closest("#dzCanvas svg") && !el.closest("g.dz-onion")) {
     const s = el.closest("path,line,polyline,polygon,circle,ellipse,rect,text");
-    if (s && s.tagName.toLowerCase() !== "svg" && dzStroked(s) && !s.hasAttribute("data-locked")) return s;
+    if (s && s.tagName.toLowerCase() !== "svg" && (dzStroked(s) || (acceptFilled && dzEditableVector(s)))
+        && !s.closest("[data-locked]")) return s;
   }
   // nadie con trazo justo debajo  el más cercano por distancia (unidades usuario)
-  const p = dzToUser(clientX, clientY);
-  const tol = (maxPx || 16) / (DZ.zoom || 1);
+  const tol = maxPx || 16;
   let best = null, bestD = tol;
-  svg.querySelectorAll("path,line,polyline,polygon").forEach(c => {
-    if (!dzStroked(c) || c.hasAttribute("data-locked") || (c.closest && c.closest("g.dz-onion"))) return;
+  svg.querySelectorAll("path,line,polyline,polygon,circle,ellipse,rect").forEach(c => {
+    if ((!dzStroked(c) && !(acceptFilled && dzEditableVector(c))) || c.closest("[data-locked]") || c.closest("g.dz-onion")) return;
     let L; try { L = c.getTotalLength(); } catch (err) { return; }
     if (!L) return;
-    const step = Math.max(2, L / 160);
+    const step = Math.max(1, L / 180), matrix = c.getScreenCTM();
+    if (!matrix) return;
     for (let d = 0; d <= L; d += step) {
       const q = c.getPointAtLength(d);
-      const dist = Math.hypot(q.x - p.x, q.y - p.y);
+      const sp = c.ownerSVGElement.createSVGPoint(); sp.x = q.x; sp.y = q.y;
+      const screen = sp.matrixTransform(matrix);
+      const dist = Math.hypot(screen.x - clientX, screen.y - clientY);
       if (dist < bestD) { bestD = dist; best = c; }
     }
   });
@@ -5584,6 +5684,15 @@ function dzHandlerDown(e) {
   const strokeEl = dzPickStroke(e.clientX, e.clientY);
   if (!strokeEl) return dzSetStatus("📏 Acercate más a una línea para ajustar su grosor");
   dzSnapshot();
+  // Los pinceles variables son cintas rellenas. Darles un contorno del mismo
+  // color permite que la bomba ensanche/afine también esos trazos reales.
+  if (!dzStroked(strokeEl) && strokeEl.tagName.toLowerCase() === "path") {
+    const colour = strokeEl.getAttribute("fill") || DZ.drawColor || "#111111";
+    strokeEl.setAttribute("stroke", colour);
+    strokeEl.setAttribute("stroke-linejoin", "round");
+    strokeEl.setAttribute("stroke-linecap", "round");
+    strokeEl.setAttribute("stroke-width", "0.5");
+  }
   const sw = parseFloat(strokeEl.getAttribute("stroke-width") || getComputedStyle(strokeEl).strokeWidth || "2");
   HANDLER = { el: strokeEl, startW: isNaN(sw) ? 2 : sw, startY: e.clientY };
   dzSetStatus("📏 Manejador — arrastrá ↕ para engrosar/afinar el trazo");
@@ -5614,18 +5723,41 @@ function dzIronDown(e) {
   e.preventDefault(); e.stopPropagation();
   const el = dzPickStroke(e.clientX, e.clientY);
   if (!el) return dzSetStatus(" Acercate a un trazo para suavizarlo");
-  for (let i = 0; i < dzVectorPrefs().ironPasses; i++) dzIronSmooth(el, i === 0);
+  dzSnapshot();
+  IRON = { active:true, lastEl:null, lastX:e.clientX, lastY:e.clientY };
+  dzIronApply(e);
 }
 
-function dzIronSmooth(el, snapshot = true) {
+let IRON = null;
+function dzIronApply(e) {
+  if (!IRON?.active) return;
+  if (IRON.lastEl && Math.hypot(e.clientX - IRON.lastX, e.clientY - IRON.lastY) < 5) return;
+  const el = dzPickStroke(e.clientX, e.clientY, 24);
+  if (!el) return;
+  for (let i = 0; i < dzVectorPrefs().ironPasses; i++) dzIronSmooth(el, false, false);
+  IRON.lastEl = el; IRON.lastX = e.clientX; IRON.lastY = e.clientY;
+  dzPositionHandle();
+}
+function dzIronUp() {
+  if (IRON?.active) { dzMarkDirty(); dzBuildLayers(); dzSetStatus(" Planchado aplicado"); }
+  IRON = null;
+}
+
+function dzIronSmooth(el, snapshot = true, finish = true) {
   if (snapshot) dzSnapshot();
   const tag = el.tagName.toLowerCase();
   if (tag === "path") {
     const d = el.getAttribute("d") || "";
-    const pts = dzPathToPoints(d);
+    let pts = null;
+    try {
+      const length = el.getTotalLength(), count = Math.max(8, Math.min(160, Math.ceil(length / 6)));
+      pts = Array.from({length:count + 1}, (_, i) => {
+        const p = el.getPointAtLength(length * i / count); return [p.x, p.y, .5];
+      });
+    } catch (_) { pts = dzPathToPoints(d); }
     if (!pts || pts.length < 4) return;
     const refined = dzRefineStroke(pts);
-    el.setAttribute("d", dzSmoothPath(refined));
+    el.setAttribute("d", dzSmoothPath(refined) + (/\s*[zZ]\s*$/.test(d) ? " Z" : ""));
   } else if (tag === "polyline") {
     const ptsRaw = (el.getAttribute("points") || "").trim().split(/[\s,]+/).map(Number);
     const pts = [];
@@ -5634,8 +5766,8 @@ function dzIronSmooth(el, snapshot = true) {
     const refined = dzRefineStroke(pts);
     el.setAttribute("points", refined.map(p => Math.round(p[0] * 10) / 10 + " " + Math.round(p[1] * 10) / 10).join(" "));
   }
-  dzMarkDirty(); dzBuildLayers();
-  dzSetStatus(" Planchado — el trazo quedó más suave");
+  if (finish) { dzMarkDirty(); dzBuildLayers(); }
+  dzSetStatus(" Plancha — pasá varias veces para alisar más");
 }
 
 /* convierte el atributo d de un path a array de puntos [x,y,pr] */
@@ -5659,7 +5791,7 @@ function dzPliersDown(e) {
   if (!pathEl || pathEl.tagName.toLowerCase() !== "path")
     return dzSetStatus("✂ Acercate al borde de un trazado (path) para cortarlo");
   dzSnapshot();
-  const p = dzToUser(e.clientX, e.clientY);
+  const p = dzPointInElement(pathEl, e.clientX, e.clientY);
   const cmds = dzPathParse(pathEl.getAttribute("d") || "");
   if (!cmds || cmds.length < 2) return;
   // encontrar el segmento más cercano al clic
@@ -5740,14 +5872,22 @@ function dzMagnetMove(e) {
 }
 
 function dzMagnetApply(e) {
-  const p = dzToUser(e.clientX, e.clientY);
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
-  const r2 = MAGNET.radius * MAGNET.radius;
   const paths = svg.querySelectorAll("path,polygon,polyline,line");
   let moved = 0;
   for (const el of paths) {
     if (el.closest("g.dz-onion") || el.closest("[data-locked]")) continue;
+    const p = dzPointInElement(el, e.clientX, e.clientY);
+    // Radio expresado en coordenadas locales del elemento, incluso si la capa
+    // está trasladada, rotada o escalada.
+    let localRadius = MAGNET.radius;
+    try {
+      const m = el.getScreenCTM();
+      const pxPerUnit = Math.max(.001, (Math.hypot(m.a, m.b) + Math.hypot(m.c, m.d)) / 2);
+      localRadius = dzVectorPrefs().magnetRadius / pxPerUnit;
+    } catch (_) { /* usar radio del lienzo */ }
+    const r2 = localRadius * localRadius;
     const tag = el.tagName.toLowerCase();
     if (tag === "path") {
       const cmds = dzPathParse(el.getAttribute("d") || "");
@@ -5759,7 +5899,7 @@ function dzMagnetApply(e) {
         const dx = p.x - lx, dy = p.y - ly;
         const d2 = dx * dx + dy * dy;
         if (d2 < r2) {
-          const force = 1 - Math.sqrt(d2) / MAGNET.radius;
+          const force = 1 - Math.sqrt(d2) / localRadius;
           s.n[s.n.length - 2] = lx + dx * force * dzVectorPrefs().magnetStrength;
           s.n[s.n.length - 1] = ly + dy * force * dzVectorPrefs().magnetStrength;
           dirty = true; moved++;
@@ -5772,7 +5912,7 @@ function dzMagnetApply(e) {
       for (let i = 0; i + 1 < pts.length; i += 2) {
         const dx = p.x - pts[i], dy = p.y - pts[i + 1];
         if (dx * dx + dy * dy < r2) {
-          const force = 1 - Math.hypot(dx, dy) / MAGNET.radius;
+          const force = 1 - Math.hypot(dx, dy) / localRadius;
           pts[i] += dx * force * dzVectorPrefs().magnetStrength;
           pts[i + 1] += dy * force * dzVectorPrefs().magnetStrength;
           dirty = true; moved++;
@@ -5786,7 +5926,7 @@ function dzMagnetApply(e) {
         const dx = p.x - (isY ? (+el.getAttribute(attr === "y1" ? "x1" : "x2")) : v);
         const dy = p.y - (isY ? v : (+el.getAttribute(attr === "x1" ? "y1" : "y2")));
         if (dx * dx + dy * dy < r2) {
-          const force = 1 - Math.hypot(dx, dy) / MAGNET.radius;
+          const force = 1 - Math.hypot(dx, dy) / localRadius;
           if (isY) el.setAttribute(attr, v + dy * force * dzVectorPrefs().magnetStrength);
           else el.setAttribute(attr, v + dx * force * dzVectorPrefs().magnetStrength);
           moved++;
@@ -12256,6 +12396,8 @@ function dz3dExit(silent) {
 const DZ_SKIP_TAGS = ["defs", "title", "desc", "style", "metadata", "lineargradient",
                       "radialgradient", "filter", "clippath", "mask", "symbol"];
 function dzLayerLabel(el) {
+  if (el.getAttribute("data-low-art") === "line") return "Línea";
+  if (el.getAttribute("data-low-art") === "colour") return "Color";
   const t = el.tagName.toLowerCase();
   if (t === "text" || t === "tspan") return "T «" + (el.textContent || "").trim().slice(0, 16) + "»";
   if (el.id) return t + " #" + el.id;
@@ -12270,11 +12412,17 @@ function dzBuildLayers() {
   if (!box) return;
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) { box.innerHTML = ""; return; }
+  // Todo objeto pertenece a una capa real. Los SVG anteriores que todavía
+  // tenían formas sueltas se organizan bajo Línea/Color al abrir el panel.
+  if (!svg.querySelector(':scope > g[data-low-art]')) {
+    const organized = dzArtEnsure(svg);
+    if (organized?.changed) dzMarkDirty();
+  }
   const kids = [...svg.children].filter(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase())
     && !(n.classList && (n.classList.contains("dz-onion") || n.classList.contains("dz-penui"))));
   if (!kids.length) { box.innerHTML = ""; return; }
   box.innerHTML =
-    '<div class="dz-layers-h">CAPAS <span class="dz-hint">arrastrá: reordena · Alt+soltar: emparenta · doble clic: renombra</span></div>' +
+    '<div class="dz-layers-h" title="Arrastrá para reordenar · Alt+soltar para agrupar · doble clic para renombrar">CAPAS <span class="dz-layers-count">' + kids.length + '</span></div>' +
     '<div class="dz-lay-head"><span title="Visible"></span><span title="Bloquear">🔒</span>' +
     '<span></span><span class="dz-lh-name">Nombre</span>' +
     '<span class="dz-lh-op" title="Opacidad %">OP</span>' +
@@ -12304,7 +12452,7 @@ function dzLayerRow(el, depth) {
   const isGroup = el.tagName.toLowerCase() === "g"
     && [...el.children].some(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase()));
   const row = document.createElement("div");
-  row.className = "dz-lay-row" + (el === DZ.sel ? " sel" : "") + (depth ? " child" : "");
+  row.className = "dz-lay-row" + (el === DZ.sel ? " sel" : "") + (depth ? " child" : "") + (el.hasAttribute("data-low-art") ? " art-root" : "");
   row.dataset.nivel = String(depth);   // la sangria dice de quien cuelga
   row.draggable = true;   // reordenar y emparentar valen a cualquier profundidad
   //  visibilidad
@@ -12350,7 +12498,7 @@ function dzLayerRow(el, depth) {
   const lbl = document.createElement("span");
   lbl.className = "dz-layer-t";
   lbl.style.paddingLeft = (depth * 12) + "px";
-  lbl.textContent = el.id ? el.id : dzLayerLabel(el);
+  lbl.textContent = el.hasAttribute("data-low-art") ? dzLayerLabel(el) : (el.id ? el.id : dzLayerLabel(el));
   lbl.ondblclick = (e) => {
     e.stopPropagation();
     const name = prompt("Nombre de la capa (para vos y para el rig):", el.id || "");
@@ -12398,6 +12546,8 @@ function dzLayerRow(el, depth) {
       "separator",
       { icon:"⧉", label:"Duplicar capa", shortcut:"Ctrl+D", disabled:bloqueado, action:dzDuplicate },
       { icon:isGroup ? "⌁" : "▣", label:isGroup ? "Desagrupar" : "Agrupar", disabled:bloqueado, action:() => dzGroupSel(isGroup) },
+      { icon:"╱", label:"Mover a Línea", disabled:bloqueado || el.hasAttribute("data-low-art"), action:() => dzArtMoveSelection("line") },
+      { icon:"●", label:"Mover a Color", disabled:bloqueado || el.hasAttribute("data-low-art"), action:() => dzArtMoveSelection("colour") },
       { icon:"↑", label:"Subir", disabled:bloqueado, action:() => dzLayerMove(1) },
       { icon:"↓", label:"Bajar", disabled:bloqueado, action:() => dzLayerMove(-1) },
       { icon:"⇣", label:"Combinar hacia abajo", disabled:bloqueado, action:dzLayerMergeDown },
@@ -12405,7 +12555,7 @@ function dzLayerRow(el, depth) {
       { icon:"⌫", label:"Eliminar capa", shortcut:"Supr", disabled:bloqueado, action:dzDeleteSelected }
     ]);
   };
-  if (!depth) {
+  {
     row.ondragstart = (e) => { DZ.dragLayer = el; e.dataTransfer.effectAllowed = "move"; };
     row.ondragover = (e) => { e.preventDefault(); row.classList.add("dz-dropover"); };
     row.ondragleave = () => row.classList.remove("dz-dropover");

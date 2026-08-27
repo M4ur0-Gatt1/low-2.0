@@ -985,11 +985,13 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 /* manija de rotación (arriba-centro de la selección) */
 .dz-rotate {
   position: absolute; z-index: 5; transform: translate(-50%, -50%);
-  width: 18px; height: 18px; line-height: 17px; text-align: center;
-  background: var(--panel2); color: var(--txt); border: 1.5px solid var(--red);
-  border-radius: 50%; cursor: grab; font-size: 12px; user-select: none;
-  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  width: 17px; height: 17px; display:grid; place-items:center;
+  background: var(--panel); color: var(--cyan); border: 1px solid var(--cyan);
+  border-radius: 50%; cursor: grab; user-select: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,.38);
 }
+.dz-rotate::before { content:"↻"; font:600 12px/1 system-ui,sans-serif; }
+.dz-rotate:active { cursor:grabbing; background:var(--cyansoft); }
 .dz-rotate[hidden] { display: none; }
 /* nodos editables (herramienta ⬦): un tirador por punto del trazado */
 .dz-node {
@@ -1421,11 +1423,11 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-sh.se { left: 100%;top: 100%;transform: translate(-50%,-50%); cursor: nwse-resize; }
 .dz-sh:hover { background: var(--cyan); }
 .dz-corner-widget {
-  position:absolute; width:11px; height:11px; pointer-events:auto;
-  transform:translate(-50%,-50%); border:1.5px solid #fff; border-radius:50%;
-  background:#f2a23a; box-shadow:0 0 0 1px rgba(0,0,0,.45),0 2px 5px rgba(0,0,0,.35);
-  cursor:ew-resize;
+  position:absolute; width:8px; height:8px; pointer-events:auto;
+  transform:translate(-50%,-50%); border:1px solid var(--cyan); border-radius:50%;
+  background:var(--panel); box-shadow:0 1px 4px rgba(0,0,0,.35); cursor:crosshair;
 }
+.dz-corner-widget:hover { width:11px; height:11px; background:var(--cyan); }
 .dz-corner-widget[hidden] { display:none; }
 
 /* ══ reglas, guías y cuadrícula 2D ══ */
@@ -1515,6 +1517,7 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-layers-h { font: 600 10.5px 'JetBrains Mono', monospace; color: var(--mut);
   letter-spacing: .04em; margin-bottom: 6px; }
 .dz-layers-h .dz-hint { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.dz-layers-count { float:right; min-width:18px; padding:1px 5px; text-align:center; border-radius:99px; background:var(--panel2); color:var(--faint); }
 #dzLayers { margin-bottom: 12px; }
 #dzLayers:empty { margin: 0; }
 /* panel de capas por columnas (Toon Boom):  [Bloqueado] [Grid] nombre  OP  Z */
@@ -1535,6 +1538,7 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-lay-row:hover { background: var(--panel2); color: var(--txt); }
 .dz-lay-row.sel { background: var(--panel2); color: var(--txt); box-shadow: inset 2px 0 0 var(--red); }
 .dz-lay-row.child { font-size: 10.5px; opacity: .92; }
+.dz-lay-row.art-root { margin-top:4px; min-height:27px; background:color-mix(in srgb,var(--panel2) 72%,transparent); color:var(--txt); font-weight:650; }
 .dz-lay-row.dz-dropover { outline: 1.5px dashed var(--cyan); outline-offset: -2px; }
 .dz-layer-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
@@ -1621,6 +1625,17 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 /* panel de estilo (relleno/trazo/opacidad) + paleta del proyecto */
 .dz-style { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 10px; }
 .dz-style-row { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+.dz-paint-stack { min-height:45px; }
+.dz-paint-overlap { position:relative; width:54px; height:40px; flex:none; }
+.dz-paint-chip { position:absolute; display:block; width:31px; height:31px; cursor:pointer; }
+.dz-paint-chip.fill { left:0; top:0; z-index:2; }
+.dz-paint-chip.stroke { left:20px; top:10px; z-index:1; }
+.dz-paint-chip input { width:31px; height:31px; padding:2px; border:1px solid var(--line); border-radius:7px; background:var(--panel2); cursor:pointer; }
+.dz-paint-chip.fill input { box-shadow:0 0 0 2px var(--panel),0 3px 9px rgba(0,0,0,.3); }
+.dz-paint-chip span { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+.dz-swap-paint { width:26px; height:26px; padding:0; border:0; border-radius:7px; background:transparent; color:var(--mut); font-size:17px; }
+.dz-swap-paint:hover { color:var(--txt); background:var(--panel2); }
+.dz-paint-stack .dz-none { width:27px; font-size:9px; }
 .dz-swatch-l { display: flex; align-items: center; gap: 5px; font: 500 11px Figtree, sans-serif; color: var(--mut); cursor: pointer; }
 .dz-swatch-l input[type=color] { width: 26px; height: 22px; padding: 1px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); cursor: pointer; }
 .dz-none {
