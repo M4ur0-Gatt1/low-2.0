@@ -774,6 +774,23 @@
         !!doc.scene.rigNode("pieza_animada") && !!doc.scene.rigNode("hueso_real"));
     }
 
+    // 27. El giro de selección envuelve la matriz existente. Una escala previa
+    // no puede convertir la rotación en deformación ni mover el centro.
+    {
+      const T = LOW.drawing.transforms;
+      const base = { a:2, b:0, c:0, d:.5, e:30, f:40 };
+      const center = T.point(base, { x:10, y:20 });
+      const rotated = T.rigidRotate(base, 90, center);
+      const fixed = T.point(rotated, { x:10, y:20 });
+      const edge = T.point(rotated, { x:15, y:20 });
+      ok("girar conserva exactamente el centro visual",
+        Math.abs(fixed.x-center.x)<1e-8 && Math.abs(fixed.y-center.y)<1e-8,
+        JSON.stringify({center,fixed}));
+      ok("girar una forma escalada sigue el sentido del controlador sin deformarla",
+        Math.abs(edge.x-center.x)<1e-8 && Math.abs(edge.y-(center.y+10))<1e-8,
+        JSON.stringify({center,edge}));
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

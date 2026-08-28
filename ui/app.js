@@ -3128,24 +3128,43 @@ function dzRotateDown(e) {
   dzSnapshot();
   const el = DZ.sel;
   let lb; try { lb = el.getBBox(); } catch (_) { return; }
-  let c = { x: lb.x + lb.width / 2, y: lb.y + lb.height / 2 };
+  const c = { x: lb.x + lb.width / 2, y: lb.y + lb.height / 2 };
+  let pivotUser = null;
   const pv = el.getAttribute("data-pivot");
   if (pv) {
     const [px, py] = pv.split(/[\s,]+/).map(Number);
-    if (!isNaN(px) && !isNaN(py)) c = { x: px, y: py };   // rig: gira desde el pivote
+    // data-pivot pertenece al lienzo/escena, no al sistema local del elemento.
+    if (!isNaN(px) && !isNaN(py)) pivotUser = { x:px, y:py };
   }
-  const cp = el.ownerSVGElement.createSVGPoint(); cp.x = c.x; cp.y = c.y;
-  const cs = cp.matrixTransform(el.getScreenCTM());
-  const cx = cs?.x ?? e.clientX, cy = cs?.y ?? e.clientY;
-  const a0 = Math.atan2(e.clientY - cy, e.clientX - cx);
-  const base = el.getAttribute("transform") || "";
+  const T = LOW.drawing.transforms;
+  const consolidated = el.transform?.baseVal?.consolidate();
+  const base = consolidated ? T.multiply(T.identity(), consolidated.matrix) : T.identity();
+  // El centro y el puntero se llevan al PADRE de la forma. Antes el ángulo se
+  // medía en pantalla y se agregaba un rotate() en coordenadas locales: con
+  // escala/rotación previa eso deformaba la pieza y hasta invertía el gesto.
+  const parentCTM = el.parentElement?.getScreenCTM?.();
+  if (!parentCTM) return;
+  const invParent = parentCTM.inverse();
+  let centerParent = T.point(base, c);
+  if (pivotUser) {
+    const rootPoint = el.ownerSVGElement.createSVGPoint();
+    rootPoint.x = pivotUser.x; rootPoint.y = pivotUser.y;
+    const rootScreen = rootPoint.matrixTransform(el.ownerSVGElement.getScreenCTM());
+    centerParent = rootScreen.matrixTransform(invParent);
+  }
+  const localPointer = ev => {
+    const p = el.ownerSVGElement.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+    return p.matrixTransform(invParent);
+  };
+  const start = localPointer(e);
+  const a0 = Math.atan2(start.y - centerParent.y, start.x - centerParent.x);
   const move = (ev) => {
     if (ev.pointerId !== pointerId) return;
-    let deg = (Math.atan2(ev.clientY - cy, ev.clientX - cx) - a0) * 180 / Math.PI;
+    const p = localPointer(ev);
+    let deg = (Math.atan2(p.y - centerParent.y, p.x - centerParent.x) - a0) * 180 / Math.PI;
     if (ev.shiftKey) deg = Math.round(deg / 15) * 15;
     deg = Math.round(deg * 10) / 10;
-    el.setAttribute("transform", (base ? base + " " : "") +
-      `rotate(${deg} ${c.x.toFixed(1)} ${c.y.toFixed(1)})`);
+    el.setAttribute("transform", T.attr(T.rigidRotate(base, deg, centerParent)));
     dzPositionHandle();
   };
   const up = (ev) => {
@@ -3370,13 +3389,20 @@ function dzMultiRotateDown(e, pack) {
   const pointerId=e.pointerId, rects=pack.map(n=>n.getBoundingClientRect());
   const sx=(Math.min(...rects.map(r=>r.left))+Math.max(...rects.map(r=>r.right)))/2;
   const sy=(Math.min(...rects.map(r=>r.top))+Math.max(...rects.map(r=>r.bottom)))/2;
-  const center=dzToUser(sx,sy), a0=Math.atan2(e.clientY-sy,e.clientX-sx);
-  const bases=pack.map(n=>({n,tr:n.getAttribute("transform")||""}));
+  const T=LOW.drawing.transforms, a0=Math.atan2(e.clientY-sy,e.clientX-sx);
+  const bases=pack.map(n=>{
+    const consolidated=n.transform?.baseVal?.consolidate();
+    const base=consolidated?T.multiply(T.identity(),consolidated.matrix):T.identity();
+    const parentCTM=n.parentElement?.getScreenCTM?.();
+    if(!parentCTM)return null;
+    const p=n.ownerSVGElement.createSVGPoint();p.x=sx;p.y=sy;
+    return {n,base,center:p.matrixTransform(parentCTM.inverse())};
+  }).filter(Boolean);
   const move=ev=>{
     if(ev.pointerId!==pointerId)return;
     let deg=(Math.atan2(ev.clientY-sy,ev.clientX-sx)-a0)*180/Math.PI;
     if(ev.shiftKey)deg=Math.round(deg/15)*15; deg=Math.round(deg*10)/10;
-    bases.forEach(({n,tr})=>n.setAttribute("transform",`rotate(${deg} ${center.x.toFixed(1)} ${center.y.toFixed(1)})${tr?" "+tr:""}`));
+    bases.forEach(({n,base,center})=>n.setAttribute("transform",T.attr(T.rigidRotate(base,deg,center))));
     dzPositionHandle();
   };
   const up=ev=>{if(ev.pointerId!==pointerId)return;document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);document.removeEventListener("pointercancel",up);dzMarkDirty();dzBuildLayers();};
