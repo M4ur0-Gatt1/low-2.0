@@ -770,6 +770,38 @@
       });
     }
 
+    /** Migra el fallo de versiones anteriores donde "Registrar" convertía
+     * cada objeto de dibujo en un nodo con pivote. Sólo quita nodos aislados,
+     * sin hueso, claves, jerarquía ni raíz fijada; un rig real queda intacto. */
+    removeLegacyRigArtNodes(elementIds) {
+      const wanted = new Set((elementIds || []).filter(Boolean));
+      if (!wanted.size) return [];
+      return this._rigChange("Separar objetos y huesos", (rig) => {
+        const parentIds = new Set(Object.values(rig.nodes || {}).map(n => n.parentId).filter(Boolean));
+        const removed = [];
+        for (const [id, node] of Object.entries(rig.nodes || {})) {
+          if (!wanted.has(node.elementId || id)) continue;
+          // El registrador antiguo copiaba el pivote en `head`, pero nunca
+          // creaba `tail`; una cola real es la señal inequívoca de hueso.
+          if (node.tail || node.parentId || parentIds.has(id) || node.pinned) continue;
+          if (Object.keys(node.keys || {}).length) continue;
+          delete rig.nodes[id];
+          for (const [slotId, slot] of Object.entries(rig.slots || {})) if (slot.boneId === id) {
+            for (const [attachmentId, attachment] of Object.entries(rig.attachments || {}))
+              if (attachment.slotId === slotId) delete rig.attachments[attachmentId];
+            delete rig.slots[slotId];
+          }
+          for (const [bindingId, binding] of Object.entries(rig.bindings || {}))
+            if (binding.boneId === id || !rig.slots[binding.slotId] || !rig.attachments[binding.attachmentId])
+              delete rig.bindings[bindingId];
+          for (const path of Object.keys(rig.channels || {}))
+            if (path.startsWith(`bones/${encodeURIComponent(id)}/`)) delete rig.channels[path];
+          removed.push(id);
+        }
+        return removed;
+      });
+    }
+
     setRigKey(id, frame, pose) {
       if (!id) return false;
       return this._rigChange("Crear clave de rig", (rig) => {

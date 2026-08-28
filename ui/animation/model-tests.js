@@ -757,6 +757,23 @@
         before.replace(/\"savedAt\":\"[^\"]+\"/, '"savedAt":"x"'));
     }
 
+    // 26. Registrar objetos no debe dejar el "doble esqueleto" histórico:
+    // se limpian pivotes automáticos, pero jamás huesos ni animación real.
+    {
+      const doc = new animation.LowDoc();
+      doc.ensureRigNodes([
+        { id:"pieza_suelta", elementId:"pieza_suelta", pivot:{x:10,y:20} },
+        { id:"pieza_animada", elementId:"pieza_animada", pivot:{x:5,y:5} }
+      ]);
+      doc.setRigKey("pieza_animada", 1, { x:0, y:0, r:0, sx:1, sy:1 });
+      doc.ensureRigBone("hueso_real", { head:{x:0,y:0}, tail:{x:0,y:50}, elementId:"brazo" });
+      const removed = doc.removeLegacyRigArtNodes(["pieza_suelta", "pieza_animada", "brazo"]);
+      ok("la migración quita sólo el pivote automático aislado",
+        removed.length === 1 && removed[0] === "pieza_suelta" && !doc.scene.rigNode("pieza_suelta"));
+      ok("la migración conserva nodos animados y huesos reales",
+        !!doc.scene.rigNode("pieza_animada") && !!doc.scene.rigNode("hueso_real"));
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

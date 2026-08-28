@@ -3069,6 +3069,12 @@ function dzPivotClick(e) {
     dzMarkDirty(); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender();
     return dzSetStatus(`Pivote de «${elegido.id}» puesto acá · ahora gira desde este punto · Alt+clic lo quita`);
   }
+  // Dentro del armado, un pivote pertenece al HUESO, no a la pieza SVG que
+  // casualmente quedó debajo del lápiz. Crear nodos desde acá era la causa de
+  // los pivotes duplicados y hacía imposible entender qué se estaba editando.
+  if (DZ.rigMode) {
+    return dzSetStatus("Elegí primero un hueso del alambre · después hacé clic donde debe articular");
+  }
   const el = document.elementFromPoint(e.clientX, e.clientY);
   const dentro = el && el.closest && el.closest("#dzCanvas svg:not(#dzRigOverlay)") && !el.closest("g.dz-onion");
   if (!dentro) {
@@ -7454,10 +7460,29 @@ function dzRigPrepareDrawing() {
   if (!DZ.doc) return dzSetStatus("Abrí una animación antes de preparar el esqueleto");
   const pieces = dzRigDrawableElements();
   if (!pieces.length) return dzSetStatus("Dibujá o importá piezas separadas antes de preparar el esqueleto");
-  const specs = pieces.map((el, index) => dzRigPieceSpec(el, index, ""));
-  const ids = dzRigRegisterSpecs(specs, "Preparar rig desde capas");
+  // Registrar objetos sólo cataloga el arte. Los huesos y sus pivotes nacen al
+  // dibujar el alambre; mezclar ambas cosas generaba un segundo esqueleto
+  // invisible (un nodo y un pivote por cada forma del dibujo).
+  dzSnapshot();
+  const svg = $("#dzCanvas")?.querySelector(":scope > svg");
+  const ids = pieces.map((el, index) => {
+    let id = String(el.id || `pieza_${index + 1}`).trim().replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]/g, "_");
+    if (!id) id = `pieza_${index + 1}`;
+    const occupied = svg?.querySelector("#" + CSS.escape(id));
+    if (occupied && occupied !== el) id = dzUniqueId(id + "_");
+    el.id = id;
+    el.setAttribute("data-rig-piece", "1");
+    return id;
+  });
+  const limpiados = DZ.doc.removeLegacyRigArtNodes?.(ids) || [];
+  for (const id of limpiados) {
+    svg?.querySelector("#" + CSS.escape(id))?.removeAttribute("data-pivot");
+    if (DZ.rigSelectedId === id) DZ.rigSelectedId = null;
+  }
+  dzDocCommit();
+  dzMarkDirty(); dzBuildLayers(); dzRigPanelSync(); dzRigOverlayRender();
   dzRigSetMode("build");
-  dzSetStatus(`${ids.length} piezas registradas sin inventar jerarquía · elegí la raíz, fijala y vinculá cada hijo arrastrando su cuadrado al pivote del padre`);
+  dzSetStatus(`${ids.length} objetos listos${limpiados.length ? ` · ${limpiados.length} pivotes viejos limpiados` : ""} · ahora dibujá el alambre encima y tocá Repartir`);
   return ids;
 }
 function dzRigRemoveSelected() {
@@ -7570,7 +7595,6 @@ function dzRigSetTool(tool) {
     DZ.rigToolSync = true;
     try { dzSetTool(canvasTool); } finally { DZ.rigToolSync = false; }
   }
-  const upgraded = tool === "pivot" ? dzRigUpgradeLegacyPivots() : 0;
   const n = dzRigSelectedNode();
   const status = {
     create: "Alambre: arrastrá para crear huesos · esta herramienta nunca mueve el esqueleto existente",
@@ -7579,9 +7603,9 @@ function dzRigSetTool(tool) {
     cut: "Cortes: tocá el trazo donde termina una pieza y empieza la articulación",
     pivot: n
       ? `Pivote de «${n.id}»: hacé clic donde articula · Alt+clic lo quita`
-      : "Pivotes: elegí una pieza o tocala donde debe articular"
+      : "Pivotes: elegí primero un hueso del alambre"
   }[tool];
-  if (status) dzSetStatus(status + (upgraded ? ` · ${upgraded} pivote(s) centrados en su unión superior` : ""));
+  if (status) dzSetStatus(status);
   dzRigOverlayRender();
 }
 function dzRigSetMode(mode) {
@@ -7609,11 +7633,11 @@ function dzRigSetMode(mode) {
   $("#rigModeIk").classList.toggle("on", DZ.rigSubmode === "ik");
   const gesto = $("#rigGesto");
   if (gesto) gesto.textContent = construyendo
-    ? "Dibujá el alambre y registrá las piezas."
+    ? "Objetos → alambre → pivotes → repartir."
     : (DZ.rigSubmode === "ik"
       ? "Arrastrá el rombo para acomodar la cadena."
       : "Arrastrá la manija para rotar o la articulación para mover.");
-  const hints = { build: "Alambre → Cortes → Pivotes → Repartir. Al dibujar o cortar, el overlay se aparta automáticamente y no bloquea la tableta.",
+  const hints = { build: "Registrar sólo identifica el dibujo. El alambre crea los huesos; Repartir los vincula. Cortes es opcional.",
     fk: "El pivote sólo se cambia en Construir. Sin Auto-clave, el gesto es una prueba: Enter la clava, Esc la descarta.",
     ik: "Elegí una cadena y arrastrá el rombo: los dos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
@@ -8100,6 +8124,10 @@ function dzRigOverlayRender() {
     const p = point(node.id); if (!p) continue;
     const jointHandler = e => {
       if (DZ.rigSubmode === "build" && DZ.rigTool === "create") return dzRigBoneCreateDrag(e);
+      // El overlay está por encima del lienzo y captura el clic. Sin esta rama,
+      // la herramienta Pivote parecía no funcionar porque dzPivotClick nunca
+      // recibía el evento al tocar una articulación visible.
+      if (DZ.rigSubmode === "build" && DZ.rigTool === "pivot") return dzRigBuildPivotDrag(e, node);
       // Alt = mover SOLO el pivote, también en un hueso. Sin esto, el pivote de
       // un hueso no se podía correr por ningún lado: el gesto siempre movía el
       // hueso entero.
@@ -9472,10 +9500,10 @@ function dzRigTutorial() {
     <div class="sub">El esqueleto de LOW en una pantalla · <b>Ayuda → Cómo se riggea</b> para volver acá</div>
     <div class="rigdoc">
 
-      <p class="rigdoc-nota">En Harmony y en OpenToonz hay dos sistemas separados: la jerarquía de
-      recortes por un lado y el esqueleto por otro. Acá hay <b>una sola cosa</b>: el nodo. Una
-      «pieza» y un «hueso» son el mismo objeto — el hueso además tiene cuerpo, y por eso se lo
-      puede agarrar y rotar desde el medio.</p>
+      <p class="rigdoc-nota">El dibujo y el esqueleto son dos capas distintas. Las <b>piezas</b>
+      son los objetos visibles; los <b>huesos</b> forman el alambre que los mueve. <b>Repartir</b>
+      es el puente entre ambos. Por eso registrar una pieza nunca le agrega un pivote propio:
+      el eje de giro pertenece al hueso que la controla.</p>
 
       <div class="rigdoc-abrir"><button class="primary" id="rigdocEjemplo">Abrir el personaje de ejemplo</button>
       <small>Un muñeco ya riggeado y animado, para seguir estos pasos tocando algo que funciona.</small></div>
@@ -9509,11 +9537,11 @@ function dzRigTutorial() {
 
       <h3>A · El personaje ya está dibujado por partes</h3>
       <ol>
-        ${paso("1", "<b>Construir → Registrar piezas del dibujo.</b> Toma todas las partes sueltas del dibujo y les pone un pivote en el centro.")}
-        ${paso("2", "Elegí la pieza y tocá <b>Pivote</b>; después hacé clic donde tiene que girar: en un brazo, el hombro. El punto va a la pieza ELEGIDA aunque el clic caiga encima de otra —el hombro está sobre el torso y eso es normal—. Alt+clic lo saca.")}
-        ${paso("3", "Decile de quién cuelga: el desplegable <b>Cuelga de</b>, o arrastrá el <b>cuadrado</b> hasta el <b>círculo</b> del padre.")}
-        ${paso("4", "La cadera o el torso van con <b>Fijar raíz</b>.")}
-        ${paso("5", "Pasá a <b>Animar</b>: ahí ya se posa, y cada gesto deja una clave.")}
+        ${paso("1", "<b>Construir → Registrar.</b> Identifica las partes sueltas del dibujo. No crea huesos ni pivotes.")}
+        ${paso("2", "Con <b>Alambre</b>, dibujá los huesos encima de esas partes, desde una articulación hasta la siguiente.")}
+        ${paso("3", "Si hace falta, elegí un hueso y usá <b>Pivotes</b> para colocar con precisión su articulación. Alt+clic la restablece.")}
+        ${paso("4", "Tocá <b>Repartir</b>: LOW vincula cada objeto con el hueso más cercano.")}
+        ${paso("5", "Pasá a <b>Animar</b>: ahí el alambre mueve las piezas y cada gesto deja una clave.")}
       </ol>
 
       <h3>B · Querés una cadena articulada</h3>
@@ -9525,9 +9553,9 @@ function dzRigTutorial() {
       </ol>
 
       <h3>El pivote de un hueso</h3>
-      <p>Arrastrar el círculo de un hueso mueve <b>el hueso entero</b>. Para correr solo su
-      pivote —el punto sobre el que gira— arrastralo con <b>Alt</b> apretado, o usá el botón
-      <b>Pivote</b> con el hueso elegido.</p>
+      <p>Cada hueso tiene una articulación; las piezas no agregan puntos extra. Para cambiarla,
+      elegí <b>Pivotes</b>, seleccioná el hueso y arrastrá su círculo. En <b>Editar</b>, Alt+arrastrar
+      hace el mismo ajuste sin mover la geometría del hueso.</p>
 
       <h3>Posar</h3>
       <p><b>FK:</b> arrastrar el cuerpo del hueso o su punta lo <b>rota</b>; arrastrar la
