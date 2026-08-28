@@ -441,11 +441,16 @@
       <button class="ibtn dz-toolbtn" data-tool="dropper" title="Cuentagotas (I): clic en un elemento toma su relleno y trazo"><svg class="ico"><use href="#i-dropper"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="bucket" title="Balde (G): clic en un elemento le aplica el relleno actual (Shift: el trazo)"><svg class="ico"><use href="#i-bucket"/></svg></button>
       <div class="hsep" data-label="Formas"></div>
-      <button class="ibtn" id="dzAddRect" title="Rectángulo (R)"><svg class="ico"><use href="#i-rect"/></svg></button>
-      <button class="ibtn" id="dzAddCircle" title="Círculo"><svg class="ico"><use href="#i-circle"/></svg></button>
-      <button class="ibtn" id="dzAddEllipse" title="Elipse (O)"><svg class="ico"><use href="#i-ellipse"/></svg></button>
-      <button class="ibtn" id="dzAddPoly" title="Polígono (6 lados — editable con nodos)"><svg class="ico"><use href="#i-poly"/></svg></button>
-      <button class="ibtn" id="dzAddStar" title="Estrella (5 puntas — editable con nodos)"><svg class="ico"><use href="#i-star"/></svg></button>
+      <div class="dz-shape-picker" id="dzShapePicker">
+        <button class="ibtn dz-shape-main" id="dzShapeMain" title="Crear forma · mantené pulsado o usá la flecha para elegir"><svg class="ico"><use id="dzShapeMainIcon" href="#i-rect"/></svg><span class="dz-shape-caret">▸</span></button>
+        <div class="dz-shape-menu" id="dzShapeMenu" hidden>
+          <button class="ibtn" id="dzAddRect" data-shape="rect" title="Rectángulo (R)"><svg class="ico"><use href="#i-rect"/></svg></button>
+          <button class="ibtn" id="dzAddCircle" data-shape="circle" title="Círculo"><svg class="ico"><use href="#i-circle"/></svg></button>
+          <button class="ibtn" id="dzAddEllipse" data-shape="ellipse" title="Elipse (O)"><svg class="ico"><use href="#i-ellipse"/></svg></button>
+          <button class="ibtn" id="dzAddPoly" data-shape="poly" title="Polígono (6 lados — editable con nodos)"><svg class="ico"><use href="#i-poly"/></svg></button>
+          <button class="ibtn" id="dzAddStar" data-shape="star" title="Estrella (5 puntas — editable con nodos)"><svg class="ico"><use href="#i-star"/></svg></button>
+        </div>
+      </div>
       <button class="ibtn" id="dzAddText" title="Texto (T)"><svg class="ico"><use href="#i-text"/></svg></button>
       <button class="ibtn" id="dzAddLine" title="Línea (L)"><svg class="ico"><use href="#i-line"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="ruler" title="Regla / Hilo tensado (R): clic = inicio, clic = fin con línea elástica · Shift+clic = 15° · clic derecho = punto de fuga para perspectiva · Esc cancela"><svg class="ico"><use href="#i-ruler"/></svg></button>
@@ -571,7 +576,7 @@
         <div class="onion2-hint">Cada fader controla un dibujo distinto; los holds no se repiten. Doble clic restablece un canal.</div>
       </div>
       <div class="dz-onionpanel rig2" id="dzRigPanel" hidden>
-        <div class="dz-op-head" id="dzRigHead"><svg class="ico"><use href="#i-key"/></svg> ESQUELETO · CUT-OUT
+        <div class="dz-op-head" id="dzRigHead"><svg class="ico"><use href="#i-key"/></svg> RIGGING · ESQUELETO
           <span class="dz-op-x" id="dzRigClose" title="Cerrar">×</span></div>
         <div class="rig2-estados" role="tablist" aria-label="Estado del esqueleto">
           <button id="rigModeBuild" class="on" title="Armar el muñeco: piezas, pivotes, jerarquía, topes. Acá no se crean claves.">
@@ -579,6 +584,17 @@
           <button id="rigModeAnim" title="Posar el muñeco. Cada gesto deja una clave en el cuadro actual.">
             <b>Animar</b><small>posar por cuadro</small></button>
         </div>
+        <section class="rig2-library-card" data-rig-section="build" aria-label="Biblioteca de esqueletos">
+          <div class="rig2-title"><b>Biblioteca</b><span>esqueletos listos</span></div>
+          <div class="rig2-library"><select id="rigLibrary" aria-label="Biblioteca de esqueletos">
+            <option value="human_standard">Humano · completo</option><option value="human_simple">Humano · stickman</option>
+            <option value="human_chibi">Humano · infantil/chibi</option><option value="dog">Perro</option>
+            <option value="cat">Gato</option><option value="horse">Caballo</option>
+            <option value="face_pro">Rostro · controles profesionales</option>
+          </select><button class="primary" id="rigLibraryAdd" title="Colocar este esqueleto sobre el personaje">Colocar</button></div>
+          <button class="rig2-import-character" id="rigImportCharacter" title="Importar arte opaco para vincularlo al esqueleto">Importar personaje…</button>
+          <div class="rig2-mini-flow" aria-label="Flujo de rigging"><b>1</b> Importar <i>›</i><b>2</b> Colocar <i>›</i><b>3</b> Repartir <i>›</i><b>4</b> Animar</div>
+        </section>
         <p class="rig2-gesto" id="rigGesto"></p>
         <div class="rig2-objectbar" id="rigObjectBar" aria-label="Objetos del rig">
           <div class="rig2-objectbar-title"><b>Objetos</b><span id="rigObjectCount">0 detectados</span></div>
@@ -602,6 +618,7 @@
           <button id="rigToolPivot" aria-label="Colocar pivotes" title="Colocar ejes y pivotes sobre las piezas del dibujo"><b aria-hidden="true">⊙</b><span>Pivotes</span></button>
         </div>
         <section class="rig2-section" data-rig-section="build">
+          <p class="rig2-hint">Importá el personaje, colocá el esqueleto y tocá Repartir. Después ajustá articulaciones con Editar.</p>
           <div class="rig2-title"><b>Jerarquía</b><span><i id="rigCount">0</i> piezas</span></div>
           <div class="rig2-flow"><span>1 Objetos</span><i>›</i><span>2 Alambre</span><i>›</i><span>3 Pivotes</span><i>›</i><span>4 Repartir</span></div>
           <div class="rig2-tree" id="rigTree" aria-label="Jerarquía del personaje"></div>
@@ -887,38 +904,39 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=3.29.71"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=3.29.74"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=3.29.71"></script>
-<script src="animation/palette.js?v=3.29.71"></script>
-<script src="animation/scene-model.js?v=3.29.71"></script>
-<script src="animation/exposures.js?v=3.29.71"></script>
-<script src="animation/onion.js?v=3.29.71"></script>
-<script src="animation/document.js?v=3.29.71"></script>
-<script src="animation/xsheet-view.js?v=3.29.71"></script>
-<script src="animation/timeline-view.js?v=3.29.71"></script>
-<script src="animation/level-strip.js?v=3.29.71"></script>
-<script src="animation/palette-view.js?v=3.29.71"></script>
-<script src="animation/audio.js?v=3.29.71"></script>
-<script src="animation/shortcuts.js?v=3.29.71"></script>
-<script src="animation/model-tests.js?v=3.29.71"></script>
-<script src="animation/timeline.js?v=3.29.71"></script>
-<script src="animation/xsheet.js?v=3.29.71"></script>
-<script src="animation/playback.js?v=3.29.71"></script>
-<script src="animation/camera.js?v=3.29.71"></script>
-<script src="drawing/stabilization.js?v=3.29.71"></script>
-<script src="drawing/transforms.js?v=3.29.71"></script>
-<script src="drawing/pointer-input.js?v=3.29.71"></script>
-<script src="drawing/brushes.js?v=3.29.71"></script>
-<script src="drawing/stroke-engine.js?v=3.29.71"></script>
-<script src="workspace/panels.js?v=3.29.71"></script>
-<script src="workspace/workspaces.js?v=3.29.71"></script>
-<script src="workspace/windows.js?v=3.29.71"></script>
-<script src="workspace/layouts.js?v=3.29.71"></script>
-<script src="workspace/recovery.js?v=3.29.71"></script>
-<script src="ai/commands.js?v=3.29.71"></script>
-<script src="ai/task-runner.js?v=3.29.71"></script>
-<script src="ai/recovery.js?v=3.29.71"></script>
-<script src="app.js?v=3.29.71"></script>
+<script src="core/history.js?v=3.29.74"></script>
+<script src="animation/palette.js?v=3.29.74"></script>
+<script src="animation/scene-model.js?v=3.29.74"></script>
+<script src="animation/exposures.js?v=3.29.74"></script>
+<script src="animation/onion.js?v=3.29.74"></script>
+<script src="animation/document.js?v=3.29.74"></script>
+<script src="animation/rig-library.js?v=3.29.74"></script>
+<script src="animation/xsheet-view.js?v=3.29.74"></script>
+<script src="animation/timeline-view.js?v=3.29.74"></script>
+<script src="animation/level-strip.js?v=3.29.74"></script>
+<script src="animation/palette-view.js?v=3.29.74"></script>
+<script src="animation/audio.js?v=3.29.74"></script>
+<script src="animation/shortcuts.js?v=3.29.74"></script>
+<script src="animation/model-tests.js?v=3.29.74"></script>
+<script src="animation/timeline.js?v=3.29.74"></script>
+<script src="animation/xsheet.js?v=3.29.74"></script>
+<script src="animation/playback.js?v=3.29.74"></script>
+<script src="animation/camera.js?v=3.29.74"></script>
+<script src="drawing/stabilization.js?v=3.29.74"></script>
+<script src="drawing/transforms.js?v=3.29.74"></script>
+<script src="drawing/pointer-input.js?v=3.29.74"></script>
+<script src="drawing/brushes.js?v=3.29.74"></script>
+<script src="drawing/stroke-engine.js?v=3.29.74"></script>
+<script src="workspace/panels.js?v=3.29.74"></script>
+<script src="workspace/workspaces.js?v=3.29.74"></script>
+<script src="workspace/windows.js?v=3.29.74"></script>
+<script src="workspace/layouts.js?v=3.29.74"></script>
+<script src="workspace/recovery.js?v=3.29.74"></script>
+<script src="ai/commands.js?v=3.29.74"></script>
+<script src="ai/task-runner.js?v=3.29.74"></script>
+<script src="ai/recovery.js?v=3.29.74"></script>
+<script src="app.js?v=3.29.74"></script>
 </body>
 </html>

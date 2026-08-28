@@ -1068,10 +1068,13 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-rig-overlay.bone-create .dz-rig-bone-hit { cursor: crosshair; }
 .dz-rig-overlay[data-mode="fk"] .dz-rig-joint { cursor: move; }
 .dz-rig-bone.active { stroke: #ffd29d; stroke-width: 4; }
+.dz-rig-bone.controller { stroke:#20c7b7; stroke-width:2; opacity:.92; }
 .dz-rig-bone-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
 .dz-rig-bone-preview { fill: none; stroke: #ffd29d; stroke-width: 2; stroke-dasharray: 5 4; pointer-events: none; }
 .dz-rig-bone-tip { fill: #171615; stroke: #ffd29d; stroke-width: 2; pointer-events: all; }
+.dz-rig-bone-tip.controller { stroke:#52e3d4; fill:#102522; }
 .dz-rig-joint { fill: #171615; stroke: #f2a06e; stroke-width: 2; pointer-events: all; cursor: pointer; }
+.dz-rig-joint.controller { fill:#102522; stroke:#52e3d4; }
 .dz-rig-joint.root { fill: #4f8bb8; stroke: #a8d9ff; }
 .dz-rig-joint.selected { fill: #f0450e; stroke: #fff; }
 /* área de agarre invisible: los círculos de 5px eran difíciles de atrapar con
@@ -1103,6 +1106,12 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-rig-target { fill: #171615; stroke: #59c3a6; stroke-width: 2.5; pointer-events: all; cursor: move; }
 .dz-rig-target.active { fill: #2c846b; stroke: #d6fff1; }
 .dz-rig-label { fill: #f1ece7; stroke: #171615; stroke-width: 3; paint-order: stroke; font: 600 11px Figtree,sans-serif; pointer-events: none; }
+.dz-rig-controller { fill:rgba(32,199,183,.08); stroke:#20c7b7; stroke-width:2; pointer-events:all; cursor:pointer; vector-effect:non-scaling-stroke; }
+.dz-rig-controller.selected { fill:rgba(32,199,183,.28); stroke:#d7fffb; stroke-width:2.5; }
+.dz-rig-overlay[data-mode="fk"] .dz-rig-controller { cursor:move; }
+.dz-rig-overlay[data-mode="fk"] .dz-rig-bone:not(.controller),
+.dz-rig-overlay[data-mode="fk"] .dz-rig-joint:not(.controller),
+.dz-rig-overlay[data-mode="fk"] .dz-rig-bone-tip:not(.controller) { opacity:.28; }
 
 /* Esqueleto/cut-out: panel de trabajo, no tarjeta decorativa. */
 .dz-onionpanel.rig2 { width: 306px; max-height: calc(100% - 72px); overflow: auto; font-size: 12px; }
@@ -1151,6 +1160,15 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .rig2 input,.rig2 select { height: 27px; min-width: 0; border: 1px solid var(--line2); border-radius: 5px; padding: 3px 6px; background: #171615; color: var(--txt); font: 500 11px Figtree,sans-serif; }
 .rig2-field > span { width: 57px; flex: none; }
 .rig2-field select { flex: 1; }
+.rig2-library { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; padding:7px 9px 3px; }
+.rig2-library-card { padding: 6px 8px 8px; border-bottom: 1px solid var(--line2); background: var(--panel); }
+.rig2-library-card .rig2-title { padding: 0 2px; }
+.rig2-library select { min-width:0; height:31px; border:1px solid var(--line); border-radius:7px; background:var(--panel2); color:var(--txt); padding:0 7px; }
+.rig2-library button { min-width:64px; }
+.rig2-import-character { width:calc(100% - 18px); margin:5px 9px 2px; }
+.rig2-mini-flow { display:flex; align-items:center; justify-content:center; gap:5px; padding:5px 4px 1px; color:var(--mut); font-size:9px; }
+.rig2-mini-flow b { display:grid; place-items:center; width:15px; height:15px; border-radius:50%; background:var(--redsoft); color:var(--txt); font-size:9px; }
+.rig2-mini-flow i { opacity:.55; font-style:normal; }
 .rig2-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; }
 .rig2-grid label,.rig2-limits label { display: grid; gap: 3px; color: var(--mut); font-size: 10px; }
 .rig2-grid input,.rig2-limits input { width: 100%; }
@@ -2547,8 +2565,9 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .dz-animation-dock .dz-onionpanel {
   position: static; width: 100%; height: auto; min-height: 0; z-index: auto;
   border: 0; border-bottom: 1px solid var(--line2); border-radius: 0;
-  box-shadow: none; overflow: visible; flex: 0 0 auto;
+  box-shadow: none; overflow: auto; flex: 0 0 auto;
 }
+.dz-animation-dock #dzRigPanel { min-height: 340px; flex: 1 1 430px; overflow-y: auto; }
 .dz-animation-dock .ls2panel { height: 270px; }
 .dz-animation-dock .dz-xsheet {
   position: static; width: 100%; height: 100%; min-height: 280px; max-height: none;
@@ -2964,6 +2983,11 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 #designView .dz-tools .ibtn:hover { background:var(--dz-raised); }
 #designView .dz-tools .ibtn.active { background:var(--redsoft); color:var(--redh); box-shadow:inset 0 0 0 1px rgba(240,69,14,.22); }
 #designView .dz-tools .hsep { margin:4px 5px 2px; width:24px; height:1px; overflow:hidden; color:transparent; background:var(--dz-hairline); }
+#designView .dz-shape-picker { position:relative; flex:none; }
+#designView .dz-shape-main { position:relative; }
+#designView .dz-shape-caret { position:absolute; right:2px; bottom:1px; font-size:11px; color:var(--txt); line-height:1; }
+#designView .dz-shape-menu { position:fixed; z-index:800; display:grid; grid-template-columns:repeat(3,34px); gap:4px; padding:6px; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 34px rgba(0,0,0,.48); }
+#designView .dz-shape-menu[hidden] { display:none; }
 #designView .dz-canvas { background-color:#101012; }
 #designView .dz-inspector { width:258px; padding:11px 10px; border-left-color:var(--dz-hairline); }
 #designView .dz-style-row { min-height:30px; gap:6px; }

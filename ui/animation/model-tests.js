@@ -789,6 +789,34 @@
       ok("girar una forma escalada sigue el sentido del controlador sin deformarla",
         Math.abs(edge.x-center.x)<1e-8 && Math.abs(edge.y-(center.y+10))<1e-8,
         JSON.stringify({center,edge}));
+      const clockwise=T.screenRotationDelta({x:100,y:50},{x:150,y:100},{x:100,y:100},{a:1,b:0,c:0,d:1,e:0,f:0});
+      const mirrored=T.screenRotationDelta({x:100,y:50},{x:150,y:100},{x:100,y:100},{a:-1,b:0,c:0,d:1,e:0,f:0});
+      ok("la rotación sigue el gesto visible en pantalla", Math.abs(clockwise-90)<.001, `giro=${clockwise}`);
+      ok("un contenedor reflejado no invierte la manija", Math.abs(mirrored+90)<.001, `giro=${mirrored}`);
+      const translated=T.rigidTranslate(rotated,{x:25,y:-12},T.identity());
+      const movedCenter=T.point(translated,{x:10,y:20});
+      ok("mover después de girar sigue la mano y no los ejes rotados",
+        Math.abs(movedCenter.x-(center.x+25))<1e-8 && Math.abs(movedCenter.y-(center.y-12))<1e-8,
+        JSON.stringify({center,movedCenter}));
+    }
+
+    // 28. Las plantillas crean el mismo rig canónico que el alambre manual.
+    {
+      const lib=animation.rigLibrary, keys=Object.keys(lib.templates);
+      ok("la biblioteca incluye humanos, perro, gato y caballo",
+        keys.length>=6 && ["human_standard","human_simple","human_chibi","dog","cat","horse"].every(k=>keys.includes(k)),keys.join(","));
+      for(const key of keys){
+        const doc=new animation.LowDoc(), ids=lib.apply(doc,key,{x:0,y:0,width:1000,height:1000},"test");
+        const nodes=Object.values(doc.scene.rig.nodes), valid=nodes.length===ids.length && nodes.every(n=>n.pivot&&n.head&&n.tail) && !(doc.scene.rig.diagnostics||[]).length;
+        ok(`esqueleto ${key} trae pivotes y jerarquía funcional`,valid,JSON.stringify(doc.scene.rig.diagnostics||[]));
+      }
+      const eventDoc=new animation.LowDoc(), eventIds=lib.apply(eventDoc,{type:"click"},{x:0,y:0,width:500,height:500},"event");
+      ok("un evento de interfaz no rompe el botón Colocar",eventIds.length===lib.templates.human_standard.bones.length,String(eventIds.length));
+      const faceDoc=new animation.LowDoc(), faceIds=lib.apply(faceDoc,"face_pro",{x:0,y:0,width:1000,height:1000},"face");
+      const faceControls=faceIds.map(id=>faceDoc.scene.rigNode(id)).filter(n=>n?.role==="control"&&n.control?.label);
+      ok("el rig facial trae controles nombrados y posables",faceControls.length>=18,String(faceControls.length));
+      const faceReload=new animation.Scene({rig:faceDoc.scene.rig.toJSON?.()||faceDoc.scene.rig});
+      ok("los controles profesionales sobreviven al guardado",faceReload.rigNode(faceIds[0])?.role==="control",faceReload.rigNode(faceIds[0])?.role);
     }
 
     const fallan = res.filter((r) => !r.ok);

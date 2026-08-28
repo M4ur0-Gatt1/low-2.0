@@ -22,6 +22,10 @@
     m = data(m);
     return { x:m.a*p.x + m.c*p.y + m.e, y:m.b*p.x + m.d*p.y + m.f };
   }
+  function vector(m, v) {
+    m = data(m);
+    return { x:m.a*v.x + m.c*v.y, y:m.b*v.x + m.d*v.y };
+  }
   function rotationAround(degrees, center) {
     const r=degrees*Math.PI/180, co=Math.cos(r), si=Math.sin(r);
     return { a:co, b:si, c:-si, d:co,
@@ -31,9 +35,26 @@
   function rigidRotate(base, degrees, centerInParent) {
     return multiply(rotationAround(degrees, centerInParent), base || identity());
   }
+  function rigidTranslate(base, delta, rootToParent) {
+    const d=vector(rootToParent || identity(), delta);
+    return multiply({a:1,b:0,c:0,d:1,e:d.x,f:d.y}, base || identity());
+  }
+  // El gesto se mide donde el usuario lo ve: en pantalla. El signo del
+  // determinante traduce ese giro al sistema del padre, incluso si una capa
+  // está reflejada. Medirlo en coordenadas locales después de una escala o
+  // rotación podía hacer que la manija avanzara en sentido contrario.
+  function screenRotationDelta(start, current, center, parentScreenMatrix) {
+    const a0=Math.atan2(start.y-center.y,start.x-center.x);
+    const a1=Math.atan2(current.y-center.y,current.x-center.x);
+    let delta=(a1-a0)*180/Math.PI;
+    while(delta>180)delta-=360;
+    while(delta<-180)delta+=360;
+    const m=data(parentScreenMatrix), determinant=m.a*m.d-m.b*m.c;
+    return delta*(determinant<0?-1:1);
+  }
   function attr(m) {
     const n=v=>Math.abs(v)<1e-10?0:Math.round(v*1e6)/1e6;
     return `matrix(${n(m.a)} ${n(m.b)} ${n(m.c)} ${n(m.d)} ${n(m.e)} ${n(m.f)})`;
   }
-  LOW.drawing.transforms = { identity, multiply, point, rotationAround, rigidRotate, attr };
+  LOW.drawing.transforms = { identity, multiply, point, vector, rotationAround, rigidRotate, rigidTranslate, screenRotationDelta, attr };
 })(typeof window !== "undefined" ? window : globalThis);

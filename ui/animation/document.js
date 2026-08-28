@@ -655,6 +655,8 @@
         limits: data.limits || { min: -180, max: 180 } };
       const bone = rig.bones[id];
       if (data.name) bone.name = data.name;
+      if (data.role) bone.role = data.role;
+      if (data.control) bone.control = animation.clone(data.control);
       if (data.inherit) bone.inherit = { ...bone.inherit, ...data.inherit };
       rig.nodes = rig.bones;
       return bone;
@@ -767,6 +769,25 @@
           if (data.pinned != null) node.pinned = !!data.pinned;
         }
         return entries.map((entry) => entry.id);
+      });
+    }
+
+    /** Inserta un esqueleto completo como una sola operación de Undo. Las
+     * plantillas y el alambre manual terminan en los mismos registros. */
+    ensureRigBones(items, label = "Insertar esqueleto") {
+      const entries=(items||[]).filter(x=>x&&x.id); if(!entries.length)return [];
+      return this._rigChange(label, rig=>{
+        for(const data of entries){
+          const bone=this._ensureRigBoneRecord(rig,data);
+          if(data.head){bone.head={x:+data.head.x||0,y:+data.head.y||0};bone.pivot={...bone.head};}
+          if(data.tail)bone.tail={x:+data.tail.x||0,y:+data.tail.y||0};
+          if(data.limits)bone.limits={...data.limits};
+          if(data.pinned!=null)bone.pinned=!!data.pinned;
+          if(data.role)bone.role=data.role;
+          if(data.control)bone.control=animation.clone(data.control);
+        }
+        for(const data of entries)rig.bones[data.id].parentId=data.parentId&&rig.bones[data.parentId]?data.parentId:null;
+        rig.nodes=rig.bones; return entries.map(x=>x.id);
       });
     }
 

@@ -382,6 +382,8 @@
           (n.pivot ? { x: +n.pivot.x || 0, y: +n.pivot.y || 0 } : null),
         tail: n.tail ? { x: +n.tail.x || 0, y: +n.tail.y || 0 } : null,
         rest: rigPoseData(n.rest), keys: clone(n.keys || {}), pinned: !!n.pinned,
+        role: n.role === "control" ? "control" : "bone",
+        control: n.control ? clone(n.control) : null,
         inherit: { translation: n.inherit?.translation !== false, rotation: n.inherit?.rotation !== false,
           scale: n.inherit?.scale !== false },
         limits: { min: Number.isFinite(+n.limits?.min) ? +n.limits.min : -180,

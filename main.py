@@ -48,7 +48,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.71"
+LOW_VERSION = "3.29.74"
 
 
 def atomic_write_text(path, content, encoding="utf-8"):
@@ -1179,6 +1179,40 @@ class Api:
             return {"error": "imagen muy pesada (>12MB) — achicala antes"}
         return {"data": f"data:{mime};base64," + base64.b64encode(raw).decode("ascii"),
                 "name": fp.name}
+
+    def import_character_art(s):
+        """Importa arte destinado a rigging, no una referencia de calco.
+
+        SVG conserva sus objetos separados para poder repartirlos entre huesos.
+        Los formatos raster entran como una sola pieza rígida y opaca.
+        """
+        if not s._window:
+            return {"error": "sin ventana"}
+        try:
+            r = s._window.create_file_dialog(
+                webview.OPEN_DIALOG, allow_multiple=False,
+                file_types=("Personaje (*.svg;*.png;*.jpg;*.jpeg;*.webp;*.gif)",))
+        except Exception as e:
+            return {"error": str(e)}
+        if not r:
+            return {"cancel": True}
+        fp = Path(r[0] if isinstance(r, (list, tuple)) else r)
+        try:
+            raw = fp.read_bytes()
+        except OSError as e:
+            return {"error": str(e)}
+        if len(raw) > 12_000_000:
+            return {"error": "archivo muy pesado (>12MB) — achicalo antes"}
+        if fp.suffix.lower() == ".svg":
+            try:
+                return {"svg": raw.decode("utf-8-sig"), "name": fp.name, "kind": "svg"}
+            except UnicodeDecodeError:
+                return {"error": "el SVG no está codificado como UTF-8"}
+        mime = s.IMG_MIME.get(fp.suffix.lower())
+        if not mime:
+            return {"error": f"formato no soportado: {fp.suffix}"}
+        return {"data": f"data:{mime};base64," + base64.b64encode(raw).decode("ascii"),
+                "name": fp.name, "kind": "raster"}
 
     def gen_background(s, prompt, size="1024x1024"):
         """Genera una IMAGEN DE FONDO con IA y la devuelve como data URL, para que

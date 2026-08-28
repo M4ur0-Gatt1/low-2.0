@@ -325,6 +325,8 @@ function renderRig(s){
  const root=document.createElement('div');root.className='rigdesk';
  const modes=document.createElement('div');modes.className='rig-modes';
  [['build','Armado'],['fk','FK'],['ik','IK']].forEach(([id,label])=>{const b=document.createElement('button');b.textContent=label;b.className=s.mode===id?'on':'';b.onclick=()=>command('mode',{mode:id});modes.appendChild(b)});root.appendChild(modes);
+ const library=document.createElement('section');library.className='rig-card';library.innerHTML='<header><b>Biblioteca</b><span>adaptable</span></header>';
+ const librow=document.createElement('div');librow.className='rig-actions';const sel=document.createElement('select');sel.innerHTML='<option value="human_standard">Humano · completo</option><option value="human_simple">Humano · stickman</option><option value="human_chibi">Humano · chibi</option><option value="dog">Perro</option><option value="cat">Gato</option><option value="horse">Caballo</option><option value="face_pro">Rostro · controles profesionales</option>';const add=document.createElement('button');add.className='primary';add.textContent='Colocar';add.title='Colocar esqueleto en la mesa principal';add.onclick=()=>command('rig-library',{key:sel.value});librow.append(sel,add);library.appendChild(librow);root.appendChild(library);
  const byId=Object.fromEntries((s.nodes||[]).map(n=>[n.id,n])),selected=byId[s.selected]||(s.nodes||[]).find(n=>n.selected)||null;
  const card=document.createElement('section');card.className='rig-card';card.innerHTML='<header><b>Jerarquía</b><span></span></header>';card.querySelector('header span').textContent=(s.nodes||[]).length+' piezas';
  const tree=document.createElement('div');tree.className='rig-tree';

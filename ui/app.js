@@ -912,6 +912,10 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   });
   $("#rigAuto").onclick = dzRigPrepareDrawing;
   $("#rigRepartir").onclick = dzRigRepartirDibujo;
+  // onclick entrega un MouseEvent. Pasarlo directo hacía que la biblioteca
+  // buscara una plantilla cuyo nombre era "[object MouseEvent]".
+  $("#rigLibraryAdd").onclick = () => dzRigLibraryAdd();
+  $("#rigImportCharacter").onclick = () => dzRigImportCharacter();
   $("#rigAdd").onclick = dzRigRegisterSelected;
   $("#rigRemove").onclick = dzRigRemoveSelected;
   $("#rigPivotTool").onclick = () => dzRigSetTool("pivot");
@@ -981,11 +985,26 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#perfPlay").onclick = dzPerfPlay;
   $("#perfSmooth").onclick = dzPerfSmooth;
   $("#perfBake").onclick = dzPerfBake;
-  $("#dzAddRect").onclick = () => dzAddShape("rect");
-  $("#dzAddCircle").onclick = () => dzAddShape("circle");
-  $("#dzAddEllipse").onclick = () => dzAddShape("ellipse");
-  $("#dzAddPoly").onclick = () => dzAddShape("poly");
-  $("#dzAddStar").onclick = () => dzAddShape("star");
+  let dzShapeKind = "rect";
+  const dzShapeMenu = $("#dzShapeMenu"), dzShapeMainIcon = $("#dzShapeMainIcon");
+  $("#dzShapeMain").onclick = (e) => {
+    const r=e.currentTarget.getBoundingClientRect();
+    // Toda la superficie abre: funciona igual con mouse, lápiz y toque y no
+    // obliga a acertarle a un triángulo de pocos píxeles.
+    dzShapeMenu.style.left=(r.right+6)+"px";
+    dzShapeMenu.style.top=Math.max(6,Math.min(innerHeight-82,r.top-5))+"px";
+    dzShapeMenu.hidden=!dzShapeMenu.hidden;
+  };
+  [["dzAddRect","rect"],["dzAddCircle","circle"],["dzAddEllipse","ellipse"],
+   ["dzAddPoly","poly"],["dzAddStar","star"]].forEach(([id,kind])=>{
+    $("#"+id).onclick=()=>{
+      dzShapeKind=kind; dzShapeMainIcon.setAttribute("href",`#i-${kind}`);
+      dzShapeMenu.hidden=true; dzAddShape(kind);
+    };
+  });
+  document.addEventListener("pointerdown", e=>{
+    if(!$("#dzShapePicker")?.contains(e.target)) dzShapeMenu.hidden=true;
+  });
   $("#dzAddText").onclick = () => dzAddShape("text");
   $("#dzAddLine").onclick = () => dzAddShape("line");
   $("#tlIns").onclick = (e) => dzFrameInsert(e.shiftKey);
@@ -3152,16 +3171,13 @@ function dzRotateDown(e) {
     const rootScreen = rootPoint.matrixTransform(el.ownerSVGElement.getScreenCTM());
     centerParent = rootScreen.matrixTransform(invParent);
   }
-  const localPointer = ev => {
-    const p = el.ownerSVGElement.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
-    return p.matrixTransform(invParent);
-  };
-  const start = localPointer(e);
-  const a0 = Math.atan2(start.y - centerParent.y, start.x - centerParent.x);
+  const centerScreenPoint = el.ownerSVGElement.createSVGPoint();
+  centerScreenPoint.x = centerParent.x; centerScreenPoint.y = centerParent.y;
+  const centerScreen = centerScreenPoint.matrixTransform(parentCTM);
+  const startScreen = { x:e.clientX, y:e.clientY };
   const move = (ev) => {
     if (ev.pointerId !== pointerId) return;
-    const p = localPointer(ev);
-    let deg = (Math.atan2(p.y - centerParent.y, p.x - centerParent.x) - a0) * 180 / Math.PI;
+    let deg = T.screenRotationDelta(startScreen, {x:ev.clientX,y:ev.clientY}, centerScreen, parentCTM);
     if (ev.shiftKey) deg = Math.round(deg / 15) * 15;
     deg = Math.round(deg * 10) / 10;
     el.setAttribute("transform", T.attr(T.rigidRotate(base, deg, centerParent)));
@@ -3389,20 +3405,22 @@ function dzMultiRotateDown(e, pack) {
   const pointerId=e.pointerId, rects=pack.map(n=>n.getBoundingClientRect());
   const sx=(Math.min(...rects.map(r=>r.left))+Math.max(...rects.map(r=>r.right)))/2;
   const sy=(Math.min(...rects.map(r=>r.top))+Math.max(...rects.map(r=>r.bottom)))/2;
-  const T=LOW.drawing.transforms, a0=Math.atan2(e.clientY-sy,e.clientX-sx);
+  const T=LOW.drawing.transforms, startScreen={x:e.clientX,y:e.clientY};
   const bases=pack.map(n=>{
     const consolidated=n.transform?.baseVal?.consolidate();
     const base=consolidated?T.multiply(T.identity(),consolidated.matrix):T.identity();
     const parentCTM=n.parentElement?.getScreenCTM?.();
     if(!parentCTM)return null;
     const p=n.ownerSVGElement.createSVGPoint();p.x=sx;p.y=sy;
-    return {n,base,center:p.matrixTransform(parentCTM.inverse())};
+    return {n,base,center:p.matrixTransform(parentCTM.inverse()),parentCTM};
   }).filter(Boolean);
   const move=ev=>{
     if(ev.pointerId!==pointerId)return;
-    let deg=(Math.atan2(ev.clientY-sy,ev.clientX-sx)-a0)*180/Math.PI;
-    if(ev.shiftKey)deg=Math.round(deg/15)*15; deg=Math.round(deg*10)/10;
-    bases.forEach(({n,base,center})=>n.setAttribute("transform",T.attr(T.rigidRotate(base,deg,center))));
+    bases.forEach(({n,base,center,parentCTM})=>{
+      let deg=T.screenRotationDelta(startScreen,{x:ev.clientX,y:ev.clientY},{x:sx,y:sy},parentCTM);
+      if(ev.shiftKey)deg=Math.round(deg/15)*15; deg=Math.round(deg*10)/10;
+      n.setAttribute("transform",T.attr(T.rigidRotate(base,deg,center)));
+    });
     dzPositionHandle();
   };
   const up=ev=>{if(ev.pointerId!==pointerId)return;document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);document.removeEventListener("pointercancel",up);dzMarkDirty();dzBuildLayers();};
@@ -3577,25 +3595,16 @@ function dzArtMoveSelection(mode) {
 
 /* posición base de un elemento según su tipo (para mover con el mouse) */
 function dzReadPos(el) {
-  const t = el.tagName.toLowerCase();
-  if (el.hasAttribute("cx") || el.hasAttribute("cy"))
-    return { mode: "c", cx: +el.getAttribute("cx") || 0, cy: +el.getAttribute("cy") || 0 };
-  if (el.hasAttribute("x") || el.hasAttribute("y"))
-    return { mode: "xy", x: +el.getAttribute("x") || 0, y: +el.getAttribute("y") || 0 };
-  // resto (path, polygon, line, g…): translate acumulado
-  const m = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(el.getAttribute("transform") || "");
-  return { mode: "t", tx: m ? +m[1] : 0, ty: m ? +m[2] : 0,
-           rest: (el.getAttribute("transform") || "").replace(/translate\([^)]*\)/, "").trim() };
+  const T=LOW.drawing.transforms, consolidated=el.transform?.baseVal?.consolidate();
+  const base=consolidated?T.multiply(T.identity(),consolidated.matrix):T.identity();
+  const root=el.ownerSVGElement?.getScreenCTM?.(), parent=el.parentElement?.getScreenCTM?.();
+  let rootToParent=T.identity();
+  if(root&&parent) rootToParent=T.multiply(parent.inverse(),root);
+  return { mode:"matrix", base, rootToParent };
 }
 function dzWritePos(el, base, dx, dy) {
-  if (base.mode === "c") {
-    el.setAttribute("cx", Math.round(base.cx + dx)); el.setAttribute("cy", Math.round(base.cy + dy));
-  } else if (base.mode === "xy") {
-    el.setAttribute("x", Math.round(base.x + dx)); el.setAttribute("y", Math.round(base.y + dy));
-  } else {
-    const tr = `translate(${Math.round(base.tx + dx)} ${Math.round(base.ty + dy)})`;
-    el.setAttribute("transform", (base.rest ? base.rest + " " : "") + tr);
-  }
+  const T=LOW.drawing.transforms;
+  el.setAttribute("transform",T.attr(T.rigidTranslate(base.base,{x:dx,y:dy},base.rootToParent)));
 }
 
 /* tirador de resize — funciona con CUALQUIER elemento (paths y grupos incluidos):
@@ -7511,6 +7520,62 @@ function dzRigPrepareDrawing() {
   dzSetStatus(`${ids.length} objetos listos${limpiados.length ? ` · ${limpiados.length} pivotes viejos limpiados` : ""} · ahora dibujá el alambre encima y tocá Repartir`);
   return ids;
 }
+function dzRigLibraryAdd(keyArg) {
+  if(!DZ.doc)return dzSetStatus("Abrí una animación antes de colocar un esqueleto");
+  const key=typeof keyArg==="string"&&keyArg ? keyArg : ($("#rigLibrary")?.value||"human_standard"), svg=$("#dzCanvas")?.querySelector(":scope > svg");
+  if(!svg)return dzSetStatus("No hay lienzo donde colocar el esqueleto");
+  const vb=svg.viewBox?.baseVal, width=(vb?.width||+svg.getAttribute("width")||1000), height=(vb?.height||+svg.getAttribute("height")||1000);
+  const x=vb?.x||0,y=vb?.y||0, padX=width*.12,padY=height*.07;
+  const prefix=`${key}_${Date.now().toString(36).slice(-5)}`;
+  dzSnapshot();
+  const ids=LOW.animation.rigLibrary.apply(DZ.doc,key,{x:x+padX,y:y+padY,width:width-padX*2,height:height-padY*2},prefix);
+  if(!ids.length)return dzSetStatus("No se pudo colocar esa plantilla");
+  DZ.rigSelectedId=ids[0]; dzRigSetMode("build"); dzRigSetTool("edit");
+  dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
+  dzSetStatus(`${ids.length} huesos colocados · ajustá articulaciones y tocá Repartir para pegarlos al personaje`);
+}
+async function dzRigImportCharacter() {
+  if (!DZ.doc) await dzDocInit();
+  const svg=$("#dzCanvas")?.querySelector(":scope > svg");
+  if (!DZ.doc || !svg) return dzSetStatus("Abrí un lienzo antes de importar el personaje");
+  const r=await api.import_character_art();
+  if(!r||r.cancel)return;
+  if(r.error)return sysMsg(" " + r.error);
+  dzSnapshot();
+  const vb=svg.viewBox?.baseVal, vx=vb?.x||0, vy=vb?.y||0,
+    vw=vb?.width||+svg.getAttribute("width")||1000, vh=vb?.height||+svg.getAttribute("height")||1000;
+  const imported=[];
+  if(r.svg){
+    const parsed=new DOMParser().parseFromString(r.svg,"image/svg+xml");
+    if(parsed.querySelector("parsererror"))return dzSetStatus("Ese SVG no se pudo leer");
+    const source=parsed.documentElement, src=(source.getAttribute("viewBox")||`0 0 ${source.getAttribute("width")||vw} ${source.getAttribute("height")||vh}`).trim().split(/[ ,]+/).map(Number);
+    const sx=src[2]||vw, sy=src[3]||vh, scale=Math.min(vw*.8/sx,vh*.8/sy),
+      tx=vx+(vw-sx*scale)/2-src[0]*scale, ty=vy+(vh-sy*scale)/2-src[1]*scale;
+    for(const child of [...source.children]){
+      const tag=child.tagName.toLowerCase();
+      if(["defs","style","metadata","title","desc"].includes(tag)){
+        svg.insertBefore(document.importNode(child,true),svg.firstChild); continue;
+      }
+      const el=document.importNode(child,true), old=el.getAttribute("transform")||"";
+      el.setAttribute("transform",`translate(${tx} ${ty}) scale(${scale}) ${old}`.trim());
+      if(!el.id)el.id=dzUniqueId("pieza_");
+      el.setAttribute("data-rig-piece","1"); dzArtAppend(svg,el); imported.push(el);
+    }
+  }else if(r.data){
+    const el=document.createElementNS(SVGNS,"image");
+    el.id=dzUniqueId("personaje_"); el.setAttribute("href",r.data);
+    el.setAttribute("x",vx+vw*.1);el.setAttribute("y",vy+vh*.1);
+    el.setAttribute("width",vw*.8);el.setAttribute("height",vh*.8);
+    el.setAttribute("preserveAspectRatio","xMidYMid meet");el.setAttribute("opacity","1");
+    el.setAttribute("data-rig-piece","1");dzArtAppend(svg,el);imported.push(el);
+  }
+  if(!imported.length)return dzSetStatus("El archivo no contiene piezas importables");
+  dzSelect(imported[0]); dzDocCommit(); dzMarkDirty(); dzBuildLayers(); dzRigSetMode("build"); dzRigPanelSync();
+  dzSetStatus(r.kind==="raster"
+    ? `Personaje importado como una pieza · colocá el esqueleto; para mover miembros por separado necesitás un SVG por piezas`
+    : `${imported.length} piezas SVG importadas · colocá el esqueleto encima y tocá Repartir`);
+  return imported;
+}
 function dzRigRemoveSelected() {
   const node = dzRigSelectedNode(); if (!node) return;
   if (DZ.doc.removeRigNode(node.id)) {
@@ -7583,6 +7648,21 @@ function dzRigUpgradeLegacyPivots() {
     changed++;
   }
   if (changed) { dzMarkDirty(); dzRigApplyLive(dzRigCur()); }
+  return changed;
+}
+function dzRigEnsureVisiblePivots() {
+  if (!DZ.doc) return 0;
+  let changed=0;
+  for(const node of Object.values(DZ.doc.scene.rig.nodes||{})) {
+    if(node.pivot) continue;
+    const el=dzRigNodeElement(node);
+    let p=node.head||null;
+    if(!p&&el) { try { p=dzRigDefaultPivot(el); } catch(_){} }
+    if(!p) continue;
+    DZ.doc.setRigPivot(node.id,p);
+    if(el) el.setAttribute("data-pivot",`${Math.round(p.x)} ${Math.round(p.y)}`);
+    changed++;
+  }
   return changed;
 }
 function dzRigRefreshToolButtons(tool) {
@@ -8076,7 +8156,7 @@ function dzRigOverlayRender() {
   // reconstruye; si no (p. ej. solo se mueve la pose), se actualizan posiciones
   // sin destruir el DOM → sin flicker y sin perder el gesto en curso.
   const sig = JSON.stringify({
-    n: Object.keys(doc.scene.rig.nodes).sort(), s: selectedId,
+    n: Object.values(doc.scene.rig.nodes).map(n=>[n.id,n.role,n.control?.shape]).sort(), s: selectedId,
     m: DZ.rigSubmode || "build", t: DZ.rigTool || "select",
     c: Object.keys(doc.scene.rig.constraints || {}).sort()
   });
@@ -8085,7 +8165,9 @@ function dzRigOverlayRender() {
   overlay.dataset.mode = DZ.rigSubmode || "build";
   overlay.dataset.tool = DZ.rigTool || "select";
   overlay.classList.toggle("bone-create", !!DZ.rigBoneTool && DZ.rigSubmode === "build");
-  overlay.classList.toggle("rig-pass-through", ["draw", "cut", "pivot"].includes(DZ.rigTool));
+  // Pivote necesita recibir el evento sobre las articulaciones visibles. La
+  // versión anterior lo ponía en pass-through y anulaba toda la herramienta.
+  overlay.classList.toggle("rig-pass-through", ["draw", "cut"].includes(DZ.rigTool));
   overlay.onpointerdown = e => {
     if (!DZ.rigBoneTool) return;
     // Los joints/tips manejan su propio pointerdown (encadenar/editar) y hacen
@@ -8126,11 +8208,12 @@ function dzRigOverlayRender() {
   const selNode = selectedId ? doc.scene.rigNode(selectedId) : null;
   const muchos = Object.keys(doc.scene.rig.nodes).length > 8;
   for (const node of Object.values(doc.scene.rig.nodes)) {
+    const isControl = node.role === "control";
     let a = point(node.id), b = tailPoint(node);
     if (!b && node.parentId) { a = point(node.parentId); b = point(node.id); }
     if (!a || !b) continue;
     get("bl:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y },
-      "dz-rig-bone" + (selectedId === node.id ? " active" : ""));
+      "dz-rig-bone" + (isControl ? " controller" : "") + (selectedId === node.id ? " active" : ""));
     const hit = get("bh:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, "data-id": node.id }, "dz-rig-bone-hit");
     const esHueso = !!node.tail;
     hit.onpointerdown = e => {
@@ -8147,6 +8230,7 @@ function dzRigOverlayRender() {
     };
   }
   for (const node of Object.values(doc.scene.rig.nodes)) {
+    const isControl = node.role === "control";
     const p = point(node.id); if (!p) continue;
     const jointHandler = e => {
       if (DZ.rigSubmode === "build" && DZ.rigTool === "create") return dzRigBoneCreateDrag(e);
@@ -8174,8 +8258,16 @@ function dzRigOverlayRender() {
     const joint = get("jt:" + node.id, "circle",
       { cx: p.x, cy: p.y, r: node.pinned ? 7 : (tenue ? 3 : 5), "data-id": node.id },
       "dz-rig-joint" + (node.pinned ? " root" : "") + (selectedId === node.id ? " selected" : "")
-        + (tenue ? " dim" : ""));
+        + (isControl ? " controller" : "") + (tenue && !isControl ? " dim" : ""));
     joint.onpointerdown = jointHandler;
+    if (isControl) {
+      const shape=node.control?.shape||"ring";
+      let control;
+      if(shape==="pin") control=get("ct:"+node.id,"path",{d:`M${p.x} ${p.y-11}L${p.x+11} ${p.y}L${p.x} ${p.y+11}L${p.x-11} ${p.y}Z`,"data-id":node.id},"dz-rig-controller pin"+(selectedId===node.id?" selected":""));
+      else if(shape==="slider") control=get("ct:"+node.id,"rect",{x:p.x-13,y:p.y-7,width:26,height:14,rx:7,"data-id":node.id},"dz-rig-controller slider"+(selectedId===node.id?" selected":""));
+      else control=get("ct:"+node.id,"circle",{cx:p.x,cy:p.y,r:11,"data-id":node.id},"dz-rig-controller ring"+(selectedId===node.id?" selected":""));
+      control.onpointerdown=jointHandler;
+    }
     // área de agarre invisible más grande: los huesos de 5px eran difíciles de
     // atrapar con el lápiz; esto mantiene el aspecto denso pero facilita el gesto.
     const jointHit = get("jh:" + node.id, "circle", { cx: p.x, cy: p.y, r: 12, "data-id": node.id }, "dz-rig-hit");
@@ -8189,7 +8281,7 @@ function dzRigOverlayRender() {
         // cualquier otro modo/herramienta: la punta al menos selecciona el hueso
         e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
       };
-      const tip = get("tp:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 5, "data-id": node.id }, "dz-rig-bone-tip");
+      const tip = get("tp:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 5, "data-id": node.id }, "dz-rig-bone-tip"+(isControl?" controller":""));
       tip.onpointerdown = tipHandler;
       const tipHit = get("th:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 11, "data-id": node.id }, "dz-rig-hit");
       tipHit.onpointerdown = tipHandler;
@@ -8248,9 +8340,9 @@ function dzRigOverlayRender() {
         });
       }
     }
-    if (selectedId === node.id) {
+    if (selectedId === node.id || isControl) {
       const label = get("lb:" + node.id, "text", { x: p.x + 9, y: p.y - 8 }, "dz-rig-label");
-      label.textContent = node.id;
+      label.textContent = node.control?.label || node.name || node.id;
     }
   }
   if (DZ.rigBonePreview) {
@@ -8357,7 +8449,11 @@ function dzRigToggle() {
   if (!DZ.rigMode) DZ.rigPreviousCanvasTool = /^rig/.test(DZ.tool || "") ? "select" : (DZ.tool || "select");
   DZ.rigMode = !DZ.rigMode; $("#dzRigBtn").classList.toggle("active", DZ.rigMode); $("#tlRigOpen")?.classList.toggle("active", DZ.rigMode); $("#dzRigPanel").hidden = !DZ.rigMode;
   $("#dzRigOverlay").toggleAttribute("hidden", !DZ.rigMode);
-  if (DZ.rigMode) { dzRigSetMode(DZ.rigSubmode || "build"); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzSetStatus("Esqueleto cut-out: registrá las piezas y armá la jerarquía desde la raíz"); }
+  if (DZ.rigMode) {
+    const repaired=dzRigEnsureVisiblePivots();
+    dzRigSetMode("build"); dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender();
+    dzSetStatus(repaired ? `${repaired} pivote(s) recuperado(s) · Construir listo para armar la jerarquía` : "Esqueleto cut-out: Construir → elegí un punto y arrastrá el vínculo al padre");
+  }
   else {
     DZ.rigBoneTool = false; DZ.rigLivePose = null; DZ.rigIKPreview = null;
     $("#rigBoneTool")?.classList.remove("on");
@@ -11122,6 +11218,7 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
       return dzRigSelectNode(node.id);
     }
     if (action === "mode") { dzRigSetMode(payload.mode); return true; }
+    if (action === "rig-library") { dzRigLibraryAdd(payload.key); return true; }
     if (action === "key-all") { dzRigKeyAll(); return true; }
     if (action === "key" && node) { dzRigSetKey(node.id, DZ.doc.frame, payload.pose || DZ.doc.scene.rigPose(node.id, DZ.doc.frame)); return true; }
     if (action === "delete-key" && node) { dzRigDelKey(node.id, DZ.doc.frame); return true; }
