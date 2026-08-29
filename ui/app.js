@@ -2482,6 +2482,18 @@ window.addEventListener("message", async (event) => {
 /* ══ Entorno de diseño: SVG vivo + inspector por elemento ══ */
 const DZ = { path: null, sel: null, zoom: 1, rigTool: "select", rigAutoKey: true };
 const DZModeMachine = window.LOW?.application?.createModeMachine?.() || null;
+const DZRigGestures = window.LOW?.rigging?.input?.createGestureController?.() || null;
+function dzRigTrackGesture(cancel) {
+  if (!DZRigGestures) { DZ.rigGestureCancel = cancel; return null; }
+  const token = DZRigGestures.begin(cancel);
+  DZ.rigGestureCancel = () => DZRigGestures.cancel("external");
+  return token;
+}
+function dzRigFinishGesture(token) {
+  const accepted = DZRigGestures ? DZRigGestures.finish(token) : true;
+  if (accepted) DZ.rigGestureCancel = null;
+  return accepted;
+}
 // Registro central de paneles: base para guardar espacios de trabajo, acoplar
 // cualquier panel y restaurarlo en configuraciones de dos monitores.
 if (window.LOW && LOW.workspace && LOW.workspace.panels) {
@@ -7907,6 +7919,7 @@ function dzRigBoneCreateDrag(e, forced = null) {
     dzRigNearestBoneTail(rawHead);
   const head = snap?.point || rawHead, parentId = forced?.parentId || snap?.bone?.id || null;
   DZ.rigBonePreview = { head, tail: head, parentId };
+  let gestureToken = null;
   const preview = ev => {
     if (ev.pointerId !== pointerId) return;
     DZ.rigBonePreview = { head, tail: dzToUser(ev.clientX, ev.clientY), parentId };
@@ -7917,7 +7930,6 @@ function dzRigBoneCreateDrag(e, forced = null) {
     document.removeEventListener("pointermove", preview);
     document.removeEventListener("pointerup", finish);
     document.removeEventListener("pointercancel", cancel);
-    if (DZ.rigGestureCancel === cancel) DZ.rigGestureCancel = null;
   };
   // Crea el hueso, lo selecciona y —si hay una pieza de arte debajo de la
   // articulación— la vincula al hueso de una vez. Así «Crear hueso» mueve el
@@ -7962,8 +7974,8 @@ function dzRigBoneCreateDrag(e, forced = null) {
     if (Math.hypot(tail.x - head.x, tail.y - head.y) < 4) tail = { x: head.x + 28, y: head.y };
     commit(tail);
   };
-  const cancel = () => { cleanup(); DZ.rigBonePreview = null; dzRigOverlayRender(); };
-  DZ.rigGestureCancel = cancel;
+  const cancel = () => { cleanup(); dzRigFinishGesture(gestureToken); DZ.rigBonePreview = null; dzRigOverlayRender(); };
+  gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", preview);
   document.addEventListener("pointerup", finish);
   document.addEventListener("pointercancel", cancel);
@@ -7976,6 +7988,7 @@ function dzRigBoneGeometryDrag(e, node, handle) {
   const nodes=DZ.doc.scene.rig.nodes;
   const original=Object.fromEntries(Object.values(nodes).filter(n=>n.head&&n.tail)
     .map(n=>[n.id,{head:{...n.head},tail:{...n.tail},parentId:n.parentId}]));
+  let gestureToken = null;
   const descendants=(id,out=new Set())=>{for(const n of Object.values(nodes))if(n.parentId===id&&!out.has(n.id)){out.add(n.id);descendants(n.id,out);}return out;};
   const joined=(parent,child)=>{
     if(!parent||!child)return false;
@@ -8008,10 +8021,10 @@ function dzRigBoneGeometryDrag(e, node, handle) {
     document.removeEventListener("pointermove", preview);
     document.removeEventListener("pointerup", finish);
     document.removeEventListener("pointercancel", cancel);
-    if (DZ.rigGestureCancel === cancel) DZ.rigGestureCancel = null;
   };
   const finish = ev => {
     if (ev.pointerId !== pointerId) return; cleanup();
+    if (!dzRigFinishGesture(gestureToken)) return;
     const value = DZ.rigBoneGeometryPreview; DZ.rigBoneGeometryPreview = null;
     // Segunda validación en el punto de escritura. El gesto pudo empezar en
     // Construir y terminar después de pulsar Animar.
@@ -8024,8 +8037,8 @@ function dzRigBoneGeometryDrag(e, node, handle) {
       dzSetStatus(handle === "body" ? "Rama movida sin separar la jerarquía" : "Articulación actualizada sin abrir la cadena");
     } else dzRigOverlayRender();
   };
-  const cancel = () => { cleanup(); DZ.rigBoneGeometryPreview = null; dzRigOverlayRender(); };
-  DZ.rigGestureCancel = cancel;
+  const cancel = () => { cleanup(); dzRigFinishGesture(gestureToken); DZ.rigBoneGeometryPreview = null; dzRigOverlayRender(); };
+  gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", preview);
   document.addEventListener("pointerup", finish);
   document.addEventListener("pointercancel", cancel);
@@ -8051,6 +8064,7 @@ function dzRigBoneFKDrag(e, node, mode) {
   // vuelta —parecia que el hueso hacia tope—. Se lleva la cuenta del recorrido
   // real para poder dar vueltas enteras.
   let aPrevio = a0, giroAcumulado = 0;
+  let gestureToken = null;
   const move = (ev) => {
     if (ev.pointerId !== pointerId) return;
     const p = dzToUser(ev.clientX, ev.clientY), pose = { ...k0 };
@@ -8081,6 +8095,7 @@ function dzRigBoneFKDrag(e, node, mode) {
   };
   const up = (ev) => {
     if (ev.pointerId !== pointerId) return; cleanup();
+    if (!dzRigFinishGesture(gestureToken)) return;
     const pose = DZ.rigLivePose && DZ.rigLivePose[node.id];
     if (pose) {
       if (DZ.rigAutoKey === false) {
@@ -8101,7 +8116,8 @@ function dzRigBoneFKDrag(e, node, mode) {
       dzRigApplyLive(frame); dzRigOverlayRender();
     }
   };
-  const cancel = () => { cleanup(); DZ.rigLivePose = null; dzRigApplyLive(frame); dzRigOverlayRender(); };
+  const cancel = () => { cleanup(); dzRigFinishGesture(gestureToken); DZ.rigLivePose = null; dzRigApplyLive(frame); dzRigOverlayRender(); };
+  gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", move);
   document.addEventListener("pointerup", up);
   document.addEventListener("pointercancel", cancel);
@@ -8112,6 +8128,7 @@ function dzRigBuildPivotDrag(e, node) {
   e.preventDefault(); e.stopPropagation();
   const target = dzRigNodeElement(node); dzRigSelectNode(node.id);
   const pointerId = e.pointerId;
+  let gestureToken = null;
   const preview = ev => {
     if (ev.pointerId !== pointerId) return;
     DZ.rigBuildPreview = { nodeId: node.id, pivot: dzToUser(ev.clientX, ev.clientY) };
@@ -8122,6 +8139,7 @@ function dzRigBuildPivotDrag(e, node) {
     document.removeEventListener("pointermove", preview);
     document.removeEventListener("pointerup", finish);
     document.removeEventListener("pointercancel", cancel);
+    if (!dzRigFinishGesture(gestureToken)) return;
     const value = DZ.rigBuildPreview; DZ.rigBuildPreview = null;
     if (DZ.rigSubmode !== "build" || !["pivot", "edit"].includes(DZ.rigTool)) {
       dzRigOverlayRender();
@@ -8139,8 +8157,10 @@ function dzRigBuildPivotDrag(e, node) {
     document.removeEventListener("pointermove", preview);
     document.removeEventListener("pointerup", finish);
     document.removeEventListener("pointercancel", cancel);
+    dzRigFinishGesture(gestureToken);
     dzRigOverlayRender();
   };
+  gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", preview);
   document.addEventListener("pointerup", finish);
   document.addEventListener("pointercancel", cancel);
@@ -8150,6 +8170,7 @@ function dzRigBuildLinkDrag(e, node) {
   if (!DZ.doc || DZ.rigSubmode !== "build") return;
   e.preventDefault(); e.stopPropagation();
   const pointerId = e.pointerId;
+  let gestureToken = null;
   const pointer = ev => ({ x: ev.clientX, y: ev.clientY });
   DZ.rigLinkPreview = { childId: node.id, pointer: pointer(e) };
   const preview = ev => {
@@ -8163,6 +8184,7 @@ function dzRigBuildLinkDrag(e, node) {
   };
   const finish = ev => {
     if (ev.pointerId !== pointerId) return; cleanup();
+    if (!dzRigFinishGesture(gestureToken)) return;
     const hit = document.elementsFromPoint(ev.clientX, ev.clientY)
       .find(el => el.classList?.contains("dz-rig-joint") && el.dataset.id !== node.id);
     DZ.rigLinkPreview = null;
@@ -8172,7 +8194,8 @@ function dzRigBuildLinkDrag(e, node) {
     else dzSetStatus(parentId ? `«${node.id}» vinculada a «${parentId}»` : `«${node.id}» quedó sin padre`);
     dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
   };
-  const cancel = () => { cleanup(); DZ.rigLinkPreview = null; dzRigOverlayRender(); };
+  const cancel = () => { cleanup(); dzRigFinishGesture(gestureToken); DZ.rigLinkPreview = null; dzRigOverlayRender(); };
+  gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", preview);
   document.addEventListener("pointerup", finish);
   document.addEventListener("pointercancel", cancel);

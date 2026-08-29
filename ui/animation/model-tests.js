@@ -932,6 +932,13 @@
       ok("la punta rota en Animar y sólo edita longitud en Construir",
         input({phase:"fk",tool:"pose",target:"tip"})==="rotate" &&
         input({phase:"build",tool:"edit",target:"tip"})==="edit-tail");
+      const gestures=LOW.rigging.input.createGestureController(); let cancellations=[];
+      const oldToken=gestures.begin(reason=>cancellations.push(reason));
+      const newToken=gestures.begin(reason=>cancellations.push(reason));
+      ok("un gesto nuevo cancela el anterior",cancellations[0]==="superseded"&&!gestures.isCurrent(oldToken)&&gestures.isCurrent(newToken));
+      ok("un pointerup viejo no puede confirmar el gesto nuevo",gestures.finish(oldToken)===false&&gestures.isCurrent(newToken));
+      gestures.transition();
+      ok("cambiar de modo cancela el gesto activo",cancellations.at(-1)==="transition"&&!gestures.isCurrent(newToken));
     }
 
     // 30. El marco de selección usa la convención profesional por dirección.

@@ -409,6 +409,11 @@ revincular, soltar, reparar propietarios y decidir qué hacen cuerpo,
 articulación y punta se prueban sin DOM. Pesos y mallas permanecen en SIGUIENTE
 hasta completar la extracción del controlador que ejecuta esos gestos.
 
+La barrera transaccional de gestos ya cubre creación de huesos, edición de
+geometría, pose FK, pivotes y jerarquía: cambiar de herramienta o modo cancela
+el gesto activo e invalida eventos de puntero tardíos. Falta migrar a este
+controlador los gestos IK y deformadores antes de cerrar AHORA.
+
 No entran nuevas familias de funciones durante esta etapa.
 
 ### SIGUIENTE — producción 2D

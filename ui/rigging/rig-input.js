@@ -30,5 +30,30 @@
     return "select";
   }
 
-  rigging.input = { pointerAction };
+  class GestureController {
+    constructor() { this.epoch = 0; this.active = null; }
+    begin(cancel) {
+      this.cancel("superseded");
+      const token = ++this.epoch;
+      this.active = { token, cancel: typeof cancel === "function" ? cancel : null };
+      return token;
+    }
+    isCurrent(token) { return !!this.active && this.active.token === token; }
+    finish(token) {
+      if (!this.isCurrent(token)) return false;
+      this.active = null;
+      return true;
+    }
+    cancel(reason = "cancel") {
+      const current = this.active;
+      if (!current) return false;
+      this.active = null;
+      this.epoch++;
+      current.cancel?.(reason);
+      return true;
+    }
+    transition() { return this.cancel("transition"); }
+  }
+
+  rigging.input = { pointerAction, GestureController, createGestureController: () => new GestureController() };
 })(typeof window !== "undefined" ? window : globalThis);
