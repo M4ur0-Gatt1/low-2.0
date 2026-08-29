@@ -460,6 +460,17 @@
         !skeleton.scene.rigBone("mano_otra").elementId &&
         !skeleton.scene.rig.bindings["binding:mano_otra"]);
 
+      const bindingCore = animation.rigBinding;
+      const isolatedRig = { bones: { a: { id: "a" }, b: { id: "b" } }, slots: {}, attachments: {}, bindings: {} };
+      bindingCore.bindElement(isolatedRig, "a", "pieza", "rigid");
+      bindingCore.bindElement(isolatedRig, "b", "pieza", "rigid");
+      ok("motor de binding transfiere una pieza sin duplicar propietarios",
+        !isolatedRig.bones.a.elementId && isolatedRig.bones.b.elementId === "pieza" &&
+        !isolatedRig.bindings["binding:a"] && isolatedRig.bindings["binding:b"].elementId === "pieza");
+      ok("motor de binding suelta arte sin borrar hueso ni slot",
+        bindingCore.unbindElement(isolatedRig, "b") === true && isolatedRig.bones.b &&
+        isolatedRig.slots["slot:b"] && !isolatedRig.bindings["binding:b"]);
+
       const invalidOwners = animation.rigData({ bones: {
         a: { elementId: "arte_compartido" }, b: { elementId: "arte_compartido" }
       }});

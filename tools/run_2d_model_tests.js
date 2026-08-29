@@ -10,6 +10,7 @@ const files = [
   "ui/animation/palette.js",
   "ui/animation/scene-model.js",
   "ui/animation/rig-policy.js",
+  "ui/rigging/binding.js",
   "ui/animation/exposures.js",
   "ui/animation/onion.js",
   "ui/animation/document.js",

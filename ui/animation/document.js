@@ -984,38 +984,7 @@
     bindRigElement(boneId, elementId, mode = "rigid") {
       if (!boneId || !elementId || !this.scene.rigNode(boneId)) return false;
       return this._rigChange("Vincular dibujo al hueso", (rig) => {
-        const bone = rig.bones[boneId];
-        // Una pieza tiene un único dueño. Dos huesos aplicando matrices sobre
-        // el mismo elemento producían saltos y piezas aparentemente sueltas.
-        // Revincular transfiere la pieza de forma atómica y deja el rig válido.
-        for (const other of Object.values(rig.bones)) {
-          if (other.id === boneId) continue;
-          const claimed = other.elementId || other.binding?.elementId;
-          if (claimed !== elementId) continue;
-          delete other.elementId;
-          delete other.binding;
-        }
-        for (const [id, binding] of Object.entries(rig.bindings)) {
-          if (binding.boneId === boneId) continue;
-          const attachment = rig.attachments[binding.attachmentId];
-          if ((attachment?.elementId || binding.elementId) === elementId) delete rig.bindings[id];
-        }
-        bone.elementId = elementId;
-        bone.binding = { mode: ["rigid", "weightedMesh", "curve", "envelope", "warp"].includes(mode) ? mode : "rigid", elementId };
-        const slotId = `slot:${boneId}`, attachmentId = `attachment:${boneId}`, bindingId = `binding:${boneId}`;
-        rig.slots[slotId] ||= { id: slotId, name: bone.name || boneId, boneId,
-          drawOrder: Object.keys(rig.slots).length, activeAttachmentId: attachmentId, visible: true };
-        rig.attachments[attachmentId] ||= { id: attachmentId, slotId, type: "drawing", elementId,
-          name: bone.name || boneId, levelId: null, drawingNumber: null };
-        // Un re-vínculo debe actualizar también el attachment existente. Antes
-        // bone/binding apuntaban a la pieza nueva pero el slot seguía mostrando
-        // la anterior al guardar o resolver la pose.
-        rig.attachments[attachmentId].elementId = elementId;
-        rig.bindings[bindingId] = { id: bindingId, mode: bone.binding.mode, boneId,
-          slotId, attachmentId, elementId };
-        rig.slots[slotId].activeAttachmentId = attachmentId;
-        rig.nodes = rig.bones;
-        return true;
+        return animation.rigBinding.bindElement(rig, boneId, elementId, mode);
       });
     }
 
@@ -1024,14 +993,7 @@
     unbindRigElement(boneId) {
       if (!boneId || !this.scene.rigNode(boneId)) return false;
       return this._rigChange("Soltar dibujo del hueso", (rig) => {
-        const bone = rig.bones[boneId];
-        const hadBinding = !!(bone.elementId || bone.binding || rig.bindings[`binding:${boneId}`]);
-        if (!hadBinding) return false;
-        delete bone.elementId;
-        delete bone.binding;
-        for (const [id, binding] of Object.entries(rig.bindings))
-          if (binding.boneId === boneId) delete rig.bindings[id];
-        return true;
+        return animation.rigBinding.unbindElement(rig, boneId);
       });
     }
 
@@ -1040,24 +1002,7 @@
      * duplicados; nunca borra arte, huesos, slots ni attachments. */
     repairRigBindingOwnership() {
       return this._rigChange("Reparar vínculos duplicados", (rig) => {
-        const owners = new Map(); let repaired = 0;
-        for (const bone of Object.values(rig.bones || {})) {
-          const elementId = bone.elementId || bone.binding?.elementId;
-          if (!elementId) continue;
-          if (!owners.has(elementId)) { owners.set(elementId, bone.id); continue; }
-          if (owners.get(elementId) === bone.id) continue;
-          delete bone.elementId; delete bone.binding; repaired++;
-        }
-        for (const [id, binding] of Object.entries(rig.bindings || {})) {
-          const attachment = rig.attachments?.[binding.attachmentId];
-          const elementId = attachment?.elementId || binding.elementId;
-          if (!elementId || !binding.boneId) continue;
-          const owner = owners.get(elementId);
-          if (!owner) { owners.set(elementId, binding.boneId); continue; }
-          if (owner === binding.boneId) continue;
-          delete rig.bindings[id]; repaired++;
-        }
-        return repaired;
+        return animation.rigBinding.repairOwnership(rig);
       });
     }
 

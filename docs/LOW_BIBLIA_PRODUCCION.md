@@ -403,6 +403,12 @@ La IA es colaboradora, no propietaria del documento.
 6. Pipeline que pruebe antes de publicar.
 7. Extracción progresiva de `app.js`.
 
+**Avance verificable:** la política de habilitación del rig y el contrato de
+binding rígido ya viven en módulos puros. Vincular, revincular, soltar y reparar
+propietarios duplicados se prueban sin DOM. El próximo corte arquitectónico es
+el controlador de interacción del rig; pesos y mallas permanecen en SIGUIENTE
+hasta completar ese aislamiento.
+
 No entran nuevas familias de funciones durante esta etapa.
 
 ### SIGUIENTE — producción 2D
