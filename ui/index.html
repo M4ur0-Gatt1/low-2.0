@@ -581,6 +581,8 @@
         <div class="rig2-estados" role="tablist" aria-label="Estado del esqueleto">
           <button id="rigModeBuild" class="on" title="Armar el muñeco: piezas, pivotes, jerarquía, topes. Acá no se crean claves.">
             <b>Construir</b><small>armar el muñeco</small></button>
+          <button id="rigModeTest" title="Probar el rig sin crear claves ni modificar el esqueleto.">
+            <b>Probar</b><small>mover sin grabar</small></button>
           <button id="rigModeAnim" title="Posar el muñeco. Cada gesto deja una clave en el cuadro actual.">
             <b>Animar</b><small>posar por cuadro</small></button>
         </div>
@@ -593,7 +595,7 @@
             <option value="face_pro">Rostro · controles profesionales</option>
           </select><button class="primary" id="rigLibraryAdd" title="Colocar este esqueleto sobre el personaje">Colocar</button></div>
           <button class="rig2-import-character" id="rigImportCharacter" title="Importar arte opaco para vincularlo al esqueleto">Importar personaje…</button>
-          <div class="rig2-mini-flow" aria-label="Flujo de rigging"><b>1</b> Importar <i>›</i><b>2</b> Colocar <i>›</i><b>3</b> Repartir <i>›</i><b>4</b> Animar</div>
+          <div class="rig2-mini-flow" aria-label="Flujo de rigging"><b>1</b> Importar <i>›</i><b>2</b> Colocar <i>›</i><b>3</b> Repartir <i>›</i><b>4</b> Probar <i>›</i><b>5</b> Animar</div>
         </section>
         <p class="rig2-gesto" id="rigGesto"></p>
         <div class="rig2-objectbar" id="rigObjectBar" aria-label="Objetos del rig">
@@ -602,6 +604,9 @@
             <button class="primary" id="rigAuto" title="Identificar los objetos del dibujo sin crear huesos ni pivotes">Registrar</button>
             <button id="rigRepartir" title="Emparejar cada pieza registrada con el hueso más cercano">Repartir</button>
           </div>
+        </div>
+        <div class="rig2-readiness" id="rigReadiness" data-state="empty" role="status" aria-live="polite">
+          <b>Rig sin preparar</b><span>Importá piezas y colocá un esqueleto.</span>
         </div>
         <div class="rig2-submodo" id="rigSubmodo" aria-label="Cómo posar">
           <span>cómo posar</span>
@@ -653,7 +658,7 @@
             <button id="rigDel" title="Quitar la clave de esta pieza">Borrar</button>
             <button id="rigReset" title="Restablecer y clavar la pose neutra">Neutra</button>
           </div>
-          <label class="rig2-check"><input type="checkbox" id="rigAutoKey" checked> Auto-clave al soltar <small>(desmarcá para probar sin grabar · Enter clava, Esc descarta)</small></label>
+          <label class="rig2-check" id="rigAutoKeyLabel"><input type="checkbox" id="rigAutoKey" checked> Auto-clave al soltar <small>(desmarcá para probar sin grabar · Enter clava, Esc descarta)</small></label>
           <div class="dz-suggest rig2-keys" id="rigChips"></div>
         </section>
         <details class="rig2-section rig2-disclosure" data-rig-section="curva">
@@ -904,39 +909,41 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=3.29.74"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=3.29.75"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=3.29.74"></script>
-<script src="animation/palette.js?v=3.29.74"></script>
-<script src="animation/scene-model.js?v=3.29.74"></script>
-<script src="animation/exposures.js?v=3.29.74"></script>
-<script src="animation/onion.js?v=3.29.74"></script>
-<script src="animation/document.js?v=3.29.74"></script>
-<script src="animation/rig-library.js?v=3.29.74"></script>
-<script src="animation/xsheet-view.js?v=3.29.74"></script>
-<script src="animation/timeline-view.js?v=3.29.74"></script>
-<script src="animation/level-strip.js?v=3.29.74"></script>
-<script src="animation/palette-view.js?v=3.29.74"></script>
-<script src="animation/audio.js?v=3.29.74"></script>
-<script src="animation/shortcuts.js?v=3.29.74"></script>
-<script src="animation/model-tests.js?v=3.29.74"></script>
-<script src="animation/timeline.js?v=3.29.74"></script>
-<script src="animation/xsheet.js?v=3.29.74"></script>
-<script src="animation/playback.js?v=3.29.74"></script>
-<script src="animation/camera.js?v=3.29.74"></script>
-<script src="drawing/stabilization.js?v=3.29.74"></script>
-<script src="drawing/transforms.js?v=3.29.74"></script>
-<script src="drawing/pointer-input.js?v=3.29.74"></script>
-<script src="drawing/brushes.js?v=3.29.74"></script>
-<script src="drawing/stroke-engine.js?v=3.29.74"></script>
-<script src="workspace/panels.js?v=3.29.74"></script>
-<script src="workspace/workspaces.js?v=3.29.74"></script>
-<script src="workspace/windows.js?v=3.29.74"></script>
-<script src="workspace/layouts.js?v=3.29.74"></script>
-<script src="workspace/recovery.js?v=3.29.74"></script>
-<script src="ai/commands.js?v=3.29.74"></script>
-<script src="ai/task-runner.js?v=3.29.74"></script>
-<script src="ai/recovery.js?v=3.29.74"></script>
-<script src="app.js?v=3.29.74"></script>
+<script src="core/history.js?v=3.29.75"></script>
+<script src="application/mode-machine.js?v=3.29.75"></script>
+<script src="animation/palette.js?v=3.29.75"></script>
+<script src="animation/scene-model.js?v=3.29.75"></script>
+<script src="animation/exposures.js?v=3.29.75"></script>
+<script src="animation/onion.js?v=3.29.75"></script>
+<script src="animation/document.js?v=3.29.75"></script>
+<script src="animation/rig-library.js?v=3.29.75"></script>
+<script src="animation/xsheet-view.js?v=3.29.75"></script>
+<script src="animation/timeline-view.js?v=3.29.75"></script>
+<script src="animation/level-strip.js?v=3.29.75"></script>
+<script src="animation/palette-view.js?v=3.29.75"></script>
+<script src="animation/audio.js?v=3.29.75"></script>
+<script src="animation/shortcuts.js?v=3.29.75"></script>
+<script src="animation/model-tests.js?v=3.29.75"></script>
+<script src="animation/timeline.js?v=3.29.75"></script>
+<script src="animation/xsheet.js?v=3.29.75"></script>
+<script src="animation/playback.js?v=3.29.75"></script>
+<script src="animation/camera.js?v=3.29.75"></script>
+<script src="drawing/stabilization.js?v=3.29.75"></script>
+<script src="drawing/selection.js?v=3.29.75"></script>
+<script src="drawing/transforms.js?v=3.29.75"></script>
+<script src="drawing/pointer-input.js?v=3.29.75"></script>
+<script src="drawing/brushes.js?v=3.29.75"></script>
+<script src="drawing/stroke-engine.js?v=3.29.75"></script>
+<script src="workspace/panels.js?v=3.29.75"></script>
+<script src="workspace/workspaces.js?v=3.29.75"></script>
+<script src="workspace/windows.js?v=3.29.75"></script>
+<script src="workspace/layouts.js?v=3.29.75"></script>
+<script src="workspace/recovery.js?v=3.29.75"></script>
+<script src="ai/commands.js?v=3.29.75"></script>
+<script src="ai/task-runner.js?v=3.29.75"></script>
+<script src="ai/recovery.js?v=3.29.75"></script>
+<script src="app.js?v=3.29.75"></script>
 </body>
 </html>

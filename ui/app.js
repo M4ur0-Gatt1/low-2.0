@@ -546,8 +546,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#tlPuppet").onclick = dzPuppetToggle;
   $("#tlWalk").onclick = dzWalkCycleModal;
   // scrub del X-sheet: arrastrá sobre los cuadros para hojearlos (flipping)
-  $("#tlFrames").addEventListener("mousedown", (e) => {
+  $("#tlFrames").addEventListener("pointerdown", (e) => {
     if (!DZ.anim) return;
+    const pointerId = e.pointerId;
     let busy = false;
     const go = async (x, y) => {
       const chip = document.elementFromPoint(x, y);
@@ -556,10 +557,16 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       const idx = [...$("#tlFrames").children].indexOf(c);
       if (idx >= 0 && idx !== DZ.anim.idx) { busy = true; try { await dzGoFrame(idx); } finally { busy = false; } }
     };
-    const mm = (ev) => go(ev.clientX, ev.clientY);
-    const mu = () => { document.removeEventListener("mousemove", mm); document.removeEventListener("mouseup", mu); };
-    document.addEventListener("mousemove", mm);
-    document.addEventListener("mouseup", mu);
+    const mm = (ev) => { if (ev.pointerId === pointerId) go(ev.clientX, ev.clientY); };
+    const mu = (ev) => {
+      if (ev.pointerId !== pointerId) return;
+      document.removeEventListener("pointermove", mm);
+      document.removeEventListener("pointerup", mu);
+      document.removeEventListener("pointercancel", mu);
+    };
+    document.addEventListener("pointermove", mm);
+    document.addEventListener("pointerup", mu);
+    document.addEventListener("pointercancel", mu);
   });
   // herramientas de dibujo (lápiz/pincel/pluma) — pointer events para presión
   document.querySelectorAll(".dz-toolbtn").forEach(b =>
@@ -623,11 +630,12 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   // zoom con la rueda del mouse (Alt+scroll = zoom hacia el cursor, pro).
   // Sin Alt la rueda no hace nada raro: dejamos el gesto para el zoom explícito.
   $("#dzCanvas").addEventListener("wheel", (e) => {
-    // Mientras se arma/posa un rig, una rueda común no debe llegar al scroll
-    // de la página ni producir la impresión de que el personaje se desplaza.
-    // Alt+rueda conserva el zoom explícito del visor y nunca toca el modelo.
-    if (DZ.rigMode && !e.altKey) { e.preventDefault(); return; }
-    if (!e.altKey) return;
+    const policy = DZModeMachine?.wheelPolicy({ altKey: e.altKey })
+      || (e.altKey ? "zoom" : (DZ.rigMode ? "block" : "scroll"));
+    // La máquina de modos garantiza que una rueda común jamás atraviese el
+    // overlay de rig ni se convierta accidentalmente en transformación.
+    if (policy === "block") { e.preventDefault(); return; }
+    if (policy !== "zoom") return;
     e.preventDefault();
     dzZoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
   }, { passive: false });
@@ -890,6 +898,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   });
   $("#rigModeBuild").onclick = () => dzRigSetMode("build");
+  $("#rigModeTest").onclick = dzRigEnterTest;
   $("#rigModeFk").onclick = () => dzRigSetMode("fk");
   $("#rigModeIk").onclick = () => dzRigSetMode("ik");
   $("#rigModeAnim").onclick = () => dzRigSetMode(DZ.rigSubmode === "ik" ? "ik" : "fk");
@@ -1015,9 +1024,9 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#tlCamKey").onclick = dzCamKeyToggle;
   // cámara: botón de la barra lateral + tiradores del encuadre
   $("#dzCamBtn").onclick = dzCamToggle;
-  $("#dzCam").addEventListener("mousedown", dzCamDrag);
-  $("#dzCamSize").addEventListener("mousedown", dzCamResize);
-  $("#dzCamRot").addEventListener("mousedown", dzCamRotate);
+  $("#dzCam").addEventListener("pointerdown", dzCamDrag);
+  $("#dzCamSize").addEventListener("pointerdown", dzCamResize);
+  $("#dzCamRot").addEventListener("pointerdown", dzCamRotate);
   // espacio mantenido = mano (panear con arrastre)
   document.addEventListener("keydown", e => {
     if (e.code === "Space" && !$("#designView").hidden &&
@@ -1038,6 +1047,10 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || "")) return;
     if (e.key === "Enter") {
       e.preventDefault();
+      if (DZ.rigTesting) {
+        dzSetStatus("Probar nunca crea claves · pasá a Animar para grabar esta pose");
+        return;
+      }
       if (dzRigCommitPreview()) dzSetStatus("Pose clavada en F" + dzRigCur());
       else dzSetStatus("Nada que clavar — posá un hueso primero");
       return;
@@ -2467,6 +2480,7 @@ window.addEventListener("message", async (event) => {
 
 /* ══ Entorno de diseño: SVG vivo + inspector por elemento ══ */
 const DZ = { path: null, sel: null, zoom: 1, rigTool: "select", rigAutoKey: true };
+const DZModeMachine = window.LOW?.application?.createModeMachine?.() || null;
 // Registro central de paneles: base para guardar espacios de trabajo, acoplar
 // cualquier panel y restaurarlo en configuraciones de dos monitores.
 if (window.LOW && LOW.workspace && LOW.workspace.panels) {
@@ -3034,10 +3048,13 @@ function dzBoxHandleDown(e, hx, hy) {
   };
   const start = local(e);
   const w0 = Math.max(1, lb.width), h0 = Math.max(1, lb.height);
-  const tr0 = el.getAttribute("transform") || "";
+  const T = LOW.drawing.transforms;
+  const consolidated = el.transform?.baseVal?.consolidate();
+  const base = consolidated ? T.multiply(T.identity(), consolidated.matrix) : T.identity();
   // ancla LOCAL = tirador opuesto (si agarro la derecha, fijo la izquierda)
   const axL = hx > 0 ? lb.x : hx < 0 ? lb.x + lb.width : lb.x + lb.width / 2;
   const ayL = hy > 0 ? lb.y : hy < 0 ? lb.y + lb.height : lb.y + lb.height / 2;
+  const anchorParent = T.point(base, { x:axL, y:ayL });
   const corner = hx !== 0 && hy !== 0;
   const move = (ev) => {
     if (ev.pointerId !== pointerId) return;
@@ -3047,8 +3064,7 @@ function dzBoxHandleDown(e, hx, hy) {
     let ky = hy ? Math.max(0.05, (h0 + dy) / h0) : 1;
     // esquina: proporcional por defecto; Shift = deformar libre
     if (corner && !ev.shiftKey) { const k = Math.max(kx, ky); kx = ky = k; }
-    const tsc = `translate(${(axL * (1 - kx)).toFixed(2)} ${(ayL * (1 - ky)).toFixed(2)}) scale(${kx.toFixed(4)} ${ky.toFixed(4)})`;
-    el.setAttribute("transform", (tr0 ? tr0 + " " : "") + tsc);
+    el.setAttribute("transform", T.attr(T.rigidScale(base, kx, ky, anchorParent)));
     dzPositionHandle();
   };
   const up = (ev) => {
@@ -3432,17 +3448,24 @@ function dzMultiScaleDown(e, hx, hy, pack) {
   const pointerId=e.pointerId, rects=pack.map(n=>n.getBoundingClientRect());
   const sr={left:Math.min(...rects.map(r=>r.left)),top:Math.min(...rects.map(r=>r.top)),
     right:Math.max(...rects.map(r=>r.right)),bottom:Math.max(...rects.map(r=>r.bottom))};
-  const a=dzToUser(hx>0?sr.left:hx<0?sr.right:(sr.left+sr.right)/2,
-    hy>0?sr.top:hy<0?sr.bottom:(sr.top+sr.bottom)/2);
+  const anchorScreen={x:hx>0?sr.left:hx<0?sr.right:(sr.left+sr.right)/2,
+    y:hy>0?sr.top:hy<0?sr.bottom:(sr.top+sr.bottom)/2};
   const start={x:e.clientX,y:e.clientY}, w=Math.max(1,sr.right-sr.left), h=Math.max(1,sr.bottom-sr.top);
-  const bases=pack.map(n=>({n,tr:n.getAttribute("transform")||""})), corner=hx!==0&&hy!==0;
+  const T=LOW.drawing.transforms;
+  const bases=pack.map(n=>{
+    const consolidated=n.transform?.baseVal?.consolidate();
+    const base=consolidated?T.multiply(T.identity(),consolidated.matrix):T.identity();
+    const parentCTM=n.parentElement?.getScreenCTM?.();
+    if(!parentCTM)return null;
+    const p=n.ownerSVGElement.createSVGPoint();p.x=anchorScreen.x;p.y=anchorScreen.y;
+    return {n,base,anchor:p.matrixTransform(parentCTM.inverse())};
+  }).filter(Boolean), corner=hx!==0&&hy!==0;
   const move=ev=>{
     if(ev.pointerId!==pointerId)return;
     let kx=hx?Math.max(.05,1+(ev.clientX-start.x)*hx/w):1;
     let ky=hy?Math.max(.05,1+(ev.clientY-start.y)*hy/h):1;
     if(corner&&!ev.shiftKey){const k=Math.max(kx,ky);kx=ky=k;}
-    const tx=(a.x*(1-kx)).toFixed(2),ty=(a.y*(1-ky)).toFixed(2);
-    bases.forEach(({n,tr})=>n.setAttribute("transform",`translate(${tx} ${ty}) scale(${kx.toFixed(4)} ${ky.toFixed(4)})${tr?" "+tr:""}`));
+    bases.forEach(({n,base,anchor})=>n.setAttribute("transform",T.attr(T.rigidScale(base,kx,ky,anchor))));
     dzPositionHandle();
   };
   const up=ev=>{if(ev.pointerId!==pointerId)return;document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);document.removeEventListener("pointercancel",up);dzMarkDirty();dzBuildLayers();};
@@ -3485,8 +3508,8 @@ function dzIsCanvasBackground(el) {
 }
 
 /* ── selección por marquee (arrastrar un rectángulo en el fondo del lienzo) ──
-   Selecciona en grupo todo lo que el rectángulo TOCA (como Illustrator).
-   Shift = sumar a la selección; Alt = solo lo que quede COMPLETAMENTE adentro. */
+   Izquierda→derecha: sólo lo completamente contenido. Derecha→izquierda: todo
+   lo que toca. Shift suma y Alt invierte temporalmente esa convención. */
 function dzMarqueeStart(e) {
   e.preventDefault();
   const pointerId = e.pointerId;
@@ -3513,15 +3536,16 @@ function dzMarqueeStart(e) {
     box.remove();
     if (ev.type === "pointercancel") return;
     if (!moved) { if (!ev.shiftKey) dzDeselect(); return; }   // clic simple  deseleccionar
+    const mode = LOW.drawing.selection.marqueeMode(x0, ev.clientX, ev.altKey);
     dzMarqueeSelect(Math.min(x0, ev.clientX), Math.min(y0, ev.clientY),
                     Math.max(x0, ev.clientX), Math.max(y0, ev.clientY),
-                    ev.shiftKey, ev.altKey);
+                    ev.shiftKey, mode);
   };
   document.addEventListener("pointermove", draw);
   document.addEventListener("pointerup", up);
   document.addEventListener("pointercancel", up);
 }
-function dzMarqueeSelect(l, t, r, b, additive, contained) {
+function dzMarqueeSelect(l, t, r, b, additive, mode = "touching") {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return;
   const direct = [...svg.children].filter(n => !n.hasAttribute("data-low-art"));
@@ -3536,15 +3560,14 @@ function dzMarqueeSelect(l, t, r, b, additive, contained) {
   kids.forEach(el => {
     let bb; try { bb = el.getBoundingClientRect(); } catch (e) { return; }
     if (!bb.width && !bb.height) return;
-    const hit = contained
-      ? (bb.left >= l && bb.top >= t && bb.right <= r && bb.bottom <= b)
-      : !(bb.right < l || bb.left > r || bb.bottom < t || bb.top > b);   // toca
+    const hit = LOW.drawing.selection.marqueeHit(bb,
+      { left:l, top:t, right:r, bottom:b }, mode);
     if (hit && !DZ.multi.includes(el)) DZ.multi.push(el);
   });
   DZ.multi = [...new Set(DZ.multi)].filter(n => n?.isConnected);
   if (DZ.multi.length > 1) {
     dzSelect(DZ.multi[DZ.multi.length - 1]);   // el "activo" es el último; la multi manda al mover
-    dzSetStatus(" " + DZ.multi.length + " elemento(s) seleccionado(s) — Ctrl+G agrupa · arrastrá para moverlos juntos · Shift suma · Alt = solo los de adentro");
+    dzSetStatus(" " + DZ.multi.length + " elemento(s) seleccionado(s) — Ctrl+G agrupa · Shift suma · marco → contiene / marco ← toca");
   } else if (DZ.multi.length === 1) {
     const only = DZ.multi[0]; DZ.multi = []; dzSelect(only); dzSetStatus("1 elemento seleccionado");
   } else { dzDeselect(); dzSetStatus("Nada en el rango"); }
@@ -3615,6 +3638,7 @@ function dzHandleDown(e) {
   if (!DZ.sel) return;
   e.preventDefault(); e.stopPropagation();
   dzCapturePointer(e);
+  const pointerId = e.pointerId;
   dzSnapshot();
   const el = DZ.sel, t = el.tagName.toLowerCase();
   const start = dzToUser(e.clientX, e.clientY);
@@ -3636,6 +3660,7 @@ function dzHandleDown(e) {
     tr: el.getAttribute("transform") || "",
   };
   const move = (ev) => {
+    if (ev.pointerId !== pointerId) return;
     const p = dzToUser(ev.clientX, ev.clientY);
     const dx = p.x - start.x, dy = p.y - start.y;
     const deform = ev.shiftKey;
@@ -3663,13 +3688,16 @@ function dzHandleDown(e) {
     }
     dzPositionHandle();
   };
-  const up = () => {
-    document.removeEventListener("mousemove", move);
-    document.removeEventListener("mouseup", up);
+  const up = (ev) => {
+    if (ev?.pointerId != null && ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("pointercancel", up);
     dzBuildInspector(el); dzMarkDirty();
   };
-  document.addEventListener("mousemove", move);
-  document.addEventListener("mouseup", up);
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up);
+  document.addEventListener("pointercancel", up);
 }
 
 /* agregar una forma nueva al centro del lienzo y seleccionarla */
@@ -6137,13 +6165,15 @@ function dzDiscToggle() {
   $("#dzCanvas").appendChild(disc);
 
   let startAngle = 0, startRot = 0;
-  disc.addEventListener("mousedown", (e) => {
+  disc.addEventListener("pointerdown", (e) => {
     e.preventDefault(); e.stopPropagation();
+    const pointerId = e.pointerId;
     const rect = disc.getBoundingClientRect();
     const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
     startAngle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
     startRot = DZ.viewRot || 0;
     const move = (ev) => {
+      if (ev.pointerId !== pointerId) return;
       const angle = Math.atan2(ev.clientY - cy, ev.clientX - cx) * 180 / Math.PI;
       let delta = angle - startAngle;
       if (ev.shiftKey) delta = Math.round(delta / 15) * 15;
@@ -6155,15 +6185,16 @@ function dzDiscToggle() {
       const dial = $("#dzDiscDial");
       if (dial) dial.textContent = Math.round(DZ.viewRot) + "°";
     };
-    const up = () => {
-      document.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseup", up);
+    const up = (ev) => {
+      if (ev.pointerId !== pointerId) return;
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
     };
-    document.addEventListener("mousemove", move);
-    document.addEventListener("mouseup", up);
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
   });
-  // evitar que el mousedown en el disco inicie otras herramientas
-  disc.addEventListener("pointerdown", (e) => { e.stopPropagation(); });
   dzSetStatus(" Mesa giratoria activa — arrastrá el disco para girar la vista");
 }
 
@@ -7043,25 +7074,34 @@ function dzCamCommit() {
 function dzCamDrag(e) {
   if (e.target.id === "dzCamSize" || e.target.id === "dzCamRot") return;
   e.preventDefault(); e.stopPropagation();
+  const pointerId = e.pointerId;
   const cam0 = dzCamAt(dzCamFrame());
   const start = dzToUser(e.clientX, e.clientY);
   const move = (ev) => {
+    if (ev.pointerId !== pointerId) return;
     const p = dzToUser(ev.clientX, ev.clientY);
     let dx = p.x - start.x, dy = p.y - start.y;
     if (ev.shiftKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }  // recto
     DZ.camDrag = { ...cam0, cx: Math.round((cam0.cx + dx) * 10) / 10, cy: Math.round((cam0.cy + dy) * 10) / 10 };
     dzCamOverlay();
   };
-  const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); dzCamCommit(); };
-  document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+  const up = (ev) => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
+    document.removeEventListener("pointercancel", up);
+    if (ev.type !== "pointercancel") dzCamCommit(); else { DZ.camDrag = null; dzCamOverlay(); }
+  };
+  document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
 }
 function dzCamResize(e) {
   e.preventDefault(); e.stopPropagation();
+  const pointerId = e.pointerId;
   const cam0 = dzCamAt(dzCamFrame());
   const start = dzToUser(e.clientX, e.clientY);
   // zoom proporcional a la distancia al centro (alejar la esquina = achicar zoom)
   const d0 = Math.max(1, Math.hypot(start.x - cam0.cx, start.y - cam0.cy));
   const move = (ev) => {
+    if (ev.pointerId !== pointerId) return;
     const p = dzToUser(ev.clientX, ev.clientY);
     const d = Math.hypot(p.x - cam0.cx, p.y - cam0.cy);
     const w = Math.max(40, Math.round(cam0.w * (d / d0) * 10) / 10);
@@ -7070,24 +7110,36 @@ function dzCamResize(e) {
     const vb = dzVB();
     dzSetStatus("🎬 zoom " + Math.round(vb[2] / w * 100) + "% del encuadre");
   };
-  const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); dzCamCommit(); dzSetStatus(""); };
-  document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+  const up = (ev) => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); document.removeEventListener("pointercancel", up);
+    if (ev.type !== "pointercancel") dzCamCommit(); else { DZ.camDrag = null; dzCamOverlay(); }
+    dzSetStatus("");
+  };
+  document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
 }
 function dzCamRotate(e) {
   e.preventDefault(); e.stopPropagation();
+  const pointerId = e.pointerId;
   const cam0 = dzCamAt(dzCamFrame());
   const c = dzToScreen(cam0.cx, cam0.cy);
   const cv = $("#dzCanvas").getBoundingClientRect();
   const a0 = Math.atan2(e.clientY - cv.top - c.y, e.clientX - cv.left - c.x);
   const move = (ev) => {
+    if (ev.pointerId !== pointerId) return;
     let deg = (cam0.rot || 0) + (Math.atan2(ev.clientY - cv.top - c.y, ev.clientX - cv.left - c.x) - a0) * 180 / Math.PI;
     if (ev.shiftKey) deg = Math.round(deg / 15) * 15;
     DZ.camDrag = { ...cam0, rot: Math.round(deg * 10) / 10 };
     dzCamOverlay();
     dzSetStatus("🎬 rotación " + Math.round(DZ.camDrag.rot) + "°");
   };
-  const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); dzCamCommit(); dzSetStatus(""); };
-  document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+  const up = (ev) => {
+    if (ev.pointerId !== pointerId) return;
+    document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); document.removeEventListener("pointercancel", up);
+    if (ev.type !== "pointercancel") dzCamCommit(); else { DZ.camDrag = null; dzCamOverlay(); }
+    dzSetStatus("");
+  };
+  document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
 }
 
 /* ── fotogramas clave de dibujo (🔑) + badges del X-sheet ── */
@@ -7681,7 +7733,8 @@ function dzRigAdoptCanvasTool(tool) {
 }
 function dzRigSetTool(tool) {
   if (!["select", "pose", "create", "edit", "draw", "cut", "pivot"].includes(tool)) tool = "select";
-  if ((DZ.rigSubmode || "build") !== "build" && ["create", "edit", "draw", "cut", "pivot"].includes(tool)) tool = "pose";
+  if (DZModeMachine) tool = DZModeMachine.setRigTool(tool).rig.tool;
+  else if ((DZ.rigSubmode || "build") !== "build" && ["create", "edit", "draw", "cut", "pivot"].includes(tool)) tool = "pose";
   DZ.rigTool = tool;
   DZ.rigBoneTool = tool === "create";
   // Crear/elegir huesos usa cursor nativo visible. Un pincel activo antes
@@ -7715,7 +7768,17 @@ function dzRigSetTool(tool) {
   dzRigOverlayRender();
 }
 function dzRigSetMode(mode) {
-  DZ.rigSubmode = ["build", "fk", "ik"].includes(mode) ? mode : "build";
+  if (DZ.rigTesting) {
+    dzRigDiscardPreview();
+    DZ.rigTesting = false;
+    DZ.rigAutoKey = DZ.rigAutoKeyBeforeTest !== false;
+    const auto = $("#rigAutoKey");
+    if (auto) { auto.disabled = false; auto.checked = DZ.rigAutoKey; }
+  }
+  const modeState = DZModeMachine?.enterRig(mode);
+  DZ.rigSubmode = modeState
+    ? (modeState.rig.phase === "build" ? "build" : modeState.rig.solver)
+    : (["build", "fk", "ik"].includes(mode) ? mode : "build");
   // al cambiar de modo, la herramienta vuelve a una coherente con ese modo:
   // build → seleccionar;  fk/ik → posar (para que arrastrar ya pose, sin pasos extra)
   if (DZ.rigSubmode === "build") dzRigSetTool("select");
@@ -7734,6 +7797,7 @@ function dzRigSetMode(mode) {
   // dos formas de posar DENTRO de Animar, no un tercer modo hermano: mezclarlos
   // era lo que hacia imposible saber en que se estaba parado.
   $("#rigModeBuild").classList.toggle("on", construyendo);
+  $("#rigModeTest")?.classList.remove("on");
   $("#rigModeAnim")?.classList.toggle("on", !construyendo);
   $("#rigModeFk").classList.toggle("on", DZ.rigSubmode === "fk");
   $("#rigModeIk").classList.toggle("on", DZ.rigSubmode === "ik");
@@ -7747,6 +7811,36 @@ function dzRigSetMode(mode) {
     fk: "El pivote sólo se cambia en Construir. Sin Auto-clave, el gesto es una prueba: Enter la clava, Esc la descarta.",
     ik: "Elegí una cadena y arrastrá el rombo: los dos huesos se clavan en una sola operación." };
   $("#rigHint").textContent = hints[DZ.rigSubmode]; dzRigOverlayRender();
+}
+
+function dzRigEnterTest() {
+  if (!DZ.doc) return dzSetStatus("Abrí una animación antes de probar el rig");
+  const readiness = dzRigReadinessStatus();
+  if (!readiness.readyToTest)
+    return dzSetStatus("Todavía no hay un esqueleto válido para probar · colocá o dibujá huesos primero");
+  dzRigDiscardPreview();
+  DZ.rigAutoKeyBeforeTest = DZ.rigAutoKey;
+  DZ.rigTesting = true;
+  DZ.rigAutoKey = false;
+  const state = DZModeMachine?.enterRig("test");
+  DZ.rigSubmode = state?.rig?.solver || "fk";
+  const panel = $("#dzRigPanel");
+  panel.dataset.mode = DZ.rigSubmode;
+  panel.dataset.estado = "probar";
+  const auto = $("#rigAutoKey");
+  if (auto) { auto.checked = false; auto.disabled = true; }
+  $("#rigModeBuild").classList.remove("on");
+  $("#rigModeTest").classList.add("on");
+  $("#rigModeAnim").classList.remove("on");
+  $("#rigModeFk").classList.toggle("on", DZ.rigSubmode === "fk");
+  $("#rigModeIk").classList.toggle("on", DZ.rigSubmode === "ik");
+  dzRigSetTool("pose");
+  $("#rigGesto").textContent = "Mové el personaje libremente · Esc restaura · aquí nunca se crean claves.";
+  $("#rigHint").textContent = readiness.readyToAnimate
+    ? "Prueba segura: comprobá jerarquía, pivotes y piezas. Pasá a Animar cuando responda correctamente."
+    : "El esqueleto se puede probar, pero todavía no tiene arte vinculado. Volvé a Construir y tocá Repartir.";
+  dzRigOverlayRender(); dzRigPanelSync();
+  dzSetStatus("Modo Probar · ninguna pose se guarda y Escape restaura el personaje");
 }
 
 function dzRigToggleBoneTool() {
@@ -7852,17 +7946,35 @@ function dzRigBoneGeometryDrag(e, node, handle) {
   if (!DZ.doc || DZ.rigSubmode !== "build" || !node?.head || !node?.tail) return;
   e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
   const pointerId = e.pointerId, start = dzToUser(e.clientX, e.clientY);
-  const original = { head: { ...node.head }, tail: { ...node.tail } };
+  const nodes=DZ.doc.scene.rig.nodes;
+  const original=Object.fromEntries(Object.values(nodes).filter(n=>n.head&&n.tail)
+    .map(n=>[n.id,{head:{...n.head},tail:{...n.tail},parentId:n.parentId}]));
+  const descendants=(id,out=new Set())=>{for(const n of Object.values(nodes))if(n.parentId===id&&!out.has(n.id)){out.add(n.id);descendants(n.id,out);}return out;};
+  const joined=(parent,child)=>{
+    if(!parent||!child)return false;
+    const length=Math.hypot(parent.tail.x-parent.head.x,parent.tail.y-parent.head.y);
+    return Math.hypot(parent.tail.x-child.head.x,parent.tail.y-child.head.y)<=Math.max(8,length*.12);
+  };
   const preview = ev => {
     if (ev.pointerId !== pointerId) return;
     const point = dzToUser(ev.clientX, ev.clientY);
-    if (handle === "tail") DZ.rigBoneGeometryPreview = { id: node.id, head: original.head, tail: point };
-    else {
+    const updates={};
+    if (handle === "tail") {
+      updates[node.id]={head:{...original[node.id].head},tail:point};
+      for(const child of Object.values(nodes).filter(n=>n.parentId===node.id&&original[n.id]&&joined(original[node.id],original[n.id])))
+        updates[child.id]={head:point,tail:{...original[child.id].tail}};
+    } else if(handle === "head") {
+      updates[node.id]={head:point,tail:{...original[node.id].tail}};
+      const parent=node.parentId&&original[node.parentId];
+      if(parent&&joined(parent,original[node.id]))updates[node.parentId]={head:{...parent.head},tail:point};
+    } else {
       const dx = point.x - start.x, dy = point.y - start.y;
-      DZ.rigBoneGeometryPreview = { id: node.id,
-        head: { x: original.head.x + dx, y: original.head.y + dy },
-        tail: { x: original.tail.x + dx, y: original.tail.y + dy } };
+      const moving=new Set([node.id,...descendants(node.id)]);
+      for(const id of moving){const base=original[id];if(base)updates[id]={head:{x:base.head.x+dx,y:base.head.y+dy},tail:{x:base.tail.x+dx,y:base.tail.y+dy}};}
+      const parent=node.parentId&&original[node.parentId];
+      if(parent&&joined(parent,original[node.id]))updates[node.parentId]={head:{...parent.head},tail:{...updates[node.id].head}};
     }
+    DZ.rigBoneGeometryPreview = updates;
     dzRigOverlayRender();
   };
   const cleanup = () => {
@@ -7874,9 +7986,9 @@ function dzRigBoneGeometryDrag(e, node, handle) {
   const finish = ev => {
     if (ev.pointerId !== pointerId) return; cleanup();
     const value = DZ.rigBoneGeometryPreview; DZ.rigBoneGeometryPreview = null;
-    if (value && DZ.doc.setRigBoneGeometry(node.id, value.head, value.tail)) {
+    if (value && DZ.doc.setRigBoneGeometries(value, handle==="body"?"Mover rama del esqueleto":"Editar articulación")) {
       dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
-      dzSetStatus(handle === "tail" ? "Longitud y dirección del hueso actualizadas" : "Hueso movido en la pose de armado");
+      dzSetStatus(handle === "body" ? "Rama movida sin separar la jerarquía" : "Articulación actualizada sin abrir la cadena");
     } else dzRigOverlayRender();
   };
   const cancel = () => { cleanup(); DZ.rigBoneGeometryPreview = null; dzRigOverlayRender(); };
@@ -8042,6 +8154,7 @@ function dzRigResetPose() {
 }
 /* pose de prueba (auto-clave OFF): Enter la clava, Esc la descarta */
 function dzRigCommitPreview() {
+  if (DZ.rigTesting) return false;
   const frame = dzRigCur();
   if (DZ.rigIKPreview && DZ.doc) {
     const p = DZ.rigIKPreview; DZ.rigIKPreview = null;
@@ -8181,13 +8294,15 @@ function dzRigOverlayRender() {
   const live = DZ.rigLivePose || DZ.rigIKPreview?.poses || {};
   const point = id => {
     const node = doc.scene.rigNode(id); if (!node?.pivot) return null;
-    const geometry = DZ.rigBoneGeometryPreview?.id === id ? DZ.rigBoneGeometryPreview : null;
+    const geometry = DZ.rigBoneGeometryPreview?.[id] ||
+      (DZ.rigBoneGeometryPreview?.id === id ? DZ.rigBoneGeometryPreview : null);
     const localPivot = geometry?.head || (DZ.rigBuildPreview?.nodeId === id ? DZ.rigBuildPreview.pivot : node.pivot);
     const p = doc.scene.rigWorldPoint(id, num, localPivot, live), s = dzFromUser(p.x, p.y);
     return s && { x: s.x - cv.left, y: s.y - cv.top };
   };
   const tailPoint = node => {
-    const geometry = DZ.rigBoneGeometryPreview?.id === node.id ? DZ.rigBoneGeometryPreview : null;
+    const geometry = DZ.rigBoneGeometryPreview?.[node.id] ||
+      (DZ.rigBoneGeometryPreview?.id === node.id ? DZ.rigBoneGeometryPreview : null);
     const localTail = geometry?.tail || node.tail; if (!localTail) return null;
     const p = doc.scene.rigWorldPoint(node.id, num, localTail, live), s = dzFromUser(p.x, p.y);
     return s && { x: s.x - cv.left, y: s.y - cv.top, user: p };
@@ -8212,8 +8327,12 @@ function dzRigOverlayRender() {
     let a = point(node.id), b = tailPoint(node);
     if (!b && node.parentId) { a = point(node.parentId); b = point(node.id); }
     if (!a || !b) continue;
-    get("bl:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y },
-      "dz-rig-bone" + (isControl ? " controller" : "") + (selectedId === node.id ? " active" : ""));
+    const dx=b.x-a.x,dy=b.y-a.y,len=Math.max(1,Math.hypot(dx,dy)),nx=-dy/len,ny=dx/len;
+    const headW=isControl?4:8,tipW=isControl?2:1.8;
+    const bonePath=`M${a.x+nx*headW} ${a.y+ny*headW} L${b.x+nx*tipW} ${b.y+ny*tipW} `+
+      `L${b.x-nx*tipW} ${b.y-ny*tipW} L${a.x-nx*headW} ${a.y-ny*headW} Z`;
+    get("bs:" + node.id, "path", { d:bonePath,"data-id":node.id },
+      "dz-rig-bone-shape" + (isControl ? " controller" : "") + (selectedId === node.id ? " active" : ""));
     const hit = get("bh:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, "data-id": node.id }, "dz-rig-bone-hit");
     const esHueso = !!node.tail;
     hit.onpointerdown = e => {
@@ -8221,7 +8340,7 @@ function dzRigOverlayRender() {
       // que puede cambiar la geometría de un hueso ya existente.
       if (DZ.rigSubmode === "build" && DZ.rigTool === "create") return dzRigBoneCreateDrag(e);
       if (DZ.rigSubmode === "build" && DZ.rigTool === "edit" && esHueso)
-        return dzRigBoneGeometryDrag(e, node, "head");
+        return dzRigBoneGeometryDrag(e, node, "body");
       // solo el cuerpo de un HUESO de verdad rota: esa línea SÍ es el hueso. En
       // una pieza, la línea va del pivote del padre al suyo —sale del torso, no
       // del brazo—, y usarla para rotar giraba al revés.
@@ -8244,7 +8363,15 @@ function dzRigOverlayRender() {
       if (DZ.rigSubmode === "build" && DZ.rigTool === "edit" && node.tail && e.altKey) return dzRigBuildPivotDrag(e, node);
       if (DZ.rigSubmode === "build" && DZ.rigTool === "edit" && node.tail) return dzRigBoneGeometryDrag(e, node, "head");
       if (DZ.rigSubmode === "build" && DZ.rigTool === "edit") return dzRigBuildPivotDrag(e, node);
-      if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "translate");
+      if (DZ.rigSubmode === "fk" && posable) {
+        // Una articulación hija no se traslada: eso abriría la cadena. La raíz
+        // y los controles sí pueden mover el conjunto; los miembros se rotan
+        // desde el cuerpo o la punta del hueso.
+        if (!node.parentId || node.pinned || node.role === "control")
+          return dzRigBoneFKDrag(e, node, "translate");
+        e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
+        return dzSetStatus("Articulación bloqueada a su padre · arrastrá el hueso o su punta para rotarlo");
+      }
       e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
     };
     // Con muchas piezas registradas la mesa se llena de puntos y no se ve el
@@ -8376,12 +8503,45 @@ function dzRigOverlayRender() {
   }
   for (const [key, el] of els) if (!used.has(key)) { el.remove(); els.delete(key); }
 }
+function dzRigReadinessStatus() {
+  const artIds = dzRigDrawableElements().map(el => el.id).filter(Boolean);
+  const report = LOW.animation.rigReadiness(DZ.doc?.scene?.rig || {}, artIds);
+  const box = $("#rigReadiness");
+  const testButton = $("#rigModeTest"), animateButton = $("#rigModeAnim");
+  if (testButton) testButton.disabled = !report.readyToTest;
+  if (animateButton) animateButton.disabled = !report.readyToAnimate;
+  if (!box) return report;
+  let state = "empty", title = "Rig sin preparar", detail = "Importá piezas y colocá un esqueleto.";
+  if (report.errors.length) {
+    state = "error"; title = "Rig con errores";
+    detail = `${report.errors.length} problema(s) de jerarquía o vínculos · corregilos antes de probar.`;
+  } else if (report.readyToAnimate) {
+    state = report.unboundElementIds.length ? "warning" : "ready";
+    title = "Rig listo para animar";
+    detail = `${report.boundBoneCount} hueso(s) vinculados` +
+      (report.unboundElementIds.length ? ` · ${report.unboundElementIds.length} pieza(s) todavía sueltas` : " · todas las piezas detectadas están vinculadas");
+  } else if (report.readyToTest) {
+    state = "warning"; title = "Esqueleto listo para probar";
+    detail = report.unboundElementIds.length
+      ? `${report.boneCount} hueso(s) · ${report.unboundElementIds.length} pieza(s) sin vincular · usá Repartir`
+      : `${report.boneCount} hueso(s), todavía sin arte vinculado`;
+  } else if (artIds.length) {
+    state = "warning"; title = "Arte sin esqueleto";
+    detail = `${artIds.length} pieza(s) detectadas · colocá una plantilla o dibujá el alambre.`;
+  }
+  box.dataset.state = state;
+  box.querySelector("b").textContent = title;
+  box.querySelector("span").textContent = detail;
+  return report;
+}
+
 function dzRigPanelSync() {
   if ($("#dzRigPanel").hidden) return;
   const el = DZ.sel, num = dzRigCur(), nodes = DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : [], current = dzRigSelectedNode();
   $("#rigId").value = current?.id || (el && el.id) || ""; $("#rigCount").textContent = nodes.length; $("#rigFrame").textContent = "F" + num;
   const detected = dzRigDrawableElements().length;
   if ($("#rigObjectCount")) $("#rigObjectCount").textContent = detected + (detected === 1 ? " detectado" : " detectados");
+  dzRigReadinessStatus();
   const k = (current && dzRigLocalAt(current.id, num)) || { x: 0, y: 0, r: 0, sx: 1, sy: 1 };
   $("#rigX").value = Math.round(k.x); $("#rigY").value = Math.round(k.y); $("#rigR").value = Math.round(k.r * 10) / 10;
   $("#rigSX").value = Math.round((k.sx == null ? (k.s == null ? 1 : k.s) : k.sx) * 100) / 100;
@@ -8455,6 +8615,7 @@ function dzRigToggle() {
     dzSetStatus(repaired ? `${repaired} pivote(s) recuperado(s) · Construir listo para armar la jerarquía` : "Esqueleto cut-out: Construir → elegí un punto y arrastrá el vínculo al padre");
   }
   else {
+    DZModeMachine?.exitRig();
     DZ.rigBoneTool = false; DZ.rigLivePose = null; DZ.rigIKPreview = null;
     $("#rigBoneTool")?.classList.remove("on");
     const ovl = $("#dzRigOverlay");
@@ -8887,7 +9048,7 @@ function dzRigRepartirDibujo() {
   dzSetStatus(asignadas + (asignadas === 1 ? " pieza repartida" : " piezas repartidas") +
     " entre " + huesos.length + " huesos, sin reemplazar vínculos" +
     (lejos ? " \u00b7 " + lejos + " quedaron lejos del alambre y sin asignar" : "") +
-    " \u00b7 pas\u00e1 a Animar y pos\u00e1");
+    " \u00b7 pas\u00e1 a Probar antes de animar");
   return reparto;
 }
 
@@ -9630,12 +9791,14 @@ function dzRigTutorial() {
       <div class="rigdoc-abrir"><button class="primary" id="rigdocEjemplo">Abrir el personaje de ejemplo</button>
       <small>Un muñeco ya riggeado y animado, para seguir estos pasos tocando algo que funciona.</small></div>
 
-      <h3>Dos estados, y nada más</h3>
-      <p>Arriba del panel hay dos botones y son <b>todo</b> el sistema:</p>
+      <h3>Tres pasos claros</h3>
+      <p>Arriba del panel hay tres botones que ordenan <b>todo</b> el sistema:</p>
       <ul class="rigdoc-simb">
         <li><b>Construir</b> — armás el muñeco: registrás las piezas, movés los pivotes, decís
         de quién cuelga cada una, ponés topes. Acá <b>no se crean claves</b>: nada de lo que
         toques queda grabado en la animación, y la manija de posar ni siquiera aparece.</li>
+        <li><b>Probar</b> — movés el esqueleto sin grabar. Sirve para comprobar jerarquía,
+        pivotes y reparto; Escape restaura la pose anterior.</li>
         <li><b>Animar</b> — posás. La herramienta de posar queda puesta sola y cada gesto deja
         una clave en el cuadro donde estés parado. Los controles de armado desaparecen, así no
         rompés el rig sin querer.</li>
@@ -9651,7 +9814,8 @@ function dzRigTutorial() {
       <ol>
         ${paso("1", "En <b>Construir</b>, tocá <b>Crear hueso</b> y dibujá el monigote de alambre <b>encima</b> del personaje: arrastrá desde cada articulación hasta la siguiente. Empezá por el torso; si arrancás desde la punta del hueso anterior, la cadena se encadena sola.")}
         ${paso("2", "Tocá <b>Repartir el dibujo en el alambre</b>. Cada parte del dibujo se va con el hueso que le pasa más cerca.")}
-        ${paso("3", "Pasá a <b>Animar</b>. Ya está: el alambre tenía adentro los pivotes, la jerarquía y qué pedazo mueve cada hueso.")}
+        ${paso("3", "Pasá a <b>Probar</b> y mové brazos y piernas. No se graba ninguna clave; Escape restaura la pose.")}
+        ${paso("4", "Cuando todo responda bien, pasá a <b>Animar</b>. El alambre ya contiene pivotes, jerarquía y qué pieza mueve cada hueso.")}
       </ol>
       <p class="rigdoc-tip">Lo que quede lejos del alambre no se asigna, y la barra de estado te
       dice cuántas quedaron afuera. Si una parte se fue al hueso equivocado, arreglala con
@@ -9663,7 +9827,8 @@ function dzRigTutorial() {
         ${paso("2", "Con <b>Alambre</b>, dibujá los huesos encima de esas partes, desde una articulación hasta la siguiente.")}
         ${paso("3", "Si hace falta, elegí un hueso y usá <b>Pivotes</b> para colocar con precisión su articulación. Alt+clic la restablece.")}
         ${paso("4", "Tocá <b>Repartir</b>: LOW vincula cada objeto con el hueso más cercano.")}
-        ${paso("5", "Pasá a <b>Animar</b>: ahí el alambre mueve las piezas y cada gesto deja una clave.")}
+        ${paso("5", "Pasá a <b>Probar</b> y comprobá que ninguna pieza se desprenda.")}
+        ${paso("6", "Pasá a <b>Animar</b>: recién ahí cada gesto deja una clave.")}
       </ol>
 
       <h3>B · Querés una cadena articulada</h3>
@@ -9671,7 +9836,7 @@ function dzRigTutorial() {
         ${paso("1", "<b>Construir → Crear hueso</b> y arrastrá desde la articulación hasta la punta.")}
         ${paso("2", "Para seguir la cadena, empezá el próximo arrastre <b>sobre la punta del anterior</b>: se engancha solo.")}
         ${paso("3", "El hueso toma el dibujo que tenga debajo. Si agarró otro, seleccioná la pieza correcta en la mesa y tocá <b>Mueve el dibujo</b>.")}
-        ${paso("4", "Pasá a <b>Animar</b> y posá.")}
+        ${paso("4", "Pasá a <b>Probar</b>, verificá la cadena y luego entrá en <b>Animar</b> para posar.")}
       </ol>
 
       <h3>El pivote de un hueso</h3>

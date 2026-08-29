@@ -19,6 +19,11 @@ sólido ni atractivo con un botón.
 La filosofía completa y su traducción a funciones concretas se documentan en
 [`docs/FILOSOFIA_DE_ANIMACION.md`](docs/FILOSOFIA_DE_ANIMACION.md).
 
+La definición vinculante de calidad, interacción, arquitectura, pruebas y orden
+de desarrollo está en
+[`docs/LOW_BIBLIA_PRODUCCION.md`](docs/LOW_BIBLIA_PRODUCCION.md). Ninguna función
+se considera terminada si no cumple esa definición de terminado.
+
 ## Autoría
 
 LOW es una obra de **Mauro Gatti y Tropa Circa**.

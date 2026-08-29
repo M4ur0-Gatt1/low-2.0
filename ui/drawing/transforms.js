@@ -35,6 +35,16 @@
   function rigidRotate(base, degrees, centerInParent) {
     return multiply(rotationAround(degrees, centerInParent), base || identity());
   }
+  function scaleAround(kx, ky, center) {
+    return { a:kx, b:0, c:0, d:ky,
+      e:center.x*(1-kx), f:center.y*(1-ky) };
+  }
+  // Escala el objeto completo en el espacio de su PADRE. El ancla ya está en
+  // ese espacio, por lo que funciona igual aunque el objeto o la capa tengan
+  // rotación, escala, reflejo o traslación previas.
+  function rigidScale(base, kx, ky, centerInParent) {
+    return multiply(scaleAround(kx, ky, centerInParent), base || identity());
+  }
   function rigidTranslate(base, delta, rootToParent) {
     const d=vector(rootToParent || identity(), delta);
     return multiply({a:1,b:0,c:0,d:1,e:d.x,f:d.y}, base || identity());
@@ -56,5 +66,6 @@
     const n=v=>Math.abs(v)<1e-10?0:Math.round(v*1e6)/1e6;
     return `matrix(${n(m.a)} ${n(m.b)} ${n(m.c)} ${n(m.d)} ${n(m.e)} ${n(m.f)})`;
   }
-  LOW.drawing.transforms = { identity, multiply, point, vector, rotationAround, rigidRotate, rigidTranslate, screenRotationDelta, attr };
+  LOW.drawing.transforms = { identity, multiply, point, vector, rotationAround,
+    scaleAround, rigidRotate, rigidScale, rigidTranslate, screenRotationDelta, attr };
 })(typeof window !== "undefined" ? window : globalThis);

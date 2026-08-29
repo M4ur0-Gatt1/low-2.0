@@ -1068,6 +1068,9 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-rig-overlay.bone-create .dz-rig-bone-hit { cursor: crosshair; }
 .dz-rig-overlay[data-mode="fk"] .dz-rig-joint { cursor: move; }
 .dz-rig-bone.active { stroke: #ffd29d; stroke-width: 4; }
+.dz-rig-bone-shape { fill:rgba(48,203,188,.22); stroke:#30cbbc; stroke-width:1.4; pointer-events:none; vector-effect:non-scaling-stroke; }
+.dz-rig-bone-shape.active { fill:rgba(240,69,14,.32); stroke:#ffd29d; stroke-width:2; }
+.dz-rig-bone-shape.controller { fill:rgba(32,199,183,.08); stroke:#20c7b7; }
 .dz-rig-bone.controller { stroke:#20c7b7; stroke-width:2; opacity:.92; }
 .dz-rig-bone-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
 .dz-rig-bone-preview { fill: none; stroke: #ffd29d; stroke-width: 2; stroke-dasharray: 5 4; pointer-events: none; }
@@ -2854,7 +2857,7 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 /* DOS ESTADOS: Construir arma el muneco, Animar lo posa. Cada uno muestra solo
    sus controles — tener todo visible siempre era lo que hacia imposible saber
    que estaba haciendo cada boton. */
-.rig2-estados { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; margin: .5rem 0 .4rem; }
+.rig2-estados { display: grid; grid-template-columns: repeat(3,1fr); gap: .35rem; margin: .5rem 0 .4rem; }
 .rig2-estados button { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem;
   padding: .5rem .65rem; border: 1px solid var(--line-strong, var(--line)); background: transparent;
   color: var(--muted); cursor: pointer; border-radius: 4px; text-align: left; }
@@ -2880,6 +2883,26 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .rig2[data-estado="construir"] [data-rig-section="pose"],
 .rig2[data-estado="construir"] [data-rig-section="curva"] { display: none; }
 .rig2[data-estado="animar"] [data-rig-section="build"] { display: none; }
+.rig2[data-estado="probar"] [data-rig-section="build"] { display: none; }
+.rig2[data-estado="probar"] #rigToolCreate,
+.rig2[data-estado="probar"] #rigToolEdit,
+.rig2[data-estado="probar"] #rigToolDraw,
+.rig2[data-estado="probar"] #rigToolCut,
+.rig2[data-estado="probar"] #rigToolPivot,
+.rig2[data-estado="probar"] .rig2-objectbar,
+.rig2[data-estado="probar"] #rigKey,
+.rig2[data-estado="probar"] #rigKeyAll,
+.rig2[data-estado="probar"] #rigDel,
+.rig2[data-estado="probar"] #rigReset,
+.rig2[data-estado="probar"] #rigAutoKeyLabel { display:none; }
+.rig2[data-estado="probar"] .rig2-submodo { display:none; }
+.rig2-readiness { margin:5px 8px 7px; padding:7px 8px; display:flex; flex-direction:column; gap:2px;
+  border:1px solid var(--line2); border-radius:7px; background:var(--panel2); }
+.rig2-readiness b { font-size:10px; color:var(--txt); }
+.rig2-readiness span { font-size:9px; color:var(--mut); line-height:1.3; }
+.rig2-readiness[data-state="ready"] { border-color:rgba(58,180,132,.55); background:rgba(58,180,132,.08); }
+.rig2-readiness[data-state="warning"] { border-color:rgba(240,166,64,.55); background:rgba(240,166,64,.08); }
+.rig2-readiness[data-state="error"] { border-color:rgba(240,69,14,.65); background:var(--redsoft); }
 
 /* TRAMO ACTIVO: lo que queda afuera se atenua, y los dos bordes llevan una
    manija para agarrarlos. Antes el In/Out solo se podia escribir a mano. */

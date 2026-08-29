@@ -798,6 +798,19 @@
       ok("mover después de girar sigue la mano y no los ejes rotados",
         Math.abs(movedCenter.x-(center.x+25))<1e-8 && Math.abs(movedCenter.y-(center.y-12))<1e-8,
         JSON.stringify({center,movedCenter}));
+      const anchor={x:42,y:75};
+      const scaled=T.rigidScale(rotated,1.5,.75,anchor);
+      const fixedAnchor=T.point(scaled,T.point({a:rotated.d,b:-rotated.b,c:-rotated.c,d:rotated.a,e:0,f:0},anchor));
+      // La propiedad realmente importante se prueba sin depender de la inversa:
+      // el punto que ya estaba en el ancla del padre permanece exactamente ahí.
+      const localAnchor={x:(anchor.x-rotated.e)*rotated.d-(anchor.y-rotated.f)*rotated.c,
+        y:-(anchor.x-rotated.e)*rotated.b+(anchor.y-rotated.f)*rotated.a};
+      const det=rotated.a*rotated.d-rotated.b*rotated.c;
+      localAnchor.x/=det; localAnchor.y/=det;
+      const afterScale=T.point(scaled,localAnchor);
+      ok("escalar una matriz previa conserva el ancla del cuadro delimitador",
+        Math.abs(afterScale.x-anchor.x)<1e-8&&Math.abs(afterScale.y-anchor.y)<1e-8,
+        JSON.stringify({anchor,afterScale,fixedAnchor}));
     }
 
     // 28. Las plantillas crean el mismo rig canónico que el alambre manual.
@@ -817,6 +830,73 @@
       ok("el rig facial trae controles nombrados y posables",faceControls.length>=18,String(faceControls.length));
       const faceReload=new animation.Scene({rig:faceDoc.scene.rig.toJSON?.()||faceDoc.scene.rig});
       ok("los controles profesionales sobreviven al guardado",faceReload.rigNode(faceIds[0])?.role==="control",faceReload.rigNode(faceIds[0])?.role);
+      const linked=new animation.LowDoc();
+      linked.ensureRigBones([
+        {id:"parent",head:{x:0,y:0},tail:{x:100,y:0},pivot:{x:0,y:0}},
+        {id:"child",parentId:"parent",head:{x:100,y:0},tail:{x:180,y:0},pivot:{x:100,y:0}}
+      ]);
+      linked.setRigBoneGeometries({
+        parent:{head:{x:0,y:0},tail:{x:100,y:30}},
+        child:{head:{x:100,y:30},tail:{x:180,y:0}}
+      });
+      ok("editar una articulación mantiene unidos padre e hijo",
+        linked.scene.rigNode("parent").tail.y===linked.scene.rigNode("child").head.y,String(linked.scene.rigNode("child").head.y));
+      linked.setRigKey("parent",1,{x:0,y:0,r:35,sx:1,sy:1});
+      const parentTip=linked.scene.rigWorldPoint("parent",1,linked.scene.rigNode("parent").tail);
+      const childHead=linked.scene.rigWorldPoint("child",1,linked.scene.rigNode("child").head);
+      ok("la pose jerárquica no separa la articulación",
+        Math.hypot(parentTip.x-childHead.x,parentTip.y-childHead.y)<1e-7,JSON.stringify({parentTip,childHead}));
+    }
+
+    // 29. La máquina de modos impide que una herramienta atraviese espacios.
+    {
+      const modes=LOW.application.createModeMachine();
+      let state=modes.enterRig("build");
+      ok("rig abre en Construir con Seleccionar",state.rig.phase==="build"&&state.rig.tool==="select",JSON.stringify(state));
+      state=modes.setRigTool("create");
+      ok("Construir permite crear huesos",state.rig.tool==="create",state.rig.tool);
+      state=modes.setRigMode("fk");
+      ok("Animar FK entra posando, no editando geometría",state.rig.phase==="animate"&&state.rig.solver==="fk"&&state.rig.tool==="pose",JSON.stringify(state));
+      state=modes.setRigTool("edit");
+      ok("Animar rechaza Editar esqueleto",state.rig.tool==="pose",state.rig.tool);
+      state=modes.setRigMode("test");
+      ok("Probar es un estado explícito y no una variante visual de Animar",
+        state.rig.phase==="test"&&state.rig.tool==="pose",JSON.stringify(state));
+      state=modes.setRigTool("create");
+      ok("Probar rechaza herramientas que cambian el esqueleto",state.rig.tool==="pose",state.rig.tool);
+      ok("rueda común queda bloqueada durante rigging",modes.wheelPolicy({altKey:false})==="block");
+      ok("Alt+rueda conserva zoom sin tocar el rig",modes.wheelPolicy({altKey:true})==="zoom");
+      ok("Escape prioriza soltar herramienta de rig",modes.cancelAction({rigSelection:true,canvasSelection:true})==="rig-tool");
+      state=modes.exitRig();
+      ok("salir de rig restaura Dibujo y Seleccionar",state.workspace==="drawing"&&!state.rig.active&&state.rig.tool==="select",JSON.stringify(state));
+    }
+
+    // 30. El marco de selección usa la convención profesional por dirección.
+    {
+      const S=LOW.drawing.selection;
+      const region={left:0,top:0,right:100,bottom:100};
+      const inside={left:10,top:10,right:40,bottom:40};
+      const crossing={left:80,top:20,right:120,bottom:50};
+      ok("marco izquierda a derecha exige contenido",S.marqueeMode(0,100)==="contained");
+      ok("marco derecha a izquierda selecciona por contacto",S.marqueeMode(100,0)==="touching");
+      ok("Alt invierte la regla del marco",S.marqueeMode(0,100,true)==="touching");
+      ok("contenido acepta lo interno y rechaza lo cruzado",
+        S.marqueeHit(inside,region,"contained")&&!S.marqueeHit(crossing,region,"contained"));
+      ok("contacto captura también el objeto cruzado",S.marqueeHit(crossing,region,"touching"));
+    }
+
+    // 31. Preparación del rig: Probar y Animar tienen puertas diferentes.
+    {
+      const doc=new animation.LowDoc();
+      let readiness=animation.rigReadiness(doc.scene.rig,["torso_art"]);
+      ok("arte sin esqueleto no habilita Probar ni Animar",!readiness.readyToTest&&!readiness.readyToAnimate,JSON.stringify(readiness));
+      doc.ensureRigBones([{id:"root",head:{x:0,y:0},tail:{x:0,y:100},pivot:{x:0,y:0},pinned:true}]);
+      readiness=animation.rigReadiness(doc.scene.rig,["torso_art"]);
+      ok("un esqueleto válido habilita Probar aunque no tenga arte",readiness.readyToTest&&!readiness.readyToAnimate,JSON.stringify(readiness));
+      doc.bindRigElement("root","torso_art");
+      readiness=animation.rigReadiness(doc.scene.rig,["torso_art","brazo_suelto"]);
+      ok("un vínculo real habilita Animar y denuncia arte suelto",
+        readiness.readyToAnimate&&readiness.boundBoneCount===1&&readiness.unboundElementIds.includes("brazo_suelto"),JSON.stringify(readiness));
     }
 
     const fallan = res.filter((r) => !r.ok);

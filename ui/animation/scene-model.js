@@ -367,6 +367,41 @@
     return { valid: errors.length === 0, errors, warnings };
   }
 
+  function rigReadiness(rig, availableElementIds = []) {
+    const bones = Object.values(rig?.bones || rig?.nodes || {});
+    const deformBones = bones.filter(b => b.role !== "control");
+    const controls = bones.filter(b => b.role === "control");
+    const boundElements = new Set();
+    const boundBones = new Set();
+    for (const bone of deformBones) {
+      const elementId = bone.elementId || bone.binding?.elementId;
+      if (elementId) { boundElements.add(elementId); boundBones.add(bone.id); }
+    }
+    for (const binding of Object.values(rig?.bindings || {})) {
+      const attachment = rig?.attachments?.[binding.attachmentId];
+      const elementId = attachment?.elementId || binding.elementId;
+      if (elementId) boundElements.add(elementId);
+      if (binding.boneId && elementId) boundBones.add(binding.boneId);
+    }
+    const diagnostics = rigDiagnostics(rig || {});
+    const unboundBoneIds = deformBones.map(b => b.id).filter(id => !boundBones.has(id));
+    const art = [...new Set((availableElementIds || []).filter(Boolean))];
+    const unboundElementIds = art.filter(id => !boundElements.has(id));
+    return {
+      valid: diagnostics.valid,
+      errors: diagnostics.errors,
+      warnings: diagnostics.warnings,
+      boneCount: deformBones.length,
+      controlCount: controls.length,
+      boundBoneCount: boundBones.size,
+      boundElementCount: boundElements.size,
+      unboundBoneIds,
+      unboundElementIds,
+      readyToTest: diagnostics.valid && bones.length > 0,
+      readyToAnimate: diagnostics.valid && bones.length > 0 && boundBones.size > 0
+    };
+  }
+
   function rigData(data) {
     const source = data || {}, structured = !!(source.nodes || source.bones);
     const sourceBones = source.bones || source.nodes || (structured ? {} : source);
@@ -1024,6 +1059,7 @@
   animation.rigChannelData = rigChannelData;
   animation.rigConstraintData = rigConstraintData;
   animation.rigDiagnostics = rigDiagnostics;
+  animation.rigReadiness = rigReadiness;
   animation.rigConstraintHasCycle = rigConstraintHasCycle;
   animation.rigOrderedConstraintIds = rigOrderedConstraintIds;
 

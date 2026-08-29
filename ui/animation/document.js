@@ -772,6 +772,25 @@
       });
     }
 
+    /** Edita varias geometrías como una sola articulación. En un esqueleto la
+     * punta del padre y la cabeza del hijo son el mismo punto conceptual; esta
+     * operación evita que una edición abra huecos entre ambos. */
+    setRigBoneGeometries(updates, label = "Editar articulación") {
+      const entries = Object.entries(updates || {}).filter(([, value]) => value?.head && value?.tail);
+      if (!entries.length) return false;
+      return this._rigChange(label, (rig) => {
+        let changed = false;
+        for (const [id, value] of entries) {
+          const bone = rig.bones[id]; if (!bone) continue;
+          const head = { x:+value.head.x||0, y:+value.head.y||0 };
+          const tail = { x:+value.tail.x||0, y:+value.tail.y||0 };
+          if (Math.hypot(tail.x-head.x, tail.y-head.y) < 2) continue;
+          bone.head=head; bone.pivot={...head}; bone.tail=tail; changed=true;
+        }
+        return changed;
+      });
+    }
+
     /** Inserta un esqueleto completo como una sola operación de Undo. Las
      * plantillas y el alambre manual terminan en los mismos registros. */
     ensureRigBones(items, label = "Insertar esqueleto") {

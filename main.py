@@ -48,7 +48,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "3.29.74"
+LOW_VERSION = "3.29.75"
 
 
 def atomic_write_text(path, content, encoding="utf-8"):

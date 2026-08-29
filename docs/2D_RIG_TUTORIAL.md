@@ -117,14 +117,18 @@ manijas pueden salirse del cuadrado.
 Cambiar la curva **no toca ninguna pose**: se puede ajustar el timing todas las
 veces que haga falta sin perder lo clavado.
 
-### Dos estados: Construir y Animar
+### Tres pasos: Construir, Probar y Animar
 
-Arriba del panel hay dos botones y son todo el sistema.
+Arriba del panel hay tres botones que ordenan todo el sistema.
 
 **Construir** arma el muneco: registrar piezas, mover pivotes, decir de quien
 cuelga cada una, poner topes, dar curva. Aca **no se crean claves** — nada de lo
 que toques queda grabado en la animacion, y la manija de posar ni siquiera
 aparece en la mesa.
+
+**Probar** permite mover el esqueleto sin crear claves ni alterar la pose neutra.
+Escape cancela la prueba y devuelve el personaje a su estado anterior. Este paso
+sirve para comprobar jerarquia, pivotes y reparto antes de empezar una toma.
 
 **Animar** posa. La herramienta de posar queda puesta sola y cada gesto deja una
 clave en el cuadro donde estes parado. Los controles de armado desaparecen, asi

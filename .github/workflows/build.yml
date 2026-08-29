@@ -19,7 +19,27 @@ permissions:
   contents: write
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Pruebas del modelo 2D
+        run: node tools/run_2d_model_tests.js
+      - name: Contratos críticos de interacción 2D
+        run: python tools/check_2d_interaction_contracts.py
+      - name: Validar sintaxis Python
+        run: python -m compileall -q main.py animation_engine providers social tools
+
   release:
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
