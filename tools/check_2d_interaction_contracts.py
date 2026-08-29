@@ -30,6 +30,9 @@ timeline_scrub = APP[APP.index('$("#tlFrames").addEventListener'):APP.index("// 
 disc = APP[APP.index("function dzDiscToggle("):APP.index("DZ.anim = null")]
 wheel = APP[APP.index('$("#dzCanvas").addEventListener("wheel"'):APP.index(
     '$("#dzCanvas").addEventListener("contextmenu"')]
+rig_mode = function_body("dzRigSetMode", "dzRigEnterTest")
+rig_geometry = function_body("dzRigBoneGeometryDrag", "dzRigBoneFKDrag")
+rig_pivot = function_body("dzRigBuildPivotDrag", "dzRigCommitPreview")
 
 require("closeDesign" not in escape and "designView" not in escape,
         "Escape volvió a cerrar o abandonar el módulo 2D")
@@ -49,5 +52,11 @@ require("wheelPolicy" in wheel and 'policy === "block"' in wheel,
         "la rueda puede atravesar otra vez el modo de rigging")
 require(INDEX.index("application/mode-machine.js") < INDEX.index("app.js"),
         "la máquina de modos debe cargarse antes que la aplicación")
+require("rigGestureCancel" in rig_mode and "rigBoneGeometryPreview = null" in rig_mode,
+        "cambiar a Animar dejó de cancelar la edición pendiente del esqueleto")
+require('DZ.rigSubmode !== "build" || DZ.rigTool !== "edit"' in rig_geometry,
+        "un gesto iniciado en Construir puede volver a editar geometría dentro de Animar")
+require('DZ.rigSubmode !== "build"' in rig_pivot,
+        "un pointerup tardío puede volver a mover pivotes dentro de Animar")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos y tableta")
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig y tableta")

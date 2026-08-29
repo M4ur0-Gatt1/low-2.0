@@ -7781,6 +7781,16 @@ function dzRigSetTool(tool) {
   dzRigOverlayRender();
 }
 function dzRigSetMode(mode) {
+  // Cambiar de estado es una barrera transaccional. Un pointerup pendiente de
+  // Editar no puede atravesar hacia Animar y escribir head/tail/pivot después
+  // del cambio de modo.
+  if (DZ.rigGestureCancel) {
+    const cancelPendingRigGesture = DZ.rigGestureCancel;
+    DZ.rigGestureCancel = null;
+    cancelPendingRigGesture();
+  }
+  DZ.rigBoneGeometryPreview = null;
+  DZ.rigBuildPreview = null;
   if (DZ.rigTesting) {
     dzRigDiscardPreview();
     DZ.rigTesting = false;
@@ -7999,6 +8009,12 @@ function dzRigBoneGeometryDrag(e, node, handle) {
   const finish = ev => {
     if (ev.pointerId !== pointerId) return; cleanup();
     const value = DZ.rigBoneGeometryPreview; DZ.rigBoneGeometryPreview = null;
+    // Segunda validación en el punto de escritura. El gesto pudo empezar en
+    // Construir y terminar después de pulsar Animar.
+    if (DZ.rigSubmode !== "build" || DZ.rigTool !== "edit") {
+      dzRigOverlayRender();
+      return dzSetStatus("Edición cancelada · Animar conserva intacta la forma del esqueleto");
+    }
     if (value && DZ.doc.setRigBoneGeometries(value, handle==="body"?"Mover rama del esqueleto":"Editar articulación")) {
       dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
       dzSetStatus(handle === "body" ? "Rama movida sin separar la jerarquía" : "Articulación actualizada sin abrir la cadena");
@@ -8103,6 +8119,10 @@ function dzRigBuildPivotDrag(e, node) {
     document.removeEventListener("pointerup", finish);
     document.removeEventListener("pointercancel", cancel);
     const value = DZ.rigBuildPreview; DZ.rigBuildPreview = null;
+    if (DZ.rigSubmode !== "build" || !["pivot", "edit"].includes(DZ.rigTool)) {
+      dzRigOverlayRender();
+      return dzSetStatus("Pivote sin cambios · sólo se edita en Construir");
+    }
     if (value?.nodeId === node.id) {
       DZ.doc.setRigPivot(node.id, value.pivot);
       target?.setAttribute("data-pivot", `${Math.round(value.pivot.x)} ${Math.round(value.pivot.y)}`);

@@ -870,11 +870,18 @@
       });
       ok("editar una articulación mantiene unidos padre e hijo",
         linked.scene.rigNode("parent").tail.y===linked.scene.rigNode("child").head.y,String(linked.scene.rigNode("child").head.y));
+      const setupBeforePose = JSON.stringify(Object.fromEntries(
+        Object.entries(linked.scene.rig.bones).map(([id, bone]) => [id,
+          { head: bone.head, tail: bone.tail, pivot: bone.pivot, parentId: bone.parentId }])));
       linked.setRigKey("parent",1,{x:0,y:0,r:35,sx:1,sy:1});
       const parentTip=linked.scene.rigWorldPoint("parent",1,linked.scene.rigNode("parent").tail);
       const childHead=linked.scene.rigWorldPoint("child",1,linked.scene.rigNode("child").head);
       ok("la pose jerárquica no separa la articulación",
         Math.hypot(parentTip.x-childHead.x,parentTip.y-childHead.y)<1e-7,JSON.stringify({parentTip,childHead}));
+      ok("Animar crea claves sin modificar la forma neutra del esqueleto",
+        setupBeforePose === JSON.stringify(Object.fromEntries(
+          Object.entries(linked.scene.rig.bones).map(([id, bone]) => [id,
+            { head: bone.head, tail: bone.tail, pivot: bone.pivot, parentId: bone.parentId }]))));
     }
 
     // 29. La máquina de modos impide que una herramienta atraviese espacios.
