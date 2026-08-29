@@ -7335,8 +7335,12 @@ function dzRigApplyLive(num, overrides = {}) {
     }
     // Un cuadro donde el personaje no esta expuesto no tiene nada que posar, y
     // sin aviso parece que el rig "dejo de funcionar". Se dice en voz alta.
-    if (DZ.rigMode && nodos.length && !hallados)
-      dzSetStatus("F" + num + ": este cuadro no tiene al personaje · sostené su dibujo (↔ en la hoja de tiempos) para poder posarlo");
+    if (DZ.rigMode && nodos.length && !hallados) {
+      const hasArt = nodos.some(n => n.elementId || n.binding?.elementId);
+      dzSetStatus(hasArt
+        ? "F" + num + ": este cuadro no tiene al personaje · sostené su dibujo (↔ en la hoja de tiempos)"
+        : "F" + num + ": animando sólo el esqueleto · las claves se conservarán al vincular un personaje");
+    }
     dzPositionHandle(); dzRigOverlayRender(); return;
   }
   const rig = dzRigTracks();
@@ -8544,27 +8548,10 @@ function dzRigReadinessStatus() {
   if (testButton) testButton.disabled = !report.readyToTest;
   if (animateButton) animateButton.disabled = !report.readyToAnimate;
   if (!box) return report;
-  let state = "empty", title = "Rig sin preparar", detail = "Importá piezas y colocá un esqueleto.";
-  if (report.errors.length) {
-    state = "error"; title = "Rig con errores";
-    detail = `${report.errors.length} problema(s) de jerarquía o vínculos · corregilos antes de probar.`;
-  } else if (report.readyToAnimate) {
-    state = report.unboundElementIds.length ? "warning" : "ready";
-    title = "Rig listo para animar";
-    detail = `${report.boundBoneCount} hueso(s) vinculados` +
-      (report.unboundElementIds.length ? ` · ${report.unboundElementIds.length} pieza(s) todavía sueltas` : " · todas las piezas detectadas están vinculadas");
-  } else if (report.readyToTest) {
-    state = "warning"; title = "Esqueleto listo para probar";
-    detail = report.unboundElementIds.length
-      ? `${report.boneCount} hueso(s) · ${report.unboundElementIds.length} pieza(s) sin vincular · usá Repartir`
-      : `${report.boneCount} hueso(s), todavía sin arte vinculado`;
-  } else if (artIds.length) {
-    state = "warning"; title = "Arte sin esqueleto";
-    detail = `${artIds.length} pieza(s) detectadas · colocá una plantilla o dibujá el alambre.`;
-  }
-  box.dataset.state = state;
-  box.querySelector("b").textContent = title;
-  box.querySelector("span").textContent = detail;
+  const presentation = LOW.animation.rigWorkflowStatus(report, artIds.length);
+  box.dataset.state = presentation.state;
+  box.querySelector("b").textContent = presentation.title;
+  box.querySelector("span").textContent = presentation.detail;
   return report;
 }
 

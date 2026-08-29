@@ -2901,6 +2901,7 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .rig2-readiness b { font-size:10px; color:var(--txt); }
 .rig2-readiness span { font-size:9px; color:var(--mut); line-height:1.3; }
 .rig2-readiness[data-state="ready"] { border-color:rgba(58,180,132,.55); background:rgba(58,180,132,.08); }
+.rig2-readiness[data-state="skeleton"] { border-color:rgba(64,157,255,.55); background:rgba(64,157,255,.08); }
 .rig2-readiness[data-state="warning"] { border-color:rgba(240,166,64,.55); background:rgba(240,166,64,.08); }
 .rig2-readiness[data-state="error"] { border-color:rgba(240,69,14,.65); background:var(--redsoft); }
 

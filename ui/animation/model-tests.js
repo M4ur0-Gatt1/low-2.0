@@ -928,11 +928,15 @@
       ok("arte sin esqueleto no habilita Probar ni Animar",!readiness.readyToTest&&!readiness.readyToAnimate,JSON.stringify(readiness));
       doc.ensureRigBones([{id:"root",head:{x:0,y:0},tail:{x:0,y:100},pivot:{x:0,y:0},pinned:true}]);
       readiness=animation.rigReadiness(doc.scene.rig,["torso_art"]);
-      ok("un esqueleto válido habilita Probar aunque no tenga arte",readiness.readyToTest&&!readiness.readyToAnimate,JSON.stringify(readiness));
+      ok("un esqueleto válido habilita Probar y Animar aunque no tenga arte",
+        readiness.readyToTest&&readiness.readyToAnimate&&!readiness.hasBoundArt,JSON.stringify(readiness));
+      const skeletonStatus=animation.rigWorkflowStatus(readiness,0);
+      ok("la interfaz identifica la animación de esqueleto sin fingir un personaje vinculado",
+        skeletonStatus.state==="skeleton"&&skeletonStatus.title==="Esqueleto animable",JSON.stringify(skeletonStatus));
       doc.bindRigElement("root","torso_art");
       readiness=animation.rigReadiness(doc.scene.rig,["torso_art","brazo_suelto"]);
       ok("un vínculo real habilita Animar y denuncia arte suelto",
-        readiness.readyToAnimate&&readiness.boundBoneCount===1&&readiness.unboundElementIds.includes("brazo_suelto"),JSON.stringify(readiness));
+        readiness.readyToAnimate&&readiness.hasBoundArt&&readiness.boundBoneCount===1&&readiness.unboundElementIds.includes("brazo_suelto"),JSON.stringify(readiness));
     }
 
     const fallan = res.filter((r) => !r.ok);

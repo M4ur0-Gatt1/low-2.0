@@ -412,7 +412,10 @@
       unboundBoneIds,
       unboundElementIds,
       readyToTest: diagnostics.valid && bones.length > 0,
-      readyToAnimate: diagnostics.valid && bones.length > 0 && boundBones.size > 0
+      // El movimiento pertenece al esqueleto, no al dibujo. Permitir claves
+      // sin arte hace posible crear y reutilizar animaciones antes del binding.
+      readyToAnimate: diagnostics.valid && bones.length > 0,
+      hasBoundArt: boundBones.size > 0
     };
   }
 
