@@ -340,6 +340,17 @@
 
   function rigDiagnostics(rig) {
     const errors = [], warnings = [], bones = rig.bones || rig.nodes || {};
+    const artOwners = new Map();
+    const claimArt = (elementId, boneId, sourceId) => {
+      if (!elementId || !boneId) return;
+      const previous = artOwners.get(elementId);
+      if (previous && previous.boneId !== boneId) {
+        errors.push({ code: "duplicate-art-binding", id: sourceId || boneId,
+          ref: elementId, owners: [previous.boneId, boneId] });
+        return;
+      }
+      artOwners.set(elementId, { boneId, sourceId });
+    };
     for (const [id, bone] of Object.entries(bones)) {
       const seen = new Set([id]); let parentId = bone.parentId;
       while (parentId) {
@@ -347,6 +358,7 @@
         if (seen.has(parentId)) { errors.push({ code: "bone-cycle", id, ref: parentId }); break; }
         seen.add(parentId); parentId = bones[parentId].parentId;
       }
+      claimArt(bone.elementId || bone.binding?.elementId, id, id);
     }
     for (const [id, slot] of Object.entries(rig.slots || {})) {
       if (slot.boneId && !bones[slot.boneId]) errors.push({ code: "missing-slot-bone", id, ref: slot.boneId });
@@ -360,6 +372,8 @@
       if (binding.slotId && !rig.slots?.[binding.slotId]) errors.push({ code: "missing-binding-slot", id, ref: binding.slotId });
       if (binding.attachmentId && !rig.attachments?.[binding.attachmentId])
         errors.push({ code: "missing-binding-attachment", id, ref: binding.attachmentId });
+      const attachment = rig.attachments?.[binding.attachmentId];
+      claimArt(attachment?.elementId || binding.elementId, binding.boneId, id);
     }
     if (rigConstraintHasCycle(rig)) errors.push({ code: "constraint-cycle" });
     for (const id of rig.constraintOrder || [])

@@ -126,6 +126,10 @@ cuelga cada una, poner topes, dar curva. Aca **no se crean claves** — nada de 
 que toques queda grabado en la animacion, y la manija de posar ni siquiera
 aparece en la mesa.
 
+Cada dibujo pertenece a un solo hueso. **Vincular** transfiere la pieza al hueso
+elegido si antes estaba en otro; **Soltar** elimina el vínculo sin borrar ni el
+dibujo ni el hueso.
+
 **Probar** permite mover el esqueleto sin crear claves ni alterar la pose neutra.
 Escape cancela la prueba y devuelve el personaje a su estado anterior. Este paso
 sirve para comprobar jerarquia, pivotes y reparto antes de empezar una toma.

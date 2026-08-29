@@ -930,6 +930,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#rigPivotTool").onclick = () => dzRigSetTool("pivot");
   $("#rigPin").onclick = dzRigTogglePin;
   $("#rigBind").onclick = dzRigBindSelection;
+  $("#rigUnbind").onclick = dzRigUnbindSelection;
   // En HTML un input numérico cambia su valor con la rueda aunque el usuario
   // sólo intente recorrer el panel. En el rig eso escribía X/Y/rotación y
   // movía al personaje. La rueda ahora desplaza el panel sin editar valores.
@@ -7641,13 +7642,25 @@ function dzRigRemoveSelected() {
    Es el puente entre «Crear hueso» (cadena ósea) y el dibujo: sin esto el
    hueso se posa solo y no arrastra el arte. */
 function dzRigBindSelection() {
-  const node = dzRigSelectedNode();
+  // Al elegir el dibujo la selección visual deja el overlay del hueso. Se usa
+  // también la última pieza activa para que el flujo «hueso → dibujo →
+  // Vincular» no pierda el destino justo en el último clic.
+  const node = dzRigPiezaDestino();
   if (!node) return dzSetStatus("Elegí un hueso del esqueleto primero (clic en el overlay o en la lista)");
   const el = DZ.sel;
   if (!el || !el.id) return dzSetStatus("Seleccioná en la mesa la pieza del dibujo que querés vincular");
   if (!DZ.doc.bindRigElement(node.id, el.id)) return dzSetStatus("No pude vincular: revisá que el hueso y la pieza existan");
   dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
-  dzSetStatus(`«${el.id}» quedó vinculada al hueso «${node.id}» · en FK/IK ya la mueve`);
+  dzSetStatus(`«${el.id}» quedó vinculada sólo al hueso «${node.id}» · probalo antes de animar`);
+}
+function dzRigUnbindSelection() {
+  const node = dzRigPiezaDestino();
+  if (!node) return dzSetStatus("Elegí el hueso cuyo dibujo querés soltar");
+  const elementId = node.elementId || node.binding?.elementId;
+  if (!elementId) return dzSetStatus(`El hueso «${node.id}» no tiene un dibujo vinculado`);
+  if (!DZ.doc.unbindRigElement(node.id)) return dzSetStatus("No pude soltar el vínculo");
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
+  dzSetStatus(`«${elementId}» quedó libre · el hueso «${node.id}» se conserva`);
 }
 function dzRigTogglePin() {
   const node = dzRigSelectedNode(); if (!node) return dzSetStatus("Elegí una pieza del esqueleto");

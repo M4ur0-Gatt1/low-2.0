@@ -985,6 +985,21 @@
       if (!boneId || !elementId || !this.scene.rigNode(boneId)) return false;
       return this._rigChange("Vincular dibujo al hueso", (rig) => {
         const bone = rig.bones[boneId];
+        // Una pieza tiene un único dueño. Dos huesos aplicando matrices sobre
+        // el mismo elemento producían saltos y piezas aparentemente sueltas.
+        // Revincular transfiere la pieza de forma atómica y deja el rig válido.
+        for (const other of Object.values(rig.bones)) {
+          if (other.id === boneId) continue;
+          const claimed = other.elementId || other.binding?.elementId;
+          if (claimed !== elementId) continue;
+          delete other.elementId;
+          delete other.binding;
+        }
+        for (const [id, binding] of Object.entries(rig.bindings)) {
+          if (binding.boneId === boneId) continue;
+          const attachment = rig.attachments[binding.attachmentId];
+          if ((attachment?.elementId || binding.elementId) === elementId) delete rig.bindings[id];
+        }
         bone.elementId = elementId;
         bone.binding = { mode: ["rigid", "weightedMesh", "curve", "envelope", "warp"].includes(mode) ? mode : "rigid", elementId };
         const slotId = `slot:${boneId}`, attachmentId = `attachment:${boneId}`, bindingId = `binding:${boneId}`;
@@ -1001,6 +1016,48 @@
         rig.slots[slotId].activeAttachmentId = attachmentId;
         rig.nodes = rig.bones;
         return true;
+      });
+    }
+
+    /** Suelta el arte de un hueso sin borrar el hueso, el slot ni sus dibujos
+     * alternativos. Permite corregir un reparto sin reconstruir el esqueleto. */
+    unbindRigElement(boneId) {
+      if (!boneId || !this.scene.rigNode(boneId)) return false;
+      return this._rigChange("Soltar dibujo del hueso", (rig) => {
+        const bone = rig.bones[boneId];
+        const hadBinding = !!(bone.elementId || bone.binding || rig.bindings[`binding:${boneId}`]);
+        if (!hadBinding) return false;
+        delete bone.elementId;
+        delete bone.binding;
+        for (const [id, binding] of Object.entries(rig.bindings))
+          if (binding.boneId === boneId) delete rig.bindings[id];
+        return true;
+      });
+    }
+
+    /** Repara escenas antiguas donde dos huesos reclaman el mismo dibujo.
+     * Conserva el primer dueño estable y suelta solamente los reclamos
+     * duplicados; nunca borra arte, huesos, slots ni attachments. */
+    repairRigBindingOwnership() {
+      return this._rigChange("Reparar vínculos duplicados", (rig) => {
+        const owners = new Map(); let repaired = 0;
+        for (const bone of Object.values(rig.bones || {})) {
+          const elementId = bone.elementId || bone.binding?.elementId;
+          if (!elementId) continue;
+          if (!owners.has(elementId)) { owners.set(elementId, bone.id); continue; }
+          if (owners.get(elementId) === bone.id) continue;
+          delete bone.elementId; delete bone.binding; repaired++;
+        }
+        for (const [id, binding] of Object.entries(rig.bindings || {})) {
+          const attachment = rig.attachments?.[binding.attachmentId];
+          const elementId = attachment?.elementId || binding.elementId;
+          if (!elementId || !binding.boneId) continue;
+          const owner = owners.get(elementId);
+          if (!owner) { owners.set(elementId, binding.boneId); continue; }
+          if (owner === binding.boneId) continue;
+          delete rig.bindings[id]; repaired++;
+        }
+        return repaired;
       });
     }
 
@@ -1291,7 +1348,11 @@
         doc.audio = new animation.AudioTrack(doc).fromJSON(d.audio);
       }
       if (d.onion) doc.onionCfg = animation.onion ? animation.onion.config(d.onion) : d.onion;
-      doc.dirty = false;
+      const repaired = doc.repairRigBindingOwnership();
+      doc.rigRepairCount = repaired || 0;
+      // Una reparación automática debe poder guardarse; una escena sana abre
+      // limpia como siempre.
+      doc.dirty = repaired > 0;
       return doc;
     }
     /** Migra una animación vieja (lista de archivos + su contenido) al modelo.

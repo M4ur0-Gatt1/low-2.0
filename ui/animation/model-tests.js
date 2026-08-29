@@ -447,6 +447,35 @@
         skeleton.scene.rig.bindings["binding:mano"].elementId === "mano_final" &&
         skeleton.scene.rig.attachments["attachment:mano"].elementId === "mano_final");
 
+      skeleton.ensureRigBone("mano_otra", { head: { x: 140, y: 30 }, tail: { x: 170, y: 30 } });
+      skeleton.bindRigElement("mano_otra", "mano_final");
+      ok("una pieza revinculada tiene un solo hueso dueño",
+        !skeleton.scene.rigBone("mano").elementId &&
+        skeleton.scene.rigBone("mano_otra").elementId === "mano_final" &&
+        !skeleton.scene.rig.bindings["binding:mano"] &&
+        animation.rigDiagnostics(skeleton.scene.rig).valid);
+      skeleton.unbindRigElement("mano_otra");
+      ok("soltar una pieza conserva el hueso y elimina sólo su vínculo",
+        !!skeleton.scene.rigBone("mano_otra") &&
+        !skeleton.scene.rigBone("mano_otra").elementId &&
+        !skeleton.scene.rig.bindings["binding:mano_otra"]);
+
+      const invalidOwners = animation.rigData({ bones: {
+        a: { elementId: "arte_compartido" }, b: { elementId: "arte_compartido" }
+      }});
+      ok("el diagnóstico bloquea dos huesos dueños de una misma pieza",
+        !animation.rigDiagnostics(invalidOwners).valid &&
+        animation.rigDiagnostics(invalidOwners).errors.some(e => e.code === "duplicate-art-binding"));
+
+      const legacyDuplicate = new animation.LowDoc();
+      legacyDuplicate.ensureRigNode("dueño", { elementId: "pieza_repetida" });
+      legacyDuplicate.ensureRigNode("duplicado", { elementId: "pieza_repetida" });
+      const repairedDuplicate = animation.LowDoc.fromJSON(legacyDuplicate.toJSON());
+      ok("abrir un proyecto viejo repara dueños duplicados sin borrar huesos",
+        repairedDuplicate.rigRepairCount > 0 && repairedDuplicate.dirty &&
+        repairedDuplicate.scene.rigBone("dueño") && repairedDuplicate.scene.rigBone("duplicado") &&
+        animation.rigDiagnostics(repairedDuplicate.scene.rig).valid);
+
       // Rig rígido mínimo: torso → brazo → antebrazo → mano. La geometría
       // vinculada se evalúa con la matriz mundial del hueso y hereda padres.
       const skin = new animation.LowDoc(), skinHistory = new LOW.core.HistoryManager();
