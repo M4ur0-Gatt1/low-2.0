@@ -8373,15 +8373,11 @@ function dzRigOverlayRender() {
     const hit = get("bh:" + node.id, "line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, "data-id": node.id }, "dz-rig-bone-hit");
     const esHueso = !!node.tail;
     hit.onpointerdown = e => {
-      // Modos de armado excluyentes: Alambre sólo crea; Editar es el único
-      // que puede cambiar la geometría de un hueso ya existente.
-      if (DZ.rigSubmode === "build" && DZ.rigTool === "create") return dzRigBoneCreateDrag(e);
-      if (DZ.rigSubmode === "build" && DZ.rigTool === "edit" && esHueso)
-        return dzRigBoneGeometryDrag(e, node, "body");
-      // solo el cuerpo de un HUESO de verdad rota: esa línea SÍ es el hueso. En
-      // una pieza, la línea va del pivote del padre al suyo —sale del torso, no
-      // del brazo—, y usarla para rotar giraba al revés.
-      if (esHueso && DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "rotate");
+      const action = LOW.rigging.input.pointerAction({ phase:DZ.rigSubmode, tool:DZ.rigTool,
+        target:"body", isBone:esHueso, parentId:node.parentId, pinned:node.pinned, role:node.role });
+      if (action === "create") return dzRigBoneCreateDrag(e);
+      if (action === "edit-body") return dzRigBoneGeometryDrag(e, node, "body");
+      if (action === "rotate") return dzRigBoneFKDrag(e, node, "rotate");
       e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
     };
   }
@@ -8389,23 +8385,14 @@ function dzRigOverlayRender() {
     const isControl = node.role === "control";
     const p = point(node.id); if (!p) continue;
     const jointHandler = e => {
-      if (DZ.rigSubmode === "build" && DZ.rigTool === "create") return dzRigBoneCreateDrag(e);
-      // El overlay está por encima del lienzo y captura el clic. Sin esta rama,
-      // la herramienta Pivote parecía no funcionar porque dzPivotClick nunca
-      // recibía el evento al tocar una articulación visible.
-      if (DZ.rigSubmode === "build" && DZ.rigTool === "pivot") return dzRigBuildPivotDrag(e, node);
-      // Alt = mover SOLO el pivote, también en un hueso. Sin esto, el pivote de
-      // un hueso no se podía correr por ningún lado: el gesto siempre movía el
-      // hueso entero.
-      if (DZ.rigSubmode === "build" && DZ.rigTool === "edit" && node.tail && e.altKey) return dzRigBuildPivotDrag(e, node);
-      if (DZ.rigSubmode === "build" && DZ.rigTool === "edit" && node.tail) return dzRigBoneGeometryDrag(e, node, "head");
-      if (DZ.rigSubmode === "build" && DZ.rigTool === "edit") return dzRigBuildPivotDrag(e, node);
-      if (DZ.rigSubmode === "fk" && posable) {
-        // Una articulación hija no se traslada: eso abriría la cadena. La raíz
-        // y los controles sí pueden mover el conjunto; los miembros se rotan
-        // desde el cuerpo o la punta del hueso.
-        if (!node.parentId || node.pinned || node.role === "control")
-          return dzRigBoneFKDrag(e, node, "translate");
+      const action = LOW.rigging.input.pointerAction({ phase:DZ.rigSubmode, tool:DZ.rigTool,
+        target:"joint", isBone:!!node.tail, parentId:node.parentId, pinned:node.pinned,
+        role:node.role, altKey:e.altKey });
+      if (action === "create") return dzRigBoneCreateDrag(e);
+      if (action === "pivot") return dzRigBuildPivotDrag(e, node);
+      if (action === "edit-head") return dzRigBoneGeometryDrag(e, node, "head");
+      if (action === "translate") return dzRigBoneFKDrag(e, node, "translate");
+      if (action === "locked-child") {
         e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
         return dzSetStatus("Articulación bloqueada a su padre · arrastrá el hueso o su punta para rotarlo");
       }
@@ -8439,9 +8426,12 @@ function dzRigOverlayRender() {
     const tp = tailPoint(node);
     if (tp) {
       const tipHandler = e => {
-        if (DZ.rigBoneTool) return dzRigBoneCreateDrag(e, { head: tp.user, parentId: node.id });
-        if (DZ.rigSubmode === "fk" && posable) return dzRigBoneFKDrag(e, node, "rotate");
-        if (DZ.rigSubmode === "build" && DZ.rigTool === "edit") return dzRigBoneGeometryDrag(e, node, "tail");
+        const action = LOW.rigging.input.pointerAction({ phase:DZ.rigSubmode, tool:DZ.rigTool,
+          target:"tip", isBone:true, parentId:node.parentId, pinned:node.pinned,
+          role:node.role, boneTool:DZ.rigBoneTool });
+        if (action === "create-from-tip") return dzRigBoneCreateDrag(e, { head: tp.user, parentId: node.id });
+        if (action === "rotate") return dzRigBoneFKDrag(e, node, "rotate");
+        if (action === "edit-tail") return dzRigBoneGeometryDrag(e, node, "tail");
         // cualquier otro modo/herramienta: la punta al menos selecciona el hueso
         e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
       };

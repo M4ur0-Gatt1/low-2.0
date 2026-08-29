@@ -916,6 +916,22 @@
       ok("Escape prioriza soltar herramienta de rig",modes.cancelAction({rigSelection:true,canvasSelection:true})==="rig-tool");
       state=modes.exitRig();
       ok("salir de rig restaura Dibujo y Seleccionar",state.workspace==="drawing"&&!state.rig.active&&state.rig.tool==="select",JSON.stringify(state));
+
+      const input=LOW.rigging.input.pointerAction;
+      ok("Alambre sobre un hueso sólo crea y nunca mueve",input({phase:"build",tool:"create",target:"body"})==="create");
+      ok("Editar es la única herramienta que cambia la geometría neutra",
+        input({phase:"build",tool:"edit",target:"joint",isBone:true})==="edit-head" &&
+        input({phase:"build",tool:"select",target:"joint",isBone:true})==="select");
+      ok("Alt sobre una articulación edita sólo el pivote",
+        input({phase:"build",tool:"edit",target:"joint",isBone:true,altKey:true})==="pivot");
+      ok("Animar bloquea la traslación de una articulación hija",
+        input({phase:"fk",tool:"pose",target:"joint",parentId:"padre"})==="locked-child");
+      ok("Animar permite trasladar raíz y controles explícitos",
+        input({phase:"fk",tool:"pose",target:"joint",parentId:null})==="translate" &&
+        input({phase:"fk",tool:"pose",target:"joint",parentId:"padre",role:"control"})==="translate");
+      ok("la punta rota en Animar y sólo edita longitud en Construir",
+        input({phase:"fk",tool:"pose",target:"tip"})==="rotate" &&
+        input({phase:"build",tool:"edit",target:"tip"})==="edit-tail");
     }
 
     // 30. El marco de selección usa la convención profesional por dirección.
