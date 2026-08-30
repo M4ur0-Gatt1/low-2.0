@@ -38,10 +38,19 @@ jobs:
       - name: Recorrido real — esqueleto solo puede Animar
         run: |
           python -m http.server 8791 --bind 127.0.0.1 >/tmp/low-http.log 2>&1 &
-          google-chrome --headless=new --disable-gpu --no-sandbox \
+          CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium)"
+          test -n "$CHROME"
+          "$CHROME" --headless=new --disable-gpu --no-sandbox \
             --remote-debugging-port=9223 --user-data-dir=/tmp/low-e2e about:blank \
             >/tmp/low-chrome.log 2>&1 &
-          sleep 3
+          for attempt in $(seq 1 20); do
+            curl --silent --fail http://127.0.0.1:9223/json >/dev/null && break
+            sleep 1
+          done
+          curl --silent --fail http://127.0.0.1:9223/json >/dev/null || {
+            cat /tmp/low-chrome.log
+            exit 1
+          }
           node tools/check_rig_skeleton_ui.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools
