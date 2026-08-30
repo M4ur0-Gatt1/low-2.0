@@ -8596,16 +8596,20 @@ function dzRigOverlayRender() {
 function dzRigReadinessStatus() {
   const artIds = dzRigDrawableElements().map(el => el.id).filter(Boolean);
   const report = LOW.animation.rigReadiness(DZ.doc?.scene?.rig || {}, artIds);
+  const access = LOW.animation.rigModeAccess(report);
   const box = $("#rigReadiness");
   const testButton = $("#rigModeTest"), animateButton = $("#rigModeAnim");
-  if (testButton) testButton.disabled = !report.readyToTest;
-  if (animateButton) animateButton.disabled = !report.readyToAnimate;
+  // Probar/Animar dependen de la jerarquía ósea, no de que ya exista arte.
+  // Errores de slots o vínculos se informan, pero no secuestran el esqueleto.
+  if (testButton) testButton.disabled = !access.test;
+  if (animateButton) animateButton.disabled = !access.animate;
   if (!box) return report;
   const presentation = LOW.animation.rigWorkflowStatus(report, artIds.length);
   box.dataset.state = presentation.state;
   box.querySelector("b").textContent = presentation.title;
   box.querySelector("span").textContent = presentation.detail;
-  return report;
+  return { ...report, readyToTest: access.test, readyToAnimate: access.animate,
+    structuralErrors: access.structuralErrors };
 }
 
 function dzRigPanelSync() {
@@ -13142,7 +13146,6 @@ function dzLayerRow(el, depth) {
     dzSelect(el);
     if (DZ.activeLayer) dzSetStatus("Capa activa: «" + (DZ.activeLayer.id || dzLayerLabel(DZ.activeLayer)) + "»");
   };
-  gestureToken = dzRigTrackGesture(cancel);
   row.oncontextmenu = e => {
     const oculto = el.getAttribute("display") === "none", bloqueado = el.hasAttribute("data-locked");
     if (!bloqueado) dzSelect(el);

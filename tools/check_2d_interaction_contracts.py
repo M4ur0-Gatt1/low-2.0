@@ -35,6 +35,7 @@ rig_geometry = function_body("dzRigBoneGeometryDrag", "dzRigBoneFKDrag")
 rig_pivot = function_body("dzRigBuildPivotDrag", "dzRigCommitPreview")
 rig_ik = function_body("dzRigIKDrag", "dzRigOverlayRender")
 rig_deformer = function_body("dzRigDeformadorDrag", "dzDeformadorCurvaDe")
+rig_readiness = function_body("dzRigReadinessStatus", "dzRigPanelSync")
 
 require("closeDesign" not in escape and "designView" not in escape,
         "Escape volvió a cerrar o abandonar el módulo 2D")
@@ -66,5 +67,7 @@ require("dzRigTrackGesture" in rig_deformer and 'addEventListener("pointercancel
         "el deformador quedó fuera de la cancelación transaccional del rig")
 require("setRigDeformerKey" not in rig_deformer[rig_deformer.index("const mover"):rig_deformer.index("const cleanup")],
         "el deformador volvió a grabar una clave por cada movimiento del lápiz")
+require("rigModeAccess" in rig_readiness and "access.animate" in rig_readiness,
+        "Animar volvió a depender del arte o sus metadatos en vez del esqueleto")
 
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig y tableta")

@@ -422,6 +422,12 @@ huesos escala proporcionalmente con la hoja; las áreas invisibles de agarre se
 mantienen cómodas para tableta. El zoom nunca vuelve a cambiar la silueta del
 esqueleto.
 
+Una regresión real reveló que las pruebas puras no alcanzan para certificar el
+recorrido del artista. Desde v3.29.84 existe una prueba E2E en Chromium que abre
+un lienzo, coloca el humano completo de biblioteca sin personaje y exige que el
+botón Animar entre efectivamente en FK con Posar activo. La puerta lógica, el
+botón y el cambio de modo se verifican juntos.
+
 No entran nuevas familias de funciones durante esta etapa.
 
 ### SIGUIENTE — producción 2D

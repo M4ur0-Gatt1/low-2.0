@@ -979,6 +979,17 @@
       const skeletonStatus=animation.rigWorkflowStatus(readiness,0);
       ok("la interfaz identifica la animación de esqueleto sin fingir un personaje vinculado",
         skeletonStatus.state==="skeleton"&&skeletonStatus.title==="Esqueleto animable",JSON.stringify(skeletonStatus));
+      const templateDoc=new animation.LowDoc();
+      animation.rigLibrary.apply(templateDoc,"human_standard",{x:0,y:0,width:1000,height:1000},"regression");
+      const templateReport=animation.rigReadiness(templateDoc.scene.rig,[]);
+      const templateAccess=animation.rigModeAccess(templateReport);
+      ok("el humano de biblioteca habilita Animar sin personaje",
+        templateAccess.animate&&templateAccess.test,JSON.stringify({templateReport,templateAccess}));
+      const metadataOnly={...templateReport,errors:[{code:"missing-binding-attachment"}]};
+      ok("un vínculo incompleto no vuelve a bloquear el esqueleto solo",
+        animation.rigModeAccess(metadataOnly).animate,JSON.stringify(animation.rigModeAccess(metadataOnly)));
+      const brokenHierarchy={...templateReport,errors:[{code:"bone-cycle"}]};
+      ok("un ciclo real sí bloquea Animar",!animation.rigModeAccess(brokenHierarchy).animate);
       doc.bindRigElement("root","torso_art");
       readiness=animation.rigReadiness(doc.scene.rig,["torso_art","brazo_suelto"]);
       ok("un vínculo real habilita Animar y denuncia arte suelto",

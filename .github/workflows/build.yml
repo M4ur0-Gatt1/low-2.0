@@ -35,6 +35,14 @@ jobs:
         run: node tools/run_2d_model_tests.js
       - name: Contratos críticos de interacción 2D
         run: python tools/check_2d_interaction_contracts.py
+      - name: Recorrido real — esqueleto solo puede Animar
+        run: |
+          python -m http.server 8791 --bind 127.0.0.1 >/tmp/low-http.log 2>&1 &
+          google-chrome --headless=new --disable-gpu --no-sandbox \
+            --remote-debugging-port=9223 --user-data-dir=/tmp/low-e2e about:blank \
+            >/tmp/low-chrome.log 2>&1 &
+          sleep 3
+          node tools/check_rig_skeleton_ui.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools
 
