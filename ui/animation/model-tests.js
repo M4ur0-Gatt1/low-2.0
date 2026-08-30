@@ -939,6 +939,18 @@
       ok("un pointerup viejo no puede confirmar el gesto nuevo",gestures.finish(oldToken)===false&&gestures.isCurrent(newToken));
       gestures.transition();
       ok("cambiar de modo cancela el gesto activo",cancellations.at(-1)==="transition"&&!gestures.isCurrent(newToken));
+      const vm1=LOW.rigging.input.visualMetrics(1), vm25=LOW.rigging.input.visualMetrics(.25);
+      ok("la silueta del hueso conserva proporción al cambiar zoom",
+        vm25.headWidth===vm1.headWidth*.25&&vm25.tipWidth===vm1.tipWidth*.25,JSON.stringify({vm1,vm25}));
+
+      const shared=LOW.input.createPointerController(); let ownerCancelled="";
+      const drawToken=shared.begin({owner:"drawing",pointerId:7,cancel:r=>ownerCancelled=r});
+      const rigToken=shared.begin({owner:"rig",pointerId:9});
+      ok("rigging cancela limpiamente el trazo que poseía el puntero",
+        ownerCancelled==="superseded"&&!shared.current(drawToken)&&shared.owns("rig",9));
+      ok("un pointerup de otro dispositivo no confirma el gesto activo",
+        !shared.finish(rigToken,7)&&shared.current(rigToken));
+      ok("el dueño correcto puede cerrar la transacción",shared.finish(rigToken,9)&&!shared.active);
     }
 
     // 30. El marco de selección usa la convención profesional por dirección.

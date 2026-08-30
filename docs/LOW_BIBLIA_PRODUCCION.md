@@ -415,6 +415,12 @@ el gesto activo e invalida eventos de puntero tardíos. IK y deformadores ya
 usan la misma barrera; el deformador previsualiza en memoria y registra una
 única clave al terminar. El próximo trabajo de AHORA es consolidar el
 controlador de puntero compartido con las herramientas generales de dibujo.
+La primera integración ya está cerrada: trazo libre y rigging poseen una única
+sesión transaccional, se cancelan entre sí al cambiar de contexto y rechazan
+eventos tardíos de otro lápiz o puntero. Además, la representación Moho de los
+huesos escala proporcionalmente con la hoja; las áreas invisibles de agarre se
+mantienen cómodas para tableta. El zoom nunca vuelve a cambiar la silueta del
+esqueleto.
 
 No entran nuevas familias de funciones durante esta etapa.
 

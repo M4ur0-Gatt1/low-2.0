@@ -6,6 +6,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const files = [
   "ui/core/history.js",
+  "ui/core/pointer-controller.js",
   "ui/application/mode-machine.js",
   "ui/animation/palette.js",
   "ui/animation/scene-model.js",

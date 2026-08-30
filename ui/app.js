@@ -2482,10 +2482,12 @@ window.addEventListener("message", async (event) => {
 /* ══ Entorno de diseño: SVG vivo + inspector por elemento ══ */
 const DZ = { path: null, sel: null, zoom: 1, rigTool: "select", rigAutoKey: true };
 const DZModeMachine = window.LOW?.application?.createModeMachine?.() || null;
-const DZRigGestures = window.LOW?.rigging?.input?.createGestureController?.() || null;
+const DZRigGestures = window.LOW?.input?.pointerController
+  || window.LOW?.rigging?.input?.createGestureController?.() || null;
 function dzRigTrackGesture(cancel) {
   if (!DZRigGestures) { DZ.rigGestureCancel = cancel; return null; }
-  const token = DZRigGestures.begin(cancel);
+  const token = DZRigGestures === window.LOW?.input?.pointerController
+    ? DZRigGestures.begin({ owner: "rig", cancel }) : DZRigGestures.begin(cancel);
   DZ.rigGestureCancel = () => DZRigGestures.cancel("external");
   return token;
 }
@@ -4502,6 +4504,7 @@ function _dzDiag(msg, color) {
 }
 
 let DRAW_TRACK = null;   // UN solo track: { pts, mode, el, pid, devType, _pbuf }
+const DZPointerController = window.LOW?.input?.pointerController || null;
 
 function _otDevType(e) {
   if (e.pointerType === "pen") return "pen";
@@ -4591,9 +4594,21 @@ function _drawBeginTrack(e, svg) {
   return track;
 }
 
+function _drawCancel(reason = "cancel") {
+  const t = DRAW_TRACK; DRAW_TRACK = null;
+  if (!t) return;
+  t.el?.remove();
+  _hideGuideLine();
+  _dzDiag("× trazo cancelado: " + reason, "#F59E0B");
+}
+
 function _drawFinish() {
   if (!DRAW_TRACK) return;
   const t = DRAW_TRACK; DRAW_TRACK = null;
+  if (DZPointerController && t.gestureToken != null
+      && !DZPointerController.finish(t.gestureToken, t.pid)) {
+    t.el?.remove(); _hideGuideLine(); return;
+  }
   if (t.pts.length < 2) { if (t.el) t.el.remove(); return; }
   const pts = dzRefineStroke(t.pts);
   let finalEl = t.el;
@@ -4659,6 +4674,11 @@ function dzDrawDown(e) {
 
   dzSnapshot();
   DRAW_TRACK = _drawBeginTrack(e, svg);
+  if (DZPointerController) {
+    DRAW_TRACK.gestureToken = DZPointerController.begin({
+      owner: "drawing", pointerId: e.pointerId, cancel: _drawCancel
+    });
+  }
 }
 
 function dzDrawMove(e) {
@@ -8362,6 +8382,10 @@ function dzRigOverlayRender() {
   };
   const cv = $("#dzCanvas").getBoundingClientRect();
   overlay.setAttribute("viewBox", `0 0 ${Math.max(1, cv.width)} ${Math.max(1, cv.height)}`);
+  // Escala real de una unidad del documento en pantalla. La geometría visible
+  // del rig la sigue; los hits invisibles quedan en píxeles y siguen cómodos.
+  const unit0 = dzFromUser(0, 0), unit1 = dzFromUser(1, 0);
+  const rigViewScale = unit0 && unit1 ? Math.hypot(unit1.x - unit0.x, unit1.y - unit0.y) : (DZ.zoom || 1);
   const live = DZ.rigLivePose || DZ.rigIKPreview?.poses || {};
   const point = id => {
     const node = doc.scene.rigNode(id); if (!node?.pivot) return null;
@@ -8399,7 +8423,8 @@ function dzRigOverlayRender() {
     if (!b && node.parentId) { a = point(node.parentId); b = point(node.id); }
     if (!a || !b) continue;
     const dx=b.x-a.x,dy=b.y-a.y,len=Math.max(1,Math.hypot(dx,dy)),nx=-dy/len,ny=dx/len;
-    const headW=isControl?4:8,tipW=isControl?2:1.8;
+    const metrics = LOW.rigging.input.visualMetrics(rigViewScale, isControl);
+    const headW=metrics.headWidth,tipW=metrics.tipWidth;
     const bonePath=`M${a.x+nx*headW} ${a.y+ny*headW} L${b.x+nx*tipW} ${b.y+ny*tipW} `+
       `L${b.x-nx*tipW} ${b.y-ny*tipW} L${a.x-nx*headW} ${a.y-ny*headW} Z`;
     get("bs:" + node.id, "path", { d:bonePath,"data-id":node.id },
@@ -8440,17 +8465,19 @@ function dzRigOverlayRender() {
       || selNode.parentId === node.id
       || (node.parentId && node.parentId === selNode.parentId);
     const tenue = muchos && !cerca && !node.pinned;
+    const metrics = LOW.rigging.input.visualMetrics(rigViewScale, isControl);
     const joint = get("jt:" + node.id, "circle",
-      { cx: p.x, cy: p.y, r: node.pinned ? 7 : (tenue ? 3 : 5), "data-id": node.id },
+      { cx: p.x, cy: p.y, r: node.pinned ? metrics.rootRadius : (tenue ? Math.max(1, metrics.jointRadius * .6) : metrics.jointRadius), "data-id": node.id },
       "dz-rig-joint" + (node.pinned ? " root" : "") + (selectedId === node.id ? " selected" : "")
         + (isControl ? " controller" : "") + (tenue && !isControl ? " dim" : ""));
     joint.onpointerdown = jointHandler;
     if (isControl) {
       const shape=node.control?.shape||"ring";
       let control;
-      if(shape==="pin") control=get("ct:"+node.id,"path",{d:`M${p.x} ${p.y-11}L${p.x+11} ${p.y}L${p.x} ${p.y+11}L${p.x-11} ${p.y}Z`,"data-id":node.id},"dz-rig-controller pin"+(selectedId===node.id?" selected":""));
-      else if(shape==="slider") control=get("ct:"+node.id,"rect",{x:p.x-13,y:p.y-7,width:26,height:14,rx:7,"data-id":node.id},"dz-rig-controller slider"+(selectedId===node.id?" selected":""));
-      else control=get("ct:"+node.id,"circle",{cx:p.x,cy:p.y,r:11,"data-id":node.id},"dz-rig-controller ring"+(selectedId===node.id?" selected":""));
+      const cr=metrics.controlRadius;
+      if(shape==="pin") control=get("ct:"+node.id,"path",{d:`M${p.x} ${p.y-cr}L${p.x+cr} ${p.y}L${p.x} ${p.y+cr}L${p.x-cr} ${p.y}Z`,"data-id":node.id},"dz-rig-controller pin"+(selectedId===node.id?" selected":""));
+      else if(shape==="slider") control=get("ct:"+node.id,"rect",{x:p.x-cr*1.18,y:p.y-cr*.64,width:cr*2.36,height:cr*1.28,rx:cr*.64,"data-id":node.id},"dz-rig-controller slider"+(selectedId===node.id?" selected":""));
+      else control=get("ct:"+node.id,"circle",{cx:p.x,cy:p.y,r:cr,"data-id":node.id},"dz-rig-controller ring"+(selectedId===node.id?" selected":""));
       control.onpointerdown=jointHandler;
     }
     // área de agarre invisible más grande: los huesos de 5px eran difíciles de
@@ -8469,7 +8496,7 @@ function dzRigOverlayRender() {
         // cualquier otro modo/herramienta: la punta al menos selecciona el hueso
         e.preventDefault(); e.stopPropagation(); dzRigSelectNode(node.id);
       };
-      const tip = get("tp:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 5, "data-id": node.id }, "dz-rig-bone-tip"+(isControl?" controller":""));
+      const tip = get("tp:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: metrics.tipRadius, "data-id": node.id }, "dz-rig-bone-tip"+(isControl?" controller":""));
       tip.onpointerdown = tipHandler;
       const tipHit = get("th:" + node.id, "circle", { cx: tp.x, cy: tp.y, r: 11, "data-id": node.id }, "dz-rig-hit");
       tipHit.onpointerdown = tipHandler;

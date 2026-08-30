@@ -30,30 +30,26 @@
     return "select";
   }
 
-  class GestureController {
-    constructor() { this.epoch = 0; this.active = null; }
-    begin(cancel) {
-      this.cancel("superseded");
-      const token = ++this.epoch;
-      this.active = { token, cancel: typeof cancel === "function" ? cancel : null };
-      return token;
-    }
-    isCurrent(token) { return !!this.active && this.active.token === token; }
-    finish(token) {
-      if (!this.isCurrent(token)) return false;
-      this.active = null;
-      return true;
-    }
-    cancel(reason = "cancel") {
-      const current = this.active;
-      if (!current) return false;
-      this.active = null;
-      this.epoch++;
-      current.cancel?.(reason);
-      return true;
-    }
-    transition() { return this.cancel("transition"); }
+  // La silueta Moho del hueso pertenece al dibujo y debe escalar con él. El
+  // área de agarre se calcula aparte en píxeles para conservar accesibilidad.
+  function visualMetrics(viewScale = 1, control = false) {
+    const s = Math.max(.08, Math.min(8, Number(viewScale) || 1));
+    return {
+      headWidth: (control ? 4 : 8) * s,
+      tipWidth: (control ? 2 : 1.8) * s,
+      jointRadius: Math.max(1.25, 5 * s),
+      tipRadius: Math.max(1.1, 5 * s),
+      rootRadius: Math.max(1.8, 7 * s),
+      controlRadius: Math.max(2.5, 11 * s)
+    };
   }
 
-  rigging.input = { pointerAction, GestureController, createGestureController: () => new GestureController() };
+  class GestureController extends (LOW.input?.PointerController || class {}) {
+    begin(cancel) { return super.begin({ owner: "rig", cancel }); }
+    isCurrent(token) { return super.current(token); }
+  }
+
+  rigging.input = { pointerAction, visualMetrics, GestureController,
+    createGestureController: () => new GestureController(),
+    sharedController: LOW.input?.pointerController || null };
 })(typeof window !== "undefined" ? window : globalThis);
