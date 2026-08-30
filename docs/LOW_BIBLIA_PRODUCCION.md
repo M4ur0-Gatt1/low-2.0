@@ -411,8 +411,10 @@ hasta completar la extracción del controlador que ejecuta esos gestos.
 
 La barrera transaccional de gestos ya cubre creación de huesos, edición de
 geometría, pose FK, pivotes y jerarquía: cambiar de herramienta o modo cancela
-el gesto activo e invalida eventos de puntero tardíos. Falta migrar a este
-controlador los gestos IK y deformadores antes de cerrar AHORA.
+el gesto activo e invalida eventos de puntero tardíos. IK y deformadores ya
+usan la misma barrera; el deformador previsualiza en memoria y registra una
+única clave al terminar. El próximo trabajo de AHORA es consolidar el
+controlador de puntero compartido con las herramientas generales de dibujo.
 
 No entran nuevas familias de funciones durante esta etapa.
 

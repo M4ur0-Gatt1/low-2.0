@@ -33,6 +33,8 @@ wheel = APP[APP.index('$("#dzCanvas").addEventListener("wheel"'):APP.index(
 rig_mode = function_body("dzRigSetMode", "dzRigEnterTest")
 rig_geometry = function_body("dzRigBoneGeometryDrag", "dzRigBoneFKDrag")
 rig_pivot = function_body("dzRigBuildPivotDrag", "dzRigCommitPreview")
+rig_ik = function_body("dzRigIKDrag", "dzRigOverlayRender")
+rig_deformer = function_body("dzRigDeformadorDrag", "dzDeformadorCurvaDe")
 
 require("closeDesign" not in escape and "designView" not in escape,
         "Escape volvió a cerrar o abandonar el módulo 2D")
@@ -58,5 +60,11 @@ require('DZ.rigSubmode !== "build" || DZ.rigTool !== "edit"' in rig_geometry,
         "un gesto iniciado en Construir puede volver a editar geometría dentro de Animar")
 require('DZ.rigSubmode !== "build"' in rig_pivot,
         "un pointerup tardío puede volver a mover pivotes dentro de Animar")
+require("dzRigTrackGesture" in rig_ik and 'addEventListener("pointercancel"' in rig_ik,
+        "IK quedó fuera de la cancelación transaccional del rig")
+require("dzRigTrackGesture" in rig_deformer and 'addEventListener("pointercancel"' in rig_deformer,
+        "el deformador quedó fuera de la cancelación transaccional del rig")
+require("setRigDeformerKey" not in rig_deformer[rig_deformer.index("const mover"):rig_deformer.index("const cleanup")],
+        "el deformador volvió a grabar una clave por cada movimiento del lápiz")
 
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig y tableta")

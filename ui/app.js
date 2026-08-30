@@ -7339,8 +7339,12 @@ function dzRigApplyLive(num, overrides = {}) {
         hallados++;
         // primero se dobla la geometria, despues se la ubica: la matriz del
         // hueso se aplica ENCIMA del dibujo ya deformado.
-        const doblez = DZ.doc.scene.rigDeformadorAt
-          ? DZ.doc.scene.rigDeformadorAt(node.id, num) : null;
+        const preview = DZ.rigDeformerPreview?.boneId === node.id && DZ.rigDeformerPreview?.frame === num
+          ? DZ.rigDeformerPreview.points : null;
+        const deformer = preview && DZ.doc.scene.rigDeformer?.(node.id);
+        const doblez = preview && deformer
+          ? LOW.animation.rigDeformador(deformer.rest, preview)
+          : (DZ.doc.scene.rigDeformadorAt ? DZ.doc.scene.rigDeformadorAt(node.id, num) : null);
         if (doblez) dzDeformarElemento(el, doblez, svg);
         dzRigApplyMatrix(el, DZ.doc.scene.rigWorldMatrix(node.id, num, overrides));
       }
@@ -8288,16 +8292,22 @@ function dzRigIKPorQueNoLlega(constraintId, target) {
 function dzRigIKDrag(e, constraintId) {
   if (!DZ.doc) return;
   e.preventDefault(); e.stopPropagation(); const pointerId = e.pointerId;
+  let gestureToken = null;
   const preview = ev => {
     if (ev.pointerId !== pointerId) return;
     const target = dzToUser(ev.clientX, ev.clientY), solved = DZ.doc.scene.rigSolveIK(constraintId, dzRigCur(), target);
     if (!solved) return;
     DZ.rigIKPreview = { constraintId, target: solved.target, poses: solved.poses }; dzRigApplyLive(dzRigCur(), solved.poses);
   };
-  const cancel = () => { DZ.rigIKPreview = null; dzRigApplyLive(dzRigCur()); };
+  const cleanup = () => {
+    document.removeEventListener("pointermove", preview);
+    document.removeEventListener("pointerup", finish);
+    document.removeEventListener("pointercancel", cancel);
+  };
+  const cancel = () => { cleanup(); dzRigFinishGesture(gestureToken); DZ.rigIKPreview = null; dzRigApplyLive(dzRigCur()); };
   const finish = ev => {
-    if (ev.pointerId !== pointerId) return;
-    document.removeEventListener("pointermove", preview); document.removeEventListener("pointerup", finish); document.removeEventListener("pointercancel", cancel);
+    if (ev.pointerId !== pointerId) return; cleanup();
+    if (!dzRigFinishGesture(gestureToken)) return;
     const value = DZ.rigIKPreview;
     if (value && DZ.rigAutoKey === false) {
       dzSetStatus(`Objetivo IK de prueba en F${dzRigCur()} · Enter clava, Esc descarta`);
@@ -8310,6 +8320,7 @@ function dzRigIKDrag(e, constraintId) {
         `Pose IK clavada en F${dzRigCur()}`);
     }
   };
+  gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", preview); document.addEventListener("pointerup", finish); document.addEventListener("pointercancel", cancel);
 }
 function dzRigOverlayRender() {
@@ -8498,7 +8509,9 @@ function dzRigOverlayRender() {
     // CURVA DEL DEFORMADOR: los puntos con los que se dobla la pieza. Viven en
     // el espacio del dibujo, asi que hay que pasarlos por la matriz del hueso
     // para dibujarlos donde el ojo los espera.
-    const curva = doc.scene.rigDeformerAt ? doc.scene.rigDeformerAt(node.id, num) : null;
+    const curva = DZ.rigDeformerPreview?.boneId === node.id && DZ.rigDeformerPreview?.frame === num
+      ? DZ.rigDeformerPreview.points
+      : (doc.scene.rigDeformerAt ? doc.scene.rigDeformerAt(node.id, num) : null);
     if (curva && curva.length > 1) {
       const enPantalla = curva.map(q => {
         const w = doc.scene.rigWorldPoint(node.id, num, q, live), s = dzFromUser(w.x, w.y);
@@ -8672,26 +8685,40 @@ function dzRigDeformadorDrag(e, node, indice) {
   const sc = DZ.doc.scene;
   const partida = sc.rigDeformerAt(node.id, frame);
   if (!partida) return;
-  let ultimo = null;
+  let ultimo = null, gestureToken = null;
   const mover = ev => {
     if (ev.pointerId !== pointerId) return;
     const enUsuario = dzToUser(ev.clientX, ev.clientY);
     const local = sc.rigLocalPoint(node.id, frame, enUsuario);
     ultimo = partida.map((q, i) => i === indice ? { x: local.x, y: local.y } : q);
-    DZ.doc.setRigDeformerKey(node.id, frame, ultimo);
+    DZ.rigDeformerPreview = { boneId: node.id, frame, points: ultimo };
     dzRigApplyLive(frame); dzRigOverlayRender();
+  };
+  const cleanup = () => {
+    document.removeEventListener("pointermove", mover);
+    document.removeEventListener("pointerup", soltar);
+    document.removeEventListener("pointercancel", cancelar);
   };
   const soltar = ev => {
     if (ev.pointerId !== pointerId) return;
-    document.removeEventListener("pointermove", mover);
-    document.removeEventListener("pointerup", soltar);
+    cleanup();
+    if (!dzRigFinishGesture(gestureToken)) return;
+    DZ.rigDeformerPreview = null;
     if (!ultimo) return;
+    DZ.doc.setRigDeformerKey(node.id, frame, ultimo);
+    dzRigApplyLive(frame); dzRigOverlayRender();
     dzRigPanelSync(); dzMarkDirty();
     dzSetStatus("\u00ab" + node.id + "\u00bb doblada en F" + frame +
       " \u00b7 punto " + (indice + 1) + " de " + partida.length);
   };
+  const cancelar = () => {
+    cleanup(); dzRigFinishGesture(gestureToken); DZ.rigDeformerPreview = null;
+    dzRigApplyLive(frame); dzRigOverlayRender();
+  };
+  gestureToken = dzRigTrackGesture(cancelar);
   document.addEventListener("pointermove", mover);
   document.addEventListener("pointerup", soltar);
+  document.addEventListener("pointercancel", cancelar);
 }
 
 /** La curva de reposo que le corresponde a una pieza: su eje largo, con tres
@@ -13088,6 +13115,7 @@ function dzLayerRow(el, depth) {
     dzSelect(el);
     if (DZ.activeLayer) dzSetStatus("Capa activa: «" + (DZ.activeLayer.id || dzLayerLabel(DZ.activeLayer)) + "»");
   };
+  gestureToken = dzRigTrackGesture(cancel);
   row.oncontextmenu = e => {
     const oculto = el.getAttribute("display") === "none", bloqueado = el.hasAttribute("data-locked");
     if (!bloqueado) dzSelect(el);
