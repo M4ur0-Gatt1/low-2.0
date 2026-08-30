@@ -77,7 +77,7 @@ async function main() {
     document.dispatchEvent(new PointerEvent("pointermove",{clientX:afterRotate.right+60,clientY:afterRotate.bottom+60,pointerId:73,bubbles:true}));
     document.dispatchEvent(new PointerEvent("pointerup",{clientX:afterRotate.right+60,clientY:afterRotate.bottom+60,pointerId:73,bubbles:true}));
     const afterScale=rect.getBoundingClientRect();
-    const transform={rotated:/^matrix\(/.test(transformAfterRotate||""),
+    const transform={rotated:(transformAfterRotate||"").startsWith("matrix("),
       grew:afterScale.width>afterRotate.width&&afterScale.height>afterRotate.height,
       geometryIntact:rect.getAttribute("width")===original&&rect.getAttribute("height")==="80",
       finite:[afterScale.left,afterScale.top,afterScale.width,afterScale.height].every(Number.isFinite)};
