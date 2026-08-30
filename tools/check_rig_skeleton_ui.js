@@ -4,25 +4,40 @@ const endpoint = process.argv[2] || "http://127.0.0.1:9223";
 const pageUrl = process.argv[3] || "http://127.0.0.1:8791/ui/index.html?mock=1";
 
 async function main() {
+  const stage = name => console.error("E2E etapa: " + name);
+  stage("conectar");
   const targets = await (await fetch(endpoint + "/json")).json();
   const target = targets.find(t => t.type === "page") || targets[0];
   if (!target?.webSocketDebuggerUrl) throw Error("Chromium no expuso una página CDP");
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; });
+  stage("CDP conectado");
   let id = 0; const pending = new Map();
   ws.onmessage = event => {
     const msg = JSON.parse(event.data);
+    if (msg.method === "Page.javascriptDialogOpening") {
+      ws.send(JSON.stringify({ id:++id, method:"Page.handleJavaScriptDialog",
+        params:{ accept:false } }));
+      return;
+    }
     if (!msg.id || !pending.has(msg.id)) return;
     const { ok, fail } = pending.get(msg.id); pending.delete(msg.id);
     msg.error ? fail(Error(JSON.stringify(msg.error))) : ok(msg.result);
   };
   const send = (method, params = {}) => new Promise((ok, fail) => {
-    const callId = ++id; pending.set(callId, { ok, fail });
+    const callId = ++id;
+    const timer = setTimeout(() => {
+      pending.delete(callId); fail(Error("CDP sin respuesta en " + method));
+    }, 15000);
+    pending.set(callId, { ok:value => { clearTimeout(timer); ok(value); },
+      fail:error => { clearTimeout(timer); fail(error); } });
     ws.send(JSON.stringify({ id: callId, method, params }));
   });
   await send("Page.enable"); await send("Runtime.enable");
+  stage("navegar");
   await send("Page.navigate", { url: pageUrl });
   await new Promise(ok => setTimeout(ok, 1800));
+  stage("ejecutar flujo");
   const expression = `(async()=>{
     await openDesign("C:\\\\mock\\\\rig-test.svg");
     await dzDocInit();
@@ -48,6 +63,24 @@ async function main() {
     const cancelled=dzVectorGestureCancel("e2e");
     const vector={changed,cancelled,restored:rect.getAttribute("width")===original,
       idle:!window.LOW.input.pointerController.active};
+    // Flujo real del cuadro delimitador: rotar y luego escalar. La geometría
+    // SVG debe permanecer intacta y ambos gestos deben seguir al puntero.
+    dzSelect(rect);
+    const rb0=rect.getBoundingClientRect(), rc={x:rb0.left+rb0.width/2,y:rb0.top+rb0.height/2};
+    dzRotateDown({clientX:rc.x,clientY:rb0.top-30,pointerId:72,target:rect,
+      preventDefault(){},stopPropagation(){}});
+    document.dispatchEvent(new PointerEvent("pointermove",{clientX:rb0.right+30,clientY:rc.y,pointerId:72,bubbles:true}));
+    document.dispatchEvent(new PointerEvent("pointerup",{clientX:rb0.right+30,clientY:rc.y,pointerId:72,bubbles:true}));
+    const afterRotate=rect.getBoundingClientRect(), transformAfterRotate=rect.getAttribute("transform");
+    dzHandleDown({clientX:afterRotate.right,clientY:afterRotate.bottom,pointerId:73,target:rect,
+      preventDefault(){},stopPropagation(){}});
+    document.dispatchEvent(new PointerEvent("pointermove",{clientX:afterRotate.right+60,clientY:afterRotate.bottom+60,pointerId:73,bubbles:true}));
+    document.dispatchEvent(new PointerEvent("pointerup",{clientX:afterRotate.right+60,clientY:afterRotate.bottom+60,pointerId:73,bubbles:true}));
+    const afterScale=rect.getBoundingClientRect();
+    const transform={rotated:/^matrix\(/.test(transformAfterRotate||""),
+      grew:afterScale.width>afterRotate.width&&afterScale.height>afterRotate.height,
+      geometryIntact:rect.getAttribute("width")===original&&rect.getAttribute("height")==="80",
+      finite:[afterScale.left,afterScale.top,afterScale.width,afterScale.height].every(Number.isFinite)};
     DZ.dirty=false;
     await dzRigEjemplo();
     const exampleIds=Object.keys(DZ_EJEMPLO_RIG);
@@ -68,9 +101,10 @@ async function main() {
     const boneDeleted=!DZ.doc.scene.rigNode("mano_der");
     const deletion={objectDeleted,boneDeleted,objectBefore,eventSeen:window.__deleteSeen};
     const canvas={width:DZ.doc.scene.width,height:DZ.doc.scene.height};
-    return {rig,vector,example,deletion,canvas};
+    return {rig,vector,transform,example,deletion,canvas};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+  stage("evaluar resultado");
   ws.close();
   if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description
     || result.exceptionDetails.text || "Excepción en la interfaz");
@@ -79,6 +113,8 @@ async function main() {
     throw Error("REGRESIÓN: Animar no abrió con esqueleto solo: " + JSON.stringify(value));
   if (!vector?.changed || !vector.cancelled || !vector.restored || !vector.idle)
     throw Error("REGRESIÓN: gesto vectorial no se pudo cancelar limpiamente: " + JSON.stringify(value));
+  if (!value.transform?.rotated || !value.transform.grew || !value.transform.geometryIntact || !value.transform.finite)
+    throw Error("REGRESIÓN: giro/escala del cuadro delimitador: " + JSON.stringify(value));
   if (value.example?.pieces < 18 || !value.example.allVisible || !value.example.allBound || !value.example.shoulders)
     throw Error("REGRESIÓN: personaje completo de Ayuda incompleto o sin vincular: " + JSON.stringify(value));
   if (!value.deletion?.objectDeleted || !value.deletion?.boneDeleted)

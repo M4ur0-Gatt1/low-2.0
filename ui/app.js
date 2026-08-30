@@ -3187,6 +3187,7 @@ function dzRotateDown(e) {
   const T = LOW.drawing.transforms;
   const consolidated = el.transform?.baseVal?.consolidate();
   const base = consolidated ? T.multiply(T.identity(), consolidated.matrix) : T.identity();
+  const originalTransform = el.getAttribute("transform");
   // El centro y el puntero se llevan al PADRE de la forma. Antes el ángulo se
   // medía en pantalla y se agregaba un rotate() en coordenadas locales: con
   // escala/rotación previa eso deformaba la pieza y hasta invertía el gesto.
@@ -3217,6 +3218,12 @@ function dzRotateDown(e) {
     document.removeEventListener("pointermove", move);
     document.removeEventListener("pointerup", up);
     document.removeEventListener("pointercancel", up);
+    if (ev.type === "pointercancel") {
+      if (originalTransform == null) el.removeAttribute("transform");
+      else el.setAttribute("transform", originalTransform);
+      dzPositionHandle();
+      return;
+    }
     dzMarkDirty(); dzBuildInspector(el);
   };
   document.addEventListener("pointermove", move);
@@ -3643,62 +3650,34 @@ function dzWritePos(el, base, dx, dy) {
   el.setAttribute("transform",T.attr(T.rigidTranslate(base.base,{x:dx,y:dy},base.rootToParent)));
 }
 
-/* tirador de resize — funciona con CUALQUIER elemento (paths y grupos incluidos):
-   arrastrar = agrandar/achicar PROPORCIONAL · con Shift = DEFORMAR (estirar).
-   Formas con atributos nativos se escalan por atributo; el resto (path, polygon,
-   g…) se escala con transform alrededor de su propio centro. */
+/* Tirador de escala único para cualquier elemento. El gesto se mide en pantalla
+   y se aplica como una matriz rígida en el padre; así una forma ya rotada sigue
+   al puntero y nunca cambia su geometría interna. Shift habilita escala libre. */
 function dzHandleDown(e) {
   if (!DZ.sel) return;
   e.preventDefault(); e.stopPropagation();
   dzCapturePointer(e);
   const pointerId = e.pointerId;
   dzSnapshot();
-  const el = DZ.sel, t = el.tagName.toLowerCase();
-  const start = dzToUser(e.clientX, e.clientY);
-  // bbox del elemento en unidades de usuario (para factores de escala y centro)
+  const el = DZ.sel;
+  const T = LOW.drawing.transforms;
+  const originalTransform = el.getAttribute("transform");
+  const consolidated = el.transform?.baseVal?.consolidate();
+  const base = consolidated ? T.multiply(T.identity(), consolidated.matrix) : T.identity();
+  const start = { x:e.clientX, y:e.clientY };
   const bb = el.getBoundingClientRect();
-  const p1 = dzToUser(bb.left, bb.top), p2 = dzToUser(bb.right, bb.bottom);
-  const w0 = Math.max(1, p2.x - p1.x), h0 = Math.max(1, p2.y - p1.y);
-  // ancla del escalado en coordenadas LOCALES del elemento (getBBox ignora su
-  // propio transform) — si usáramos las del lienzo, escalar algo ya movido lo correría
-  let lb = null; try { lb = el.getBBox(); } catch (err) { /* sin bbox: raro */ }
-  const cx0 = lb ? lb.x + lb.width / 2 : (p1.x + p2.x) / 2;
-  const cy0 = lb ? lb.y + lb.height / 2 : (p1.y + p2.y) / 2;
-  const b = {
-    w: +el.getAttribute("width") || 0, h: +el.getAttribute("height") || 0,
-    r: +el.getAttribute("r") || 0, rx: +el.getAttribute("rx") || 0, ry: +el.getAttribute("ry") || 0,
-    fs: parseFloat(dzGet(el, "font-size", "fontSize")) || 20,
-    x1: +el.getAttribute("x1") || 0, y1: +el.getAttribute("y1") || 0,
-    x2: +el.getAttribute("x2") || 0, y2: +el.getAttribute("y2") || 0,
-    tr: el.getAttribute("transform") || "",
-  };
+  const w0 = Math.max(1, bb.right - bb.left), h0 = Math.max(1, bb.bottom - bb.top);
+  const parentCTM = el.parentElement?.getScreenCTM?.();
+  if (!parentCTM) return;
+  const ap = el.ownerSVGElement.createSVGPoint(); ap.x = bb.left; ap.y = bb.top;
+  const anchorParent = ap.matrixTransform(parentCTM.inverse());
   const move = (ev) => {
     if (ev.pointerId !== pointerId) return;
-    const p = dzToUser(ev.clientX, ev.clientY);
-    const dx = p.x - start.x, dy = p.y - start.y;
+    const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
     const deform = ev.shiftKey;
-    // factores: proporcional usa el mismo k en ambos ejes
     let kx = Math.max(0.05, 1 + dx / w0), ky = Math.max(0.05, 1 + dy / h0);
-    if (!deform) { const k = Math.max(0.05, 1 + (dx + dy) / (w0 + h0)); kx = ky = k; }
-    if (t === "rect" || t === "image") {
-      el.setAttribute("width", Math.max(1, Math.round(b.w * kx)));
-      el.setAttribute("height", Math.max(1, Math.round(b.h * ky)));
-    } else if (t === "circle") {
-      el.setAttribute("r", Math.max(1, Math.round(b.r * kx)));
-    } else if (t === "ellipse") {
-      el.setAttribute("rx", Math.max(1, Math.round(b.rx * kx)));
-      el.setAttribute("ry", Math.max(1, Math.round(b.ry * ky)));
-    } else if (t === "text" || t === "tspan") {
-      el.setAttribute("font-size", Math.max(4, Math.round(b.fs * (deform ? ky : kx))));
-    } else if (t === "line") {
-      // escalar la punta alrededor del origen de la línea
-      el.setAttribute("x2", Math.round(b.x1 + (b.x2 - b.x1) * kx));
-      el.setAttribute("y2", Math.round(b.y1 + (b.y2 - b.y1) * ky));
-    } else {
-      // path/polygon/g/etc: escala real via transform, anclada al centro
-      const scale = ` translate(${(cx0 * (1 - kx)).toFixed(2)} ${(cy0 * (1 - ky)).toFixed(2)}) scale(${kx.toFixed(4)} ${ky.toFixed(4)})`;
-      el.setAttribute("transform", (b.tr ? b.tr + " " : "") + scale.trim());
-    }
+    if (!deform) { const k = Math.max(0.05, Math.min(kx, ky)); kx = ky = k; }
+    el.setAttribute("transform", T.attr(T.rigidScale(base, kx, ky, anchorParent)));
     dzPositionHandle();
   };
   const up = (ev) => {
@@ -3706,6 +3685,12 @@ function dzHandleDown(e) {
     document.removeEventListener("pointermove", move);
     document.removeEventListener("pointerup", up);
     document.removeEventListener("pointercancel", up);
+    if (ev.type === "pointercancel") {
+      if (originalTransform == null) el.removeAttribute("transform");
+      else el.setAttribute("transform", originalTransform);
+      dzPositionHandle();
+      return;
+    }
     dzBuildInspector(el); dzMarkDirty();
   };
   document.addEventListener("pointermove", move);

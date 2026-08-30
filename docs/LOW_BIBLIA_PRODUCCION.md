@@ -516,6 +516,11 @@ columna → hombro/clavícula → brazo → antebrazo → mano en ambos lados. L
 nunca nacen directamente del cuello o del centro del torso. El personaje de
 Ayuda reproduce esa jerarquía con dieciocho piezas visibles y vinculadas.
 
+Desde v3.29.86, la aceptación de transformaciones exige además rotar y luego
+escalar una misma pieza sin modificar sus atributos geométricos, invertir el
+sentido del arrastre ni deformar el contenido. Una cancelación del puntero debe
+restaurar exactamente la matriz anterior.
+
 El proceso debe quedar grabado como prueba repetible y medirse en errores,
 tiempo, interrupciones y necesidad de ayuda. Ésta es la prueba que decide cuándo
 LOW está a la altura de su promesa.
