@@ -36,6 +36,11 @@ rig_pivot = function_body("dzRigBuildPivotDrag", "dzRigCommitPreview")
 rig_ik = function_body("dzRigIKDrag", "dzRigOverlayRender")
 rig_deformer = function_body("dzRigDeformadorDrag", "dzDeformadorCurvaDe")
 rig_readiness = function_body("dzRigReadinessStatus", "dzRigPanelSync")
+vector_tx = APP[APP.index("const DZ_VECTOR_ATTRS"):APP.index("function dzVectorElementAt")]
+inflator = function_body("dzInflatorDown", "dzInflatorMove") + function_body("dzInflatorMove", "dzInflatorUp") + function_body("dzInflatorUp", "dzVectorPrefs")
+handler = function_body("dzHandlerDown", "dzHandlerMove") + function_body("dzHandlerUp", "dzHandlerGlobalMove")
+iron = function_body("dzIronDown", "dzIronApply") + function_body("dzIronApply", "dzIronUp") + function_body("dzIronUp", "dzIronSmooth")
+magnet = function_body("dzMagnetDown", "dzMagnetMove") + function_body("dzMagnetMove", "dzMagnetApply") + function_body("dzMagnetUp", "dzDiscToggle")
 
 require("closeDesign" not in escape and "designView" not in escape,
         "Escape volvió a cerrar o abandonar el módulo 2D")
@@ -69,5 +74,10 @@ require("setRigDeformerKey" not in rig_deformer[rig_deformer.index("const mover"
         "el deformador volvió a grabar una clave por cada movimiento del lápiz")
 require("rigModeAccess" in rig_readiness and "access.animate" in rig_readiness,
         "Animar volvió a depender del arte o sus metadatos en vez del esqueleto")
+require('owner: "vector:" + owner' in vector_tx and "dzVectorRestore" in vector_tx,
+        "las herramientas vectoriales dejaron de compartir una transacción reversible")
+for name, body in (("Inflador", inflator), ("Manejador", handler), ("Plancha", iron), ("Imán", magnet)):
+    require("dzVectorBegin" in body and "dzVectorFinish" in body and "pointercancel" in body,
+            f"{name} quedó fuera del controlador común o confirma un pointercancel")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig y tableta")
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores y tableta")

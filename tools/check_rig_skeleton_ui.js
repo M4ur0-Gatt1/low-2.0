@@ -32,16 +32,34 @@ async function main() {
     const button=document.querySelector("#rigModeAnim");
     const before={disabled:button.disabled,bones:Object.keys(DZ.doc.scene.rig.bones||{}).length};
     button.click();
-    return {...before,submode:DZ.rigSubmode,tool:DZ.rigTool,active:button.classList.contains("on")};
+    const rig={...before,submode:DZ.rigSubmode,tool:DZ.rigTool,active:button.classList.contains("on")};
+    const svg=document.querySelector("#dzCanvas > svg");
+    const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");
+    rect.setAttribute("x","100"); rect.setAttribute("y","100");
+    rect.setAttribute("width","120"); rect.setAttribute("height","80");
+    rect.setAttribute("fill","#e5322d"); svg.appendChild(rect); dzSelect(rect);
+    const box=rect.getBoundingClientRect(), cx=box.left+box.width/2, cy=box.top+box.height/2;
+    const event=(type,x,y)=>({type,clientX:x,clientY:y,pointerId:71,shiftKey:false,
+      target:rect,preventDefault(){},stopPropagation(){}});
+    const original=rect.getAttribute("width");
+    dzInflatorDown(event("pointerdown",box.right,cy));
+    dzInflatorMove(event("pointermove",box.right+80,cy));
+    const changed=rect.getAttribute("width")!==original;
+    const cancelled=dzVectorGestureCancel("e2e");
+    const vector={changed,cancelled,restored:rect.getAttribute("width")===original,
+      idle:!window.LOW.input.pointerController.active};
+    return {rig,vector};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   ws.close();
   if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description
     || result.exceptionDetails.text || "Excepción en la interfaz");
-  const value = result.result?.value;
-  if (!value || value.disabled || value.bones < 1 || value.submode !== "fk" || value.tool !== "pose" || !value.active)
+  const value = result.result?.value, rig=value?.rig, vector=value?.vector;
+  if (!rig || rig.disabled || rig.bones < 1 || rig.submode !== "fk" || rig.tool !== "pose" || !rig.active)
     throw Error("REGRESIÓN: Animar no abrió con esqueleto solo: " + JSON.stringify(value));
-  console.log("E2E RIG OK: humano sin personaje -> Animar FK -> Posar", JSON.stringify(value));
+  if (!vector?.changed || !vector.cancelled || !vector.restored || !vector.idle)
+    throw Error("REGRESIÓN: gesto vectorial no se pudo cancelar limpiamente: " + JSON.stringify(value));
+  console.log("E2E 2D OK: rig sin personaje + cancelación vectorial", JSON.stringify(value));
 }
 
 main().catch(error => { console.error(error.stack || error); process.exit(1); });

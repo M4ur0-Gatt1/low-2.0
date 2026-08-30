@@ -2603,6 +2603,9 @@ function dzEscapeActive() {
   if (!$("#overlay")?.hidden) { closeModal(); return true; }
   closeCtxMenu();
   document.querySelectorAll("#dzMenubar .dz-menu.open").forEach(n => n.classList.remove("open"));
+  if (dzVectorGestureCancel("escape")) {
+    dzSetStatus("Edición vectorial cancelada"); return true;
+  }
   if (DZ.rigGestureCancel) {
     const cancel = DZ.rigGestureCancel; DZ.rigGestureCancel = null; cancel();
     dzSetStatus("Gesto de esqueleto cancelado"); return true;
@@ -4406,6 +4409,7 @@ function dzPenDebugToggle() {
 }
 
 function dzSetTool(t) {
+  if (t !== DZ.tool) dzVectorGestureCancel("tool-change");
   if (DRAW_TRACK) _drawFinish();
   if (RULER && t !== "ruler") dzRulerClear();
   DZ.tool = t;
@@ -5752,6 +5756,51 @@ function dzRulerClear() {
    centro geométrico con un factor proporcional a la distancia arrastrada. ── */
 let INFLATOR = null;   // gesto con geometría original (no acumula error por frame)
 
+const DZ_VECTOR_ATTRS = ["d", "points", "x", "y", "width", "height", "cx", "cy",
+  "r", "rx", "ry", "x1", "y1", "x2", "y2", "stroke", "stroke-width",
+  "stroke-linejoin", "stroke-linecap"];
+function dzVectorRemember(el, journal, attrs = DZ_VECTOR_ATTRS) {
+  if (!el || journal.has(el)) return;
+  const values = {};
+  attrs.forEach(a => { values[a] = el.hasAttribute(a) ? el.getAttribute(a) : null; });
+  journal.set(el, values);
+}
+function dzVectorRestore(journal) {
+  if (!journal) return;
+  journal.forEach((values, el) => {
+    if (!el?.isConnected) return;
+    Object.entries(values).forEach(([a, value]) => {
+      if (value == null) el.removeAttribute(a); else el.setAttribute(a, value);
+    });
+  });
+  dzPositionHandle(); dzBuildLayers();
+}
+function dzVectorBegin(owner, e, state, clear) {
+  state.pid = e.pointerId;
+  state.journal ||= new Map();
+  if (DZPointerController) state.gestureToken = DZPointerController.begin({
+    owner: "vector:" + owner, pointerId: e.pointerId,
+    cancel: () => { dzVectorRestore(state.journal); clear(); }
+  });
+  return state;
+}
+function dzVectorAccept(state, e) {
+  if (!state) return false;
+  if (state.pid != null && e.pointerId != null && state.pid !== e.pointerId) return false;
+  return !DZPointerController || state.gestureToken == null ||
+    DZPointerController.accepts(state.gestureToken, state.pid);
+}
+function dzVectorFinish(state, e) {
+  if (!dzVectorAccept(state, e)) return false;
+  return !DZPointerController || state.gestureToken == null ||
+    DZPointerController.finish(state.gestureToken, state.pid);
+}
+function dzVectorGestureCancel(reason = "cancel") {
+  const active = DZPointerController?.active;
+  if (!active || !String(active.owner || "").startsWith("vector:")) return false;
+  return DZPointerController.cancel(reason);
+}
+
 function dzVectorElementAt(e, shapesOnly = false) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return null;
@@ -5786,19 +5835,20 @@ function dzInflatorDown(e) {
   const original = tag === "path" ? dzPathParse(el.getAttribute("d") || "")
     : tag === "polygon" || tag === "polyline" ? (el.getAttribute("points") || "").trim().split(/[\s,]+/).map(Number)
     : Object.fromEntries(["x","y","width","height","cx","cy","r","rx","ry"].map(a => [a, +el.getAttribute(a) || 0]));
-  INFLATOR = {
+  const journal = new Map(); dzVectorRemember(el, journal);
+  INFLATOR = dzVectorBegin("inflator", e, {
     el, cx: bbox.x + bbox.width / 2, cy: bbox.y + bbox.height / 2,
     startR: Math.max(1, Math.max(bbox.width, bbox.height) / 2),
     screenR: Math.max(24, Math.max(el.getBoundingClientRect().width, el.getBoundingClientRect().height) / 2),
     centerScreen, original,
     startDist: Math.max(1, Math.hypot(e.clientX - centerScreen.x, e.clientY - centerScreen.y)),
-    dir: e.shiftKey ? -1 : 1
-  };
+    dir: e.shiftKey ? -1 : 1, journal
+  }, () => { INFLATOR = null; });
   dzSetStatus("🎈 Inflando — soltá para aplicar · Shift desinfla");
 }
 
 function dzInflatorMove(e) {
-  if (!INFLATOR || !INFLATOR.el) return;
+  if (!INFLATOR?.el || !dzVectorAccept(INFLATOR, e)) return;
   const dist = Math.hypot(e.clientX - INFLATOR.centerScreen.x, e.clientY - INFLATOR.centerScreen.y);
   // factor: 1.0 en startDist, crece/decrece al alejarse/acercarse
   const delta = (dist - INFLATOR.startDist) / INFLATOR.screenR;
@@ -5841,7 +5891,9 @@ function dzInflatorMove(e) {
 }
 
 function dzInflatorUp(e) {
-  if (INFLATOR && INFLATOR.el) { dzMarkDirty(); dzBuildLayers(); dzSetStatus("🎈 Inflado aplicado"); }
+  if (e?.type === "pointercancel") { dzVectorGestureCancel("pointercancel"); return; }
+  if (!INFLATOR?.el || !dzVectorFinish(INFLATOR, e)) return;
+  dzMarkDirty(); dzBuildLayers(); dzSetStatus("🎈 Inflado aplicado");
   INFLATOR = null;
 }
 
@@ -5918,6 +5970,7 @@ function dzHandlerDown(e) {
   const strokeEl = dzPickStroke(e.clientX, e.clientY);
   if (!strokeEl) return dzSetStatus("📏 Acercate más a una línea para ajustar su grosor");
   dzSnapshot();
+  const journal = new Map(); dzVectorRemember(strokeEl, journal);
   // Los pinceles variables son cintas rellenas. Darles un contorno del mismo
   // color permite que la bomba ensanche/afine también esos trazos reales.
   if (!dzStroked(strokeEl) && strokeEl.tagName.toLowerCase() === "path") {
@@ -5928,7 +5981,9 @@ function dzHandlerDown(e) {
     strokeEl.setAttribute("stroke-width", "0.5");
   }
   const sw = parseFloat(strokeEl.getAttribute("stroke-width") || getComputedStyle(strokeEl).strokeWidth || "2");
-  HANDLER = { el: strokeEl, startW: isNaN(sw) ? 2 : sw, startY: e.clientY };
+  HANDLER = dzVectorBegin("handler", e,
+    { el: strokeEl, startW: isNaN(sw) ? 2 : sw, startY: e.clientY, journal },
+    () => { HANDLER = null; });
   dzSetStatus("📏 Manejador — arrastrá ↕ para engrosar/afinar el trazo");
 }
 
@@ -5937,13 +5992,15 @@ function dzHandlerMove(e) {
 }
 
 function dzHandlerUp(e) {
-  if (HANDLER && HANDLER.el) { dzMarkDirty(); dzBuildLayers(); dzSetStatus("📏 Grosor ajustado"); }
+  if (e?.type === "pointercancel") { dzVectorGestureCancel("pointercancel"); return; }
+  if (!HANDLER?.el || !dzVectorFinish(HANDLER, e)) return;
+  dzMarkDirty(); dzBuildLayers(); dzSetStatus("📏 Grosor ajustado");
   HANDLER = null;
 }
 
 /* handler se procesa en el mousemove global porque no usa DRAW_TRACK */
 function dzHandlerGlobalMove(e) {
-  if (!HANDLER || !HANDLER.el) return;
+  if (!HANDLER?.el || !dzVectorAccept(HANDLER, e)) return;
   const dy = HANDLER.startY - e.clientY;
   const newW = Math.max(0.5, Math.min(200, HANDLER.startW + dy / dzVectorPrefs().pumpSensitivity));
   HANDLER.el.setAttribute("stroke-width", newW.toFixed(1));
@@ -5958,22 +6015,27 @@ function dzIronDown(e) {
   const el = dzPickStroke(e.clientX, e.clientY);
   if (!el) return dzSetStatus(" Acercate a un trazo para suavizarlo");
   dzSnapshot();
-  IRON = { active:true, lastEl:null, lastX:e.clientX, lastY:e.clientY };
+  IRON = dzVectorBegin("iron", e,
+    { active:true, lastEl:null, lastX:e.clientX, lastY:e.clientY, journal:new Map() },
+    () => { IRON = null; });
   dzIronApply(e);
 }
 
 let IRON = null;
 function dzIronApply(e) {
-  if (!IRON?.active) return;
+  if (!IRON?.active || !dzVectorAccept(IRON, e)) return;
   if (IRON.lastEl && Math.hypot(e.clientX - IRON.lastX, e.clientY - IRON.lastY) < 5) return;
   const el = dzPickStroke(e.clientX, e.clientY, 24);
   if (!el) return;
+  dzVectorRemember(el, IRON.journal, ["d", "points"]);
   for (let i = 0; i < dzVectorPrefs().ironPasses; i++) dzIronSmooth(el, false, false);
   IRON.lastEl = el; IRON.lastX = e.clientX; IRON.lastY = e.clientY;
   dzPositionHandle();
 }
-function dzIronUp() {
-  if (IRON?.active) { dzMarkDirty(); dzBuildLayers(); dzSetStatus(" Planchado aplicado"); }
+function dzIronUp(e) {
+  if (e?.type === "pointercancel") { dzVectorGestureCancel("pointercancel"); return; }
+  if (!IRON?.active || !dzVectorFinish(IRON, e)) return;
+  dzMarkDirty(); dzBuildLayers(); dzSetStatus(" Planchado aplicado");
   IRON = null;
 }
 
@@ -6095,13 +6157,15 @@ let MAGNET = null;   // { active, radius }
 function dzMagnetDown(e) {
   e.preventDefault(); e.stopPropagation();
   dzSnapshot();
-  MAGNET = { active: true, radius: dzVectorPrefs().magnetRadius / (DZ.zoom || 1) };
+  MAGNET = dzVectorBegin("magnet", e,
+    { active: true, radius: dzVectorPrefs().magnetRadius / (DZ.zoom || 1), journal:new Map() },
+    () => { MAGNET = null; });
   dzMagnetApply(e);
   dzSetStatus("🧲 Imán activo — arrastrá para deformar · soltá para terminar");
 }
 
 function dzMagnetMove(e) {
-  if (!MAGNET || !MAGNET.active) return;
+  if (!MAGNET?.active || !dzVectorAccept(MAGNET, e)) return;
   dzMagnetApply(e);
 }
 
@@ -6123,6 +6187,8 @@ function dzMagnetApply(e) {
     } catch (_) { /* usar radio del lienzo */ }
     const r2 = localRadius * localRadius;
     const tag = el.tagName.toLowerCase();
+    dzVectorRemember(el, MAGNET.journal, tag === "path" ? ["d"] :
+      (tag === "line" ? ["x1","y1","x2","y2"] : ["points"]));
     if (tag === "path") {
       const cmds = dzPathParse(el.getAttribute("d") || "");
       if (!cmds) continue;
@@ -6172,10 +6238,9 @@ function dzMagnetApply(e) {
 }
 
 function dzMagnetUp(e) {
-  if (MAGNET && MAGNET.active) {
-    dzMarkDirty(); dzBuildLayers();
-    dzSetStatus("🧲 Deformación aplicada");
-  }
+  if (e?.type === "pointercancel") { dzVectorGestureCancel("pointercancel"); return; }
+  if (!MAGNET?.active || !dzVectorFinish(MAGNET, e)) return;
+  dzMarkDirty(); dzBuildLayers(); dzSetStatus("🧲 Deformación aplicada");
   MAGNET = null;
 }
 

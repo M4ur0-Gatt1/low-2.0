@@ -422,6 +422,13 @@ huesos escala proporcionalmente con la hoja; las áreas invisibles de agarre se
 mantienen cómodas para tableta. El zoom nunca vuelve a cambiar la silueta del
 esqueleto.
 
+La segunda integración extiende esa misma autoridad a Inflador, Manejador de
+contorno, Plancha e Imán. Cada gesto conserva un diario exacto de los atributos
+SVG que toca; Escape, cambio de herramienta y `pointercancel` restauran el
+estado anterior, mientras que sólo un `pointerup` del mismo puntero confirma la
+operación. Una herramienta no puede apropiarse de un gesto empezado por otra ni
+dejar una deformación a medias por vibración o pérdida de contacto de la tableta.
+
 Una regresión real reveló que las pruebas puras no alcanzan para certificar el
 recorrido del artista. Desde v3.29.84 existe una prueba E2E en Chromium que abre
 un lienzo, coloca el humano completo de biblioteca sin personaje y exige que el
