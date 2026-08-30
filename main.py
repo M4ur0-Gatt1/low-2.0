@@ -1742,11 +1742,11 @@ class Api:
         return s.insert_frame(path, m.group(0))
 
     def new_design(s):
-        """Crea un lienzo SVG en blanco (mesa LOW 1020×1080) y devuelve su ruta.
+        """Crea un lienzo SVG Full HD en blanco (1920×1080) y devuelve su ruta.
         Página en blanco de verdad, lista para dibujar — sin carteles."""
         starter = (
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 1080" width="1020" height="1080" preserveAspectRatio="xMidYMid meet">\n'
-            '  <rect data-low-page="1" x="0" y="0" width="1020" height="1080" fill="#ffffff"/>\n'
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" preserveAspectRatio="xMidYMid meet">\n'
+            '  <rect data-low-page="1" x="0" y="0" width="1920" height="1080" fill="#ffffff"/>\n'
             '  <g data-low-art="colour" aria-label="Color"></g>\n'
             '  <g data-low-art="line" aria-label="Línea"></g>\n'
             '</svg>\n')
@@ -2556,7 +2556,7 @@ class Api:
         return {"ok": True}
 
     # ── API de animación (bridge al motor Python) ──────────
-    def anim_init(s, name="animacion", width=1020, height=1080, fps=24, duration=240):
+    def anim_init(s, name="animacion", width=1920, height=1080, fps=24, duration=240):
         """Inicializa el motor de animación para el workspace actual."""
         if not s.ws:
             return {"error": "Abrí un proyecto primero"}

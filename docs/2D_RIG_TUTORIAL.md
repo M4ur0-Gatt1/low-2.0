@@ -177,9 +177,11 @@ se mantiene: lo que cambia es por donde pasa.
 ### El personaje de ejemplo
 
 **Ayuda -> Abrir el personaje de ejemplo** (o el boton al principio del tutorial
-dentro del programa) arma un muneco de siete piezas ya riggeado y animado: tres
-niveles de jerarquia, el dibujo sostenido a lo largo de trece cuadros, un saludo
-de tres claves y un codo con topes puestos. Sirve para seguir estos pasos
+dentro del programa) arma un personaje frontal completo de dieciocho piezas ya
+riggeado y animado: cabeza, cuello, torso, pelvis, hombros independientes,
+brazos, antebrazos, manos, muslos, piernas y pies. Incluye varios niveles de
+jerarquia, el dibujo sostenido a lo largo de trece cuadros y un saludo de tres
+claves. Sirve para seguir estos pasos
 tocando algo que ya funciona en vez de armarlo a ciegas.
 
 ---

@@ -1114,12 +1114,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       e.preventDefault(); dz3dToggle(); return;
     }
     if (e.key === "Delete" || e.key === "Backspace") {
-      if (DZ.rigMode && DZ.rigSubmode === "build" && dzRigSelectedNode()) {
-        e.preventDefault(); dzRigRemoveSelected(); return;
-      }
-      if (DZ.sel || (DZ.multi || []).length) {
-        e.preventDefault(); dzDeleteSelected(); return;
-      }
+      if (dzDeleteContext()) { e.preventDefault(); return; }
     }
     if (e.ctrlKey && e.key.toLowerCase() === "d" && DZ.sel) {
       e.preventDefault(); dzDuplicate();
@@ -2687,10 +2682,10 @@ function dzFitView() {
   dzApplyZoom();
 }
 /* ──  Documento: tamaño del lienzo, presets y color de fondo ── */
-const DZ_DEFAULT_DOCUMENT = Object.freeze({ width: 1020, height: 1080 });
+const DZ_DEFAULT_DOCUMENT = Object.freeze({ width: 1920, height: 1080 });
 const DZ_DOC_PRESETS = [
-  ["LOW animación 1020×1080", 1020, 1080],
   ["Full HD horizontal 1920×1080", 1920, 1080],
+  ["LOW vertical 1020×1080", 1020, 1080],
   ["Full HD vertical 1080×1920", 1080, 1920],
   ["HD horizontal 1280×720", 1280, 720],
   ["4K UHD 3840×2160", 3840, 2160],
@@ -3787,6 +3782,15 @@ function dzDeleteSelected() {
   const rot = $("#dzRotate"); if (rot) rot.hidden = true;
   $("#dzProps").hidden = true; $("#dzEmpty").hidden = false;
   dzMarkDirty(); dzBuildLayers();
+}
+function dzDeleteContext() {
+  if (DZ.rigMode && DZ.rigSubmode === "build" && dzRigSelectedNode()) {
+    dzRigRemoveSelected(); return true;
+  }
+  if (DZ.sel || (DZ.multi || []).length) {
+    dzDeleteSelected(); return true;
+  }
+  return false;
 }
 
 /* ══ agrupar (Ctrl+G) / desagrupar (Ctrl+Shift+G): como Illustrator ══ */
@@ -9840,33 +9844,57 @@ function dzRigEasePreset(nombre) {
    de jerarquía y un saludo de tres claves: alcanza para ver la cadena, los
    pivotes, el sostener del dibujo y la interpolación, todo junto. */
 const DZ_EJEMPLO_SVG = [
-  '<g id="pierna_izq"><rect x="372" y="452" width="44" height="120" rx="18" fill="#8d6f56" stroke="#2b2b2b" stroke-width="3"/></g>',
-  '<g id="pierna_der"><rect x="432" y="452" width="44" height="120" rx="18" fill="#8d6f56" stroke="#2b2b2b" stroke-width="3"/></g>',
-  '<g id="torso"><rect x="360" y="252" width="128" height="208" rx="26" fill="#c9b8a4" stroke="#2b2b2b" stroke-width="3"/></g>',
-  '<g id="cabeza"><circle cx="424" cy="196" r="54" fill="#f0c9ad" stroke="#2b2b2b" stroke-width="3"/>',
-  '<circle cx="406" cy="188" r="6" fill="#2b2b2b"/><circle cx="442" cy="188" r="6" fill="#2b2b2b"/>',
-  '<path d="M406 216 Q424 230 442 216" fill="none" stroke="#2b2b2b" stroke-width="3" stroke-linecap="round"/></g>',
-  '<g id="brazo"><rect x="482" y="270" width="112" height="42" rx="20" fill="#d8846a" stroke="#2b2b2b" stroke-width="3"/></g>',
-  '<g id="antebrazo"><rect x="588" y="273" width="102" height="38" rx="18" fill="#e0a184" stroke="#2b2b2b" stroke-width="3"/></g>',
-  '<g id="mano"><circle cx="706" cy="292" r="25" fill="#f0c9ad" stroke="#2b2b2b" stroke-width="3"/></g>'
+  '<g id="pie_izq"><path d="M378 552h42q15 0 18 17H374z" fill="#34445f" stroke="#202936" stroke-width="3"/></g>',
+  '<g id="pie_der"><path d="M438 552h42q15 0 18 17H434z" fill="#34445f" stroke="#202936" stroke-width="3"/></g>',
+  '<g id="pierna_inf_izq"><rect x="383" y="478" width="34" height="82" rx="15" fill="#efb08e" stroke="#3a3030" stroke-width="3"/></g>',
+  '<g id="pierna_inf_der"><rect x="443" y="478" width="34" height="82" rx="15" fill="#efb08e" stroke="#3a3030" stroke-width="3"/></g>',
+  '<g id="muslo_izq"><rect x="376" y="405" width="44" height="82" rx="18" fill="#3b5278" stroke="#202936" stroke-width="3"/></g>',
+  '<g id="muslo_der"><rect x="440" y="405" width="44" height="82" rx="18" fill="#3b5278" stroke="#202936" stroke-width="3"/></g>',
+  '<g id="pelvis"><path d="M370 382h108l-9 43h-90z" fill="#263650" stroke="#202936" stroke-width="3"/></g>',
+  '<g id="torso"><path d="M371 258Q424 236 477 258l-8 132h-90z" fill="#e85d3f" stroke="#3a3030" stroke-width="3"/></g>',
+  '<g id="cuello"><rect x="406" y="224" width="36" height="42" rx="15" fill="#efb08e" stroke="#3a3030" stroke-width="3"/></g>',
+  '<g id="cabeza"><circle cx="424" cy="180" r="58" fill="#f2bb98" stroke="#3a3030" stroke-width="3"/>',
+  '<path d="M369 177Q365 112 424 112q58 3 56 67-25-36-87-30z" fill="#263650"/>',
+  '<circle cx="405" cy="180" r="5" fill="#27313d"/><circle cx="443" cy="180" r="5" fill="#27313d"/>',
+  '<path d="M405 207q19 14 38 0" fill="none" stroke="#8c453d" stroke-width="3" stroke-linecap="round"/></g>',
+  '<g id="hombro_izq"><path d="M374 258q-29 0-40 25l37 17 27-38z" fill="#d94b38" stroke="#3a3030" stroke-width="3"/></g>',
+  '<g id="hombro_der"><path d="M474 258q29 0 40 25l-37 17-27-38z" fill="#d94b38" stroke="#3a3030" stroke-width="3"/></g>',
+  '<g id="brazo_izq"><rect x="296" y="281" width="86" height="38" rx="18" fill="#e85d3f" stroke="#3a3030" stroke-width="3" transform="rotate(-25 374 281)"/></g>',
+  '<g id="brazo_der"><rect x="466" y="281" width="86" height="38" rx="18" fill="#e85d3f" stroke="#3a3030" stroke-width="3" transform="rotate(25 474 281)"/></g>',
+  '<g id="antebrazo_izq"><rect x="245" y="335" width="82" height="34" rx="16" fill="#efb08e" stroke="#3a3030" stroke-width="3" transform="rotate(-52 315 337)"/></g>',
+  '<g id="antebrazo_der"><rect x="521" y="335" width="82" height="34" rx="16" fill="#efb08e" stroke="#3a3030" stroke-width="3" transform="rotate(52 533 337)"/></g>',
+  '<g id="mano_izq"><circle cx="259" cy="405" r="21" fill="#f2bb98" stroke="#3a3030" stroke-width="3"/></g>',
+  '<g id="mano_der"><circle cx="589" cy="405" r="21" fill="#f2bb98" stroke="#3a3030" stroke-width="3"/></g>'
 ].join("");
 
 // pieza: [pivote x, pivote y, de quién cuelga]
 const DZ_EJEMPLO_RIG = {
-  torso:      [424, 452, null],
-  cabeza:     [424, 250, "torso"],
-  brazo:      [488, 291, "torso"],
-  antebrazo:  [592, 292, "brazo"],
-  mano:       [692, 292, "antebrazo"],
-  pierna_izq: [394, 456, "torso"],
-  pierna_der: [454, 456, "torso"]
+  pelvis:            [424, 405, null],
+  torso:             [424, 390, "pelvis"],
+  cuello:            [424, 258, "torso"],
+  cabeza:            [424, 230, "cuello"],
+  hombro_izq:        [424, 270, "torso"],
+  brazo_izq:         [374, 281, "hombro_izq"],
+  antebrazo_izq:     [315, 337, "brazo_izq"],
+  mano_izq:          [259, 405, "antebrazo_izq"],
+  hombro_der:        [424, 270, "torso"],
+  brazo_der:         [474, 281, "hombro_der"],
+  antebrazo_der:     [533, 337, "brazo_der"],
+  mano_der:          [589, 405, "antebrazo_der"],
+  muslo_izq:         [398, 410, "pelvis"],
+  pierna_inf_izq:    [400, 482, "muslo_izq"],
+  pie_izq:           [400, 552, "pierna_inf_izq"],
+  muslo_der:         [462, 410, "pelvis"],
+  pierna_inf_der:    [460, 482, "muslo_der"],
+  pie_der:           [460, 552, "pierna_inf_der"]
 };
 
 // un saludo: tres claves y LOW rellena el medio
 const DZ_EJEMPLO_CLAVES = {
-  brazo:     { 1: 0, 7: -68, 13: -12 },
-  antebrazo: { 1: 0, 7: -46, 13: 8 },
-  mano:      { 1: 0, 7: -18, 13: 6 },
+  hombro_der:{ 1: 0, 7: -10, 13: 0 },
+  brazo_der: { 1: 0, 7: -68, 13: -12 },
+  antebrazo_der:{ 1: 0, 7: -46, 13: 8 },
+  mano_der:  { 1: 0, 7: -18, 13: 6 },
   cabeza:    { 1: 0, 7: -7, 13: 2 }
 };
 const DZ_EJEMPLO_LARGO = 13;
@@ -9899,7 +9927,7 @@ async function dzRigEjemplo() {
     DZ.doc.setRigPivot(id, { x: px, y: py });
     if (padre) DZ.doc.setRigParent(id, padre);
   }
-  DZ.doc.setRigPinned("torso", true);
+  DZ.doc.setRigPinned("pelvis", true);
   // El ejemplo va SIN topes: es para aprender a animar, y encontrarse con un
   // codo que frena parece una falla del programa antes que una restriccion
   // puesta a proposito. Los topes se explican en el tutorial.
@@ -9916,7 +9944,7 @@ async function dzRigEjemplo() {
   DZ.doc.goTo(1);
   await dzRigOpen();                    // monta el panel y abre el modo, en orden
   dzRigSetMode("fk");
-  dzRigSelectNode("brazo");
+  dzRigSelectNode("brazo_der");
   dzMarkDirty();
   dzSetStatus("Personaje de ejemplo listo · dale a reproducir, o agarrá la manija del brazo y posalo");
 }
@@ -14394,6 +14422,7 @@ async function dzXsMount() {
   // atajos de animación: navegar por frames y por DIBUJOS, timing y celdas
   LOW.animation.shortcuts.wire(() => DZ.doc, () => DZ.playback, {
     getSelection: () => DZ.doc && DZ.doc.cellSelection,
+    deleteScene: () => dzDeleteContext(),
     status: (m) => dzSetStatus(" " + m),
     toggleOnion: () => { DZ.onionOn = !DZ.onionOn; dzOnion2Render(); dzOnionRender(); },
   });

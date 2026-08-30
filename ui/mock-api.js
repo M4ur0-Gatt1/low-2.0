@@ -16,8 +16,8 @@
   // diseño de muestra: dos capas <g> con profundidad + una capa SUELTA
   // (el <path> superior) para poder probar el flujo "capa suelta" del 3D
   const SAMPLE_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 1080" width="1020" height="1080" preserveAspectRatio="xMidYMid meet">' +
-    '<rect width="1020" height="1080" fill="#ffffff"/>' +                          // fondo real, como los diseños de LOW
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" preserveAspectRatio="xMidYMid meet">' +
+    '<rect width="1920" height="1080" fill="#ffffff"/>' +                          // fondo real, como los diseños de LOW
     '<g data-low="plano"><circle cx="510" cy="620" r="150" fill="#F0450E"/>' +
     '<rect x="300" y="760" width="480" height="40" fill="#171716"/></g>' +
     '<g data-low="plano" data-z="140"><rect x="330" y="330" width="420" height="260" fill="#33B5E8" opacity="0.85"/></g>' +

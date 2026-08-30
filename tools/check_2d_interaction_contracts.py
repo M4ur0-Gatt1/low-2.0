@@ -10,6 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "ui" / "app.js").read_text(encoding="utf-8")
 INDEX = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+SHORTCUTS = (ROOT / "ui" / "animation" / "shortcuts.js").read_text(encoding="utf-8")
+SCENE_MODEL = (ROOT / "ui" / "animation" / "scene-model.js").read_text(encoding="utf-8")
 
 
 def function_body(name: str, next_name: str) -> str:
@@ -74,6 +76,11 @@ require("setRigDeformerKey" not in rig_deformer[rig_deformer.index("const mover"
         "el deformador volvió a grabar una clave por cada movimiento del lápiz")
 require("rigModeAccess" in rig_readiness and "access.animate" in rig_readiness,
         "Animar volvió a depender del arte o sus metadatos en vez del esqueleto")
+require('e.key === "Delete" && opts.deleteScene?.()' in SHORTCUTS and "deleteScene: () => dzDeleteContext()" in APP,
+        "la X-sheet volvió a secuestrar Supr antes de borrar objetos o huesos")
+require("const DEFAULT_WIDTH = 1920" in SCENE_MODEL and
+        "width: 1920, height: 1080" in APP,
+        "el documento nuevo dejó de ser Full HD 1920×1080")
 require('owner: "vector:" + owner' in vector_tx and "dzVectorRestore" in vector_tx,
         "las herramientas vectoriales dejaron de compartir una transacción reversible")
 for name, body in (("Inflador", inflator), ("Manejador", handler), ("Plancha", iron), ("Imán", magnet)):

@@ -48,7 +48,27 @@ async function main() {
     const cancelled=dzVectorGestureCancel("e2e");
     const vector={changed,cancelled,restored:rect.getAttribute("width")===original,
       idle:!window.LOW.input.pointerController.active};
-    return {rig,vector};
+    DZ.dirty=false;
+    await dzRigEjemplo();
+    const exampleIds=Object.keys(DZ_EJEMPLO_RIG);
+    const example={pieces:exampleIds.length,allVisible:exampleIds.every(id=>document.getElementById(id)),
+      allBound:exampleIds.every(id=>DZ.doc.scene.rigNode(id)?.binding?.elementId===id),
+      shoulders:["hombro_izq","hombro_der"].every(id=>DZ.doc.scene.rigNode(id))};
+    dzSelect(document.getElementById("mano_izq"));
+    dzReleaseFocus();
+    window.__deleteSeen=null;
+    window.addEventListener("keydown",e=>{window.__deleteSeen=e.key;},{once:true});
+    const objectBefore={selected:DZ.sel?.id,activeTag:document.activeElement?.tagName,
+      shortcuts:!!window.__lowAnimKeys,node:!!DZ.doc.scene.rigNode("mano_izq")};
+    document.dispatchEvent(new KeyboardEvent("keydown",{key:"Delete",bubbles:true,cancelable:true}));
+    const objectDeleted=!document.getElementById("mano_izq");
+    dzRigSetMode("build"); DZ.rigSelectedId="mano_der"; dzRigPanelSync();
+    dzReleaseFocus();
+    document.dispatchEvent(new KeyboardEvent("keydown",{key:"Delete",bubbles:true,cancelable:true}));
+    const boneDeleted=!DZ.doc.scene.rigNode("mano_der");
+    const deletion={objectDeleted,boneDeleted,objectBefore,eventSeen:window.__deleteSeen};
+    const canvas={width:DZ.doc.scene.width,height:DZ.doc.scene.height};
+    return {rig,vector,example,deletion,canvas};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   ws.close();
@@ -59,7 +79,13 @@ async function main() {
     throw Error("REGRESIÓN: Animar no abrió con esqueleto solo: " + JSON.stringify(value));
   if (!vector?.changed || !vector.cancelled || !vector.restored || !vector.idle)
     throw Error("REGRESIÓN: gesto vectorial no se pudo cancelar limpiamente: " + JSON.stringify(value));
-  console.log("E2E 2D OK: rig sin personaje + cancelación vectorial", JSON.stringify(value));
+  if (value.example?.pieces < 18 || !value.example.allVisible || !value.example.allBound || !value.example.shoulders)
+    throw Error("REGRESIÓN: personaje completo de Ayuda incompleto o sin vincular: " + JSON.stringify(value));
+  if (!value.deletion?.objectDeleted || !value.deletion?.boneDeleted)
+    throw Error("REGRESIÓN: Supr no elimina objeto y hueso según contexto: " + JSON.stringify(value));
+  if (value.canvas?.width !== 1920 || value.canvas?.height !== 1080)
+    throw Error("REGRESIÓN: el lienzo nuevo no es Full HD: " + JSON.stringify(value));
+  console.log("E2E 2D OK: rig, vectores y personaje completo de Ayuda", JSON.stringify(value));
 }
 
 main().catch(error => { console.error(error.stack || error); process.exit(1); });

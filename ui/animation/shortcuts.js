@@ -47,7 +47,13 @@
     global.addEventListener("keydown", (e) => {
       const doc = getDoc && getDoc();
       const pb = getPlayback && getPlayback();
-      if (!doc || escribiendo()) return;
+      if (!doc) return;
+      // Supr sobre una selección de la mesa es una orden inequívoca aunque
+      // el último control enfocado haya sido un desplegable del panel.
+      if (e.key === "Delete" && opts.deleteScene?.()) {
+        e.preventDefault(); e.stopPropagation(); return;
+      }
+      if (escribiendo()) return;
       const ctrl = e.ctrlKey || e.metaKey;
       const ly = doc.layer;
       let manejado = true;
@@ -64,6 +70,9 @@
         case " ":          if (pb) pb.toggle(); break;
         case "Insert":     doc.apply("insert", doc.frame, 1); break;
         case "Delete": {
+          // La mesa manda cuando hay arte o un hueso seleccionado. Este
+          // listener corre en captura; antes vaciaba la celda y nunca dejaba
+          // que Supr llegara al editor de objetos.
           const selected = opts.getSelection && opts.getSelection();
           if (selected) doc.clearCells(selected, "Vaciar rango");
           else doc.apply("clear", doc.frame, doc.frame);

@@ -587,20 +587,20 @@
     {
       const doc = new animation.LowDoc();
       const history = new LOW.core.HistoryManager(); doc.setHistory(history);
-      ok("la resolución inicial de LOW es 1020×1080",
-        doc.scene.width === 1020 && doc.scene.height === 1080,
+      ok("la resolución inicial de LOW es Full HD 1920×1080",
+        doc.scene.width === 1920 && doc.scene.height === 1080,
         `${doc.scene.width}×${doc.scene.height}`);
-      doc.setSize(1920, 1080);
+      doc.setSize(1280, 720);
       ok("un formato de pantalla cambia el documento canónico",
-        doc.scene.width === 1920 && doc.scene.height === 1080);
+        doc.scene.width === 1280 && doc.scene.height === 720);
       history.undo();
       ok("undo restaura juntas las dos dimensiones",
-        doc.scene.width === 1020 && doc.scene.height === 1080,
+        doc.scene.width === 1920 && doc.scene.height === 1080,
         `${doc.scene.width}×${doc.scene.height}`);
       history.redo();
       const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
       ok("la resolución definida se conserva al guardar y reabrir",
-        reopened.scene.width === 1920 && reopened.scene.height === 1080,
+        reopened.scene.width === 1280 && reopened.scene.height === 720,
         `${reopened.scene.width}×${reopened.scene.height}`);
     }
 
@@ -865,6 +865,12 @@
       }
       const eventDoc=new animation.LowDoc(), eventIds=lib.apply(eventDoc,{type:"click"},{x:0,y:0,width:500,height:500},"event");
       ok("un evento de interfaz no rompe el botón Colocar",eventIds.length===lib.templates.human_standard.bones.length,String(eventIds.length));
+      const human=lib.templates.human_standard.bones;
+      const shoulderL=human.find(b=>b.id==="clavicle_L"), shoulderR=human.find(b=>b.id==="clavicle_R");
+      ok("el humano completo incluye ambos hombros entre columna y brazos",
+        shoulderL?.parentId==="spine" && shoulderR?.parentId==="spine" &&
+        human.find(b=>b.id==="upper_arm_L")?.parentId==="clavicle_L" &&
+        human.find(b=>b.id==="upper_arm_R")?.parentId==="clavicle_R",JSON.stringify({shoulderL,shoulderR}));
       const faceDoc=new animation.LowDoc(), faceIds=lib.apply(faceDoc,"face_pro",{x:0,y:0,width:1000,height:1000},"face");
       const faceControls=faceIds.map(id=>faceDoc.scene.rigNode(id)).filter(n=>n?.role==="control"&&n.control?.label);
       ok("el rig facial trae controles nombrados y posables",faceControls.length>=18,String(faceControls.length));

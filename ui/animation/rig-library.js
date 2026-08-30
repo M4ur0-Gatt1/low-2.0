@@ -7,8 +7,8 @@
   const templates={
     human_standard:{name:"Humano · completo",kind:"humano",bones:[
       b("root",null,.50,.82,.50,.66,"Raíz"),b("spine","root",.50,.66,.50,.43,"Columna"),b("neck","spine",.50,.43,.50,.35,"Cuello"),b("head","neck",.50,.35,.50,.18,"Cabeza",{min:-55,max:55}),
-      b("upper_arm_L","spine",.50,.44,.34,.48,"Brazo izq."),b("forearm_L","upper_arm_L",.34,.48,.20,.58,"Antebrazo izq."),b("hand_L","forearm_L",.20,.58,.14,.62,"Mano izq."),
-      b("upper_arm_R","spine",.50,.44,.66,.48,"Brazo der."),b("forearm_R","upper_arm_R",.66,.48,.80,.58,"Antebrazo der."),b("hand_R","forearm_R",.80,.58,.86,.62,"Mano der."),
+      b("clavicle_L","spine",.50,.43,.42,.44,"Hombro izq.",{min:-25,max:25}),b("upper_arm_L","clavicle_L",.42,.44,.34,.48,"Brazo izq."),b("forearm_L","upper_arm_L",.34,.48,.20,.58,"Antebrazo izq."),b("hand_L","forearm_L",.20,.58,.14,.62,"Mano izq."),
+      b("clavicle_R","spine",.50,.43,.58,.44,"Hombro der.",{min:-25,max:25}),b("upper_arm_R","clavicle_R",.58,.44,.66,.48,"Brazo der."),b("forearm_R","upper_arm_R",.66,.48,.80,.58,"Antebrazo der."),b("hand_R","forearm_R",.80,.58,.86,.62,"Mano der."),
       b("thigh_L","root",.47,.68,.40,.84,"Muslo izq."),b("shin_L","thigh_L",.40,.84,.40,.96,"Pierna izq.",{min:-10,max:150}),b("foot_L","shin_L",.40,.96,.32,.98,"Pie izq."),
       b("thigh_R","root",.53,.68,.60,.84,"Muslo der."),b("shin_R","thigh_R",.60,.84,.60,.96,"Pierna der.",{min:-10,max:150}),b("foot_R","shin_R",.60,.96,.68,.98,"Pie der.")]},
     human_simple:{name:"Humano · stickman",kind:"humano",bones:[

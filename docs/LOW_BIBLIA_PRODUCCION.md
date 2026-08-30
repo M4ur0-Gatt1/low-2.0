@@ -511,6 +511,11 @@ puede realizar, sin ayuda externa, este proyecto:
 11. Exportar un resultado idéntico a la previsualización.
 12. Recuperar el proyecto después de un cierre forzado.
 
+La plantilla humana de aceptación incluye una cintura escapular explícita:
+columna → hombro/clavícula → brazo → antebrazo → mano en ambos lados. Los brazos
+nunca nacen directamente del cuello o del centro del torso. El personaje de
+Ayuda reproduce esa jerarquía con dieciocho piezas visibles y vinculadas.
+
 El proceso debe quedar grabado como prueba repetible y medirse en errores,
 tiempo, interrupciones y necesidad de ayuda. Ésta es la prueba que decide cuándo
 LOW está a la altura de su promesa.

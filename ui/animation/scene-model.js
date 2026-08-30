@@ -27,7 +27,7 @@
   "use strict";
   const LOW = global.LOW = global.LOW || {};
   const animation = LOW.animation = LOW.animation || {};
-  const DEFAULT_WIDTH = 1020;
+  const DEFAULT_WIDTH = 1920;
   const DEFAULT_HEIGHT = 1080;
   const documentDimension = (value, fallback) => {
     const n = Math.round(Number(value));
