@@ -9110,13 +9110,24 @@ function dzPuntosDeMuestra(el) {
   try { b = el.getBBox(); } catch (_) { return []; }
   if (!b || (!b.width && !b.height)) return [];
   const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
-  return [
+  const locales = [
     { x: cx, y: cy },
     { x: b.x + b.width * 0.25, y: b.y + b.height * 0.25 },
     { x: b.x + b.width * 0.75, y: b.y + b.height * 0.25 },
     { x: b.x + b.width * 0.25, y: b.y + b.height * 0.75 },
     { x: b.x + b.width * 0.75, y: b.y + b.height * 0.75 },
   ];
+  // getBBox() devuelve coordenadas LOCALES. Los huesos viven en el sistema de
+  // la raíz SVG; comparar ambos sin convertir hacía que una pieza agrupada,
+  // escalada o girada se repartiera al hueso equivocado. getCTM incluye toda
+  // la cadena de grupos pero no el zoom CSS de la interfaz.
+  const root = el.ownerSVGElement, matrix = el.getCTM?.();
+  if (!root || !matrix) return locales;
+  return locales.map(p => {
+    const point = root.createSVGPoint(); point.x = p.x; point.y = p.y;
+    const world = point.matrixTransform(matrix);
+    return { x:world.x, y:world.y };
+  });
 }
 
 /** Reparte el dibujo entre los huesos ya dibujados: cada pieza va al hueso que

@@ -81,12 +81,24 @@ async function main() {
       grew:afterScale.width>afterRotate.width&&afterScale.height>afterRotate.height,
       geometryIntact:rect.getAttribute("width")===original&&rect.getAttribute("height")==="80",
       finite:[afterScale.left,afterScale.top,afterScale.width,afterScale.height].every(Number.isFinite)};
+    const samples=dzPuntosDeMuestra(rect), localCenter=svg.createSVGPoint();
+    localCenter.x=160; localCenter.y=140;
+    const expectedCenter=localCenter.matrixTransform(rect.getCTM());
+    const rigSampling={count:samples.length,
+      transformed:Math.hypot(samples[0].x-expectedCenter.x,samples[0].y-expectedCenter.y)<.01};
     DZ.dirty=false;
     await dzRigEjemplo();
     const exampleIds=Object.keys(DZ_EJEMPLO_RIG);
     const example={pieces:exampleIds.length,allVisible:exampleIds.every(id=>document.getElementById(id)),
       allBound:exampleIds.every(id=>DZ.doc.scene.rigNode(id)?.binding?.elementId===id),
       shoulders:["hombro_izq","hombro_der"].every(id=>DZ.doc.scene.rigNode(id))};
+    DZ.doc.setRigKey("brazo_der",12,{x:4,y:-3,r:28,sx:1,sy:1});
+    const saved=JSON.parse(JSON.stringify(DZ.doc.toJSON()));
+    const reopened=LOW.animation.LowDoc.fromJSON(saved), reopenedArm=reopened.scene.rigNode("brazo_der");
+    const exported=dzRigView(svg.outerHTML,12);
+    const persistence={bindings:Object.keys(reopened.scene.rig.bindings||{}).length,
+      pose:reopenedArm?.keys?.[12]?.r,diagnostics:(reopened.scene.rig.diagnostics||[]).length,
+      exportPosed:exported.includes("matrix("),exportClean:!exported.includes("data-rigbase")};
     dzSelect(document.getElementById("mano_izq"));
     dzReleaseFocus();
     window.__deleteSeen=null;
@@ -101,7 +113,7 @@ async function main() {
     const boneDeleted=!DZ.doc.scene.rigNode("mano_der");
     const deletion={objectDeleted,boneDeleted,objectBefore,eventSeen:window.__deleteSeen};
     const canvas={width:DZ.doc.scene.width,height:DZ.doc.scene.height};
-    return {rig,vector,transform,example,deletion,canvas};
+    return {rig,vector,transform,rigSampling,example,persistence,deletion,canvas};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   stage("evaluar resultado");
@@ -115,8 +127,13 @@ async function main() {
     throw Error("REGRESIÓN: gesto vectorial no se pudo cancelar limpiamente: " + JSON.stringify(value));
   if (!value.transform?.rotated || !value.transform.grew || !value.transform.geometryIntact || !value.transform.finite)
     throw Error("REGRESIÓN: giro/escala del cuadro delimitador: " + JSON.stringify(value));
+  if (value.rigSampling?.count !== 5 || !value.rigSampling.transformed)
+    throw Error("REGRESIÓN: Repartir compara pieza y hueso en sistemas distintos: " + JSON.stringify(value));
   if (value.example?.pieces < 18 || !value.example.allVisible || !value.example.allBound || !value.example.shoulders)
     throw Error("REGRESIÓN: personaje completo de Ayuda incompleto o sin vincular: " + JSON.stringify(value));
+  if (value.persistence?.bindings < 18 || value.persistence.pose !== 28 || value.persistence.diagnostics ||
+      !value.persistence.exportPosed || !value.persistence.exportClean)
+    throw Error("REGRESIÓN: rig no sobrevive guardar/reabrir/exportar: " + JSON.stringify(value));
   if (!value.deletion?.objectDeleted || !value.deletion?.boneDeleted)
     throw Error("REGRESIÓN: Supr no elimina objeto y hueso según contexto: " + JSON.stringify(value));
   if (value.canvas?.width !== 1920 || value.canvas?.height !== 1080)

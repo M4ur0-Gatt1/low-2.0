@@ -521,6 +521,11 @@ escalar una misma pieza sin modificar sus atributos geométricos, invertir el
 sentido del arrastre ni deformar el contenido. Una cancelación del puntero debe
 restaurar exactamente la matriz anterior.
 
+Desde v3.29.88, el reparto automático debe medir arte y huesos en el mismo
+sistema de coordenadas aunque las piezas estén dentro de grupos transformados.
+La prueba maestra guarda, reabre y exporta una pose con todos los vínculos del
+personaje de ejemplo; una pose visible que no persiste no cuenta como función.
+
 El proceso debe quedar grabado como prueba repetible y medirse en errores,
 tiempo, interrupciones y necesidad de ayuda. Ésta es la prueba que decide cuándo
 LOW está a la altura de su promesa.
