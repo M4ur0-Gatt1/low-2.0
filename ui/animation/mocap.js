@@ -12,8 +12,15 @@
       this.range = { in: 1, out: 1 };
       this.status = "empty";
       this.engine = null;
+      this.subjectRegion = null;
       this.samples = {};
       this.silhouettes = {};
+    }
+    setSubjectRegion(region) {
+      if (!region) { this.subjectRegion = null; return null; }
+      const x=Math.max(0,Math.min(1,Number(region.x)||0)), y=Math.max(0,Math.min(1,Number(region.y)||0));
+      const w=Math.max(.01,Math.min(1-x,Number(region.w)||1)), h=Math.max(.01,Math.min(1-y,Number(region.h)||1));
+      this.subjectRegion={x,y,w,h}; return this.subjectRegion;
     }
     setSource(meta) {
       meta = meta || {};
@@ -49,7 +56,8 @@
       return Math.max(0, (Math.max(1, Number(frame) || 1) - this.range.in) / fps);
     }
     toJSON() {
-      return { version: 1, source: this.source, range: this.range, status: this.status,
+      return { version: 2, source: this.source, range: this.range, status: this.status,
+        subjectRegion: this.subjectRegion,
         engine: this.engine, samples: this.samples, silhouettes: this.silhouettes };
     }
     fromJSON(data) {
@@ -58,6 +66,7 @@
       this.range = Object.assign({ in: 1, out: 1 }, data.range || {});
       this.status = data.status || (this.source ? "reference" : "empty");
       this.engine = data.engine || null;
+      this.subjectRegion = data.subjectRegion ? this.setSubjectRegion(data.subjectRegion) : null;
       this.samples = Object.assign({}, data.samples || {});
       this.silhouettes = Object.assign({}, data.silhouettes || {});
       return this;
@@ -117,6 +126,9 @@
       const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       const oldTime = video.currentTime, oldPaused = video.paused;
+      const roi=track.subjectRegion||{x:0,y:0,w:1,h:1};
+      const rx0=Math.floor(roi.x*width), ry0=Math.floor(roi.y*height);
+      const rx1=Math.ceil((roi.x+roi.w)*width), ry1=Math.ceil((roi.y+roi.h)*height);
       video.pause();
       await seek(video, 0);
       ctx.drawImage(video, 0, 0, width, height);
@@ -131,6 +143,8 @@
         const pixels = ctx.getImageData(0, 0, width, height).data;
         const raw = new Uint8Array(width * height), mask = new Uint8Array(width * height);
         for (let p = 0, q = 0; p < pixels.length; p += 4, q++) {
+          const px=q%width, py=Math.floor(q/width);
+          if(px<rx0||px>=rx1||py<ry0||py>=ry1){ raw[q]=0; continue; }
           const delta = Math.abs(pixels[p] - background[p]) + Math.abs(pixels[p+1] - background[p+1]) + Math.abs(pixels[p+2] - background[p+2]);
           raw[q] = delta > 54 ? 1 : 0;
         }

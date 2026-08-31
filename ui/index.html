@@ -740,8 +740,10 @@
         <details class="rig2-performance" id="mocapPanel">
           <summary>Video · mocap · rotoscopía</summary>
           <div class="rig2-actions"><button class="primary" id="mocapImport">Importar video</button>
+            <button id="mocapSubject" title="Arrastrá sobre el video para aislar a la persona">Marcar sujeto</button>
             <button id="mocapAnalyze" title="Extrae localmente siluetas de movimiento cuadro a cuadro">Extraer siluetas</button></div>
-          <video id="mocapVideo" class="mocap-video" muted playsinline controls hidden></video>
+          <div class="mocap-video-wrap"><video id="mocapVideo" class="mocap-video" muted playsinline controls hidden></video>
+            <i id="mocapSubjectBox" class="mocap-subject-box" hidden></i></div>
           <canvas id="mocapSilhouette" class="mocap-video" hidden aria-label="Silueta extraída del cuadro actual"></canvas>
           <p class="rig2-hint" id="mocapStatus">Importá una actuación para verla sincronizada con los cuadros.</p>
         </details>

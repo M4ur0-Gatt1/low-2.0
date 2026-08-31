@@ -33,6 +33,9 @@ motor local, una GPU remota o una API sin contaminar el modelo de animación.
 
 ## Estado
 
-Base implementada: importación local, visor sincronizado, persistencia del
-modelo y registro de motores. Pendiente para producción: motor de segmentación
-y pose, corrector visual, retargeting, reducción de claves y pruebas de video.
+Base implementada: importación local, visor sincronizado, región de sujeto
+editable, extracción local de siluetas de movimiento, persistencia del modelo y
+registro de motores. La extracción local compara contra el primer cuadro y está
+pensada para cámara fija; no se presenta como detección corporal. Pendiente para
+producción: segmentación semántica estable, pose, corrector visual, retargeting,
+reducción de claves y pruebas de aceptación con videos diversos.

@@ -457,11 +457,12 @@ siluetas para calco, pose/esqueleto y curvas de movimiento retargeteables. El
 video nunca modifica directamente el personaje ni reemplaza sus claves sin una
 confirmación visible.
 
-La primera base funcional guarda una pista de video con duración, tamaño, rango,
+La base funcional guarda una pista de video con duración, tamaño, rango,
 estado, muestras de pose y siluetas; sincroniza la referencia con el fotograma
 actual y permite que motores intercambiables realicen el análisis. La aplicación
-no muestra una falsa detección cuando no hay motor instalado. Las siguientes
-puertas son: segmentación temporal estable, detección corporal, corrector de
+incluye un motor local honesto de silueta por diferencia temporal y permite
+marcar una región de sujeto antes de analizar. No confunde esa máscara con una
+detección corporal. Las siguientes puertas son: segmentación semántica estable, detección corporal, corrector de
 oclusiones, reducción de claves, mapeo de articulaciones y prueba con video real.
 
 ### DESPUÉS — integración avanzada

@@ -13974,8 +13974,15 @@ function dzMocapRenderSilhouette() {
   for(let i=0,p=0;i<mask.length;i++,p+=4){ image.data[p]=255; image.data[p+1]=74; image.data[p+2]=32; image.data[p+3]=mask[i]; }
   ctx.clearRect(0,0,canvas.width,canvas.height); ctx.putImageData(image,0,0);
 }
+function dzMocapRenderSubject() {
+  const video=$("#mocapVideo"), box=$("#mocapSubjectBox"), track=DZ.doc&&DZ.doc.mocap;
+  if(!video||!box||!track?.subjectRegion){if(box)box.hidden=true;return;}
+  const r=track.subjectRegion, vr=video.getBoundingClientRect(), wrap=video.parentElement.getBoundingClientRect();
+  box.hidden=false; box.style.left=(vr.left-wrap.left+r.x*vr.width)+"px"; box.style.top=(vr.top-wrap.top+r.y*vr.height)+"px";
+  box.style.width=(r.w*vr.width)+"px"; box.style.height=(r.h*vr.height)+"px";
+}
 function dzMocapWire() {
-  const input = $("#mocapVideoFile"), open = $("#mocapImport"), analyze = $("#mocapAnalyze");
+  const input = $("#mocapVideoFile"), open = $("#mocapImport"), analyze = $("#mocapAnalyze"), subject=$("#mocapSubject");
   const video = $("#mocapVideo"), status = $("#mocapStatus");
   if (!input || input.dataset.wired) return;
   input.dataset.wired = "1";
@@ -13991,8 +13998,20 @@ function dzMocapWire() {
       track.setSource({ name: file.name, duration: video.duration,
         width: video.videoWidth, height: video.videoHeight });
       DZ.doc.touch(); dzMocapSync();
+      dzMocapRenderSubject();
       status.textContent = `${file.name} · ${video.videoWidth}×${video.videoHeight} · ${video.duration.toFixed(1)} s · sincronizado`;
     };
+  };
+  subject.onclick=()=>{
+    if(!video.src)return dzSetStatus(" Importá primero un video");
+    const wrap=video.parentElement; wrap.classList.add("marking"); subject.classList.add("active");
+    status.textContent="Arrastrá un rectángulo sobre la persona que querés seguir";
+    let start=null;
+    const point=e=>{const r=video.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};};
+    const down=e=>{e.preventDefault();start=point(e);video.setPointerCapture?.(e.pointerId);};
+    const move=e=>{if(!start)return;const p=point(e),track=dzMocapTrack();track.setSubjectRegion({x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(p.x-start.x),h:Math.abs(p.y-start.y)});dzMocapRenderSubject();};
+    const up=e=>{if(!start)return;move(e);start=null;wrap.classList.remove("marking");subject.classList.remove("active");video.removeEventListener("pointerdown",down);video.removeEventListener("pointermove",move);video.removeEventListener("pointerup",up);video.removeEventListener("pointercancel",up);DZ.doc.touch();status.textContent="Sujeto marcado · Extraer siluetas analizará solamente esa región";};
+    video.addEventListener("pointerdown",down);video.addEventListener("pointermove",move);video.addEventListener("pointerup",up);video.addEventListener("pointercancel",up);
   };
   analyze.onclick = async () => {
     const track = DZ.doc && DZ.doc.mocap;
