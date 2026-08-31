@@ -925,6 +925,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   // buscara una plantilla cuyo nombre era "[object MouseEvent]".
   $("#rigLibraryAdd").onclick = () => dzRigLibraryAdd();
   $("#rigImportCharacter").onclick = () => dzRigImportCharacter();
+  $("#rigClearAll").onclick = dzRigClearAll;
   $("#rigAdd").onclick = dzRigRegisterSelected;
   $("#rigRemove").onclick = dzRigRemoveSelected;
   $("#rigPivotTool").onclick = () => dzRigSetTool("pivot");
@@ -7731,6 +7732,16 @@ function dzRigRemoveSelected() {
     dzTimelineBadges(); dzMarkDirty();
     dzSetStatus(`Hueso «${node.id}» eliminado; el dibujo permanece intacto`);
   }
+}
+function dzRigClearAll() {
+  if (!DZ.doc || !Object.keys(DZ.doc.scene.rig.nodes || {}).length)
+    return dzSetStatus("No hay ningún esqueleto para eliminar");
+  if (!confirm("¿Eliminar todo el esqueleto? El dibujo queda intacto y podés deshacer con Ctrl+Z.")) return;
+  if (!DZ.doc.clearRig()) return;
+  DZ.rigSelectedId = null; DZ.rigConstraintId = null; DZ.rigLivePose = null; DZ.rigIKPreview = null;
+  document.querySelectorAll("[data-pivot]").forEach(el => el.removeAttribute("data-pivot"));
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
+  dzSetStatus("Esqueleto eliminado · el dibujo permanece intacto · Ctrl+Z para recuperarlo");
 }
 /* Vincula la pieza SVG seleccionada en la mesa al hueso activo del esqueleto.
    Es el puente entre «Crear hueso» (cadena ósea) y el dibujo: sin esto el

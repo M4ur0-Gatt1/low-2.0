@@ -904,6 +904,14 @@
         setupBeforePose === JSON.stringify(Object.fromEntries(
           Object.entries(linked.scene.rig.bones).map(([id, bone]) => [id,
             { head: bone.head, tail: bone.tail, pivot: bone.pivot, parentId: bone.parentId }]))));
+      const clearDoc=new animation.LowDoc();
+      clearDoc.setHistory(new LOW.core.HistoryManager());
+      lib.apply(clearDoc,"human_standard",{x:0,y:0,width:1000,height:1000},"clear");
+      const countBeforeClear=Object.keys(clearDoc.scene.rig.nodes).length;
+      clearDoc.clearRig();
+      ok("eliminar esqueleto quita huesos y datos de rig",countBeforeClear>0 && !Object.keys(clearDoc.scene.rig.nodes).length && !Object.keys(clearDoc.scene.rig.bindings).length);
+      clearDoc.history.undo();
+      ok("deshacer recupera el esqueleto completo",Object.keys(clearDoc.scene.rig.nodes).length===countBeforeClear,String(Object.keys(clearDoc.scene.rig.nodes).length));
     }
 
     // 29. La máquina de modos impide que una herramienta atraviese espacios.

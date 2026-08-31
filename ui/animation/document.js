@@ -989,6 +989,18 @@
       });
     }
 
+    clearRig() {
+      return this._rigChange("Eliminar esqueleto completo", (rig) => {
+        if (!Object.keys(rig.nodes || {}).length) return false;
+        rig.bones = {}; rig.nodes = rig.bones;
+        rig.slots = {}; rig.attachments = {}; rig.bindings = {};
+        rig.meshes = {}; rig.deformers = {}; rig.constraints = {};
+        rig.constraintOrder = []; rig.controllers = {}; rig.actions = {};
+        rig.channels = {}; rig.switches = {}; rig.physics = {};
+        return true;
+      });
+    }
+
     /** Suelta el arte de un hueso sin borrar el hueso, el slot ni sus dibujos
      * alternativos. Permite corregir un reparto sin reconstruir el esqueleto. */
     unbindRigElement(boneId) {
