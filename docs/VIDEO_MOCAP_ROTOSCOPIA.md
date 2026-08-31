@@ -34,7 +34,8 @@ motor local, una GPU remota o una API sin contaminar el modelo de animación.
 ## Estado
 
 Base implementada: importación local, visor sincronizado, región de sujeto
-editable, extracción local de siluetas de movimiento, persistencia del modelo y
+editable, extracción local de siluetas de movimiento, corrector por cuadro para
+agregar o borrar máscara con tableta, persistencia del modelo y
 registro de motores. La extracción local compara contra el primer cuadro y está
 pensada para cámara fija; no se presenta como detección corporal. Pendiente para
 producción: segmentación semántica estable, pose, corrector visual, retargeting,

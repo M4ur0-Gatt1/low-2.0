@@ -745,6 +745,11 @@
           <div class="mocap-video-wrap"><video id="mocapVideo" class="mocap-video" muted playsinline controls hidden></video>
             <i id="mocapSubjectBox" class="mocap-subject-box" hidden></i></div>
           <canvas id="mocapSilhouette" class="mocap-video" hidden aria-label="Silueta extraída del cuadro actual"></canvas>
+          <div class="rig2-actions" id="mocapCorrection" hidden>
+            <button id="mocapPaint" title="Agregar zonas a la silueta">Agregar</button>
+            <button id="mocapErase" title="Quitar zonas de la silueta">Borrar</button>
+            <label title="Tamaño del corrector">Punta <input id="mocapBrush" type="range" min="2" max="24" value="8"></label>
+          </div>
           <p class="rig2-hint" id="mocapStatus">Importá una actuación para verla sincronizada con los cuadros.</p>
         </details>
         <div class="rig2-hint" id="rigHint">Armado: registrá las piezas. En la mesa, arrastrá un círculo para colocar su pivote y el cuadrado para vincular esa pieza con su padre.</div>

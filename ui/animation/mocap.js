@@ -166,6 +166,7 @@
     }
   };
   animation.MotionCaptureTrack = MotionCaptureTrack;
+  animation.encodeMocapMask = encodeMask;
   animation.decodeMocapMask = decodeMask;
   animation.mocapEngines = {
     register: registerMocapEngine,

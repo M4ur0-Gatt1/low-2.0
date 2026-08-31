@@ -13973,6 +13973,32 @@ function dzMocapRenderSilhouette() {
   const mask=LOW.animation.decodeMocapMask(data);
   for(let i=0,p=0;i<mask.length;i++,p+=4){ image.data[p]=255; image.data[p+1]=74; image.data[p+2]=32; image.data[p+3]=mask[i]; }
   ctx.clearRect(0,0,canvas.width,canvas.height); ctx.putImageData(image,0,0);
+  const tools=$("#mocapCorrection"); if(tools)tools.hidden=false;
+}
+function dzMocapCommitMask(canvas,mask) {
+  const track=DZ.doc&&DZ.doc.mocap,data=track?.silhouetteAt?.(DZ.doc.frame);
+  if(!track||!data||!LOW.animation.encodeMocapMask)return;
+  let minX=canvas.width,minY=canvas.height,maxX=-1,maxY=-1,count=0;
+  for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++){const q=y*canvas.width+x;if(mask[q]){count++;minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);}}
+  track.setSilhouette(DZ.doc.frame,{width:canvas.width,height:canvas.height,runs:LOW.animation.encodeMocapMask(mask),coverage:count/mask.length,
+    bounds:maxX<0?null:{x:minX/canvas.width,y:minY/canvas.height,w:(maxX-minX+1)/canvas.width,h:(maxY-minY+1)/canvas.height},corrected:true});
+  DZ.doc.touch(); dzMocapRenderSilhouette();
+}
+function dzMocapCorrectionWire() {
+  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush");
+  if(!canvas||canvas.dataset.correctorWired)return; canvas.dataset.correctorWired="1";
+  let mode=null,drawing=false,mask=null,before=null;
+  const activate=next=>{mode=next;paint?.classList.toggle("active",next==="paint");erase?.classList.toggle("active",next==="erase");canvas.classList.toggle("correcting",!!next);};
+  paint.onclick=()=>activate(mode==="paint"?null:"paint"); erase.onclick=()=>activate(mode==="erase"?null:"erase");
+  const apply=e=>{if(!drawing||!mode||!mask)return;const r=canvas.getBoundingClientRect(),cx=(e.clientX-r.left)/r.width*canvas.width,cy=(e.clientY-r.top)/r.height*canvas.height,rad=+(brush?.value||8);
+    for(let y=Math.max(0,Math.floor(cy-rad));y<Math.min(canvas.height,Math.ceil(cy+rad));y++)for(let x=Math.max(0,Math.floor(cx-rad));x<Math.min(canvas.width,Math.ceil(cx+rad));x++)if((x-cx)**2+(y-cy)**2<=rad**2)mask[y*canvas.width+x]=mode==="paint"?255:0;
+    const ctx=canvas.getContext("2d"),image=ctx.createImageData(canvas.width,canvas.height);for(let i=0,p=0;i<mask.length;i++,p+=4){image.data[p]=255;image.data[p+1]=74;image.data[p+2]=32;image.data[p+3]=mask[i];}ctx.putImageData(image,0,0);};
+  canvas.addEventListener("pointerdown",e=>{if(!mode)return;e.preventDefault();const data=DZ.doc?.mocap?.silhouetteAt?.(DZ.doc.frame);if(!data)return;before=JSON.parse(JSON.stringify(data));mask=LOW.animation.decodeMocapMask(data);drawing=true;canvas.setPointerCapture?.(e.pointerId);apply(e);});
+  canvas.addEventListener("pointermove",apply);
+  const finish=()=>{if(!drawing)return;drawing=false;const frame=DZ.doc.frame;dzMocapCommitMask(canvas,mask);const after=JSON.parse(JSON.stringify(DZ.doc.mocap.silhouetteAt(frame)));
+    if(DZ.doc.history&&JSON.stringify(before)!==JSON.stringify(after)){const doc=DZ.doc;DZ.doc.history.push({label:"Corregir silueta",domain:"mocap",before,after,apply:(_dir,value)=>{doc.mocap.setSilhouette(frame,JSON.parse(JSON.stringify(value)));doc.touch();if(doc.frame===frame)dzMocapRenderSilhouette();}});}
+    mask=null;before=null;};
+  canvas.addEventListener("pointerup",finish);canvas.addEventListener("pointercancel",finish);
 }
 function dzMocapRenderSubject() {
   const video=$("#mocapVideo"), box=$("#mocapSubjectBox"), track=DZ.doc&&DZ.doc.mocap;
@@ -13986,6 +14012,7 @@ function dzMocapWire() {
   const video = $("#mocapVideo"), status = $("#mocapStatus");
   if (!input || input.dataset.wired) return;
   input.dataset.wired = "1";
+  dzMocapCorrectionWire();
   open.onclick = () => input.click();
   input.onchange = () => {
     const file = input.files && input.files[0]; input.value = "";

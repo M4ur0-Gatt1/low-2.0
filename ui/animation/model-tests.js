@@ -1043,6 +1043,8 @@
         animation.mocapEngines.list().includes("local-motion-silhouette"));
       const mask=animation.decodeMocapMask({width:3,height:2,runs:[2,0,3,1,1,0]});
       ok("las siluetas persistentes reconstruyen su máscara",Array.from(mask).join(",")==="0,0,255,255,255,0");
+      ok("una máscara corregida se puede volver a comprimir sin pérdidas",
+        Array.from(animation.decodeMocapMask({width:3,height:2,runs:animation.encodeMocapMask(mask)})).join(",")===Array.from(mask).join(","));
     }
 
     const fallan = res.filter((r) => !r.ok);
