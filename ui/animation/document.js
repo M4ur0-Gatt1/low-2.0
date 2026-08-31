@@ -45,6 +45,7 @@
       this.cellSelection = null;
       this.path = null;            // archivo .lowscene, si ya se guardó
       this.onionCfg = animation.onion ? animation.onion.config() : {};
+      this.mocap = null;
     }
 
     // ── estado actual ────────────────────────────────────────────────────
@@ -1281,6 +1282,7 @@
                // reabrir aunque el archivo de audio no esté a mano, y no hay
                // que volver a decodificarlo
                audio: this.audio ? this.audio.toJSON() : null,
+               mocap: this.mocap ? this.mocap.toJSON() : null,
                onion: this.onionCfg ? JSON.parse(JSON.stringify(this.onionCfg)) : null };
     }
     static fromJSON(data) {
@@ -1291,6 +1293,9 @@
       if (d.layerId && doc.scene.layer(d.layerId)) doc.layerId = d.layerId;
       if (d.audio && animation.AudioTrack) {
         doc.audio = new animation.AudioTrack(doc).fromJSON(d.audio);
+      }
+      if (d.mocap && animation.MotionCaptureTrack) {
+        doc.mocap = new animation.MotionCaptureTrack(doc).fromJSON(d.mocap);
       }
       if (d.onion) doc.onionCfg = animation.onion ? animation.onion.config(d.onion) : d.onion;
       const repaired = doc.repairRigBindingOwnership();

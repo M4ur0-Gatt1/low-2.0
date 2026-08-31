@@ -1002,6 +1002,24 @@
         readiness.readyToAnimate&&readiness.hasBoundArt&&readiness.boundBoneCount===1&&readiness.unboundElementIds.includes("brazo_suelto"),JSON.stringify(readiness));
     }
 
+    // 32. Video mocap: referencia, sincronía y seguimiento sobreviven al archivo.
+    {
+      const doc = new animation.LowDoc();
+      const track = new animation.MotionCaptureTrack(doc).setSource({
+        name:"actuacion.mp4", duration:2, width:1920, height:1080
+      });
+      track.setPose(13,{nose:{x:.5,y:.2},left_shoulder:{x:.4,y:.35}},.91);
+      doc.mocap = track;
+      ok("video mocap traduce el cuadro a tiempo de video",Math.abs(track.timeAt(13,24)-.5)<.0001);
+      const reopened = animation.LowDoc.fromJSON(doc.toJSON());
+      ok("video mocap persiste fuente, rango y muestras al reabrir",
+        reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91,
+        JSON.stringify(reopened.mocap&&reopened.mocap.toJSON()));
+      let rejected=false;
+      try { animation.mocapEngines.register("roto",{}); } catch (_) { rejected=true; }
+      ok("el registro rechaza motores que no analizan",rejected);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

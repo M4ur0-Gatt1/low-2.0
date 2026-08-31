@@ -15,6 +15,7 @@ const files = [
   "ui/rigging/rig-input.js",
   "ui/animation/exposures.js",
   "ui/animation/onion.js",
+  "ui/animation/mocap.js",
   "ui/animation/document.js",
   "ui/animation/rig-library.js",
   "ui/animation/playback.js",

@@ -369,6 +369,7 @@
       <span data-act="escena-abrir">Abrir escena…</span>
       <hr><span data-act="audio-cargar">Cargar audio… <kbd>wav · mp3</kbd></span>
       <span data-act="audio-quitar">Quitar el audio</span>
+      <span data-act="mocap-video">Video mocap / Rotoscopía…</span>
       <hr><span data-act="timeline">Línea de tiempo</span>
       <span data-act="cuadro">Duplicar cuadro al final</span>
       <span data-act="insertar">Insertar cuadro <kbd>Shift: en blanco</kbd></span>
@@ -731,6 +732,13 @@
           <div class="rig2-actions"><button id="perfRec">Actuar</button><button id="perfPlay">Ver</button>
             <button id="perfSmooth">Suavizar</button><button id="perfBake">Generar</button></div>
         </details>
+        <details class="rig2-performance" id="mocapPanel">
+          <summary>Video · mocap · rotoscopía</summary>
+          <div class="rig2-actions"><button class="primary" id="mocapImport">Importar video</button>
+            <button id="mocapAnalyze" title="Requiere un motor de seguimiento instalado">Analizar</button></div>
+          <video id="mocapVideo" class="mocap-video" muted playsinline controls hidden></video>
+          <p class="rig2-hint" id="mocapStatus">Importá una actuación para verla sincronizada con los cuadros.</p>
+        </details>
         <div class="rig2-hint" id="rigHint">Armado: registrá las piezas. En la mesa, arrastrá un círculo para colocar su pivote y el cuadrado para vincular esa pieza con su padre.</div>
       </div>
       <div class="dz-pin" id="dzPin" hidden>💬</div>
@@ -878,6 +886,7 @@
        usara. Con las barras de arriba, la mitad de la pantalla era interfaz y
        no lienzo. Ahora se pliega a una línea y se abre con Ctrl+K o un clic. -->
   <input type="file" id="dzAudioFile" accept="audio/*" hidden>
+  <input type="file" id="mocapVideoFile" accept="video/mp4,video/webm,video/quicktime,video/x-msvideo" hidden>
   <div class="dz-dock" id="dzDock">
     <button class="dz-dock-toggle" id="dzDockToggle" title="Pedirle un cambio a LOW (Ctrl+K)">
       <span>Pedile un cambio a LOW…</span><b>Ctrl+K</b></button>
@@ -922,6 +931,7 @@
 <script src="rigging/rig-input.js?v=3.29.85"></script>
 <script src="animation/exposures.js?v=3.29.85"></script>
 <script src="animation/onion.js?v=3.29.85"></script>
+<script src="animation/mocap.js?v=3.29.89"></script>
 <script src="animation/document.js?v=3.29.85"></script>
 <script src="animation/rig-library.js?v=3.29.85"></script>
 <script src="animation/xsheet-view.js?v=3.29.85"></script>

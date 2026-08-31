@@ -439,12 +439,29 @@ No entran nuevas familias de funciones durante esta etapa.
 
 ### SIGUIENTE — producción 2D
 
-1. Editor de curvas.
-2. Pesos, flexi-binding y mallas.
-3. Smart Bones y acciones.
-4. Audio, lipsync y sustituciones consolidadas.
-5. Cámara y composición verificadas.
-6. Espacios de trabajo desmontables y multimonitor.
+1. **Video mocap y rotoscopía asistida**: importar actuación, sincronizarla,
+   extraer silueta y pose, corregir resultados y retargetearlos sin destruir el rig.
+2. Editor de curvas.
+3. Pesos, flexi-binding y mallas.
+4. Smart Bones y acciones.
+5. Audio, lipsync y sustituciones consolidadas.
+6. Cámara y composición verificadas.
+7. Espacios de trabajo desmontables y multimonitor.
+
+#### Prioridad inmediata — video mocap y rotoscopía
+
+El recorrido obligatorio es: **Importar → marcar sujeto → analizar → corregir →
+aplicar**. Produce cuatro resultados separados y combinables: video de referencia,
+siluetas para calco, pose/esqueleto y curvas de movimiento retargeteables. El
+video nunca modifica directamente el personaje ni reemplaza sus claves sin una
+confirmación visible.
+
+La primera base funcional guarda una pista de video con duración, tamaño, rango,
+estado, muestras de pose y siluetas; sincroniza la referencia con el fotograma
+actual y permite que motores intercambiables realicen el análisis. La aplicación
+no muestra una falsa detección cuando no hay motor instalado. Las siguientes
+puertas son: segmentación temporal estable, detección corporal, corrector de
+oclusiones, reducción de claves, mapeo de articulaciones y prueba con video real.
 
 ### DESPUÉS — integración avanzada
 

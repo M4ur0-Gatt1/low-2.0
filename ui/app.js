@@ -10642,6 +10642,7 @@ function dzMenuAction(act) {
     timeline: dzAnimToggle, cuadro: dzFrameAdd, insertar: () => dzFrameInsert(false),
     clave: dzKeyToggle, intercalar: dzTweenModal, interpolar: dzMoveTween,
     grabar: dzRecToggle, claveia: dzAIKeyModal, esqueleto: dzRigOpen,
+    "mocap-video": dzMocapOpen,
     camara: dzCamToggle, clavecam: dzCamKeyToggle,
     tutorialrig: dzRigTutorial,
     ejemplorig: dzRigEjemplo,
@@ -13875,6 +13876,65 @@ function dzDocumentReset() {
   dzDeselect();
 }
 
+/* ══ VIDEO DE REFERENCIA / MOTION CAPTURE ════════════════════════════════
+   La pista pertenece al documento. El blob sólo sirve para previsualizar en
+   esta sesión; al reabrir se conserva el análisis y se pide revincular el
+   archivo fuente, evitando incrustar cientos de MB en una escena. */
+function dzMocapTrack() {
+  if (!DZ.doc || !LOW.animation.MotionCaptureTrack) return null;
+  if (!DZ.doc.mocap) DZ.doc.mocap = new LOW.animation.MotionCaptureTrack(DZ.doc);
+  return DZ.doc.mocap;
+}
+function dzMocapSync() {
+  const video = $("#mocapVideo"), track = DZ.doc && DZ.doc.mocap;
+  if (!video || !track || !track.source || !video.src || !video.duration) return;
+  const t = Math.min(Math.max(0, track.timeAt(DZ.doc.frame, DZ.doc.scene.fps)), Math.max(0, video.duration - .001));
+  if (Math.abs(video.currentTime - t) > .025) video.currentTime = t;
+}
+function dzMocapWire() {
+  const input = $("#mocapVideoFile"), open = $("#mocapImport"), analyze = $("#mocapAnalyze");
+  const video = $("#mocapVideo"), status = $("#mocapStatus");
+  if (!input || input.dataset.wired) return;
+  input.dataset.wired = "1";
+  open.onclick = () => input.click();
+  input.onchange = () => {
+    const file = input.files && input.files[0]; input.value = "";
+    if (!file) return;
+    if (DZ.mocapObjectUrl) URL.revokeObjectURL(DZ.mocapObjectUrl);
+    DZ.mocapObjectUrl = URL.createObjectURL(file);
+    video.src = DZ.mocapObjectUrl; video.hidden = false;
+    video.onloadedmetadata = () => {
+      const track = dzMocapTrack(); if (!track) return;
+      track.setSource({ name: file.name, duration: video.duration,
+        width: video.videoWidth, height: video.videoHeight });
+      DZ.doc.touch(); dzMocapSync();
+      status.textContent = `${file.name} · ${video.videoWidth}×${video.videoHeight} · ${video.duration.toFixed(1)} s · sincronizado`;
+    };
+  };
+  analyze.onclick = async () => {
+    const track = DZ.doc && DZ.doc.mocap;
+    if (!track || !track.source) return dzSetStatus(" Importá primero un video de actuación");
+    const ids = LOW.animation.mocapEngines.list();
+    if (!ids.length) {
+      status.textContent = "Video listo como referencia. Falta instalar un motor de silueta y pose; LOW no inventará resultados.";
+      return dzSetStatus(" Captura automática todavía sin motor instalado");
+    }
+    const engine = LOW.animation.mocapEngines.get(ids[0]);
+    track.status = "processing"; status.textContent = "Analizando movimiento…";
+    try { await engine.analyze(track, video); track.engine = ids[0]; track.status = "tracked"; DZ.doc.touch(); }
+    catch (err) { track.status = "error"; status.textContent = "Falló el análisis: " + (err.message || err); }
+  };
+}
+
+async function dzMocapOpen() {
+  await dzDocInit();
+  if (!DZ.rigMode) dzRigToggle();
+  const panel = $("#mocapPanel");
+  if (panel) { panel.open = true; panel.scrollIntoView({ block: "nearest" }); }
+  dzMocapWire();
+  dzSetStatus(" Video mocap: importá una actuación para usarla como referencia sincronizada");
+}
+
 function dzDocumentMayDiscard(action) {
   const dirty = !!(DZ.doc?.dirty || DZ.dirty);
   return !dirty || confirm(`Hay cambios sin guardar. ¿${action} sin guardarlos?`);
@@ -14362,6 +14422,7 @@ async function dzDocInit() {
       dzCanvasSet(drawing ? drawing.content : "");
       dzOnionRender();
       dzTlFramesSync();          // la barra de chips sigue al modelo
+      dzMocapSync();
       const hasRig = Object.keys((doc.scene.rig && doc.scene.rig.nodes) || {}).length > 0;
       if (hasRig) {
         dzRigApplyLive(doc.frame);
@@ -14377,6 +14438,11 @@ async function dzDocInit() {
     if (motivo === "palette" || (motivo === "content" && DZ.palView)) dzPalCssRender();
   });
   dzPalCssRender();
+  dzMocapWire();
+  if (DZ.doc.mocap && DZ.doc.mocap.source) {
+    const st = $("#mocapStatus");
+    if (st) st.textContent = DZ.doc.mocap.source.name + " · fuente desconectada: importala otra vez para previsualizar";
+  }
   dzPaletteRender();          // el panel pasa a mostrar la paleta de la escena
   dzSyncCanvasDocument();
   dzSyncTransportFromDoc();   // fps y rango del archivo, a los controles
