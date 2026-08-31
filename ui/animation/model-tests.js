@@ -867,8 +867,13 @@
       ok("un evento de interfaz no rompe el botón Colocar",eventIds.length===lib.templates.human_standard.bones.length,String(eventIds.length));
       const human=lib.templates.human_standard.bones;
       const shoulderL=human.find(b=>b.id==="clavicle_L"), shoulderR=human.find(b=>b.id==="clavicle_R");
+      const lumbar=human.find(b=>b.id==="spine"), chest=human.find(b=>b.id==="chest"), upperChest=human.find(b=>b.id==="upper_chest");
+      ok("el humano completo incluye dos articulaciones internas de columna",
+        chest?.parentId==="spine" && upperChest?.parentId==="chest" &&
+        Math.abs(lumbar.tail.y-chest.head.y)<1e-9 && Math.abs(chest.tail.y-upperChest.head.y)<1e-9,
+        JSON.stringify({lumbar,chest,upperChest}));
       ok("el humano completo incluye ambos hombros entre columna y brazos",
-        shoulderL?.parentId==="spine" && shoulderR?.parentId==="spine" &&
+        shoulderL?.parentId==="upper_chest" && shoulderR?.parentId==="upper_chest" &&
         human.find(b=>b.id==="upper_arm_L")?.parentId==="clavicle_L" &&
         human.find(b=>b.id==="upper_arm_R")?.parentId==="clavicle_R",JSON.stringify({shoulderL,shoulderR}));
       const faceDoc=new animation.LowDoc(), faceIds=lib.apply(faceDoc,"face_pro",{x:0,y:0,width:1000,height:1000},"face");

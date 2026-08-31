@@ -529,9 +529,12 @@ puede realizar, sin ayuda externa, este proyecto:
 12. Recuperar el proyecto después de un cierre forzado.
 
 La plantilla humana de aceptación incluye una cintura escapular explícita:
-columna → hombro/clavícula → brazo → antebrazo → mano en ambos lados. Los brazos
+pelvis → columna lumbar → columna media → pecho superior → hombro/clavícula →
+brazo → antebrazo → mano en ambos lados. Los brazos
 nunca nacen directamente del cuello o del centro del torso. El personaje de
-Ayuda reproduce esa jerarquía con dieciocho piezas visibles y vinculadas.
+Ayuda reproduce esa jerarquía con piezas visibles y vinculadas; el humano
+completo ofrece dos articulaciones internas de columna para inclinar y arquear
+el torso sin arrastrarlo como un bloque rígido.
 
 Desde v3.29.86, la aceptación de transformaciones exige además rotar y luego
 escalar una misma pieza sin modificar sus atributos geométricos, invertir el
