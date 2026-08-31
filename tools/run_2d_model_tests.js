@@ -18,6 +18,7 @@ const files = [
   "ui/animation/mocap.js",
   "ui/animation/document.js",
   "ui/animation/rig-library.js",
+  "ui/animation/character-library.js",
   "ui/animation/playback.js",
   "ui/drawing/selection.js",
   "ui/drawing/transforms.js",

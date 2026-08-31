@@ -154,6 +154,7 @@ Antes, durante y después de un gesto deben verse:
 6. **Validar.** Lista de piezas sin hueso, huesos sin arte, ciclos, pivotes y límites dudosos.
 7. **Probar.** Pose temporal sin claves ni modificación de la geometría neutra.
 8. **Animar.** Autokey explícito, claves visibles en X-sheet/Timeline y reproducción.
+9. **Reutilizar.** Guardar arte y rig como personaje de biblioteca; cada apertura crea una copia editable independiente.
 9. **Guardar y reabrir.** Mismo arte, jerarquía, bindings, poses, controles y timing.
 10. **Exportar.** Resultado visual igual a la previsualización aprobada.
 

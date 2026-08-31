@@ -925,7 +925,11 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   // buscara una plantilla cuyo nombre era "[object MouseEvent]".
   $("#rigLibraryAdd").onclick = () => dzRigLibraryAdd();
   $("#rigImportCharacter").onclick = () => dzRigImportCharacter();
+  $("#rigCharacterSave").onclick = dzCharacterSave;
+  $("#rigCharacterLoad").onclick = dzCharacterLoad;
+  $("#rigCharacterDelete").onclick = dzCharacterDelete;
   $("#rigClearAll").onclick = dzRigClearAll;
+  dzCharacterLibraryRender();
   $("#rigAdd").onclick = dzRigRegisterSelected;
   $("#rigRemove").onclick = dzRigRemoveSelected;
   $("#rigPivotTool").onclick = () => dzRigSetTool("pivot");
@@ -7681,6 +7685,61 @@ function dzRigLibraryAdd(keyArg) {
   DZ.rigSelectedId=ids[0]; dzRigSetMode("build"); dzRigSetTool("edit");
   dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
   dzSetStatus(`${ids.length} huesos colocados · ajustá articulaciones y tocá Repartir para pegarlos al personaje`);
+}
+
+const DZ_CHARACTER_LIBRARY_KEY = "low.2d.characters.v1";
+function dzCharacterLibraryRead() {
+  try {
+    const list = JSON.parse(localStorage.getItem(DZ_CHARACTER_LIBRARY_KEY) || "[]");
+    return Array.isArray(list) ? list.map(x => LOW.animation.characterLibrary.read(x)) : [];
+  } catch (_) { return []; }
+}
+function dzCharacterLibraryWrite(list) {
+  localStorage.setItem(DZ_CHARACTER_LIBRARY_KEY, JSON.stringify(list.slice(0, 40)));
+}
+function dzCharacterLibraryRender(selectedId) {
+  const select = $("#rigCharacterLibrary"); if (!select || !LOW.animation.characterLibrary) return;
+  const list = dzCharacterLibraryRead();
+  select.innerHTML = '<option value="">Mis personajes…</option>' + list.map(p =>
+    `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+  if (selectedId && list.some(p => p.id === selectedId)) select.value = selectedId;
+  const remove = $("#rigCharacterDelete"); if (remove) remove.disabled = !list.length;
+}
+function dzCharacterSave() {
+  if (!DZ.doc) return dzSetStatus("Abrí o creá un personaje primero");
+  const current = $("#rigCharacterLibrary")?.value;
+  const list = dzCharacterLibraryRead(), previous = list.find(p => p.id === current);
+  const name = prompt("Nombre para guardar este personaje:", previous?.name || DZ.doc.scene.name || "Mi personaje");
+  if (name == null || !name.trim()) return;
+  try {
+    const preset = LOW.animation.characterLibrary.capture(DZ.doc, dzCanvasInner(), name,
+      previous?.id || `char_${Date.now().toString(36)}`);
+    const next = list.filter(p => p.id !== preset.id); next.unshift(preset);
+    dzCharacterLibraryWrite(next); dzCharacterLibraryRender(preset.id);
+    dzSetStatus(`Personaje «${preset.name}» guardado · podés abrir una copia en cualquier lienzo`);
+  } catch (err) { sysMsg(" No se pudo guardar el personaje: " + (err.message || err)); }
+}
+async function dzCharacterLoad() {
+  const id = $("#rigCharacterLibrary")?.value;
+  const preset = dzCharacterLibraryRead().find(p => p.id === id);
+  if (!preset) return dzSetStatus("Elegí un personaje guardado primero");
+  if ((DZ.dirty || DZ.doc?.dirty) && !confirm(`¿Reemplazar el personaje actual por una copia de «${preset.name}»?`)) return;
+  if (!DZ.doc) await dzDocInit();
+  dzSnapshot();
+  dzCanvasSet(preset.drawing); dzSyncCanvasDocument(true); DZ.doc.writeDrawing(dzCanvasInner());
+  DZ.doc.replaceRig(preset.rig, `Cargar personaje «${preset.name}»`);
+  DZ.rigSelectedId = Object.keys(DZ.doc.scene.rig.nodes || {})[0] || null;
+  dzBuildLayers(); dzRigSetMode("build"); dzRigSetTool("edit");
+  dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
+  dzSetStatus(`Copia editable de «${preset.name}» cargada · la plantilla guardada no cambia`);
+}
+function dzCharacterDelete() {
+  const id = $("#rigCharacterLibrary")?.value;
+  const list = dzCharacterLibraryRead(), preset = list.find(p => p.id === id);
+  if (!preset) return dzSetStatus("Elegí una plantilla para quitar");
+  if (!confirm(`¿Quitar «${preset.name}» de tu biblioteca? El personaje abierto no se borra.`)) return;
+  dzCharacterLibraryWrite(list.filter(p => p.id !== id)); dzCharacterLibraryRender();
+  dzSetStatus(`Plantilla «${preset.name}» quitada · el personaje abierto permanece`);
 }
 async function dzRigImportCharacter() {
   if (!DZ.doc) await dzDocInit();

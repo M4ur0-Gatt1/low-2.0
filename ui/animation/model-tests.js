@@ -912,6 +912,13 @@
       ok("eliminar esqueleto quita huesos y datos de rig",countBeforeClear>0 && !Object.keys(clearDoc.scene.rig.nodes).length && !Object.keys(clearDoc.scene.rig.bindings).length);
       clearDoc.history.undo();
       ok("deshacer recupera el esqueleto completo",Object.keys(clearDoc.scene.rig.nodes).length===countBeforeClear,String(Object.keys(clearDoc.scene.rig.nodes).length));
+      const preset=animation.characterLibrary.capture(clearDoc,"<g id='personaje'><path d='M0 0h10v10z'/></g>","Personaje propio","mine");
+      const copy=animation.characterLibrary.read(JSON.parse(JSON.stringify(preset)));
+      ok("un personaje reutilizable conserva arte y rig",copy.name==="Personaje propio"&&copy.drawing.includes("personaje")&&Object.keys(copy.rig.bones).length===countBeforeClear);
+      const target=new animation.LowDoc(); target.setHistory(new LOW.core.HistoryManager());
+      target.replaceRig(copy.rig); const loadedCount=Object.keys(target.scene.rig.nodes).length;
+      target.scene.rig.nodes[Object.keys(target.scene.rig.nodes)[0]].name="copia editada";
+      ok("cargar personaje produce una copia independiente",loadedCount===countBeforeClear&&!Object.values(copy.rig.bones).some(b=>b.name==="copia editada"));
     }
 
     // 29. La máquina de modos impide que una herramienta atraviese espacios.

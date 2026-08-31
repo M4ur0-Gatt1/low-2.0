@@ -596,6 +596,10 @@
             <option value="face_pro">Rostro · controles profesionales</option>
           </select><button class="primary" id="rigLibraryAdd" title="Colocar este esqueleto sobre el personaje">Colocar</button></div>
           <button class="rig2-import-character" id="rigImportCharacter" title="Importar arte opaco para vincularlo al esqueleto">Importar personaje…</button>
+          <div class="rig2-library"><select id="rigCharacterLibrary" aria-label="Mis personajes guardados"><option value="">Mis personajes…</option></select>
+            <button id="rigCharacterLoad" title="Cargar una copia editable del personaje elegido">Abrir</button></div>
+          <div class="rig2-actions"><button id="rigCharacterSave" title="Guardar el personaje, su esqueleto y sus claves en la biblioteca personal">Guardar personaje…</button>
+            <button id="rigCharacterDelete" title="Eliminar la plantilla elegida de la biblioteca">Quitar</button></div>
           <button id="rigClearAll" title="Eliminar todos los huesos, pivotes, vínculos y claves; el dibujo permanece intacto">Eliminar esqueleto…</button>
           <div class="rig2-mini-flow" aria-label="Flujo de rigging"><b>1</b> Importar <i>›</i><b>2</b> Colocar <i>›</i><b>3</b> Repartir <i>›</i><b>4</b> Probar <i>›</i><b>5</b> Animar</div>
         </section>
@@ -935,6 +939,7 @@
 <script src="animation/mocap.js?v=3.29.89"></script>
 <script src="animation/document.js?v=3.29.85"></script>
 <script src="animation/rig-library.js?v=3.29.85"></script>
+<script src="animation/character-library.js?v=3.29.92"></script>
 <script src="animation/xsheet-view.js?v=3.29.85"></script>
 <script src="animation/timeline-view.js?v=3.29.85"></script>
 <script src="animation/level-strip.js?v=3.29.85"></script>

@@ -1001,6 +1001,20 @@
       });
     }
 
+    replaceRig(data, label = "Cargar personaje de biblioteca") {
+      const before = animation.rigToJSON(this.scene.rig);
+      const afterRig = animation.rigData(data || {});
+      const after = animation.rigToJSON(afterRig);
+      if (JSON.stringify(before) === JSON.stringify(after)) return false;
+      this.scene.rig = afterRig; this.touch(); this.emit("rig"); this.emit("frame");
+      if (this.history) {
+        const doc = this;
+        this.history.push({ label, domain: "rig", before, after,
+          apply: (_dir, value) => { doc.scene.rig = animation.rigData(value); doc.touch(); doc.emit("rig"); doc.emit("frame"); } });
+      }
+      return true;
+    }
+
     /** Suelta el arte de un hueso sin borrar el hueso, el slot ni sus dibujos
      * alternativos. Permite corregir un reparto sin reconstruir el esqueleto. */
     unbindRigElement(boneId) {
