@@ -740,8 +740,9 @@
         <details class="rig2-performance" id="mocapPanel">
           <summary>Video · mocap · rotoscopía</summary>
           <div class="rig2-actions"><button class="primary" id="mocapImport">Importar video</button>
-            <button id="mocapAnalyze" title="Requiere un motor de seguimiento instalado">Analizar</button></div>
+            <button id="mocapAnalyze" title="Extrae localmente siluetas de movimiento cuadro a cuadro">Extraer siluetas</button></div>
           <video id="mocapVideo" class="mocap-video" muted playsinline controls hidden></video>
+          <canvas id="mocapSilhouette" class="mocap-video" hidden aria-label="Silueta extraída del cuadro actual"></canvas>
           <p class="rig2-hint" id="mocapStatus">Importá una actuación para verla sincronizada con los cuadros.</p>
         </details>
         <div class="rig2-hint" id="rigHint">Armado: registrá las piezas. En la mesa, arrastrá un círculo para colocar su pivote y el cuadrado para vincular esa pieza con su padre.</div>
@@ -936,7 +937,7 @@
 <script src="rigging/rig-input.js?v=3.29.85"></script>
 <script src="animation/exposures.js?v=3.29.85"></script>
 <script src="animation/onion.js?v=3.29.85"></script>
-<script src="animation/mocap.js?v=3.29.89"></script>
+<script src="animation/mocap.js?v=3.29.93"></script>
 <script src="animation/document.js?v=3.29.85"></script>
 <script src="animation/rig-library.js?v=3.29.85"></script>
 <script src="animation/character-library.js?v=3.29.92"></script>
@@ -946,7 +947,7 @@
 <script src="animation/palette-view.js?v=3.29.85"></script>
 <script src="animation/audio.js?v=3.29.85"></script>
 <script src="animation/shortcuts.js?v=3.29.85"></script>
-<script src="animation/model-tests.js?v=3.29.85"></script>
+<script src="animation/model-tests.js?v=3.29.93"></script>
 <script src="animation/timeline.js?v=3.29.85"></script>
 <script src="animation/xsheet.js?v=3.29.85"></script>
 <script src="animation/playback.js?v=3.29.85"></script>
@@ -965,6 +966,6 @@
 <script src="ai/commands.js?v=3.29.85"></script>
 <script src="ai/task-runner.js?v=3.29.85"></script>
 <script src="ai/recovery.js?v=3.29.85"></script>
-<script src="app.js?v=3.29.85"></script>
+<script src="app.js?v=3.29.93"></script>
 </body>
 </html>

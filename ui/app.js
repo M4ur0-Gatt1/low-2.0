@@ -13962,6 +13962,17 @@ function dzMocapSync() {
   if (!video || !track || !track.source || !video.src || !video.duration) return;
   const t = Math.min(Math.max(0, track.timeAt(DZ.doc.frame, DZ.doc.scene.fps)), Math.max(0, video.duration - .001));
   if (Math.abs(video.currentTime - t) > .025) video.currentTime = t;
+  dzMocapRenderSilhouette();
+}
+function dzMocapRenderSilhouette() {
+  const canvas = $("#mocapSilhouette"), track = DZ.doc && DZ.doc.mocap;
+  const data = track && track.silhouetteAt && track.silhouetteAt(DZ.doc.frame);
+  if (!canvas || !data || !LOW.animation.decodeMocapMask) { if (canvas) canvas.hidden = true; return; }
+  canvas.width=data.width; canvas.height=data.height; canvas.hidden=false;
+  const ctx=canvas.getContext("2d"), image=ctx.createImageData(data.width,data.height);
+  const mask=LOW.animation.decodeMocapMask(data);
+  for(let i=0,p=0;i<mask.length;i++,p+=4){ image.data[p]=255; image.data[p+1]=74; image.data[p+2]=32; image.data[p+3]=mask[i]; }
+  ctx.clearRect(0,0,canvas.width,canvas.height); ctx.putImageData(image,0,0);
 }
 function dzMocapWire() {
   const input = $("#mocapVideoFile"), open = $("#mocapImport"), analyze = $("#mocapAnalyze");
@@ -13986,15 +13997,16 @@ function dzMocapWire() {
   analyze.onclick = async () => {
     const track = DZ.doc && DZ.doc.mocap;
     if (!track || !track.source) return dzSetStatus(" Importá primero un video de actuación");
-    const ids = LOW.animation.mocapEngines.list();
-    if (!ids.length) {
-      status.textContent = "Video listo como referencia. Falta instalar un motor de silueta y pose; LOW no inventará resultados.";
-      return dzSetStatus(" Captura automática todavía sin motor instalado");
-    }
-    const engine = LOW.animation.mocapEngines.get(ids[0]);
-    track.status = "processing"; status.textContent = "Analizando movimiento…";
-    try { await engine.analyze(track, video); track.engine = ids[0]; track.status = "tracked"; DZ.doc.touch(); }
+    const id = "local-motion-silhouette", engine = LOW.animation.mocapEngines.get(id);
+    if (!engine) return dzSetStatus(" No se cargó el analizador local");
+    analyze.disabled=true; track.status = "processing"; status.textContent = "Extrayendo siluetas localmente… 0%";
+    try { await engine.analyze(track, video,{onProgress:(p,f,last)=>{status.textContent=`Extrayendo siluetas… ${Math.round(p*100)}% · cuadro ${f}/${last}`;}});
+      track.engine = id; track.status = "tracked"; DZ.doc.touch(); dzMocapRenderSilhouette();
+      const count=Object.keys(track.silhouettes||{}).length;
+      status.textContent=`${count} siluetas reales extraídas · avanzá por la línea de tiempo para revisarlas`;
+      dzSetStatus(` Captura terminada: ${count} siluetas de movimiento`); }
     catch (err) { track.status = "error"; status.textContent = "Falló el análisis: " + (err.message || err); }
+    finally { analyze.disabled=false; }
   };
 }
 

@@ -1038,6 +1038,10 @@
       let rejected=false;
       try { animation.mocapEngines.register("roto",{}); } catch (_) { rejected=true; }
       ok("el registro rechaza motores que no analizan",rejected);
+      ok("LOW incluye un motor local real de siluetas",
+        animation.mocapEngines.list().includes("local-motion-silhouette"));
+      const mask=animation.decodeMocapMask({width:3,height:2,runs:[2,0,3,1,1,0]});
+      ok("las siluetas persistentes reconstruyen su máscara",Array.from(mask).join(",")==="0,0,255,255,255,0");
     }
 
     const fallan = res.filter((r) => !r.ok);
