@@ -14060,18 +14060,19 @@ function dzMocapWire() {
     video.addEventListener("pointerdown",down);video.addEventListener("pointermove",move);video.addEventListener("pointerup",up);video.addEventListener("pointercancel",up);
   };
   analyze.onclick = async () => {
+    if(DZ.mocapAbort){DZ.mocapAbort.abort();return;}
     const track = DZ.doc && DZ.doc.mocap;
     if (!track || !track.source) return dzSetStatus(" Importá primero un video de actuación");
     const id = "local-motion-silhouette", engine = LOW.animation.mocapEngines.get(id);
     if (!engine) return dzSetStatus(" No se cargó el analizador local");
-    analyze.disabled=true; track.status = "processing"; status.textContent = "Extrayendo siluetas localmente… 0%";
-    try { await engine.analyze(track, video,{onProgress:(p,f,last)=>{status.textContent=`Extrayendo siluetas… ${Math.round(p*100)}% · cuadro ${f}/${last}`;}});
+    DZ.mocapAbort=new AbortController();analyze.textContent="Cancelar";analyze.classList.add("danger"); track.status = "processing"; status.textContent = "Extrayendo siluetas localmente… 0%";
+    try { await engine.analyze(track, video,{signal:DZ.mocapAbort.signal,onProgress:(p,f,last)=>{status.textContent=`Extrayendo siluetas… ${Math.round(p*100)}% · cuadro ${f}/${last}`;}});
       track.engine = id; track.status = "tracked"; DZ.doc.touch(); dzMocapRenderSilhouette();
       const count=Object.keys(track.silhouettes||{}).length;
       status.textContent=`${count} siluetas reales extraídas · avanzá por la línea de tiempo para revisarlas`;
       dzSetStatus(` Captura terminada: ${count} siluetas de movimiento`); }
-    catch (err) { track.status = "error"; status.textContent = "Falló el análisis: " + (err.message || err); }
-    finally { analyze.disabled=false; }
+    catch (err) {if(err.name==="AbortError"){track.status=Object.keys(track.silhouettes||{}).length?"tracked":"reference";status.textContent="Análisis cancelado · se conservaron los resultados anteriores";dzSetStatus(" Captura cancelada sin perder datos");}else{track.status = "error"; status.textContent = "Falló el análisis: " + (err.message || err);}}
+    finally { DZ.mocapAbort=null;analyze.textContent="Extraer siluetas";analyze.classList.remove("danger"); }
   };
 }
 

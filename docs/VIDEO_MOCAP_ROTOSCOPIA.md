@@ -41,3 +41,7 @@ registro de motores. La extracción local compara contra el primer cuadro y est�
 pensada para cámara fija; no se presenta como detección corporal. Pendiente para
 producción: segmentación semántica estable, pose, corrector visual, retargeting,
 reducción de claves y pruebas de aceptación con videos diversos.
+
+El análisis muestra progreso y se puede cancelar. Una cancelación restaura el
+conjunto anterior de siluetas y devuelve el video a su tiempo y reproducción
+previos; cancelar nunca deja un análisis parcial presentado como completo.

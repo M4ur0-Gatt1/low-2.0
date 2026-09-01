@@ -134,33 +134,34 @@
       ctx.drawImage(video, 0, 0, width, height);
       const background = ctx.getImageData(0, 0, width, height).data.slice();
       const last = Math.min(track.range.out, track.range.in + Math.max(1, Math.floor(video.duration * fps)) - 1);
-      track.silhouettes = {};
-      for (let frame = track.range.in; frame <= last; frame++) {
-        if (options.signal && options.signal.aborted) throw new Error("Análisis cancelado");
-        const time = Math.min(video.duration - .001, track.timeAt(frame, fps));
-        await seek(video, Math.max(0, time));
-        ctx.drawImage(video, 0, 0, width, height);
-        const pixels = ctx.getImageData(0, 0, width, height).data;
-        const raw = new Uint8Array(width * height), mask = new Uint8Array(width * height);
-        for (let p = 0, q = 0; p < pixels.length; p += 4, q++) {
-          const px=q%width, py=Math.floor(q/width);
-          if(px<rx0||px>=rx1||py<ry0||py>=ry1){ raw[q]=0; continue; }
-          const delta = Math.abs(pixels[p] - background[p]) + Math.abs(pixels[p+1] - background[p+1]) + Math.abs(pixels[p+2] - background[p+2]);
-          raw[q] = delta > 54 ? 1 : 0;
+      const previous=track.silhouettes;track.silhouettes = {};
+      try {
+        for (let frame = track.range.in; frame <= last; frame++) {
+          if (options.signal && options.signal.aborted) { const e=new Error("Análisis cancelado");e.name="AbortError";throw e; }
+          const time = Math.min(video.duration - .001, track.timeAt(frame, fps));
+          await seek(video, Math.max(0, time));
+          ctx.drawImage(video, 0, 0, width, height);
+          const pixels = ctx.getImageData(0, 0, width, height).data;
+          const raw = new Uint8Array(width * height), mask = new Uint8Array(width * height);
+          for (let p = 0, q = 0; p < pixels.length; p += 4, q++) {
+            const px=q%width, py=Math.floor(q/width);
+            if(px<rx0||px>=rx1||py<ry0||py>=ry1){ raw[q]=0; continue; }
+            const delta = Math.abs(pixels[p] - background[p]) + Math.abs(pixels[p+1] - background[p+1]) + Math.abs(pixels[p+2] - background[p+2]);
+            raw[q] = delta > 54 ? 1 : 0;
+          }
+          let minX=width,minY=height,maxX=-1,maxY=-1,count=0;
+          for (let y=1;y<height-1;y++) for (let x=1;x<width-1;x++) {
+            const q=y*width+x; let near=0;
+            for(let yy=-1;yy<=1;yy++) for(let xx=-1;xx<=1;xx++) near+=raw[q+yy*width+xx];
+            if(near>=4){ mask[q]=1; count++; minX=Math.min(minX,x); minY=Math.min(minY,y); maxX=Math.max(maxX,x); maxY=Math.max(maxY,y); }
+          }
+          track.setSilhouette(frame,{width,height,runs:encodeMask(mask),coverage:count/mask.length,
+            bounds:maxX<0?null:{x:minX/width,y:minY/height,w:(maxX-minX+1)/width,h:(maxY-minY+1)/height}});
+          if (options.onProgress) options.onProgress((frame-track.range.in+1)/(last-track.range.in+1), frame, last);
+          if ((frame-track.range.in)%4===0) await new Promise(resolve => setTimeout(resolve,0));
         }
-        let minX=width,minY=height,maxX=-1,maxY=-1,count=0;
-        for (let y=1;y<height-1;y++) for (let x=1;x<width-1;x++) {
-          const q=y*width+x; let near=0;
-          for(let yy=-1;yy<=1;yy++) for(let xx=-1;xx<=1;xx++) near+=raw[q+yy*width+xx];
-          if(near>=4){ mask[q]=1; count++; minX=Math.min(minX,x); minY=Math.min(minY,y); maxX=Math.max(maxX,x); maxY=Math.max(maxY,y); }
-        }
-        track.setSilhouette(frame,{width,height,runs:encodeMask(mask),coverage:count/mask.length,
-          bounds:maxX<0?null:{x:minX/width,y:minY/height,w:(maxX-minX+1)/width,h:(maxY-minY+1)/height}});
-        if (options.onProgress) options.onProgress((frame-track.range.in+1)/(last-track.range.in+1), frame, last);
-        if ((frame-track.range.in)%4===0) await new Promise(resolve => setTimeout(resolve,0));
-      }
-      await seek(video, Math.min(oldTime, video.duration - .001));
-      if (!oldPaused) video.play().catch(()=>{});
+      } catch(error) { track.silhouettes=previous;throw error; }
+      finally { await seek(video, Math.min(oldTime, video.duration - .001));if (!oldPaused) video.play().catch(()=>{}); }
       track.engine = "local-motion-silhouette"; track.status = "tracked";
       return track;
     }
