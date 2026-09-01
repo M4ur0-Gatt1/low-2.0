@@ -2556,7 +2556,7 @@ async function openDesign(path) {
   // rompía todo el editor ("Cannot set properties of null"). Solo cambiar el svg.
   // Solo el svg del DISEÑO, que es hijo directo; los overlays del editor se conservan.
   [...cv.children]
-    .filter(n => n.tagName.toLowerCase() === "svg" && n.id !== "dzRigOverlay")
+    .filter(n => n.tagName.toLowerCase() === "svg" && !["dzRigOverlay","dzMocapSheet"].includes(n.id))
     .forEach(n => n.remove());
   let sourceSvg = r.svg;
   const recovery = window.LOW?.workspace?.recovery?.get(path);
@@ -2648,6 +2648,7 @@ function dzApplyZoom() {
   if (DZ.rulers || DZ.grid || (DZ.guides && DZ.guides.length)) dzRulersRender();
   dzPivotMark();
   if (DZ.rigMode) dzRigOverlayRender();
+  dzMocapRenderCanvasGuide();
 }
 /* modo dibujo (Tab): oculta menús, paneles, timeline y dock — solo lienzo +
    herramientas, para dibujar sin distracción (como el Tab de Photoshop). */
@@ -13974,6 +13975,21 @@ function dzMocapRenderSilhouette() {
   for(let i=0,p=0;i<mask.length;i++,p+=4){ image.data[p]=255; image.data[p+1]=74; image.data[p+2]=32; image.data[p+3]=mask[i]; }
   ctx.clearRect(0,0,canvas.width,canvas.height); ctx.putImageData(image,0,0);
   const tools=$("#mocapCorrection"); if(tools)tools.hidden=false;
+  const toLevel=$("#mocapToLevel");if(toLevel)toLevel.hidden=false;
+  dzMocapRenderCanvasGuide();
+}
+function dzMocapMaskDataUrl(data,color) {
+  if(!data||!LOW.animation.decodeMocapMask)return null;const canvas=document.createElement("canvas");canvas.width=data.width;canvas.height=data.height;
+  const ctx=canvas.getContext("2d"),image=ctx.createImageData(data.width,data.height),mask=LOW.animation.decodeMocapMask(data),rgb=color||[255,74,32];
+  for(let i=0,p=0;i<mask.length;i++,p+=4){image.data[p]=rgb[0];image.data[p+1]=rgb[1];image.data[p+2]=rgb[2];image.data[p+3]=mask[i];}ctx.putImageData(image,0,0);return canvas.toDataURL("image/png");
+}
+function dzMocapRenderCanvasGuide() {
+  const overlay=$("#dzMocapSheet"),design=$("#dzCanvas")?.querySelector(":scope > svg:not(#dzMocapSheet):not(#dzRigOverlay)"),track=DZ.doc&&DZ.doc.mocap;
+  const data=track?.silhouetteAt?.(DZ.doc.frame),guide=$("#mocapGuide");
+  if(!overlay||!design||!data||guide?.classList.contains("active")===false){if(overlay)overlay.hidden=true;return;}
+  const size=dzSvgDocumentSize(design),url=dzMocapMaskDataUrl(data);if(!url){overlay.hidden=true;return;}
+  overlay.hidden=false;overlay.setAttribute("viewBox",`${size.x} ${size.y} ${size.width} ${size.height}`);overlay.setAttribute("width",size.width);overlay.setAttribute("height",size.height);
+  overlay.style.transform=design.style.transform;overlay.innerHTML=`<image href="${url}" x="${size.x}" y="${size.y}" width="${size.width}" height="${size.height}" opacity=".42" preserveAspectRatio="none"/>`;
 }
 function dzMocapCommitMask(canvas,mask) {
   const track=DZ.doc&&DZ.doc.mocap,data=track?.silhouetteAt?.(DZ.doc.frame);
@@ -13985,11 +14001,14 @@ function dzMocapCommitMask(canvas,mask) {
   DZ.doc.touch(); dzMocapRenderSilhouette();
 }
 function dzMocapCorrectionWire() {
-  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush");
+  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush"),guide=$("#mocapGuide"),toLevel=$("#mocapToLevel");
   if(!canvas||canvas.dataset.correctorWired)return; canvas.dataset.correctorWired="1";
   let mode=null,drawing=false,mask=null,before=null;
   const activate=next=>{mode=next;paint?.classList.toggle("active",next==="paint");erase?.classList.toggle("active",next==="erase");canvas.classList.toggle("correcting",!!next);};
   paint.onclick=()=>activate(mode==="paint"?null:"paint"); erase.onclick=()=>activate(mode==="erase"?null:"erase");
+  guide.onclick=()=>{guide.classList.toggle("active");dzMocapRenderCanvasGuide();};
+  toLevel.onclick=()=>{const track=DZ.doc?.mocap;if(!track)return;const size=dzCurrentDocumentSize(),items=Object.keys(track.silhouettes||{}).map(Number).sort((a,b)=>a-b).map(frame=>{const data=track.silhouetteAt(frame),url=dzMocapMaskDataUrl(data,[40,40,40]);return{frame,content:`<image href="${url}" x="${size.x}" y="${size.y}" width="${size.width}" height="${size.height}" opacity=".6" preserveAspectRatio="none" data-low-roto="1"/>`};});
+    const layer=DZ.doc.addReferenceSequence(items,"Rotoscopía");if(layer){dzBuildLayers();dzSetStatus(` Nivel de calco creado: ${items.length} dibujos`);}};
   const apply=e=>{if(!drawing||!mode||!mask)return;const r=canvas.getBoundingClientRect(),cx=(e.clientX-r.left)/r.width*canvas.width,cy=(e.clientY-r.top)/r.height*canvas.height,rad=+(brush?.value||8);
     for(let y=Math.max(0,Math.floor(cy-rad));y<Math.min(canvas.height,Math.ceil(cy+rad));y++)for(let x=Math.max(0,Math.floor(cx-rad));x<Math.min(canvas.width,Math.ceil(cx+rad));x++)if((x-cx)**2+(y-cy)**2<=rad**2)mask[y*canvas.width+x]=mode==="paint"?255:0;
     const ctx=canvas.getContext("2d"),image=ctx.createImageData(canvas.width,canvas.height);for(let i=0,p=0;i<mask.length;i++,p+=4){image.data[p]=255;image.data[p+1]=74;image.data[p+2]=32;image.data[p+3]=mask[i];}ctx.putImageData(image,0,0);};

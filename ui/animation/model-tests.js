@@ -1045,6 +1045,11 @@
       ok("las siluetas persistentes reconstruyen su máscara",Array.from(mask).join(",")==="0,0,255,255,255,0");
       ok("una máscara corregida se puede volver a comprimir sin pérdidas",
         Array.from(animation.decodeMocapMask({width:3,height:2,runs:animation.encodeMocapMask(mask)})).join(",")===Array.from(mask).join(","));
+      const history=new LOW.core.HistoryManager(),rotoDoc=new animation.LowDoc();rotoDoc.setHistory(history);
+      const originalLayer=rotoDoc.layerId,roto=rotoDoc.addReferenceSequence([{frame:1,content:"<image/>"},{frame:3,content:"<image/>"}],"Roto");
+      ok("las siluetas crean un nivel de calco con exposiciones",roto&&rotoDoc.level.drawings.length===2&&roto.cellAt(3)===2);
+      history.undo();ok("deshacer quita atómicamente el nivel de calco",rotoDoc.layerId===originalLayer&&!rotoDoc.scene.layer(roto.id));
+      history.redo();ok("rehacer restaura dibujos y exposiciones del calco",rotoDoc.scene.layer(roto.id)?.cellAt(3)===2);
     }
 
     const fallan = res.filter((r) => !r.ok);

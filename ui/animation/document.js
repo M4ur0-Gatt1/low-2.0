@@ -642,6 +642,24 @@
       return ly;
     }
 
+    /** Crea una columna de referencia a partir de imágenes por cuadro. Es una
+     *  operación atómica: Undo quita nivel y capa; Redo restaura exactamente
+     *  dibujos y exposiciones, sin tocar el resto de la escena. */
+    addReferenceSequence(items, nombre) {
+      const valid=(items||[]).filter(x=>x&&Number(x.frame)>0&&x.content!=null);
+      if(!valid.length)return null;
+      const lv=this.scene.addLevel(nombre||"Rotoscopía","reference");
+      const ly=this.scene.addLayer(lv.id,nombre||"Rotoscopía"); ly.opacity=.35;
+      valid.forEach((item,index)=>{const number=index+1;lv.addDrawing(number,String(item.content));ly.setCell(Math.round(item.frame),number);});
+      const levelData=lv.toJSON(),layerData=ly.toJSON(),previousLayerId=this.layerId;
+      this.layerId=ly.id;this.touch();this.emit("layers");this.emit("level");this.emit("cells");this.emit("frame");
+      if(this.history){const doc=this;this.history.push({label:"Crear nivel de rotoscopía",domain:"mocap",before:null,after:{levelData,layerData},apply:(dir,value)=>{
+        if(dir==="undo"){doc.scene.layers=doc.scene.layers.filter(x=>x.id!==layerData.id);doc.scene.levels=doc.scene.levels.filter(x=>x.id!==levelData.id);doc.layerId=previousLayerId;}
+        else{if(!doc.scene.level(levelData.id))doc.scene.levels.push(new animation.Level(value.levelData));if(!doc.scene.layer(layerData.id))doc.scene.layers.push(new animation.Layer(value.layerData));doc.layerId=layerData.id;}
+        doc.touch();doc.emit("layers");doc.emit("level");doc.emit("cells");doc.emit("frame");}});}
+      return ly;
+    }
+
     // ── rig canónico ────────────────────────────────────────────────────
     _ensureRigBoneRecord(rig, data) {
       const id = data.id;

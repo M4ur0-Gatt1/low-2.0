@@ -521,6 +521,7 @@
         <div class="dz-cam-rot" id="dzCamRot" title="Arrastrá para rotar la cámara"></div>
       </div>
       <div class="dz-pivotmark" id="dzPivot" title="Pivote de rotación (rig) — la rotación gira alrededor de acá" hidden>✛</div>
+      <svg class="dz-mocap-sheet" id="dzMocapSheet" aria-label="Guía de rotoscopía" hidden></svg>
       <svg class="dz-rig-overlay" id="dzRigOverlay" aria-label="Controles del esqueleto" hidden></svg>
       <!-- 🎭 Diorama: vista lateral del multiplano (cámara  capas  fondo).
            El compositing sin nodos: cada capa es una tarjeta física que corrés
@@ -748,8 +749,10 @@
           <div class="rig2-actions" id="mocapCorrection" hidden>
             <button id="mocapPaint" title="Agregar zonas a la silueta">Agregar</button>
             <button id="mocapErase" title="Quitar zonas de la silueta">Borrar</button>
+            <button id="mocapGuide" class="active" title="Mostrar u ocultar la silueta sobre el lienzo">Guía</button>
             <label title="Tamaño del corrector">Punta <input id="mocapBrush" type="range" min="2" max="24" value="8"></label>
           </div>
+          <button id="mocapToLevel" hidden>Crear nivel de calco</button>
           <p class="rig2-hint" id="mocapStatus">Importá una actuación para verla sincronizada con los cuadros.</p>
         </details>
         <div class="rig2-hint" id="rigHint">Armado: registrá las piezas. En la mesa, arrastrá un círculo para colocar su pivote y el cuadrado para vincular esa pieza con su padre.</div>
