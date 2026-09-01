@@ -14032,6 +14032,10 @@ function dzMocapWire() {
   if (!input || input.dataset.wired) return;
   input.dataset.wired = "1";
   dzMocapCorrectionWire();
+  const threshold=$("#mocapThreshold"),cleanup=$("#mocapCleanup");
+  const syncOptions=()=>{const track=dzMocapTrack();if(!track)return;track.analysisOptions={threshold:+threshold.value||54,cleanup:+cleanup.value||4};DZ.doc.touch();};
+  threshold.oninput=syncOptions;cleanup.oninput=syncOptions;
+  const current=DZ.doc?.mocap?.analysisOptions;if(current){threshold.value=current.threshold||54;cleanup.value=current.cleanup||4;}
   open.onclick = () => input.click();
   input.onchange = () => {
     const file = input.files && input.files[0]; input.value = "";
@@ -14044,6 +14048,7 @@ function dzMocapWire() {
       track.setSource({ name: file.name, duration: video.duration,
         width: video.videoWidth, height: video.videoHeight });
       DZ.doc.touch(); dzMocapSync();
+      threshold.value=track.analysisOptions?.threshold||54;cleanup.value=track.analysisOptions?.cleanup||4;
       dzMocapRenderSubject();
       status.textContent = `${file.name} · ${video.videoWidth}×${video.videoHeight} · ${video.duration.toFixed(1)} s · sincronizado`;
     };

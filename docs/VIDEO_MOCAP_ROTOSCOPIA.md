@@ -45,3 +45,5 @@ reducción de claves y pruebas de aceptación con videos diversos.
 El análisis muestra progreso y se puede cancelar. Una cancelación restaura el
 conjunto anterior de siluetas y devuelve el video a su tiempo y reproducción
 previos; cancelar nunca deja un análisis parcial presentado como completo.
+La sensibilidad y la limpieza pertenecen a la pista y se conservan al reabrir;
+el artista puede adaptarlas al ruido, compresión e iluminación de cada toma.

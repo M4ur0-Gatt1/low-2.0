@@ -13,6 +13,7 @@
       this.status = "empty";
       this.engine = null;
       this.subjectRegion = null;
+      this.analysisOptions = { threshold: 54, cleanup: 4 };
       this.samples = {};
       this.silhouettes = {};
     }
@@ -58,6 +59,7 @@
     toJSON() {
       return { version: 2, source: this.source, range: this.range, status: this.status,
         subjectRegion: this.subjectRegion,
+        analysisOptions: this.analysisOptions,
         engine: this.engine, samples: this.samples, silhouettes: this.silhouettes };
     }
     fromJSON(data) {
@@ -67,6 +69,7 @@
       this.status = data.status || (this.source ? "reference" : "empty");
       this.engine = data.engine || null;
       this.subjectRegion = data.subjectRegion ? this.setSubjectRegion(data.subjectRegion) : null;
+      this.analysisOptions = Object.assign({threshold:54,cleanup:4},data.analysisOptions||{});
       this.samples = Object.assign({}, data.samples || {});
       this.silhouettes = Object.assign({}, data.silhouettes || {});
       return this;
@@ -120,6 +123,7 @@
       if (!video || !video.duration || !video.videoWidth) throw new Error("El video no está listo");
       if (typeof document === "undefined") throw new Error("El analizador necesita el lienzo de LOW");
       options = options || {};
+      const analysis=Object.assign({threshold:54,cleanup:4},track.analysisOptions||{},options.analysis||{});
       const fps = Math.max(1, Number(track.doc && track.doc.scene && track.doc.scene.fps) || 24);
       const width = Math.min(192, Math.max(64, video.videoWidth));
       const height = Math.max(36, Math.round(width * video.videoHeight / video.videoWidth));
@@ -147,13 +151,13 @@
             const px=q%width, py=Math.floor(q/width);
             if(px<rx0||px>=rx1||py<ry0||py>=ry1){ raw[q]=0; continue; }
             const delta = Math.abs(pixels[p] - background[p]) + Math.abs(pixels[p+1] - background[p+1]) + Math.abs(pixels[p+2] - background[p+2]);
-            raw[q] = delta > 54 ? 1 : 0;
+            raw[q] = delta > Math.max(1,Number(analysis.threshold)||54) ? 1 : 0;
           }
           let minX=width,minY=height,maxX=-1,maxY=-1,count=0;
           for (let y=1;y<height-1;y++) for (let x=1;x<width-1;x++) {
             const q=y*width+x; let near=0;
             for(let yy=-1;yy<=1;yy++) for(let xx=-1;xx<=1;xx++) near+=raw[q+yy*width+xx];
-            if(near>=4){ mask[q]=1; count++; minX=Math.min(minX,x); minY=Math.min(minY,y); maxX=Math.max(maxX,x); maxY=Math.max(maxY,y); }
+            if(near>=Math.max(1,Math.min(9,Number(analysis.cleanup)||4))){ mask[q]=1; count++; minX=Math.min(minX,x); minY=Math.min(minY,y); maxX=Math.max(maxX,x); maxY=Math.max(maxY,y); }
           }
           track.setSilhouette(frame,{width,height,runs:encodeMask(mask),coverage:count/mask.length,
             bounds:maxX<0?null:{x:minX/width,y:minY/height,w:(maxX-minX+1)/width,h:(maxY-minY+1)/height}});
