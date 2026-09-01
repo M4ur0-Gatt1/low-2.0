@@ -100,12 +100,12 @@ async function main() {
       pose:reopenedArm?.keys?.[12]?.r,diagnostics:(reopened.scene.rig.diagnostics||[]).length,
       exportPosed:exported.includes("matrix("),exportClean:!exported.includes("data-rigbase")};
     const track=new LOW.animation.MotionCaptureTrack(DZ.doc);
-    track.setPose(1,{hips:{x:.45,y:.7},neck:{x:.45,y:.4}},1);
-    track.setPose(5,{hips:{x:.55,y:.7},neck:{x:.55,y:.4}},1);
+    track.setPose(1,{hips:{x:.45,y:.7},neck:{x:.45,y:.4},left_ankle:{x:.35,y:.92},right_ankle:{x:.55,y:.92}},1);
+    track.setPose(5,{hips:{x:.55,y:.7},neck:{x:.55,y:.4},left_ankle:{x:.35,y:.92},right_ankle:{x:.55,y:.92}},1);
     track.analysisOptions.backgroundTime=1.25;
     track.setSilhouette(2,{width:2,height:1,runs:[2,1],coverage:1,confidence:.2,occluded:true,corrected:false});DZ.doc.mocap=track;dzMocapWire();
-    const complete=document.querySelector("#mocapPoseInterpolation"),tolerance=document.querySelector("#mocapKeyTolerance"),poseConfidence=document.querySelector("#mocapPoseConfidence");
-    complete.checked=true;complete.dispatchEvent(new Event("change",{bubbles:true}));tolerance.value="3";tolerance.dispatchEvent(new Event("input",{bubbles:true}));poseConfidence.value="0.6";poseConfidence.dispatchEvent(new Event("input",{bubbles:true}));
+    const complete=document.querySelector("#mocapPoseInterpolation"),footLock=document.querySelector("#mocapFootLock"),tolerance=document.querySelector("#mocapKeyTolerance"),poseConfidence=document.querySelector("#mocapPoseConfidence");
+    complete.checked=true;complete.dispatchEvent(new Event("change",{bubbles:true}));footLock.checked=true;footLock.dispatchEvent(new Event("change",{bubbles:true}));tolerance.value="3";tolerance.dispatchEvent(new Event("input",{bubbles:true}));poseConfidence.value="0.6";poseConfidence.dispatchEvent(new Event("input",{bubbles:true}));
     track.poseAnalysis={detected:2,missed:1,missedFrames:[4],retained:0,model:"pose_landmarker_lite"};
     const poseState=dzMocapPoseStatus(),poseIssueVisible=!document.querySelector("#mocapNextPoseIssue").hidden&&!document.querySelector("#mocapPoseTools").hidden;
     document.querySelector("#mocapNextIssue").click();const issueNavigation=DZ.doc.frame===2;
@@ -113,7 +113,8 @@ async function main() {
     DZ.doc.history.undo();const validationUndo=DZ.doc.mocap.silhouetteAt(2).corrected===false;DZ.doc.history.redo();const validationRedo=DZ.doc.mocap.silhouetteAt(2).corrected===true;
     document.querySelector("#mocapNextPoseIssue").click();const poseIssueNavigation=DZ.doc.frame===4;
     const mocap={generated:poseState.report.generatedFrames,spine:poseState.report.chainFrames.spine,
-      optionSaved:DZ.doc.mocap.analysisOptions.poseInterpolation===true&&DZ.doc.mocap.analysisOptions.keyTolerance===3&&DZ.doc.mocap.analysisOptions.backgroundTime===1.25&&DZ.doc.mocap.analysisOptions.poseConfidence===.6,
+      optionSaved:DZ.doc.mocap.analysisOptions.poseInterpolation===true&&DZ.doc.mocap.analysisOptions.footLock===true&&DZ.doc.mocap.analysisOptions.keyTolerance===3&&DZ.doc.mocap.analysisOptions.backgroundTime===1.25&&DZ.doc.mocap.analysisOptions.poseConfidence===.6,
+      footContacts:poseState.contacts?.ranges?.left?.length===1&&poseState.contacts?.ranges?.right?.length===1,
       applyVisible:!document.querySelector("#mocapApplyRig").hidden,detectorVisible:!!document.querySelector("#mocapDetectPose")&&!document.querySelector("#mocapDetectPose").hidden,status:document.querySelector("#mocapPoseStatus").textContent,
       issueNavigation,poseIssueVisible,poseIssueNavigation,validated,validationUndo,validationRedo};
     dzSelect(document.getElementById("mano_izq"));
@@ -157,7 +158,7 @@ async function main() {
       !value.persistence.exportPosed || !value.persistence.exportClean)
     throw Error("REGRESIÓN: rig no sobrevive guardar/reabrir/exportar: " + JSON.stringify(value));
   if (value.mocap?.generated !== 5 || value.mocap?.spine !== 5 || !value.mocap.optionSaved || !value.mocap.applyVisible || !value.mocap.detectorVisible ||
-       !value.mocap.issueNavigation || !value.mocap.poseIssueVisible || !value.mocap.poseIssueNavigation || !value.mocap.validated || !value.mocap.validationUndo || !value.mocap.validationRedo)
+       !value.mocap.footContacts || !value.mocap.issueNavigation || !value.mocap.poseIssueVisible || !value.mocap.poseIssueNavigation || !value.mocap.validated || !value.mocap.validationUndo || !value.mocap.validationRedo)
     throw Error("REGRESIÓN: diagnóstico/opciones de retargeting no funcionan en la interfaz: " + JSON.stringify(value));
   if (!value.deletion?.objectDeleted || !value.deletion?.boneDeleted)
     throw Error("REGRESIÓN: Supr no elimina objeto y hueso según contexto: " + JSON.stringify(value));

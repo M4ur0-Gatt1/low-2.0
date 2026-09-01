@@ -13968,12 +13968,12 @@ function dzMocapSync() {
 function dzMocapPoseStatus() {
   const track=DZ.doc?.mocap,options=$("#mocapPoseOptions"),status=$("#mocapPoseStatus"),apply=$("#mocapApplyRig"),nextPose=$("#mocapNextPoseIssue"),poseTools=$("#mocapPoseTools");
   if(!track||!LOW.animation.mocapPoseSequence){if(options)options.hidden=true;if(status)status.hidden=true;if(apply)apply.hidden=true;if(nextPose)nextPose.hidden=true;if(poseTools)poseTools.hidden=true;return null;}
-  const interpolate=track.analysisOptions?.poseInterpolation!==false,sequence=LOW.animation.mocapPoseSequence(track,interpolate),report=LOW.animation.mocapPoseReport(track,sequence);
+  const interpolate=track.analysisOptions?.poseInterpolation!==false,sequence=LOW.animation.mocapPoseSequence(track,interpolate),report=LOW.animation.mocapPoseReport(track,sequence),contacts=LOW.animation.mocapFootContacts?.(sequence);
   const visible=report.observedFrames>0,missed=(track.poseAnalysis?.missedFrames||[]).length;if(options)options.hidden=!visible;if(status)status.hidden=!visible;if(apply)apply.hidden=!visible;
   if(nextPose)nextPose.hidden=!missed;if(poseTools)poseTools.hidden=!(visible||missed);
-  if(status&&visible){const usable=Object.values(report.chainFrames).filter(Boolean).length,expanded=report.generatedFrames>report.observedFrames?` → ${report.generatedFrames} con completado`:"",origin=report.automaticFrames?` · ${report.automaticFrames} automáticos · ${report.manualFrames} revisados`:"";
-    status.textContent=`${report.observedJoints}/${report.totalJoints} articulaciones · ${report.observedFrames} cuadros con pose${expanded}${origin} · ${usable} cadenas utilizables`;}
-  return {sequence,report};
+  if(status&&visible){const usable=Object.values(report.chainFrames).filter(Boolean).length,expanded=report.generatedFrames>report.observedFrames?` → ${report.generatedFrames} con completado`:"",origin=report.automaticFrames?` · ${report.automaticFrames} automáticos · ${report.manualFrames} revisados`:"",left=contacts?.ranges?.left?.length||0,right=contacts?.ranges?.right?.length||0,feet=left||right?` · apoyos ${left} izq./${right} der.`:"";
+    status.textContent=`${report.observedJoints}/${report.totalJoints} articulaciones · ${report.observedFrames} cuadros con pose${expanded}${origin} · ${usable} cadenas utilizables${feet}`;}
+  return {sequence,report,contacts};
 }
 function dzMocapIsIssue(data) {
   return !!data && !data.corrected && (!!data.occluded || (data.confidence != null && Number(data.confidence) < .45));
@@ -14029,7 +14029,7 @@ function dzMocapCommitMask(canvas,mask) {
   DZ.doc.touch(); dzMocapRenderSilhouette();
 }
 function dzMocapCorrectionWire() {
-  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush"),guide=$("#mocapGuide"),toLevel=$("#mocapToLevel"),joint=$("#mocapJoint"),placeJoint=$("#mocapPlaceJoint"),deleteJoint=$("#mocapDeleteJoint"),applyRig=$("#mocapApplyRig"),poseInterpolation=$("#mocapPoseInterpolation"),keyTolerance=$("#mocapKeyTolerance"),validate=$("#mocapValidate"),nextIssue=$("#mocapNextIssue"),nextPoseIssue=$("#mocapNextPoseIssue");
+  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush"),guide=$("#mocapGuide"),toLevel=$("#mocapToLevel"),joint=$("#mocapJoint"),placeJoint=$("#mocapPlaceJoint"),deleteJoint=$("#mocapDeleteJoint"),applyRig=$("#mocapApplyRig"),poseInterpolation=$("#mocapPoseInterpolation"),footLock=$("#mocapFootLock"),keyTolerance=$("#mocapKeyTolerance"),validate=$("#mocapValidate"),nextIssue=$("#mocapNextIssue"),nextPoseIssue=$("#mocapNextPoseIssue");
   if(!canvas||canvas.dataset.correctorWired)return; canvas.dataset.correctorWired="1";
   let mode=null,drawing=false,mask=null,before=null;
   const activate=next=>{mode=next;paint?.classList.toggle("active",next==="paint");erase?.classList.toggle("active",next==="erase");canvas.classList.toggle("correcting",!!next);};
@@ -14046,8 +14046,8 @@ function dzMocapCorrectionWire() {
     if(DZ.doc.history){const doc=DZ.doc;DZ.doc.history.push({label,domain:"mocap",before,after,apply:(_dir,next)=>{if(next.sample){const meta=Object.assign({},next.sample);delete meta.joints;delete meta.confidence;doc.mocap.setPose(frame,next.sample.joints,next.sample.confidence,meta);}else delete doc.mocap.samples[frame];if(doc.mocap.poseAnalysis)doc.mocap.poseAnalysis.missedFrames=[...next.missedFrames];doc.touch();if(doc.frame===frame)dzMocapRenderSilhouette();}});}DZ.doc.touch();dzMocapRenderSilhouette();};
   deleteJoint.onclick=()=>changeJoint(joint.value,null,"Quitar articulación de video");
   canvas.addEventListener("click",e=>{if(!placingJoint)return;e.preventDefault();e.stopImmediatePropagation();const r=canvas.getBoundingClientRect();changeJoint(joint.value,{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height)),confidence:1},"Colocar articulación de video");placingJoint=false;placeJoint.classList.remove("active");canvas.classList.remove("placing-joint");});
-  const syncPoseOptions=()=>{const track=DZ.doc?.mocap;if(!track)return;track.analysisOptions=Object.assign({},track.analysisOptions,{poseInterpolation:poseInterpolation?.checked!==false,keyTolerance:+keyTolerance?.value||0});DZ.doc.touch();dzMocapPoseStatus();};
-  if(poseInterpolation)poseInterpolation.onchange=syncPoseOptions;if(keyTolerance)keyTolerance.oninput=syncPoseOptions;
+  const syncPoseOptions=()=>{const track=DZ.doc?.mocap;if(!track)return;track.analysisOptions=Object.assign({},track.analysisOptions,{poseInterpolation:poseInterpolation?.checked!==false,footLock:footLock?.checked!==false,keyTolerance:+keyTolerance?.value||0});DZ.doc.touch();dzMocapPoseStatus();};
+  if(poseInterpolation)poseInterpolation.onchange=syncPoseOptions;if(footLock)footLock.onchange=syncPoseOptions;if(keyTolerance)keyTolerance.oninput=syncPoseOptions;
   if(validate)validate.onclick=()=>{
     const track=DZ.doc?.mocap,frame=DZ.doc?.frame,current=track?.silhouetteAt?.(frame);if(!track||!frame||!current)return dzSetStatus(" No hay una silueta para validar en este cuadro");
     const before=JSON.parse(JSON.stringify(current)),after=Object.assign({},before,{corrected:true,confidence:1,occluded:false});track.setSilhouette(frame,after);
@@ -14062,8 +14062,9 @@ function dzMocapCorrectionWire() {
   if(nextPoseIssue)nextPoseIssue.onclick=()=>{const track=DZ.doc?.mocap,issues=(track?.poseAnalysis?.missedFrames||[]).map(Number).filter(Number.isFinite).sort((a,b)=>a-b);if(!issues.length)return dzSetStatus(" No quedan cuadros sin pose por revisar");const target=issues.find(frame=>frame>DZ.doc.frame)||issues[0];DZ.doc.goTo(target);dzMocapRenderSilhouette();dzSetStatus(` Pose faltante en F${target} · elegí una articulación y colocala sobre la referencia`);};
   if(applyRig)applyRig.onclick=()=>{
     const track=DZ.doc?.mocap,rig=DZ.doc?.scene?.rig;if(!track||!rig)return;if(!Object.keys(rig.nodes||{}).length)return dzSetStatus(" Colocá o construí un esqueleto antes de transferir movimiento");
-    const size={width:DZ.doc.scene.width,height:DZ.doc.scene.height},prepared=LOW.animation.mocapPoseSequence(track,track.analysisOptions?.poseInterpolation!==false),rawSequence={};
-    for(const [frame,sample] of Object.entries(prepared)){const poses=LOW.animation.retargetHumanPose(sample,rig,size);if(Object.keys(poses).length)rawSequence[frame]=poses;}
+    const size={width:DZ.doc.scene.width,height:DZ.doc.scene.height},prepared=LOW.animation.mocapPoseSequence(track,track.analysisOptions?.poseInterpolation!==false),contacts=LOW.animation.mocapFootContacts(prepared),motion=track.analysisOptions?.footLock===false?prepared:LOW.animation.stabilizeMocapFootContacts(prepared,contacts),rawSequence={};
+    if(track.poseAnalysis)track.poseAnalysis.contacts=contacts;
+    for(const [frame,sample] of Object.entries(motion)){const poses=LOW.animation.retargetHumanPose(sample,rig,size);if(Object.keys(poses).length)rawSequence[frame]=poses;}
     const rawKeys=Object.values(rawSequence).reduce((sum,poses)=>sum+Object.keys(poses).length,0),sequence=LOW.animation.reduceRigPoseSequence(rawSequence,track.analysisOptions?.keyTolerance??2);
     const frames=Object.keys(sequence),keys=Object.values(sequence).reduce((sum,poses)=>sum+Object.keys(poses).length,0);
     if(!frames.length)return dzSetStatus(" No hay pares de articulaciones suficientes para transferir");
@@ -14092,8 +14093,8 @@ function dzMocapWire() {
   const video = $("#mocapVideo"), status = $("#mocapStatus");
   if (!input) return;
   dzMocapCorrectionWire();
-  const threshold=$("#mocapThreshold"),cleanup=$("#mocapCleanup"),poseConfidence=$("#mocapPoseConfidence"),poseInterpolation=$("#mocapPoseInterpolation"),keyTolerance=$("#mocapKeyTolerance");
-  const current=DZ.doc?.mocap?.analysisOptions;if(current){threshold.value=current.threshold||54;cleanup.value=current.cleanup||4;if(poseConfidence)poseConfidence.value=current.poseConfidence??.45;if(poseInterpolation)poseInterpolation.checked=current.poseInterpolation!==false;if(keyTolerance)keyTolerance.value=current.keyTolerance??2;}dzMocapPoseStatus();
+  const threshold=$("#mocapThreshold"),cleanup=$("#mocapCleanup"),poseConfidence=$("#mocapPoseConfidence"),poseInterpolation=$("#mocapPoseInterpolation"),footLock=$("#mocapFootLock"),keyTolerance=$("#mocapKeyTolerance");
+  const current=DZ.doc?.mocap?.analysisOptions;if(current){threshold.value=current.threshold||54;cleanup.value=current.cleanup||4;if(poseConfidence)poseConfidence.value=current.poseConfidence??.45;if(poseInterpolation)poseInterpolation.checked=current.poseInterpolation!==false;if(footLock)footLock.checked=current.footLock!==false;if(keyTolerance)keyTolerance.value=current.keyTolerance??2;}dzMocapPoseStatus();
   if(input.dataset.wired)return;
   input.dataset.wired = "1";
   const syncOptions=()=>{const track=dzMocapTrack();if(!track)return;track.analysisOptions=Object.assign({},track.analysisOptions,{threshold:+threshold.value||54,cleanup:+cleanup.value||4,poseConfidence:+poseConfidence?.value||.45,poseInterpolation:poseInterpolation?.checked!==false,keyTolerance:+keyTolerance?.value||0});DZ.doc.touch();};

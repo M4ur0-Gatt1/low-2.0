@@ -15,7 +15,7 @@
       this.poseEngine = null;
       this.poseAnalysis = null;
       this.subjectRegion = null;
-      this.analysisOptions = { threshold: 54, cleanup: 4, backgroundTime: 0, poseConfidence: .45, poseInterpolation: true, keyTolerance: 2 };
+      this.analysisOptions = { threshold: 54, cleanup: 4, backgroundTime: 0, poseConfidence: .45, poseInterpolation: true, footLock: true, keyTolerance: 2 };
       this.samples = {};
       this.silhouettes = {};
     }
@@ -75,7 +75,7 @@
       this.poseEngine = data.poseEngine || null;
       this.poseAnalysis = data.poseAnalysis ? Object.assign({},data.poseAnalysis) : null;
       this.subjectRegion = data.subjectRegion ? this.setSubjectRegion(data.subjectRegion) : null;
-      this.analysisOptions = Object.assign({threshold:54,cleanup:4,backgroundTime:0,poseConfidence:.45,poseInterpolation:true,keyTolerance:2},data.analysisOptions||{});
+      this.analysisOptions = Object.assign({threshold:54,cleanup:4,backgroundTime:0,poseConfidence:.45,poseInterpolation:true,footLock:true,keyTolerance:2},data.analysisOptions||{});
       this.samples = Object.assign({}, data.samples || {});
       this.silhouettes = Object.assign({}, data.silhouettes || {});
       return this;
@@ -259,7 +259,8 @@
         }
       }catch(error){track.samples=previous;throw error;}
       finally{try{poseWorker?.close();landmarker?.close();}catch(_){/* liberación defensiva */}await seek(video,Math.min(oldTime,video.duration-.001));if(!oldPaused)video.play().catch(()=>{});}
-      track.poseEngine="mediapipe-pose";track.poseAnalysis={detected,missed,missedFrames,retained:Object.keys(retained).length,model:"pose_landmarker_lite",confidence:minimum,execution};track.status="tracked";return track;
+      const contacts=mocapFootContacts(mocapPoseSequence(track,true));
+      track.poseEngine="mediapipe-pose";track.poseAnalysis={detected,missed,missedFrames,retained:Object.keys(retained).length,model:"pose_landmarker_lite",confidence:minimum,execution,contacts};track.status="tracked";return track;
     }
   };
   const RETARGET_CHAINS = [
@@ -285,6 +286,24 @@
       }
     }
     return Object.fromEntries(Object.entries(out).sort((a,b)=>Number(a[0])-Number(b[0])));
+  }
+  function mocapFootContacts(sequence, options) {
+    const source=sequence||{},frames=Object.keys(source).map(Number).filter(Number.isFinite).sort((a,b)=>a-b),settings=Object.assign({floorTolerance:.045,speedThreshold:.018,minFrames:2},options||{});
+    const all=[];for(const frame of frames)for(const side of ["left","right"]){const point=source[frame]?.joints?.[`${side}_ankle`];if(point&&Number.isFinite(point.y))all.push(point.y);}
+    if(!all.length)return{floorY:null,leftFrames:[],rightFrames:[],frames:{},ranges:{left:[],right:[]}};
+    all.sort((a,b)=>a-b);const floorY=all[Math.min(all.length-1,Math.floor((all.length-1)*.9))],contacts={left:[],right:[]};
+    const velocity=(index,name)=>{const here=source[frames[index]]?.joints?.[name];if(!here)return Infinity;const values=[];for(const offset of [-1,1]){const otherIndex=index+offset,otherFrame=frames[otherIndex],other=source[otherFrame]?.joints?.[name];if(!other||!Number.isFinite(otherFrame))continue;const span=Math.max(1,Math.abs(otherFrame-frames[index]));values.push(Math.hypot(other.x-here.x,other.y-here.y)/span);}return values.length?Math.min(...values):0;};
+    for(const side of ["left","right"]){const name=`${side}_ankle`,candidates=[];for(let index=0;index<frames.length;index++){const frame=frames[index],point=source[frame]?.joints?.[name];if(point&&Math.abs(point.y-floorY)<=settings.floorTolerance&&velocity(index,name)<=settings.speedThreshold)candidates.push(frame);}
+      let run=[];const flush=()=>{if(run.length>=settings.minFrames)contacts[side].push(...run);run=[];};for(const frame of candidates){if(run.length&&frame!==run.at(-1)+1)flush();run.push(frame);}flush();}
+    const resultFrames={};for(const side of ["left","right"])for(const frame of contacts[side])(resultFrames[frame]||(resultFrames[frame]={}))[side]=true;
+    const rangesFor=values=>{const ranges=[];let start=null,last=null;for(const frame of values){if(start==null){start=last=frame;continue;}if(frame===last+1){last=frame;continue;}ranges.push({from:start,to:last});start=last=frame;}if(start!=null)ranges.push({from:start,to:last});return ranges;};
+    return{floorY,leftFrames:contacts.left,rightFrames:contacts.right,frames:resultFrames,ranges:{left:rangesFor(contacts.left),right:rangesFor(contacts.right)},settings};
+  }
+  function stabilizeMocapFootContacts(sequence, contactReport) {
+    const output=clone(sequence||{}),frames=Object.keys(output).map(Number).filter(Number.isFinite).sort((a,b)=>a-b),anchors={left:null,right:null};
+    for(const frame of frames){const sample=output[frame],active=contactReport?.frames?.[frame]||{},corrections=[];for(const side of ["left","right"]){const point=sample?.joints?.[`${side}_ankle`];if(!active[side]||!point){anchors[side]=null;continue;}if(!anchors[side])anchors[side]={x:point.x,y:point.y};corrections.push({x:anchors[side].x-point.x,y:anchors[side].y-point.y});}
+      if(!corrections.length)continue;const dx=corrections.reduce((sum,item)=>sum+item.x,0)/corrections.length,dy=corrections.reduce((sum,item)=>sum+item.y,0)/corrections.length;for(const point of Object.values(sample.joints||{})){if(!point)continue;point.x+=dx;point.y+=dy;}}
+    return output;
   }
   function mocapPoseReport(track, sequence) {
     const exact=track&&track.samples||{},expanded=sequence||mocapPoseSequence(track,true),confirmed=new Set(),observed=new Set(),samples=Object.values(exact),manual=samples.filter(sample=>!sample?.source||sample.source==="manual"||sample.corrected);
@@ -332,6 +351,8 @@
   animation.retainManualMocapPoses = retainManualPoseSamples;
   animation.createMocapPoseWorker = createPoseWorker;
   animation.mocapPoseSequence = mocapPoseSequence;
+  animation.mocapFootContacts = mocapFootContacts;
+  animation.stabilizeMocapFootContacts = stabilizeMocapFootContacts;
   animation.mocapPoseReport = mocapPoseReport;
   animation.retargetHumanPose = retargetHumanPose;
   animation.reduceRigPoseSequence = reduceRigPoseSequence;

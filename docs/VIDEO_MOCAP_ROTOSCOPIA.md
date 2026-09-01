@@ -15,7 +15,9 @@ artista conserva el control de cada corrección y de las claves generadas.
    **Extraer siluetas** separa fondo, componentes y seguimiento temporal.
 5. Revisar los cuadros señalados con **⚠→**; corregir la máscara o confirmarla con **✓**.
 6. **Corregir** articulaciones perdidas, escala y piso.
-7. **Aplicar** como siluetas, guía de dibujo, esqueleto nuevo o movimiento de un rig.
+7. Mantener **Pies firmes** activado para estabilizar automáticamente cada apoyo
+   detectado, o desactivarlo cuando el plano exige deslizamiento.
+8. **Aplicar** como siluetas, guía de dibujo, esqueleto nuevo o movimiento de un rig.
 
 ## Contrato técnico
 
@@ -53,8 +55,9 @@ local compara contra el fondo elegido y está pensada para cámara fija; no se p
 detección corporal. El sistema completa puntos sólo entre dos observaciones de
 la misma articulación, informa la cobertura antes de aplicar y reduce claves
 redundantes con una tolerancia elegida por el artista. Pendiente para producción:
-segmentación semántica estable, contactos de pies y pruebas de aceptación con
-videos diversos. La inferencia corporal ya corre en un worker local para que el
+segmentación semántica estable y pruebas de aceptación con videos diversos. Los
+contactos de pie ya se detectan como intervalos y estabilizan el retargeting sin
+alterar la pose relativa. La inferencia corporal corre en un worker local para que el
 modelo no congele la mesa; conserva un fallback compatible para equipos donde
 esa capacidad no esté disponible.
 

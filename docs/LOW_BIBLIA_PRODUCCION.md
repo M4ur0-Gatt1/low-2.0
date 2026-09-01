@@ -471,8 +471,10 @@ con diagnóstico de cobertura. Pose Landmarker Lite se distribuye dentro de LOW 
 detecta el cuerpo localmente sin API; las correcciones humanas prevalecen al
 reanalizar. La inferencia se ejecuta en un worker local para no bloquear la mesa
 de dibujo y cae de forma segura al hilo principal sólo cuando el entorno no
-admite workers. Las siguientes puertas son: segmentación semántica estable,
-contactos de pies y prueba con videos reales variados.
+admite workers. Los apoyos de ambos pies se detectan como intervalos; **Pies
+firmes** compensa el deslizamiento antes de retargetear sin cambiar la pose
+relativa del cuerpo. Las siguientes puertas son: segmentación semántica estable
+y prueba con videos reales variados.
 
 ### DESPUÉS — integración avanzada
 

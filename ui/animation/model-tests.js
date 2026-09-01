@@ -1030,14 +1030,14 @@
       });
       track.setPose(13,{nose:{x:.5,y:.2},left_shoulder:{x:.4,y:.35}},.91);
       track.setSubjectRegion({x:.2,y:.1,w:.5,h:.8});
-      track.analysisOptions={threshold:72,cleanup:6,backgroundTime:1.25,poseInterpolation:false,keyTolerance:3.5};
+      track.analysisOptions={threshold:72,cleanup:6,backgroundTime:1.25,poseInterpolation:false,footLock:false,keyTolerance:3.5};
       track.poseEngine="mediapipe-pose";track.poseAnalysis={detected:12,missed:2,missedFrames:[15,18],retained:1,model:"pose_landmarker_lite"};
       doc.mocap = track;
       ok("video mocap traduce el cuadro a tiempo de video",Math.abs(track.timeAt(13,24)-.5)<.0001);
       track.setPose(14,{hips:{x:.5,y:.6}},1);ok("la pose manual queda asociada al cuadro exacto",track.poseAt(14).joints.hips.y===.6&&!track.poseAt(12));
       const reopened = animation.LowDoc.fromJSON(doc.toJSON());
       ok("video mocap persiste fuente, rango y muestras al reabrir",
-        reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91&&reopened.mocap.subjectRegion.w===.5&&reopened.mocap.analysisOptions.threshold===72&&reopened.mocap.analysisOptions.backgroundTime===1.25&&reopened.mocap.analysisOptions.poseInterpolation===false&&reopened.mocap.analysisOptions.keyTolerance===3.5&&reopened.mocap.poseEngine==="mediapipe-pose"&&reopened.mocap.poseAnalysis.detected===12&&reopened.mocap.poseAnalysis.missedFrames.join(",")==="15,18",
+        reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91&&reopened.mocap.subjectRegion.w===.5&&reopened.mocap.analysisOptions.threshold===72&&reopened.mocap.analysisOptions.backgroundTime===1.25&&reopened.mocap.analysisOptions.poseInterpolation===false&&reopened.mocap.analysisOptions.footLock===false&&reopened.mocap.analysisOptions.keyTolerance===3.5&&reopened.mocap.poseEngine==="mediapipe-pose"&&reopened.mocap.poseAnalysis.detected===12&&reopened.mocap.poseAnalysis.missedFrames.join(",")==="15,18",
         JSON.stringify(reopened.mocap&&reopened.mocap.toJSON()));
       let rejected=false;
       try { animation.mocapEngines.register("roto",{}); } catch (_) { rejected=true; }
@@ -1086,6 +1086,10 @@
       ok("el diagnóstico distingue confirmación de cuadros generados",report.observedFrames===2&&report.confirmedFrames===2&&report.generatedFrames===5&&report.observedJoints===2&&report.chainFrames.spine===5,JSON.stringify(report));
       const auto=new animation.MotionCaptureTrack(doc);auto.setPose(1,{hips:{x:.5,y:.7},neck:{x:.5,y:.4}},.8,{source:"mediapipe"});auto.setPose(2,{hips:{x:.5,y:.7},neck:{x:.5,y:.4}},1,{source:"manual",corrected:true});const autoReport=animation.mocapPoseReport(auto);
       ok("el diagnóstico separa detección automática de revisión humana",autoReport.observedFrames===2&&autoReport.automaticFrames===1&&autoReport.manualFrames===1&&autoReport.confirmedFrames===1,JSON.stringify(autoReport));
+      const walk={};for(let frame=1;frame<=5;frame++)walk[frame]={joints:{left_ankle:{x:.3+(frame-1)*.003,y:.92},right_ankle:{x:.62+frame*.04,y:.8},hips:{x:.5+(frame-1)*.003,y:.65}}};
+      const contacts=animation.mocapFootContacts(walk),locked=animation.stabilizeMocapFootContacts(walk,contacts);
+      ok("mocap detecta intervalos de apoyo sin confundir el pie en vuelo",contacts.ranges.left.length===1&&contacts.leftFrames.length===5&&!contacts.rightFrames.length,JSON.stringify(contacts));
+      ok("pies firmes estabiliza el apoyo sin deformar la pose",Math.abs(locked[5].joints.left_ankle.x-locked[1].joints.left_ankle.x)<.0001&&Math.abs((locked[5].joints.hips.x-locked[5].joints.left_ankle.x)-(walk[5].joints.hips.x-walk[5].joints.left_ankle.x))<.0001,JSON.stringify(locked));
       const linear={};for(let frame=1;frame<=5;frame++)linear[frame]={bone:{x:frame*2,y:frame,r:frame*5,sx:1,sy:1}};
       const compact=animation.reduceRigPoseSequence(linear,.1);
       ok("la reducción elimina claves lineales redundantes",Object.keys(compact).length===2&&compact[1].bone&&compact[5].bone,JSON.stringify(compact));

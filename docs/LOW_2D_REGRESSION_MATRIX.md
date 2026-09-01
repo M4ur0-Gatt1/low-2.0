@@ -60,6 +60,7 @@ tener una comprobación proporcional al riesgo.
 | MOCAP-08 | Los 33 hitos MediaPipe se traducen a 13 articulaciones LOW respetando región, confianza y lados. | P0 — automatizado |
 | MOCAP-09 | Reanalizar reemplaza detecciones automáticas pero conserva cuadros corregidos manualmente. | P0 — automatizado |
 | MOCAP-10 | Pose Landmarker ejecuta inferencia en un worker local y el hilo visual conserva un fallback seguro. | P1 — E2E Chromium |
+| MOCAP-11 | Los apoyos se agrupan por pie e intervalo; Pies firmes estabiliza el contacto sin deformar la pose relativa. | P1 — modelo/UI automatizados |
 
 ## Regla para nuevos tests
 
