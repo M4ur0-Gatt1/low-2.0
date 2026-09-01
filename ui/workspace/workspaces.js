@@ -31,6 +31,7 @@
     camera:    { label: "Cámara",        element: "#dzCam" },
     onion:     { label: "Papel cebolla", element: "#dzOnionPanel" },
     levelstrip:{ label: "Dibujos del nivel", element: "#dzLevelStrip" },
+    mocap:     { label: "Motion Capture", element: "#dzMocapPanel" },
     color:     { label: "Paleta",        element: "#dzPalette" },
     code:      { label: "Código SVG",    element: ".dz-code" },
   };

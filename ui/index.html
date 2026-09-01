@@ -738,8 +738,12 @@
           <div class="rig2-actions"><button id="perfRec">Actuar</button><button id="perfPlay">Ver</button>
             <button id="perfSmooth">Suavizar</button><button id="perfBake">Generar</button></div>
         </details>
-        <details class="rig2-performance" id="mocapPanel">
-          <summary>Video · mocap · rotoscopía</summary>
+        <div class="rig2-hint" id="rigHint">Armado: registrá las piezas. En la mesa, arrastrá un círculo para colocar su pivote y el cuadrado para vincular esa pieza con su padre.</div>
+      </div>
+      <div class="dz-onionpanel mocap2" id="dzMocapPanel" hidden>
+        <div class="dz-op-head" id="dzMocapHead"><svg class="ico"><use href="#i-cam"/></svg> MOTION CAPTURE · ROTOSCOPÍA
+          <span class="dz-op-x" id="dzMocapClose" title="Cerrar">×</span></div>
+        <div class="mocap-panel-body" id="mocapPanel">
           <div class="rig2-actions"><button class="primary" id="mocapImport">Importar video</button>
             <button id="mocapSubject" title="Arrastrá sobre el video para aislar a la persona">Marcar sujeto</button>
             <button id="mocapBackground" title="Usar el cuadro actual del video como fondo limpio">Fondo</button>
@@ -783,8 +787,7 @@
           <p class="rig2-hint" id="mocapPoseStatus" hidden></p>
           <button id="mocapApplyRig" hidden title="Crea claves nuevas a partir de los puntos confirmados">Aplicar movimiento al rig…</button>
           <p class="rig2-hint" id="mocapStatus">Importá una actuación para verla sincronizada con los cuadros.</p>
-        </details>
-        <div class="rig2-hint" id="rigHint">Armado: registrá las piezas. En la mesa, arrastrá un círculo para colocar su pivote y el cuadrado para vincular esa pieza con su padre.</div>
+        </div>
       </div>
       <div class="dz-pin" id="dzPin" hidden>💬</div>
     </div>

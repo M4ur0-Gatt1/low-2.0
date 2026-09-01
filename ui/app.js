@@ -2507,6 +2507,7 @@ if (window.LOW && LOW.workspace && LOW.workspace.panels) {
   panels.register("xsheet", { dock: "right", element: "#dzXsheet", visible: false });
   panels.register("camera", { dock: "overlay", element: "#dzCam", visible: false });
   panels.register("rig", { dock: "right", element: "#dzRigPanel", visible: false });
+  panels.register("mocap", { dock: "right", element: "#dzMocapPanel", visible: false });
   panels.subscribe(panel => {
     const node = panel?.element && document.querySelector(panel.element); if (!node) return;
     if (!panel.detached) node.hidden = !panel.visible;
@@ -2619,7 +2620,7 @@ function dzEscapeActive() {
       dzRigSetTool("select"); dzSetStatus("Herramienta de rig soltada · modo Elegir"); return true;
     }
     if (DZ.rigSelectedId) {
-      DZ.rigSelectedId = null; dzRigOverlayRender(); dzRigPanelSync();
+      DZ.rigSelectedId = null; DZ.rigSelectionSource = null; dzRigOverlayRender(); dzRigPanelSync();
       dzSetStatus("Hueso soltado"); return true;
     }
   }
@@ -2900,7 +2901,13 @@ function dzSelect(el) {
   // que se dibuje debe entrar en la misma capa, no volver al plano general.
   const layer = dzLayerOf(el);
   if (layer) DZ.activeLayer = layer;
-  if (DZ.rigMode) DZ.rigSelectedId = DZ.doc?.scene.rigNode(el.id) ? el.id : null;
+  if (DZ.rigMode && !DZ.rigSelectingNode) {
+    // Un clic sobre el dibujo elige ARTE, aunque esté vinculado. Sólo el overlay
+    // o el árbol eligen un HUESO. Esta distinción evita que Supr borre lo opuesto
+    // a lo que el usuario acaba de tocar.
+    DZ.rigSelectedId = DZ.doc?.scene.rigNode(el.id) ? el.id : null;
+    DZ.rigSelectionSource = "art";
+  }
   dzBuildInspector(el);
   dzPositionHandle();
   dzBuildLayers();
@@ -3775,7 +3782,12 @@ function dzDeleteSelected() {
   dzMarkDirty(); dzBuildLayers();
 }
 function dzDeleteContext() {
-  if (DZ.rigMode && DZ.rigSubmode === "build" && dzRigSelectedNode()) {
+  const rigNode = DZ.rigMode && DZ.rigSelectionSource === "rig" && dzRigSelectedNode();
+  if (rigNode) {
+    if (DZ.rigSubmode !== "build") {
+      dzSetStatus(`«${rigNode.id}» es un hueso · pasá a Construir para eliminarlo sin borrar el dibujo`);
+      return true;
+    }
     dzRigRemoveSelected(); return true;
   }
   if (DZ.sel || (DZ.multi || []).length) {
@@ -7494,7 +7506,9 @@ function dzRigParentDelta(id, dx, dy, frame) {
 }
 function dzRigSelectedNode() {
   if (!DZ.doc) return null;
-  const node = DZ.doc.scene.rigNode(DZ.rigSelectedId || DZ.sel?.id) || null;
+  const id = DZ.rigSelectedId || (DZ.sel?.id &&
+    (DZ.doc.scene.rigNode(DZ.sel.id)?.id || dzRigNodeIdOfElement(DZ.sel.id)));
+  const node = DZ.doc.scene.rigNode(id) || null;
   // Seleccionar en la mesa algo que no es del rig borra la pieza elegida, y
   // esta bien que asi sea. Pero sumarle un dibujo a una pieza obliga a elegir
   // justamente un dibujo que todavia NO es del rig: para ese caso se recuerda
@@ -7511,10 +7525,17 @@ function dzRigPiezaDestino() {
 function dzRigSelectNode(id) {
   const node = DZ.doc?.scene.rigNode(id); if (!node) return false;
   DZ.rigSelectedId = id;
+  DZ.rigSelectionSource = "rig";
   const target = dzRigNodeElement(node);
-  if (target) dzSelect(target);
+  if (target) {
+    // dzSelect también actualiza inspector/capas. El guard conserva la fuente
+    // de selección como hueso en vez de reinterpretarla como clic sobre arte.
+    DZ.rigSelectingNode = true;
+    try { dzSelect(target); } finally { DZ.rigSelectingNode = false; }
+    DZ.rigSelectedId = id; DZ.rigSelectionSource = "rig";
+  }
   else {
-    dzDeselect(); DZ.rigSelectedId = id;
+    dzDeselect(); DZ.rigSelectedId = id; DZ.rigSelectionSource = "rig";
     dzRigPanelSync(); dzRigOverlayRender();
   }
   return true;
@@ -7786,8 +7807,14 @@ async function dzRigImportCharacter() {
 }
 function dzRigRemoveSelected() {
   const node = dzRigSelectedNode(); if (!node) return;
+  if (DZ.rigSubmode !== "build") {
+    dzSetStatus(`Pasá a Construir para eliminar «${node.id}» sin alterar una pose`); return;
+  }
+  if (DZ.rigGestureCancel) { const cancel=DZ.rigGestureCancel; DZ.rigGestureCancel=null; cancel(); }
+  DZ.rigLivePose=null; DZ.rigIKPreview=null; DZ.rigBoneGeometryPreview=null;
   if (DZ.doc.removeRigNode(node.id)) {
-    DZ.sel?.removeAttribute("data-pivot"); DZ.rigSelectedId = null;
+    DZ.sel?.removeAttribute("data-pivot"); DZ.rigSelectedId = null; DZ.rigSelectionSource = null;
+    if (DZ.rigUltimaPieza === node.id) DZ.rigUltimaPieza = null;
     dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender();
     dzTimelineBadges(); dzMarkDirty();
     dzSetStatus(`Hueso «${node.id}» eliminado; el dibujo permanece intacto`);
@@ -7799,6 +7826,7 @@ function dzRigClearAll() {
   if (!confirm("¿Eliminar todo el esqueleto? El dibujo queda intacto y podés deshacer con Ctrl+Z.")) return;
   if (!DZ.doc.clearRig()) return;
   DZ.rigSelectedId = null; DZ.rigConstraintId = null; DZ.rigLivePose = null; DZ.rigIKPreview = null;
+  DZ.rigSelectionSource = null;
   document.querySelectorAll("[data-pivot]").forEach(el => el.removeAttribute("data-pivot"));
   dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
   dzSetStatus("Esqueleto eliminado · el dibujo permanece intacto · Ctrl+Z para recuperarlo");
@@ -13742,9 +13770,12 @@ function dzPanelDockSetup() {
     external.title = "Abrir como ventana nativa para llevar a otro monitor";
     const panelKind = panel.id === "dzLevelStrip" ? "levelstrip"
       : panel.id === "dzOnionPanel" ? "onion"
-      : panel.id === "dzRigPanel" ? "rig" : "xsheet";
-    external.onclick = e => { e.stopPropagation(); dzDetachPanel(panelKind); };
-    head.insertBefore(external, head.querySelector(".dz-op-x"));
+      : panel.id === "dzRigPanel" ? "rig"
+      : panel.id === "dzMocapPanel" ? "mocap" : "xsheet";
+    if (panelKind !== "mocap") {
+      external.onclick = e => { e.stopPropagation(); dzDetachPanel(panelKind); };
+      head.insertBefore(external, head.querySelector(".dz-op-x"));
+    }
     head.addEventListener("pointerdown", e => {
       if (DZ.workspaceLocked) { dzSetStatus(" Disposición bloqueada · Ventana → Desbloquear disposición"); return; }
       if (e.button !== 0 || e.target.closest("button,input,.dz-op-x")) return;
@@ -13776,7 +13807,7 @@ function dzPanelDockSetup() {
     }).observe(panel);
   };
   for (const [id, headId] of [["dzLevelStrip","dzLsHead"],["dzOnionPanel","dzOpHead"],
-    ["dzXsheet","dzXsHead"],["dzRigPanel","dzRigHead"]]) {
+    ["dzXsheet","dzXsHead"],["dzRigPanel","dzRigHead"],["dzMocapPanel","dzMocapHead"]]) {
     const panel = $("#" + id), head = $("#" + headId); if (!panel) continue;
     const cfg = saved[id];
     if (cfg && cfg.place === "float") floatPanel(panel, cfg.x || 80, cfg.y || 80, cfg.w || 260, cfg.h || 260);
@@ -13915,6 +13946,7 @@ const DZ_SCENE_KEY = "low.scene.autosave";
 function dzDocumentReset() {
   if (DZ.anim?.playing) dzAnimStop();
   if (DZ.perf?.rec) dzPerfRecEnd(false);
+  dzMocapResetSession({ closePanel: true });
   if (DZ.doc?.listeners?.clear) DZ.doc.listeners.clear();
   ["xsView", "tlView", "lsView", "palView"].forEach((key) => {
     try { DZ[key]?.dispose?.(); } catch (_) { /* la limpieza no debe bloquear */ }
@@ -13931,6 +13963,8 @@ function dzDocumentReset() {
   DZ.rigMode = false;
   DZ.rigSubmode = "build";
   DZ.rigNodeId = null;
+  DZ.rigSelectedId = null;
+  DZ.rigSelectionSource = null;
   DZ.rigConstraintId = null;
   DZ.rigLivePose = null;
   DZ.rigIKPreview = null;
@@ -13958,9 +13992,62 @@ function dzMocapTrack() {
   if (!DZ.doc.mocap) DZ.doc.mocap = new LOW.animation.MotionCaptureTrack(DZ.doc);
   return DZ.doc.mocap;
 }
+/** El video es un recurso de la sesion, no del documento. Esta limpieza evita
+ *  que una mascara, un blob o una deteccion del archivo anterior reaparezca en
+ *  un lienzo nuevo. Los datos persistentes siguen viviendo dentro del LowDoc. */
+function dzMocapResetSession({ closePanel = false } = {}) {
+  if (DZ.mocapAbort) {
+    try { DZ.mocapAbort.abort(); } catch (_) { /* ya finalizado */ }
+    DZ.mocapAbort = null;
+  }
+  const video = $("#mocapVideo");
+  if (video) {
+    try { video.pause(); } catch (_) { /* sin medio cargado */ }
+    video.onloadedmetadata = null;
+    video.removeAttribute("src");
+    try { video.load(); } catch (_) { /* WebView sin backend multimedia */ }
+    video.hidden = true;
+  }
+  if (DZ.mocapObjectUrl) {
+    try { URL.revokeObjectURL(DZ.mocapObjectUrl); } catch (_) { /* blob ya revocado */ }
+    DZ.mocapObjectUrl = null;
+  }
+  const input = $("#mocapVideoFile"); if (input) input.value = "";
+  const canvas = $("#mocapSilhouette");
+  if (canvas) {
+    try { canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height); } catch (_) { /* canvas no disponible */ }
+    canvas.hidden = true;
+    canvas.classList.remove("correcting", "placing-joint");
+  }
+  const subject = $("#mocapSubjectBox");
+  if (subject) { subject.hidden = true; subject.removeAttribute("style"); }
+  video?.parentElement?.classList.remove("marking");
+  ["mocapCorrection", "mocapToLevel", "mocapPoseTools", "mocapPoseOptions",
+    "mocapPoseStatus", "mocapApplyRig", "mocapNextPoseIssue"].forEach(id => {
+      const el = $("#" + id); if (el) el.hidden = true;
+    });
+  $("#mocapPaint")?.classList.remove("active");
+  $("#mocapErase")?.classList.remove("active");
+  const overlay = $("#dzMocapSheet");
+  if (overlay) {
+    overlay.hidden = true;
+    overlay.innerHTML = "";
+    overlay.removeAttribute("viewBox"); overlay.removeAttribute("width"); overlay.removeAttribute("height");
+    overlay.style.transform = "";
+  }
+  const status = $("#mocapStatus");
+  if (status) status.textContent = "Importá una actuación para verla sincronizada con los cuadros.";
+  if (closePanel) {
+    const panel = $("#dzMocapPanel"); if (panel) panel.hidden = true;
+    LOW.workspace?.panels?.hide?.("mocap");
+  }
+}
 function dzMocapSync() {
   const video = $("#mocapVideo"), track = DZ.doc && DZ.doc.mocap;
-  if (!video || !track || !track.source || !video.src || !video.duration) return;
+  if (!video || !track || !track.source || !video.src || !video.duration) {
+    dzMocapRenderSilhouette();
+    return;
+  }
   const t = Math.min(Math.max(0, track.timeAt(DZ.doc.frame, DZ.doc.scene.fps)), Math.max(0, video.duration - .001));
   if (Math.abs(video.currentTime - t) > .025) video.currentTime = t;
   dzMocapRenderSilhouette();
@@ -13980,11 +14067,18 @@ function dzMocapIsIssue(data) {
 }
 function dzMocapRenderSilhouette() {
   const canvas = $("#mocapSilhouette"), track = DZ.doc && DZ.doc.mocap;
-  const data = track && track.silhouetteAt && track.silhouetteAt(DZ.doc.frame);
-  const pose=track?.poseAt?.(DZ.doc.frame);
+  const frame = DZ.doc?.frame;
+  const data = frame != null && track?.silhouetteAt?.(frame);
+  const pose=frame != null&&track?.poseAt?.(frame);
   dzMocapPoseStatus();
-  const poseMissing=(track?.poseAnalysis?.missedFrames||[]).includes(DZ.doc.frame);
-  if (!canvas || (!data&&!pose&&!poseMissing)) { if (canvas) canvas.hidden = true; return; }
+  const poseMissing=frame!=null&&(track?.poseAnalysis?.missedFrames||[]).includes(frame);
+  if (!canvas || (!data&&!pose&&!poseMissing)) {
+    if (canvas) canvas.hidden = true;
+    const tools=$("#mocapCorrection"); if(tools)tools.hidden=true;
+    const toLevel=$("#mocapToLevel");if(toLevel)toLevel.hidden=true;
+    dzMocapRenderCanvasGuide();
+    return;
+  }
   const source=track?.source||{},width=data?.width||Math.min(512,Math.max(192,source.width||192)),height=data?.height||Math.max(108,Math.round(width*(source.height||108)/(source.width||192)));
   canvas.width=width; canvas.height=height; canvas.hidden=false;
   const ctx=canvas.getContext("2d"),image=data?ctx.createImageData(data.width,data.height):null;
@@ -14013,8 +14107,8 @@ function dzMocapMaskDataUrl(data,color) {
 function dzMocapRenderCanvasGuide() {
   const overlay=$("#dzMocapSheet"),design=$("#dzCanvas")?.querySelector(":scope > svg:not(#dzMocapSheet):not(#dzRigOverlay)"),track=DZ.doc&&DZ.doc.mocap;
   const data=track?.silhouetteAt?.(DZ.doc.frame),guide=$("#mocapGuide");
-  if(!overlay||!design||!data||guide?.classList.contains("active")===false){if(overlay)overlay.hidden=true;return;}
-  const size=dzSvgDocumentSize(design),url=dzMocapMaskDataUrl(data);if(!url){overlay.hidden=true;return;}
+  if(!overlay||!design||!data||guide?.classList.contains("active")===false){if(overlay){overlay.hidden=true;overlay.innerHTML="";}return;}
+  const size=dzSvgDocumentSize(design),url=dzMocapMaskDataUrl(data);if(!url){overlay.hidden=true;overlay.innerHTML="";return;}
   overlay.hidden=false;overlay.setAttribute("viewBox",`${size.x} ${size.y} ${size.width} ${size.height}`);overlay.setAttribute("width",size.width);overlay.setAttribute("height",size.height);
   overlay.style.transform=design.style.transform;overlay.innerHTML=`<image href="${url}" x="${size.x}" y="${size.y}" width="${size.width}" height="${size.height}" opacity=".42" preserveAspectRatio="none"/>`;
 }
@@ -14094,6 +14188,9 @@ function dzMocapWire() {
   const input = $("#mocapVideoFile"), open = $("#mocapImport"), analyze = $("#mocapAnalyze"), detectPose=$("#mocapDetectPose"), subject=$("#mocapSubject"), background=$("#mocapBackground");
   const video = $("#mocapVideo"), status = $("#mocapStatus");
   if (!input) return;
+  const panel=$("#dzMocapPanel"),close=$("#dzMocapClose");
+  if(close&&!close.dataset.wired){close.dataset.wired="1";close.onclick=()=>{if(panel)panel.hidden=true;LOW.workspace?.panels?.hide?.("mocap");};}
+  if(panel&&!panel.dataset.wheelWired){panel.dataset.wheelWired="1";panel.addEventListener("wheel",e=>{if(!e.target.closest?.('input[type="number"]'))return;e.preventDefault();e.stopPropagation();panel.scrollTop+=e.deltaY;},{passive:false});}
   dzMocapCorrectionWire();
   const threshold=$("#mocapThreshold"),cleanup=$("#mocapCleanup"),poseConfidence=$("#mocapPoseConfidence"),poseInterpolation=$("#mocapPoseInterpolation"),footLock=$("#mocapFootLock"),keyTolerance=$("#mocapKeyTolerance");
   const current=DZ.doc?.mocap?.analysisOptions;if(current){threshold.value=current.threshold||54;cleanup.value=current.cleanup||4;if(poseConfidence)poseConfidence.value=current.poseConfidence??.45;if(poseInterpolation)poseInterpolation.checked=current.poseInterpolation!==false;if(footLock)footLock.checked=current.footLock!==false;if(keyTolerance)keyTolerance.value=current.keyTolerance??2;}dzMocapPoseStatus();
@@ -14156,11 +14253,17 @@ function dzMocapWire() {
 
 async function dzMocapOpen() {
   await dzDocInit();
-  if (!DZ.rigMode) dzRigToggle();
-  const panel = $("#mocapPanel");
-  if (panel) { panel.open = true; panel.scrollIntoView({ block: "nearest" }); }
+  if (!DZ.anim) await dzAnimToggle();
+  dzPanelDockSetup();
+  const panel = $("#dzMocapPanel");
+  if (panel) {
+    panel.hidden = false;
+    LOW.workspace?.panels?.show?.("mocap");
+    DZ.panelDock?.update?.();
+  }
   dzMocapWire();
-  dzSetStatus(" Video mocap: importá una actuación para usarla como referencia sincronizada");
+  dzMocapSync();
+  dzSetStatus(" Motion Capture independiente: importá una actuación; Cut-out sólo interviene al aplicar el movimiento a un rig");
 }
 
 function dzDocumentMayDiscard(action) {

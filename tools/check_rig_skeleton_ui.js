@@ -104,6 +104,9 @@ async function main() {
     track.setPose(5,{hips:{x:.55,y:.7},neck:{x:.55,y:.4},left_ankle:{x:.35,y:.92},right_ankle:{x:.55,y:.92}},1);
     track.analysisOptions.backgroundTime=1.25;
     track.setSilhouette(2,{width:2,height:1,runs:[2,1],coverage:1,confidence:.2,occluded:true,corrected:false});DZ.doc.mocap=track;dzMocapWire();
+    const rigModeBeforeMocap=DZ.rigMode;DZ.rigMode=false;document.querySelector("#dzRigPanel").hidden=true;await dzMocapOpen();
+    const mocapIndependent=!DZ.rigMode&&!document.querySelector("#dzMocapPanel").hidden&&document.querySelector("#dzRigPanel").hidden;
+    DZ.rigMode=rigModeBeforeMocap;
     const complete=document.querySelector("#mocapPoseInterpolation"),footLock=document.querySelector("#mocapFootLock"),tolerance=document.querySelector("#mocapKeyTolerance"),poseConfidence=document.querySelector("#mocapPoseConfidence");
     complete.checked=true;complete.dispatchEvent(new Event("change",{bubbles:true}));footLock.checked=true;footLock.dispatchEvent(new Event("change",{bubbles:true}));tolerance.value="3";tolerance.dispatchEvent(new Event("input",{bubbles:true}));poseConfidence.value="0.6";poseConfidence.dispatchEvent(new Event("input",{bubbles:true}));
     track.poseAnalysis={detected:2,missed:1,missedFrames:[4],retained:0,model:"pose_landmarker_lite"};
@@ -118,7 +121,7 @@ async function main() {
       footContacts:poseState.contacts?.ranges?.left?.length===1&&poseState.contacts?.ranges?.right?.length===1,
       applyVisible:!document.querySelector("#mocapApplyRig").hidden,detectorVisible:!!document.querySelector("#mocapDetectPose")&&!document.querySelector("#mocapDetectPose").hidden,status:document.querySelector("#mocapPoseStatus").textContent,
       issueNavigation,poseIssueVisible,poseIssueNavigation,validated,validationUndo,validationRedo,
-      rotoscopeSvg:!!rotoSvg&&rotoSvg.includes("<path")&&!rotoSvg.includes("data:image")};
+      rotoscopeSvg:!!rotoSvg&&rotoSvg.includes("<path")&&!rotoSvg.includes("data:image"),independent:mocapIndependent};
     dzSelect(document.getElementById("mano_izq"));
     dzReleaseFocus();
     window.__deleteSeen=null;
@@ -127,18 +130,21 @@ async function main() {
       shortcuts:!!window.__lowAnimKeys,node:!!DZ.doc.scene.rigNode("mano_izq")};
     document.dispatchEvent(new KeyboardEvent("keydown",{key:"Delete",bubbles:true,cancelable:true}));
     const objectDeleted=!document.getElementById("mano_izq");
-    dzRigSetMode("build"); DZ.rigSelectedId="mano_der"; dzRigPanelSync();
+    dzRigSetMode("build"); const selectedBoundBone=dzRigSelectNode("mano_der")&&DZ.rigSelectedId==="mano_der"; dzRigPanelSync();
     dzReleaseFocus();
     document.dispatchEvent(new KeyboardEvent("keydown",{key:"Delete",bubbles:true,cancelable:true}));
     const boneDeleted=!DZ.doc.scene.rigNode("mano_der");
-    const deletion={objectDeleted,boneDeleted,objectBefore,eventSeen:window.__deleteSeen};
+    const deletion={objectDeleted,boneDeleted,selectedBoundBone,objectBefore,eventSeen:window.__deleteSeen};
     const canvas={width:DZ.doc.scene.width,height:DZ.doc.scene.height};
     let mediaPipe={loaded:false,inference:false,worker:false,error:""};
     try{const detector=LOW.animation.createMocapPoseWorker(new URL("animation/mocap-pose-worker.js",document.baseURI).href);if(!detector)throw Error("Worker corporal no disponible");
       await detector.call("init",{moduleUrl:new URL("vendor/mediapipe/vision_bundle.mjs",document.baseURI).href,wasmRoot:new URL("vendor/mediapipe/wasm",document.baseURI).href,modelUrl:new URL("models/pose_landmarker_lite.task",document.baseURI).href,minimum:.45});
       const testCanvas=document.createElement("canvas");testCanvas.width=256;testCanvas.height=256;const bitmap=await createImageBitmap(testCanvas),detected=await detector.call("detect",{bitmap,timestamp:0},[bitmap]);mediaPipe={loaded:true,inference:Array.isArray(detected.landmarks),worker:true,poses:detected.landmarks.length,error:""};detector.close();}
     catch(error){mediaPipe.error=String(error?.message||error);}
-    return {rig,vector,transform,rigSampling,example,persistence,mocap,deletion,canvas,mediaPipe};
+    const staleSheet=document.querySelector("#dzMocapSheet");staleSheet.hidden=false;staleSheet.innerHTML='<circle cx="10" cy="10" r="5"/>';
+    document.querySelector("#dzMocapPanel").hidden=false;DZ.mocapObjectUrl="blob:stale-test";dzDocumentReset();
+    const documentReset={sheetHidden:staleSheet.hidden,sheetEmpty:!staleSheet.children.length,panelHidden:document.querySelector("#dzMocapPanel").hidden,blobCleared:DZ.mocapObjectUrl==null};
+    return {rig,vector,transform,rigSampling,example,persistence,mocap,deletion,canvas,mediaPipe,documentReset};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   stage("evaluar resultado");
@@ -160,14 +166,16 @@ async function main() {
       !value.persistence.exportPosed || !value.persistence.exportClean)
     throw Error("REGRESIÓN: rig no sobrevive guardar/reabrir/exportar: " + JSON.stringify(value));
   if (value.mocap?.generated !== 5 || value.mocap?.spine !== 5 || !value.mocap.optionSaved || !value.mocap.applyVisible || !value.mocap.detectorVisible ||
-       !value.mocap.footContacts || !value.mocap.issueNavigation || !value.mocap.poseIssueVisible || !value.mocap.poseIssueNavigation || !value.mocap.validated || !value.mocap.validationUndo || !value.mocap.validationRedo || !value.mocap.rotoscopeSvg)
+       !value.mocap.footContacts || !value.mocap.issueNavigation || !value.mocap.poseIssueVisible || !value.mocap.poseIssueNavigation || !value.mocap.validated || !value.mocap.validationUndo || !value.mocap.validationRedo || !value.mocap.rotoscopeSvg || !value.mocap.independent)
     throw Error("REGRESIÓN: diagnóstico/opciones de retargeting no funcionan en la interfaz: " + JSON.stringify(value));
-  if (!value.deletion?.objectDeleted || !value.deletion?.boneDeleted)
+  if (!value.deletion?.objectDeleted || !value.deletion?.selectedBoundBone || !value.deletion?.boneDeleted)
     throw Error("REGRESIÓN: Supr no elimina objeto y hueso según contexto: " + JSON.stringify(value));
   if (value.canvas?.width !== 1920 || value.canvas?.height !== 1080)
     throw Error("REGRESIÓN: el lienzo nuevo no es Full HD: " + JSON.stringify(value));
   if (!value.mediaPipe?.loaded || !value.mediaPipe?.inference || !value.mediaPipe?.worker)
     throw Error("REGRESIÓN: MediaPipe, el modelo corporal o su worker local no cargan: " + JSON.stringify(value));
+  if (!value.documentReset?.sheetHidden || !value.documentReset?.sheetEmpty || !value.documentReset?.panelHidden || !value.documentReset?.blobCleared)
+    throw Error("REGRESIÓN: el documento nuevo conserva manchas o recursos del video anterior: " + JSON.stringify(value));
   console.log("E2E 2D OK: rig, vectores y personaje completo de Ayuda", JSON.stringify(value));
 }
 

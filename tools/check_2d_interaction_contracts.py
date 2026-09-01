@@ -38,6 +38,8 @@ rig_pivot = function_body("dzRigBuildPivotDrag", "dzRigCommitPreview")
 rig_ik = function_body("dzRigIKDrag", "dzRigOverlayRender")
 rig_deformer = function_body("dzRigDeformadorDrag", "dzDeformadorCurvaDe")
 rig_readiness = function_body("dzRigReadinessStatus", "dzRigPanelSync")
+mocap_open = function_body("dzMocapOpen", "dzDocumentMayDiscard")
+mocap_reset = function_body("dzMocapResetSession", "dzMocapSync")
 vector_tx = APP[APP.index("const DZ_VECTOR_ATTRS"):APP.index("function dzVectorElementAt")]
 inflator = function_body("dzInflatorDown", "dzInflatorMove") + function_body("dzInflatorMove", "dzInflatorUp") + function_body("dzInflatorUp", "dzVectorPrefs")
 handler = function_body("dzHandlerDown", "dzHandlerMove") + function_body("dzHandlerUp", "dzHandlerGlobalMove")
@@ -78,6 +80,16 @@ require("rigModeAccess" in rig_readiness and "access.animate" in rig_readiness,
         "Animar volvió a depender del arte o sus metadatos en vez del esqueleto")
 require('e.key === "Delete" && opts.deleteScene?.()' in SHORTCUTS and "deleteScene: () => dzDeleteContext()" in APP,
         "la X-sheet volvió a secuestrar Supr antes de borrar objetos o huesos")
+require('DZ.rigSelectionSource = "rig"' in APP and 'DZ.rigSelectionSource = "art"' in APP and
+        'DZ.rigSelectionSource === "rig"' in APP,
+        "seleccionar el arte vinculado vuelve a perder el hueso activo")
+require('$("#dzMocapPanel")' in mocap_open and "dzRigToggle" not in mocap_open,
+        "Motion Capture volvió a depender del panel o modo Cut-out")
+require("revokeObjectURL" in mocap_reset and 'overlay.innerHTML = ""' in mocap_reset and
+        'panel.hidden = true' in mocap_reset,
+        "un documento nuevo puede volver a heredar video, máscara o panel de Motion Capture")
+require('id="dzMocapPanel"' in INDEX and INDEX.index('id="dzRigPanel"') < INDEX.index('id="dzMocapPanel"'),
+        "Motion Capture dejó de ser un panel independiente")
 require("const DEFAULT_WIDTH = 1920" in SCENE_MODEL and
         "width: 1920, height: 1080" in APP,
         "el documento nuevo dejó de ser Full HD 1920×1080")
