@@ -1052,6 +1052,14 @@
       ok("las siluetas crean un nivel de calco con exposiciones",roto&&rotoDoc.level.drawings.length===2&&roto.cellAt(3)===2);
       history.undo();ok("deshacer quita atómicamente el nivel de calco",rotoDoc.layerId===originalLayer&&!rotoDoc.scene.layer(roto.id));
       history.redo();ok("rehacer restaura dibujos y exposiciones del calco",rotoDoc.scene.layer(roto.id)?.cellAt(3)===2);
+      const rigDoc=new animation.LowDoc(),bones=animation.rigLibrary.instantiate("human_standard",{x:0,y:0,width:1000,height:1000},"mocap");
+      rigDoc.ensureRigBones(bones);
+      const mapped=animation.retargetHumanPose({joints:{hips:{x:.5,y:.68},neck:{x:.5,y:.43},left_shoulder:{x:.42,y:.44},left_elbow:{x:.34,y:.48},left_wrist:{x:.2,y:.58}}},rigDoc.scene.rig,{width:1000,height:1000});
+      ok("retargeting sólo produce cadenas con puntos confirmados",mapped.mocap_root&&mapped.mocap_spine&&mapped.mocap_upper_arm_L&&mapped.mocap_forearm_L&&!mapped.mocap_upper_arm_R,JSON.stringify(mapped));
+      const rigHistory=new LOW.core.HistoryManager();rigDoc.setHistory(rigHistory);
+      ok("una secuencia mocap se aplica como lote atómico",rigDoc.setRigPoseSequence({1:mapped,3:mapped})&&rigDoc.scene.rigNode("mocap_spine").keys[3]);
+      rigHistory.undo();ok("deshacer retargeting quita todas sus claves",!rigDoc.scene.rigNode("mocap_spine").keys[3]);
+      rigHistory.redo();ok("rehacer retargeting recupera toda la secuencia",!!rigDoc.scene.rigNode("mocap_spine").keys[3]);
     }
 
     const fallan = res.filter((r) => !r.ok);

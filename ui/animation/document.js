@@ -1249,6 +1249,13 @@
         return changed;
       });
     }
+    setRigPoseSequence(sequence, label = "Aplicar movimiento capturado") {
+      return this._rigChange(label, (rig) => {
+        let changed=false;
+        for(const [rawFrame,poses] of Object.entries(sequence||{})){const f=Math.max(1,Math.round(Number(rawFrame)||1));for(const [id,pose] of Object.entries(poses||{})){const node=rig.nodes[id];if(!node)continue;const sx=pose.sx==null?1:+pose.sx,sy=pose.sy==null?1:+pose.sy;node.keys[f]={x:+pose.x||0,y:+pose.y||0,r:+pose.r||0,sx,sy};this._syncRigPoseChannels(rig,id,node.keys);changed=true;}}
+        return changed;
+      });
+    }
 
     deleteRigPoseKeys(ids, frame, label = "Borrar pose global del rig") {
       const f = Math.max(1, Math.round(frame)), wanted = new Set(ids || Object.keys(this.scene.rig.nodes));

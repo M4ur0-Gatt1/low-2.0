@@ -170,9 +170,32 @@
       return track;
     }
   };
+  const RETARGET_CHAINS = [
+    ["spine","hips","neck"],["head","neck","nose"],
+    ["clavicle_L","neck","left_shoulder"],["upper_arm_L","left_shoulder","left_elbow"],["forearm_L","left_elbow","left_wrist"],
+    ["clavicle_R","neck","right_shoulder"],["upper_arm_R","right_shoulder","right_elbow"],["forearm_R","right_elbow","right_wrist"],
+    ["thigh_L","hips","left_knee"],["shin_L","left_knee","left_ankle"],
+    ["thigh_R","hips","right_knee"],["shin_R","right_knee","right_ankle"]
+  ];
+  const angle=(a,b)=>Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI;
+  const normAngle=value=>{let n=(value+180)%360;if(n<0)n+=360;return n-180;};
+  function retargetHumanPose(sample,rig,size) {
+    const joints=sample&&sample.joints||{},nodes=rig&&rig.nodes||{},width=Math.max(1,size&&size.width||1),height=Math.max(1,size&&size.height||1);
+    const bySuffix=suffix=>Object.values(nodes).find(n=>n.id===suffix||n.id.endsWith("_"+suffix));
+    const poses={},worldDelta={};
+    const inherited=node=>{let sum=0,parent=node&&node.parentId,guard=0;while(parent&&guard++<64){sum+=worldDelta[parent]||0;parent=nodes[parent]&&nodes[parent].parentId;}return sum;};
+    const root=bySuffix("root"),hips=joints.hips;
+    if(root&&hips&&root.pivot)poses[root.id]={x:hips.x*width-root.pivot.x,y:hips.y*height-root.pivot.y,r:0,sx:1,sy:1};
+    for(const [suffix,aName,bName] of RETARGET_CHAINS){const node=bySuffix(suffix),a=joints[aName],b=joints[bName];if(!node||!a||!b||!node.head||!node.tail)continue;
+      const desired=angle({x:a.x*width,y:a.y*height},{x:b.x*width,y:b.y*height}),rest=angle(node.head,node.tail),r=normAngle(desired-rest-inherited(node));
+      poses[node.id]={x:0,y:0,r,sx:1,sy:1};worldDelta[node.id]=r;
+    }
+    return poses;
+  }
   animation.MotionCaptureTrack = MotionCaptureTrack;
   animation.encodeMocapMask = encodeMask;
   animation.decodeMocapMask = decodeMask;
+  animation.retargetHumanPose = retargetHumanPose;
   animation.mocapEngines = {
     register: registerMocapEngine,
     get: (id) => engines.get(String(id)) || null,

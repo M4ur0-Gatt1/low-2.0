@@ -13968,7 +13968,7 @@ function dzMocapSync() {
 function dzMocapRenderSilhouette() {
   const canvas = $("#mocapSilhouette"), track = DZ.doc && DZ.doc.mocap;
   const data = track && track.silhouetteAt && track.silhouetteAt(DZ.doc.frame);
-  if (!canvas || !data || !LOW.animation.decodeMocapMask) { if (canvas) canvas.hidden = true; return; }
+  if (!canvas || !data || !LOW.animation.decodeMocapMask) { if (canvas) canvas.hidden = true; const applyRig=$("#mocapApplyRig");if(applyRig)applyRig.hidden=!Object.keys(track?.samples||{}).length; return; }
   canvas.width=data.width; canvas.height=data.height; canvas.hidden=false;
   const ctx=canvas.getContext("2d"), image=ctx.createImageData(data.width,data.height);
   const mask=LOW.animation.decodeMocapMask(data);
@@ -13978,6 +13978,7 @@ function dzMocapRenderSilhouette() {
   const tools=$("#mocapCorrection"); if(tools)tools.hidden=false;
   const toLevel=$("#mocapToLevel");if(toLevel)toLevel.hidden=false;
   const poseTools=$("#mocapPoseTools");if(poseTools)poseTools.hidden=false;
+  const applyRig=$("#mocapApplyRig");if(applyRig)applyRig.hidden=!Object.keys(track.samples||{}).length;
   dzMocapRenderCanvasGuide();
 }
 function dzMocapMaskDataUrl(data,color) {
@@ -14003,7 +14004,7 @@ function dzMocapCommitMask(canvas,mask) {
   DZ.doc.touch(); dzMocapRenderSilhouette();
 }
 function dzMocapCorrectionWire() {
-  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush"),guide=$("#mocapGuide"),toLevel=$("#mocapToLevel"),joint=$("#mocapJoint"),placeJoint=$("#mocapPlaceJoint"),deleteJoint=$("#mocapDeleteJoint");
+  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush"),guide=$("#mocapGuide"),toLevel=$("#mocapToLevel"),joint=$("#mocapJoint"),placeJoint=$("#mocapPlaceJoint"),deleteJoint=$("#mocapDeleteJoint"),applyRig=$("#mocapApplyRig");
   if(!canvas||canvas.dataset.correctorWired)return; canvas.dataset.correctorWired="1";
   let mode=null,drawing=false,mask=null,before=null;
   const activate=next=>{mode=next;paint?.classList.toggle("active",next==="paint");erase?.classList.toggle("active",next==="erase");canvas.classList.toggle("correcting",!!next);};
@@ -14017,6 +14018,15 @@ function dzMocapCorrectionWire() {
     if(DZ.doc.history){const doc=DZ.doc;DZ.doc.history.push({label,domain:"mocap",before,after,apply:(_dir,next)=>{doc.mocap.setPose(frame,next.joints,next.confidence);doc.touch();if(doc.frame===frame)dzMocapRenderSilhouette();}});}DZ.doc.touch();dzMocapRenderSilhouette();};
   deleteJoint.onclick=()=>changeJoint(joint.value,null,"Quitar articulación de video");
   canvas.addEventListener("click",e=>{if(!placingJoint)return;e.preventDefault();e.stopImmediatePropagation();const r=canvas.getBoundingClientRect();changeJoint(joint.value,{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height)),confidence:1},"Colocar articulación de video");placingJoint=false;placeJoint.classList.remove("active");canvas.classList.remove("placing-joint");});
+  if(applyRig)applyRig.onclick=()=>{
+    const track=DZ.doc?.mocap,rig=DZ.doc?.scene?.rig;if(!track||!rig)return;
+    const size={width:DZ.doc.scene.width,height:DZ.doc.scene.height},sequence={};
+    for(const [frame,sample] of Object.entries(track.samples||{})){const poses=LOW.animation.retargetHumanPose(sample,rig,size);if(Object.keys(poses).length)sequence[frame]=poses;}
+    const frames=Object.keys(sequence),keys=Object.values(sequence).reduce((sum,poses)=>sum+Object.keys(poses).length,0);
+    if(!frames.length)return dzSetStatus(" No hay pares de articulaciones suficientes para transferir");
+    if(!confirm(`Se crearán ${keys} claves en ${frames.length} cuadros. El rig y sus pivotes no cambiarán. ¿Aplicar?`))return;
+    if(DZ.doc.setRigPoseSequence(sequence,"Retargeting desde video")){dzRigApplyLive(DZ.doc.frame);dzTimelineBadges();dzSetStatus(` Movimiento aplicado: ${keys} claves · Ctrl+Z revierte todo`);}
+  };
   const apply=e=>{if(!drawing||!mode||!mask)return;const r=canvas.getBoundingClientRect(),cx=(e.clientX-r.left)/r.width*canvas.width,cy=(e.clientY-r.top)/r.height*canvas.height,rad=+(brush?.value||8);
     for(let y=Math.max(0,Math.floor(cy-rad));y<Math.min(canvas.height,Math.ceil(cy+rad));y++)for(let x=Math.max(0,Math.floor(cx-rad));x<Math.min(canvas.width,Math.ceil(cx+rad));x++)if((x-cx)**2+(y-cy)**2<=rad**2)mask[y*canvas.width+x]=mode==="paint"?255:0;
     const ctx=canvas.getContext("2d"),image=ctx.createImageData(canvas.width,canvas.height);for(let i=0,p=0;i<mask.length;i++,p+=4){image.data[p]=255;image.data[p+1]=74;image.data[p+2]=32;image.data[p+3]=mask[i];}ctx.putImageData(image,0,0);};

@@ -37,10 +37,11 @@ Base implementada: importación local, visor sincronizado, región de sujeto
 editable, extracción local de siluetas de movimiento, corrector por cuadro para
 agregar o borrar máscara con tableta, guía superpuesta en el lienzo y conversión
 reversible a un nivel de calco con exposiciones, persistencia del modelo y
-registro de motores. La extracción local compara contra el primer cuadro y está
-pensada para cámara fija; no se presenta como detección corporal. Pendiente para
-producción: segmentación semántica estable, pose, corrector visual, retargeting,
-reducción de claves y pruebas de aceptación con videos diversos.
+registro de motores y retargeting humano manual. La extracción local compara
+contra el primer cuadro y está pensada para cámara fija; no se presenta como
+detección corporal. Pendiente para producción: segmentación semántica estable,
+detección automática de pose, reducción de claves y pruebas de aceptación con
+videos diversos.
 
 El análisis muestra progreso y se puede cancelar. Una cancelación restaura el
 conjunto anterior de siluetas y devuelve el video a su tiempo y reproducción
@@ -49,4 +50,10 @@ La sensibilidad y la limpieza pertenecen a la pista y se conservan al reabrir;
 el artista puede adaptarlas al ruido, compresión e iluminación de cada toma.
 Las articulaciones también pueden colocarse o quitarse manualmente por cuadro.
 Estos puntos son datos de pose persistentes y corregibles, no una detección
-automática simulada; serán la entrada verificable del retargeting.
+automática simulada; son la entrada verificable del retargeting.
+
+El retargeting humano inicial transfiere únicamente cadenas cuyos dos extremos
+fueron confirmados: cadera/columna, cuello/cabeza, clavículas, brazos y piernas.
+Convierte toda la toma en un solo lote reversible con `Ctrl+Z`; nunca cambia la
+geometría, los pivotes ni la jerarquía del esqueleto. Si faltan puntos, esa
+cadena se omite en vez de inventar movimiento.
