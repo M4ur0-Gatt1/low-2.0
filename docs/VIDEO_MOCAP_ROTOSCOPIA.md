@@ -11,7 +11,8 @@ artista conserva el control de cada corrección y de las claves generadas.
 1. **Importar** un MP4, WebM, MOV o AVI y definir entrada/salida.
 2. Buscar un cuadro sin el actor y pulsar **Fondo** para fijar una referencia limpia.
 3. **Marcar sujeto** cuando hay varias personas u oclusiones.
-4. **Analizar** por etapas: separación del fondo, componentes y seguimiento temporal.
+4. **Analizar** por etapas: **Detectar cuerpo** obtiene articulaciones reales y
+   **Extraer siluetas** separa fondo, componentes y seguimiento temporal.
 5. Revisar los cuadros señalados con **⚠→**; corregir la máscara o confirmarla con **✓**.
 6. **Corregir** articulaciones perdidas, escala y piso.
 7. **Aplicar** como siluetas, guía de dibujo, esqueleto nuevo o movimiento de un rig.
@@ -40,15 +41,20 @@ elegible, región de sujeto editable, extracción local de siluetas de movimient
 limpieza por componentes conectados con continuidad temporal, corrector por cuadro para
 agregar o borrar máscara con tableta, guía superpuesta en el lienzo y conversión
 reversible a un nivel de calco con exposiciones, persistencia del modelo y
-registro de motores y retargeting humano manual. Cada resultado conserva
+registro de motores, detección corporal local y retargeting humano. **Detectar
+cuerpo** usa Pose Landmarker Lite empaquetado dentro de LOW: procesa el video en
+el equipo, produce 33 hitos corporales y traduce 13 articulaciones al contrato
+del rig. No requiere internet ni envía imágenes. Las marcas corregidas a mano se
+conservan al repetir el análisis y sustituyen a la detección automática de ese
+cuadro. Cada resultado conserva
 confianza, oclusión y límites del sujeto; **⚠→** recorre solamente los cuadros
 problemáticos y **✓** guarda la validación como una acción reversible. La extracción
 local compara contra el fondo elegido y está pensada para cámara fija; no se presenta como
 detección corporal. El sistema completa puntos sólo entre dos observaciones de
 la misma articulación, informa la cobertura antes de aplicar y reduce claves
 redundantes con una tolerancia elegida por el artista. Pendiente para producción:
-segmentación semántica estable, detección automática de pose, contactos de pies
-y pruebas de aceptación con videos diversos.
+segmentación semántica estable, contactos de pies, ejecución de inferencia en un
+worker y pruebas de aceptación con videos diversos.
 
 El análisis muestra progreso y se puede cancelar. Una cancelación restaura el
 conjunto anterior de siluetas y devuelve el video a su tiempo y reproducción

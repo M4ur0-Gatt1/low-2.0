@@ -12,8 +12,10 @@
       this.range = { in: 1, out: 1 };
       this.status = "empty";
       this.engine = null;
+      this.poseEngine = null;
+      this.poseAnalysis = null;
       this.subjectRegion = null;
-      this.analysisOptions = { threshold: 54, cleanup: 4, backgroundTime: 0, poseInterpolation: true, keyTolerance: 2 };
+      this.analysisOptions = { threshold: 54, cleanup: 4, backgroundTime: 0, poseConfidence: .45, poseInterpolation: true, keyTolerance: 2 };
       this.samples = {};
       this.silhouettes = {};
     }
@@ -37,10 +39,11 @@
       this.status = "reference";
       return this;
     }
-    setPose(frame, joints, confidence) {
+    setPose(frame, joints, confidence, metadata) {
       const f = Math.max(1, Math.round(Number(frame) || 1));
       this.samples[f] = { joints: JSON.parse(JSON.stringify(joints || {})),
         confidence: confidence == null ? 1 : Math.max(0, Math.min(1, Number(confidence) || 0)) };
+      Object.assign(this.samples[f], metadata || {});
       this.status = "tracked";
       return this.samples[f];
     }
@@ -57,10 +60,11 @@
       return Math.max(0, (Math.max(1, Number(frame) || 1) - this.range.in) / fps);
     }
     toJSON() {
-      return { version: 2, source: this.source, range: this.range, status: this.status,
+      return { version: 3, source: this.source, range: this.range, status: this.status,
         subjectRegion: this.subjectRegion,
         analysisOptions: this.analysisOptions,
-        engine: this.engine, samples: this.samples, silhouettes: this.silhouettes };
+        engine: this.engine, poseEngine: this.poseEngine, poseAnalysis: this.poseAnalysis,
+        samples: this.samples, silhouettes: this.silhouettes };
     }
     fromJSON(data) {
       data = data || {};
@@ -68,8 +72,10 @@
       this.range = Object.assign({ in: 1, out: 1 }, data.range || {});
       this.status = data.status || (this.source ? "reference" : "empty");
       this.engine = data.engine || null;
+      this.poseEngine = data.poseEngine || null;
+      this.poseAnalysis = data.poseAnalysis ? Object.assign({},data.poseAnalysis) : null;
       this.subjectRegion = data.subjectRegion ? this.setSubjectRegion(data.subjectRegion) : null;
-      this.analysisOptions = Object.assign({threshold:54,cleanup:4,backgroundTime:0,poseInterpolation:true,keyTolerance:2},data.analysisOptions||{});
+      this.analysisOptions = Object.assign({threshold:54,cleanup:4,backgroundTime:0,poseConfidence:.45,poseInterpolation:true,keyTolerance:2},data.analysisOptions||{});
       this.samples = Object.assign({}, data.samples || {});
       this.silhouettes = Object.assign({}, data.silhouettes || {});
       return this;
@@ -192,6 +198,56 @@
       return track;
     }
   };
+  const MEDIAPIPE_JOINTS={nose:0,left_shoulder:11,right_shoulder:12,left_elbow:13,right_elbow:14,left_wrist:15,right_wrist:16,
+    left_hip:23,right_hip:24,left_knee:25,right_knee:26,left_ankle:27,right_ankle:28};
+  function mediapipeLandmarksToLow(landmarks, region, minimumConfidence) {
+    const roi=region||{x:0,y:0,w:1,h:1},minimum=Math.max(0,Math.min(1,Number(minimumConfidence)||0)),joints={};
+    const confidence=landmark=>{if(!landmark)return 0;const visibility=Number.isFinite(landmark.visibility)?landmark.visibility:1,presence=Number.isFinite(landmark.presence)?landmark.presence:1;return Math.max(0,Math.min(1,visibility,presence));};
+    const point=index=>{const raw=landmarks&&landmarks[index],score=confidence(raw);if(!raw||!Number.isFinite(raw.x)||!Number.isFinite(raw.y)||score<minimum)return null;
+      return{x:Math.max(0,Math.min(1,roi.x+raw.x*roi.w)),y:Math.max(0,Math.min(1,roi.y+raw.y*roi.h)),z:Number.isFinite(raw.z)?raw.z:0,confidence:score};};
+    Object.entries(MEDIAPIPE_JOINTS).forEach(([name,index])=>{const value=point(index);if(value)joints[name]=value;});
+    const midpoint=(name,a,b)=>{if(!a||!b)return;joints[name]={x:(a.x+b.x)/2,y:(a.y+b.y)/2,z:((a.z||0)+(b.z||0))/2,confidence:Math.min(a.confidence,b.confidence)};};
+    midpoint("neck",joints.left_shoulder,joints.right_shoulder);midpoint("hips",joints.left_hip,joints.right_hip);
+    delete joints.left_hip;delete joints.right_hip;
+    const scores=Object.values(joints).map(joint=>joint.confidence).filter(Number.isFinite);
+    return {joints,confidence:scores.length?scores.reduce((sum,value)=>sum+value,0)/scores.length:0};
+  }
+  let mediaPipeModulePromise=null;
+  function loadMediaPipeModule(moduleUrl) {
+    if(!mediaPipeModulePromise)mediaPipeModulePromise=import(moduleUrl).catch(error=>{mediaPipeModulePromise=null;throw error;});
+    return mediaPipeModulePromise;
+  }
+  function retainManualPoseSamples(samples) {
+    const retained={};Object.entries(samples||{}).forEach(([frame,sample])=>{if(!sample?.source||sample.source==="manual"||sample.corrected)retained[frame]=JSON.parse(JSON.stringify(sample));});return retained;
+  }
+  const mediaPipePoseEngine={
+    async analyze(track,video,options){
+      if(!video||!video.duration||!video.videoWidth)throw new Error("El video no está listo");
+      if(typeof document==="undefined")throw new Error("La detección corporal necesita el visor de LOW");options=options||{};
+      const base=document.baseURI,moduleUrl=options.moduleUrl||new URL("vendor/mediapipe/vision_bundle.mjs",base).href,
+        wasmRoot=options.wasmRoot||new URL("vendor/mediapipe/wasm",base).href,modelUrl=options.modelUrl||new URL("models/pose_landmarker_lite.task",base).href;
+      const module=await loadMediaPipeModule(moduleUrl),vision=await module.FilesetResolver.forVisionTasks(wasmRoot),minimum=Math.max(.05,Math.min(.95,Number(track.analysisOptions?.poseConfidence)||.45));
+      const landmarker=await module.PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:modelUrl,delegate:"CPU"},runningMode:"VIDEO",numPoses:1,
+        minPoseDetectionConfidence:minimum,minPosePresenceConfidence:minimum,minTrackingConfidence:minimum,outputSegmentationMasks:false});
+      const fps=Math.max(1,Number(track.doc?.scene?.fps)||24),last=Math.min(track.range.out,track.range.in+Math.max(1,Math.floor(video.duration*fps))-1),roi=track.subjectRegion||{x:0,y:0,w:1,h:1};
+      const canvas=document.createElement("canvas"),sourceWidth=Math.max(1,video.videoWidth*roi.w),sourceHeight=Math.max(1,video.videoHeight*roi.h);
+      canvas.width=Math.min(512,Math.max(192,Math.round(sourceWidth)));canvas.height=Math.max(108,Math.round(canvas.width*sourceHeight/sourceWidth));const ctx=canvas.getContext("2d",{willReadFrequently:true});
+      const previous=track.samples,retained=retainManualPoseSamples(previous);track.samples=Object.assign({},retained);
+      const oldTime=video.currentTime,oldPaused=video.paused,missedFrames=[];let detected=0,missed=0;video.pause();
+      try{
+        for(let frame=track.range.in;frame<=last;frame++){
+          if(options.signal?.aborted){const error=new Error("Detección cancelada");error.name="AbortError";throw error;}
+          if(!retained[frame]){const time=Math.min(video.duration-.001,track.timeAt(frame,fps));await seek(video,Math.max(0,time));ctx.drawImage(video,roi.x*video.videoWidth,roi.y*video.videoHeight,roi.w*video.videoWidth,roi.h*video.videoHeight,0,0,canvas.width,canvas.height);
+            const result=landmarker.detectForVideo(canvas,Math.round(time*1000)),mapped=mediapipeLandmarksToLow(result?.landmarks?.[0],roi,minimum);
+            if(Object.keys(mapped.joints).length){track.setPose(frame,mapped.joints,mapped.confidence,{source:"mediapipe",corrected:false});detected++;}else{missed++;missedFrames.push(frame);}
+          }
+          if(options.onProgress)options.onProgress((frame-track.range.in+1)/(last-track.range.in+1),frame,last,detected,missed);await new Promise(resolve=>setTimeout(resolve,0));
+        }
+      }catch(error){track.samples=previous;throw error;}
+      finally{try{landmarker.close();}catch(_){/* liberación defensiva */}await seek(video,Math.min(oldTime,video.duration-.001));if(!oldPaused)video.play().catch(()=>{});}
+      track.poseEngine="mediapipe-pose";track.poseAnalysis={detected,missed,missedFrames,retained:Object.keys(retained).length,model:"pose_landmarker_lite",confidence:minimum};track.status="tracked";return track;
+    }
+  };
   const RETARGET_CHAINS = [
     ["spine","hips","neck"],["head","neck","nose"],
     ["clavicle_L","neck","left_shoulder"],["upper_arm_L","left_shoulder","left_elbow"],["forearm_L","left_elbow","left_wrist"],
@@ -217,11 +273,11 @@
     return Object.fromEntries(Object.entries(out).sort((a,b)=>Number(a[0])-Number(b[0])));
   }
   function mocapPoseReport(track, sequence) {
-    const exact=track&&track.samples||{},expanded=sequence||mocapPoseSequence(track,true),confirmed=new Set();
-    Object.values(exact).forEach(sample=>Object.keys(sample?.joints||{}).forEach(name=>confirmed.add(name)));
+    const exact=track&&track.samples||{},expanded=sequence||mocapPoseSequence(track,true),confirmed=new Set(),observed=new Set(),samples=Object.values(exact),manual=samples.filter(sample=>!sample?.source||sample.source==="manual"||sample.corrected);
+    samples.forEach(sample=>Object.keys(sample?.joints||{}).forEach(name=>observed.add(name)));manual.forEach(sample=>Object.keys(sample?.joints||{}).forEach(name=>confirmed.add(name)));
     const chainFrames={};for(const [suffix,a,b] of RETARGET_CHAINS)chainFrames[suffix]=Object.values(expanded).filter(sample=>sample?.joints?.[a]&&sample?.joints?.[b]).length;
-    return {confirmedFrames:Object.keys(exact).length,generatedFrames:Object.keys(expanded).length,confirmedJoints:confirmed.size,totalJoints:MOCAP_JOINTS.length,
-      missingJoints:MOCAP_JOINTS.filter(name=>!confirmed.has(name)),chainFrames};
+    return {observedFrames:samples.length,manualFrames:manual.length,automaticFrames:samples.length-manual.length,confirmedFrames:manual.length,generatedFrames:Object.keys(expanded).length,
+      observedJoints:observed.size,confirmedJoints:confirmed.size,totalJoints:MOCAP_JOINTS.length,missingJoints:MOCAP_JOINTS.filter(name=>!observed.has(name)),chainFrames};
   }
   function retargetHumanPose(sample,rig,size) {
     const joints=sample&&sample.joints||{},nodes=rig&&rig.nodes||{},width=Math.max(1,size&&size.width||1),height=Math.max(1,size&&size.height||1);
@@ -258,6 +314,8 @@
   animation.encodeMocapMask = encodeMask;
   animation.decodeMocapMask = decodeMask;
   animation.filterMocapMotionComponents = filterMotionComponents;
+  animation.mediapipeLandmarksToLow = mediapipeLandmarksToLow;
+  animation.retainManualMocapPoses = retainManualPoseSamples;
   animation.mocapPoseSequence = mocapPoseSequence;
   animation.mocapPoseReport = mocapPoseReport;
   animation.retargetHumanPose = retargetHumanPose;
@@ -268,4 +326,5 @@
     list: () => Array.from(engines.keys())
   };
   registerMocapEngine("local-motion-silhouette", localSilhouetteEngine);
+  registerMocapEngine("mediapipe-pose", mediaPipePoseEngine);
 })(typeof window !== "undefined" ? window : globalThis);

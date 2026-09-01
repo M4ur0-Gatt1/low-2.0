@@ -57,6 +57,8 @@ tener una comprobación proporcional al riesgo.
 | MOCAP-05 | Un video real con oclusiones, paneo y dos sujetos produce diagnóstico comprensible y corrección manual. | P1 — aceptación humana pendiente |
 | MOCAP-06 | El filtro elimina ruido aislado, mantiene continuidad de identidad y marca ausencia del sujeto como oclusión. | P1 — automatizado |
 | MOCAP-07 | Fondo elegido, validación y navegación por problemas persisten y son reversibles con Ctrl+Z. | P1 — modelo/UI automatizados |
+| MOCAP-08 | Los 33 hitos MediaPipe se traducen a 13 articulaciones LOW respetando región, confianza y lados. | P0 — automatizado |
+| MOCAP-09 | Reanalizar reemplaza detecciones automáticas pero conserva cuadros corregidos manualmente. | P0 — automatizado |
 
 ## Regla para nuevos tests
 

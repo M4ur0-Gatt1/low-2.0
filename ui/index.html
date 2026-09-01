@@ -743,10 +743,12 @@
           <div class="rig2-actions"><button class="primary" id="mocapImport">Importar video</button>
             <button id="mocapSubject" title="Arrastrá sobre el video para aislar a la persona">Marcar sujeto</button>
             <button id="mocapBackground" title="Usar el cuadro actual del video como fondo limpio">Fondo</button>
+            <button id="mocapDetectPose" title="Detectar articulaciones reales con el modelo local incluido">Detectar cuerpo</button>
             <button id="mocapAnalyze" title="Extrae localmente siluetas de movimiento cuadro a cuadro">Extraer siluetas</button></div>
           <div class="rig2-row mocap-analysis-options">
             <label title="Menor umbral detecta movimientos más sutiles">Sensibilidad <input id="mocapThreshold" type="range" min="18" max="140" value="54"></label>
             <label title="Mayor limpieza elimina más ruido aislado">Limpieza <input id="mocapCleanup" type="range" min="1" max="8" value="4"></label>
+            <label title="Confianza mínima de las articulaciones detectadas">Confianza <input id="mocapPoseConfidence" type="range" min="0.2" max="0.9" value="0.45" step="0.05"></label>
           </div>
           <div class="mocap-video-wrap"><video id="mocapVideo" class="mocap-video" muted playsinline controls hidden></video>
             <i id="mocapSubjectBox" class="mocap-subject-box" hidden></i></div>
@@ -771,6 +773,7 @@
             </select>
             <button id="mocapPlaceJoint" title="Después tocá la silueta para colocar la articulación">Colocar punto</button>
             <button id="mocapDeleteJoint" title="Quitar la articulación elegida del cuadro">Quitar punto</button>
+            <button id="mocapNextPoseIssue" hidden title="Ir al próximo cuadro donde no se detectó el cuerpo" aria-label="Siguiente pose faltante">⚠ pose</button>
           </div>
           <div class="rig2-row mocap-analysis-options" id="mocapPoseOptions" hidden>
             <label title="Completa solamente el espacio entre dos puntos confirmados de la misma articulación"><input id="mocapPoseInterpolation" type="checkbox" checked> Completar</label>

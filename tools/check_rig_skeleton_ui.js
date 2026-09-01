@@ -104,15 +104,18 @@ async function main() {
     track.setPose(5,{hips:{x:.55,y:.7},neck:{x:.55,y:.4}},1);
     track.analysisOptions.backgroundTime=1.25;
     track.setSilhouette(2,{width:2,height:1,runs:[2,1],coverage:1,confidence:.2,occluded:true,corrected:false});DZ.doc.mocap=track;dzMocapWire();
-    const complete=document.querySelector("#mocapPoseInterpolation"),tolerance=document.querySelector("#mocapKeyTolerance");
-    complete.checked=true;complete.dispatchEvent(new Event("change",{bubbles:true}));tolerance.value="3";tolerance.dispatchEvent(new Event("input",{bubbles:true}));
-    const poseState=dzMocapPoseStatus();document.querySelector("#mocapNextIssue").click();const issueNavigation=DZ.doc.frame===2;
+    const complete=document.querySelector("#mocapPoseInterpolation"),tolerance=document.querySelector("#mocapKeyTolerance"),poseConfidence=document.querySelector("#mocapPoseConfidence");
+    complete.checked=true;complete.dispatchEvent(new Event("change",{bubbles:true}));tolerance.value="3";tolerance.dispatchEvent(new Event("input",{bubbles:true}));poseConfidence.value="0.6";poseConfidence.dispatchEvent(new Event("input",{bubbles:true}));
+    track.poseAnalysis={detected:2,missed:1,missedFrames:[4],retained:0,model:"pose_landmarker_lite"};
+    const poseState=dzMocapPoseStatus(),poseIssueVisible=!document.querySelector("#mocapNextPoseIssue").hidden&&!document.querySelector("#mocapPoseTools").hidden;
+    document.querySelector("#mocapNextIssue").click();const issueNavigation=DZ.doc.frame===2;
     document.querySelector("#mocapValidate").click();const validated=DZ.doc.mocap.silhouetteAt(2).corrected===true&&DZ.doc.mocap.silhouetteAt(2).confidence===1;
     DZ.doc.history.undo();const validationUndo=DZ.doc.mocap.silhouetteAt(2).corrected===false;DZ.doc.history.redo();const validationRedo=DZ.doc.mocap.silhouetteAt(2).corrected===true;
+    document.querySelector("#mocapNextPoseIssue").click();const poseIssueNavigation=DZ.doc.frame===4;
     const mocap={generated:poseState.report.generatedFrames,spine:poseState.report.chainFrames.spine,
-      optionSaved:DZ.doc.mocap.analysisOptions.poseInterpolation===true&&DZ.doc.mocap.analysisOptions.keyTolerance===3&&DZ.doc.mocap.analysisOptions.backgroundTime===1.25,
-      applyVisible:!document.querySelector("#mocapApplyRig").hidden,status:document.querySelector("#mocapPoseStatus").textContent,
-      issueNavigation,validated,validationUndo,validationRedo};
+      optionSaved:DZ.doc.mocap.analysisOptions.poseInterpolation===true&&DZ.doc.mocap.analysisOptions.keyTolerance===3&&DZ.doc.mocap.analysisOptions.backgroundTime===1.25&&DZ.doc.mocap.analysisOptions.poseConfidence===.6,
+      applyVisible:!document.querySelector("#mocapApplyRig").hidden,detectorVisible:!!document.querySelector("#mocapDetectPose")&&!document.querySelector("#mocapDetectPose").hidden,status:document.querySelector("#mocapPoseStatus").textContent,
+      issueNavigation,poseIssueVisible,poseIssueNavigation,validated,validationUndo,validationRedo};
     dzSelect(document.getElementById("mano_izq"));
     dzReleaseFocus();
     window.__deleteSeen=null;
@@ -127,7 +130,11 @@ async function main() {
     const boneDeleted=!DZ.doc.scene.rigNode("mano_der");
     const deletion={objectDeleted,boneDeleted,objectBefore,eventSeen:window.__deleteSeen};
     const canvas={width:DZ.doc.scene.width,height:DZ.doc.scene.height};
-    return {rig,vector,transform,rigSampling,example,persistence,mocap,deletion,canvas};
+    let mediaPipe={loaded:false,inference:false,error:""};
+    try{const mp=await import(new URL("vendor/mediapipe/vision_bundle.mjs",document.baseURI).href),files=await mp.FilesetResolver.forVisionTasks(new URL("vendor/mediapipe/wasm",document.baseURI).href),detector=await mp.PoseLandmarker.createFromOptions(files,{baseOptions:{modelAssetPath:new URL("models/pose_landmarker_lite.task",document.baseURI).href,delegate:"CPU"},runningMode:"VIDEO",numPoses:1});
+      const testCanvas=document.createElement("canvas");testCanvas.width=256;testCanvas.height=256;const detected=detector.detectForVideo(testCanvas,0);mediaPipe={loaded:true,inference:Array.isArray(detected.landmarks),poses:detected.landmarks.length,error:""};detector.close();}
+    catch(error){mediaPipe.error=String(error?.message||error);}
+    return {rig,vector,transform,rigSampling,example,persistence,mocap,deletion,canvas,mediaPipe};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   stage("evaluar resultado");
@@ -148,13 +155,15 @@ async function main() {
   if (value.persistence?.bindings < 18 || value.persistence.pose !== 28 || value.persistence.diagnostics ||
       !value.persistence.exportPosed || !value.persistence.exportClean)
     throw Error("REGRESIÓN: rig no sobrevive guardar/reabrir/exportar: " + JSON.stringify(value));
-  if (value.mocap?.generated !== 5 || value.mocap?.spine !== 5 || !value.mocap.optionSaved || !value.mocap.applyVisible ||
-      !value.mocap.issueNavigation || !value.mocap.validated || !value.mocap.validationUndo || !value.mocap.validationRedo)
+  if (value.mocap?.generated !== 5 || value.mocap?.spine !== 5 || !value.mocap.optionSaved || !value.mocap.applyVisible || !value.mocap.detectorVisible ||
+       !value.mocap.issueNavigation || !value.mocap.poseIssueVisible || !value.mocap.poseIssueNavigation || !value.mocap.validated || !value.mocap.validationUndo || !value.mocap.validationRedo)
     throw Error("REGRESIÓN: diagnóstico/opciones de retargeting no funcionan en la interfaz: " + JSON.stringify(value));
   if (!value.deletion?.objectDeleted || !value.deletion?.boneDeleted)
     throw Error("REGRESIÓN: Supr no elimina objeto y hueso según contexto: " + JSON.stringify(value));
   if (value.canvas?.width !== 1920 || value.canvas?.height !== 1080)
     throw Error("REGRESIÓN: el lienzo nuevo no es Full HD: " + JSON.stringify(value));
+  if (!value.mediaPipe?.loaded || !value.mediaPipe?.inference)
+    throw Error("REGRESIÓN: MediaPipe o el modelo corporal local no cargan: " + JSON.stringify(value));
   console.log("E2E 2D OK: rig, vectores y personaje completo de Ayuda", JSON.stringify(value));
 }
 

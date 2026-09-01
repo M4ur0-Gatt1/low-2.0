@@ -1031,18 +1031,21 @@
       track.setPose(13,{nose:{x:.5,y:.2},left_shoulder:{x:.4,y:.35}},.91);
       track.setSubjectRegion({x:.2,y:.1,w:.5,h:.8});
       track.analysisOptions={threshold:72,cleanup:6,backgroundTime:1.25,poseInterpolation:false,keyTolerance:3.5};
+      track.poseEngine="mediapipe-pose";track.poseAnalysis={detected:12,missed:2,missedFrames:[15,18],retained:1,model:"pose_landmarker_lite"};
       doc.mocap = track;
       ok("video mocap traduce el cuadro a tiempo de video",Math.abs(track.timeAt(13,24)-.5)<.0001);
       track.setPose(14,{hips:{x:.5,y:.6}},1);ok("la pose manual queda asociada al cuadro exacto",track.poseAt(14).joints.hips.y===.6&&!track.poseAt(12));
       const reopened = animation.LowDoc.fromJSON(doc.toJSON());
       ok("video mocap persiste fuente, rango y muestras al reabrir",
-        reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91&&reopened.mocap.subjectRegion.w===.5&&reopened.mocap.analysisOptions.threshold===72&&reopened.mocap.analysisOptions.backgroundTime===1.25&&reopened.mocap.analysisOptions.poseInterpolation===false&&reopened.mocap.analysisOptions.keyTolerance===3.5,
+        reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91&&reopened.mocap.subjectRegion.w===.5&&reopened.mocap.analysisOptions.threshold===72&&reopened.mocap.analysisOptions.backgroundTime===1.25&&reopened.mocap.analysisOptions.poseInterpolation===false&&reopened.mocap.analysisOptions.keyTolerance===3.5&&reopened.mocap.poseEngine==="mediapipe-pose"&&reopened.mocap.poseAnalysis.detected===12&&reopened.mocap.poseAnalysis.missedFrames.join(",")==="15,18",
         JSON.stringify(reopened.mocap&&reopened.mocap.toJSON()));
       let rejected=false;
       try { animation.mocapEngines.register("roto",{}); } catch (_) { rejected=true; }
       ok("el registro rechaza motores que no analizan",rejected);
       ok("LOW incluye un motor local real de siluetas",
         animation.mocapEngines.list().includes("local-motion-silhouette"));
+      ok("LOW incluye el detector corporal MediaPipe local",
+        animation.mocapEngines.list().includes("mediapipe-pose"));
       const mask=animation.decodeMocapMask({width:3,height:2,runs:[2,0,3,1,1,0]});
       ok("las siluetas persistentes reconstruyen su máscara",Array.from(mask).join(",")==="0,0,255,255,255,0");
       ok("una máscara corregida se puede volver a comprimir sin pérdidas",
@@ -1055,6 +1058,12 @@
       ok("la continuidad mantiene al sujeto aunque aparezca otra mancha mayor",continuous.bounds.x<.3&&continuous.mask[11]===1&&continuous.mask[67]===0,JSON.stringify(continuous));
       const hidden=animation.filterMocapMotionComponents(new Uint8Array(100),10,10,continuous.bounds);
       ok("un cuadro sin sujeto queda marcado como oclusión revisable",hidden.occluded===true&&hidden.confidence===0&&hidden.bounds===null,JSON.stringify(hidden));
+      const landmarks=Array.from({length:33},()=>null),put=(index,x,y,visibility=.9)=>{landmarks[index]={x,y,z:.1,visibility,presence:visibility};};
+      put(0,.5,.15);put(11,.3,.35);put(12,.7,.35);put(13,.2,.5);put(14,.8,.5);put(15,.1,.65);put(16,.9,.65);put(23,.4,.62);put(24,.6,.62);put(25,.38,.78);put(26,.62,.78);put(27,.35,.95);put(28,.65,.95);put(19,.1,.7,.1);
+      const body=animation.mediapipeLandmarksToLow(landmarks,{x:.2,y:.1,w:.5,h:.8},.45);
+      ok("MediaPipe se traduce al contrato humano normalizado de LOW",Object.keys(body.joints).length===13&&Math.abs(body.joints.neck.x-.45)<.0001&&Math.abs(body.joints.hips.y-.596)<.0001&&body.confidence>.8,JSON.stringify(body));
+      const retained=animation.retainManualMocapPoses({1:{joints:{},confidence:1},2:{joints:{},source:"manual",corrected:true},3:{joints:{},source:"mediapipe"}});
+      ok("reanalizar conserva marcas manuales y reemplaza sólo detecciones automáticas",!!retained[1]&&!!retained[2]&&!retained[3],JSON.stringify(retained));
       const history=new LOW.core.HistoryManager(),rotoDoc=new animation.LowDoc();rotoDoc.setHistory(history);
       const originalLayer=rotoDoc.layerId,roto=rotoDoc.addReferenceSequence([{frame:1,content:"<image/>"},{frame:3,content:"<image/>"}],"Roto");
       ok("las siluetas crean un nivel de calco con exposiciones",roto&&rotoDoc.level.drawings.length===2&&roto.cellAt(3)===2);
@@ -1072,7 +1081,9 @@
       const completed=animation.mocapPoseSequence(sparse,true),middle=completed[3];
       ok("mocap completa sólo entre dos articulaciones confirmadas",middle&&Math.abs(middle.joints.hips.x-.5)<.0001&&middle.joints.hips.interpolated===true&&!completed[6],JSON.stringify(completed));
       const report=animation.mocapPoseReport(sparse,completed);
-      ok("el diagnóstico distingue confirmación de cuadros generados",report.confirmedFrames===2&&report.generatedFrames===5&&report.confirmedJoints===2&&report.chainFrames.spine===5,JSON.stringify(report));
+      ok("el diagnóstico distingue confirmación de cuadros generados",report.observedFrames===2&&report.confirmedFrames===2&&report.generatedFrames===5&&report.observedJoints===2&&report.chainFrames.spine===5,JSON.stringify(report));
+      const auto=new animation.MotionCaptureTrack(doc);auto.setPose(1,{hips:{x:.5,y:.7},neck:{x:.5,y:.4}},.8,{source:"mediapipe"});auto.setPose(2,{hips:{x:.5,y:.7},neck:{x:.5,y:.4}},1,{source:"manual",corrected:true});const autoReport=animation.mocapPoseReport(auto);
+      ok("el diagnóstico separa detección automática de revisión humana",autoReport.observedFrames===2&&autoReport.automaticFrames===1&&autoReport.manualFrames===1&&autoReport.confirmedFrames===1,JSON.stringify(autoReport));
       const linear={};for(let frame=1;frame<=5;frame++)linear[frame]={bone:{x:frame*2,y:frame,r:frame*5,sx:1,sy:1}};
       const compact=animation.reduceRigPoseSequence(linear,.1);
       ok("la reducción elimina claves lineales redundantes",Object.keys(compact).length===2&&compact[1].bone&&compact[5].bone,JSON.stringify(compact));

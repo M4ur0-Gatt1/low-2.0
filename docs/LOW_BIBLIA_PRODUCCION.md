@@ -467,8 +467,10 @@ región de sujeto antes de analizar. La confianza y las oclusiones guían una co
 de revisión cuadro por cuadro; validar o corregir es reversible. No confunde esa máscara con una
 detección corporal. El mapeo humano manual, la interpolación acotada entre
 observaciones y la reducción reversible de claves ya forman un recorrido único
-con diagnóstico de cobertura. Las siguientes puertas son: segmentación semántica
-estable, detección corporal, contactos de pies y prueba con videos reales variados.
+con diagnóstico de cobertura. Pose Landmarker Lite se distribuye dentro de LOW y
+detecta el cuerpo localmente sin API; las correcciones humanas prevalecen al
+reanalizar. Las siguientes puertas son: segmentación semántica estable, contactos
+de pies, inferencia fuera del hilo visual y prueba con videos reales variados.
 
 ### DESPUÉS — integración avanzada
 
