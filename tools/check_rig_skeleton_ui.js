@@ -130,9 +130,10 @@ async function main() {
     const boneDeleted=!DZ.doc.scene.rigNode("mano_der");
     const deletion={objectDeleted,boneDeleted,objectBefore,eventSeen:window.__deleteSeen};
     const canvas={width:DZ.doc.scene.width,height:DZ.doc.scene.height};
-    let mediaPipe={loaded:false,inference:false,error:""};
-    try{const mp=await import(new URL("vendor/mediapipe/vision_bundle.mjs",document.baseURI).href),files=await mp.FilesetResolver.forVisionTasks(new URL("vendor/mediapipe/wasm",document.baseURI).href),detector=await mp.PoseLandmarker.createFromOptions(files,{baseOptions:{modelAssetPath:new URL("models/pose_landmarker_lite.task",document.baseURI).href,delegate:"CPU"},runningMode:"VIDEO",numPoses:1});
-      const testCanvas=document.createElement("canvas");testCanvas.width=256;testCanvas.height=256;const detected=detector.detectForVideo(testCanvas,0);mediaPipe={loaded:true,inference:Array.isArray(detected.landmarks),poses:detected.landmarks.length,error:""};detector.close();}
+    let mediaPipe={loaded:false,inference:false,worker:false,error:""};
+    try{const detector=LOW.animation.createMocapPoseWorker(new URL("animation/mocap-pose-worker.js",document.baseURI).href);if(!detector)throw Error("Worker corporal no disponible");
+      await detector.call("init",{moduleUrl:new URL("vendor/mediapipe/vision_bundle.mjs",document.baseURI).href,wasmRoot:new URL("vendor/mediapipe/wasm",document.baseURI).href,modelUrl:new URL("models/pose_landmarker_lite.task",document.baseURI).href,minimum:.45});
+      const testCanvas=document.createElement("canvas");testCanvas.width=256;testCanvas.height=256;const bitmap=await createImageBitmap(testCanvas),detected=await detector.call("detect",{bitmap,timestamp:0},[bitmap]);mediaPipe={loaded:true,inference:Array.isArray(detected.landmarks),worker:true,poses:detected.landmarks.length,error:""};detector.close();}
     catch(error){mediaPipe.error=String(error?.message||error);}
     return {rig,vector,transform,rigSampling,example,persistence,mocap,deletion,canvas,mediaPipe};
   })()`;
@@ -162,8 +163,8 @@ async function main() {
     throw Error("REGRESIÓN: Supr no elimina objeto y hueso según contexto: " + JSON.stringify(value));
   if (value.canvas?.width !== 1920 || value.canvas?.height !== 1080)
     throw Error("REGRESIÓN: el lienzo nuevo no es Full HD: " + JSON.stringify(value));
-  if (!value.mediaPipe?.loaded || !value.mediaPipe?.inference)
-    throw Error("REGRESIÓN: MediaPipe o el modelo corporal local no cargan: " + JSON.stringify(value));
+  if (!value.mediaPipe?.loaded || !value.mediaPipe?.inference || !value.mediaPipe?.worker)
+    throw Error("REGRESIÓN: MediaPipe, el modelo corporal o su worker local no cargan: " + JSON.stringify(value));
   console.log("E2E 2D OK: rig, vectores y personaje completo de Ayuda", JSON.stringify(value));
 }
 

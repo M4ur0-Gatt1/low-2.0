@@ -469,8 +469,10 @@ detección corporal. El mapeo humano manual, la interpolación acotada entre
 observaciones y la reducción reversible de claves ya forman un recorrido único
 con diagnóstico de cobertura. Pose Landmarker Lite se distribuye dentro de LOW y
 detecta el cuerpo localmente sin API; las correcciones humanas prevalecen al
-reanalizar. Las siguientes puertas son: segmentación semántica estable, contactos
-de pies, inferencia fuera del hilo visual y prueba con videos reales variados.
+reanalizar. La inferencia se ejecuta en un worker local para no bloquear la mesa
+de dibujo y cae de forma segura al hilo principal sólo cuando el entorno no
+admite workers. Las siguientes puertas son: segmentación semántica estable,
+contactos de pies y prueba con videos reales variados.
 
 ### DESPUÉS — integración avanzada
 

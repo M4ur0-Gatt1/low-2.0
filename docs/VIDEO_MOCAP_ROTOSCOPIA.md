@@ -53,8 +53,10 @@ local compara contra el fondo elegido y está pensada para cámara fija; no se p
 detección corporal. El sistema completa puntos sólo entre dos observaciones de
 la misma articulación, informa la cobertura antes de aplicar y reduce claves
 redundantes con una tolerancia elegida por el artista. Pendiente para producción:
-segmentación semántica estable, contactos de pies, ejecución de inferencia en un
-worker y pruebas de aceptación con videos diversos.
+segmentación semántica estable, contactos de pies y pruebas de aceptación con
+videos diversos. La inferencia corporal ya corre en un worker local para que el
+modelo no congele la mesa; conserva un fallback compatible para equipos donde
+esa capacidad no esté disponible.
 
 El análisis muestra progreso y se puede cancelar. Una cancelación restaura el
 conjunto anterior de siluetas y devuelve el video a su tiempo y reproducción

@@ -220,15 +220,28 @@
   function retainManualPoseSamples(samples) {
     const retained={};Object.entries(samples||{}).forEach(([frame,sample])=>{if(!sample?.source||sample.source==="manual"||sample.corrected)retained[frame]=JSON.parse(JSON.stringify(sample));});return retained;
   }
+  function createPoseWorker(url) {
+    if(typeof Worker!=="function"||typeof createImageBitmap!=="function")return null;
+    // MediaPipe 1.0.1 carga su fábrica WASM mediante importScripts; por eso el
+    // contenedor debe ser un worker clásico aunque el bundle se importe como ESM.
+    const worker=new Worker(url),pending=new Map();let serial=0,closed=false;
+    const failAll=error=>{for(const item of pending.values())item.reject(error);pending.clear();};
+    worker.onmessage=event=>{const message=event.data||{},item=pending.get(message.id);if(!item)return;pending.delete(message.id);message.ok?item.resolve(message.value):item.reject(new Error(message.error||"Falló el detector corporal"));};
+    worker.onerror=event=>failAll(new Error(event.message||"Falló el worker de captura corporal"));
+    return {call(type,payload,transfer){if(closed)return Promise.reject(new Error("El worker corporal está cerrado"));const id=++serial;return new Promise((resolve,reject)=>{pending.set(id,{resolve,reject});worker.postMessage(Object.assign({id,type},payload||{}),transfer||[]);});},
+      close(){if(closed)return;closed=true;try{worker.postMessage({id:++serial,type:"close"});}catch(_){/* cierre defensivo */}setTimeout(()=>worker.terminate(),100);failAll(new Error("Worker corporal cerrado"));}};
+  }
   const mediaPipePoseEngine={
     async analyze(track,video,options){
       if(!video||!video.duration||!video.videoWidth)throw new Error("El video no está listo");
       if(typeof document==="undefined")throw new Error("La detección corporal necesita el visor de LOW");options=options||{};
       const base=document.baseURI,moduleUrl=options.moduleUrl||new URL("vendor/mediapipe/vision_bundle.mjs",base).href,
         wasmRoot=options.wasmRoot||new URL("vendor/mediapipe/wasm",base).href,modelUrl=options.modelUrl||new URL("models/pose_landmarker_lite.task",base).href;
-      const module=await loadMediaPipeModule(moduleUrl),vision=await module.FilesetResolver.forVisionTasks(wasmRoot),minimum=Math.max(.05,Math.min(.95,Number(track.analysisOptions?.poseConfidence)||.45));
-      const landmarker=await module.PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:modelUrl,delegate:"CPU"},runningMode:"VIDEO",numPoses:1,
-        minPoseDetectionConfidence:minimum,minPosePresenceConfidence:minimum,minTrackingConfidence:minimum,outputSegmentationMasks:false});
+      const minimum=Math.max(.05,Math.min(.95,Number(track.analysisOptions?.poseConfidence)||.45)),workerUrl=options.workerUrl||new URL("animation/mocap-pose-worker.js",base).href;
+      let poseWorker=createPoseWorker(workerUrl),landmarker=null,execution="worker";
+      if(poseWorker){try{await poseWorker.call("init",{moduleUrl,wasmRoot,modelUrl,minimum});}catch(_){poseWorker.close();poseWorker=null;}}
+      if(!poseWorker){execution="main";const module=await loadMediaPipeModule(moduleUrl),vision=await module.FilesetResolver.forVisionTasks(wasmRoot);landmarker=await module.PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:modelUrl,delegate:"CPU"},runningMode:"VIDEO",numPoses:1,
+        minPoseDetectionConfidence:minimum,minPosePresenceConfidence:minimum,minTrackingConfidence:minimum,outputSegmentationMasks:false});}
       const fps=Math.max(1,Number(track.doc?.scene?.fps)||24),last=Math.min(track.range.out,track.range.in+Math.max(1,Math.floor(video.duration*fps))-1),roi=track.subjectRegion||{x:0,y:0,w:1,h:1};
       const canvas=document.createElement("canvas"),sourceWidth=Math.max(1,video.videoWidth*roi.w),sourceHeight=Math.max(1,video.videoHeight*roi.h);
       canvas.width=Math.min(512,Math.max(192,Math.round(sourceWidth)));canvas.height=Math.max(108,Math.round(canvas.width*sourceHeight/sourceWidth));const ctx=canvas.getContext("2d",{willReadFrequently:true});
@@ -238,14 +251,15 @@
         for(let frame=track.range.in;frame<=last;frame++){
           if(options.signal?.aborted){const error=new Error("Detección cancelada");error.name="AbortError";throw error;}
           if(!retained[frame]){const time=Math.min(video.duration-.001,track.timeAt(frame,fps));await seek(video,Math.max(0,time));ctx.drawImage(video,roi.x*video.videoWidth,roi.y*video.videoHeight,roi.w*video.videoWidth,roi.h*video.videoHeight,0,0,canvas.width,canvas.height);
-            const result=landmarker.detectForVideo(canvas,Math.round(time*1000)),mapped=mediapipeLandmarksToLow(result?.landmarks?.[0],roi,minimum);
+            let landmarks;if(poseWorker){const bitmap=await createImageBitmap(canvas),result=await poseWorker.call("detect",{bitmap,timestamp:Math.round(time*1000)},[bitmap]);landmarks=result?.landmarks?.[0];}else landmarks=landmarker.detectForVideo(canvas,Math.round(time*1000))?.landmarks?.[0];
+            const mapped=mediapipeLandmarksToLow(landmarks,roi,minimum);
             if(Object.keys(mapped.joints).length){track.setPose(frame,mapped.joints,mapped.confidence,{source:"mediapipe",corrected:false});detected++;}else{missed++;missedFrames.push(frame);}
           }
           if(options.onProgress)options.onProgress((frame-track.range.in+1)/(last-track.range.in+1),frame,last,detected,missed);await new Promise(resolve=>setTimeout(resolve,0));
         }
       }catch(error){track.samples=previous;throw error;}
-      finally{try{landmarker.close();}catch(_){/* liberación defensiva */}await seek(video,Math.min(oldTime,video.duration-.001));if(!oldPaused)video.play().catch(()=>{});}
-      track.poseEngine="mediapipe-pose";track.poseAnalysis={detected,missed,missedFrames,retained:Object.keys(retained).length,model:"pose_landmarker_lite",confidence:minimum};track.status="tracked";return track;
+      finally{try{poseWorker?.close();landmarker?.close();}catch(_){/* liberación defensiva */}await seek(video,Math.min(oldTime,video.duration-.001));if(!oldPaused)video.play().catch(()=>{});}
+      track.poseEngine="mediapipe-pose";track.poseAnalysis={detected,missed,missedFrames,retained:Object.keys(retained).length,model:"pose_landmarker_lite",confidence:minimum,execution};track.status="tracked";return track;
     }
   };
   const RETARGET_CHAINS = [
@@ -316,6 +330,7 @@
   animation.filterMocapMotionComponents = filterMotionComponents;
   animation.mediapipeLandmarksToLow = mediapipeLandmarksToLow;
   animation.retainManualMocapPoses = retainManualPoseSamples;
+  animation.createMocapPoseWorker = createPoseWorker;
   animation.mocapPoseSequence = mocapPoseSequence;
   animation.mocapPoseReport = mocapPoseReport;
   animation.retargetHumanPose = retargetHumanPose;

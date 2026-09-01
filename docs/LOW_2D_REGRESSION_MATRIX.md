@@ -59,6 +59,7 @@ tener una comprobación proporcional al riesgo.
 | MOCAP-07 | Fondo elegido, validación y navegación por problemas persisten y son reversibles con Ctrl+Z. | P1 — modelo/UI automatizados |
 | MOCAP-08 | Los 33 hitos MediaPipe se traducen a 13 articulaciones LOW respetando región, confianza y lados. | P0 — automatizado |
 | MOCAP-09 | Reanalizar reemplaza detecciones automáticas pero conserva cuadros corregidos manualmente. | P0 — automatizado |
+| MOCAP-10 | Pose Landmarker ejecuta inferencia en un worker local y el hilo visual conserva un fallback seguro. | P1 — E2E Chromium |
 
 ## Regla para nuevos tests
 

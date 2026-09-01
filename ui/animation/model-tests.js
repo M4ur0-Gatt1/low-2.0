@@ -1046,6 +1046,8 @@
         animation.mocapEngines.list().includes("local-motion-silhouette"));
       ok("LOW incluye el detector corporal MediaPipe local",
         animation.mocapEngines.list().includes("mediapipe-pose"));
+      ok("el detector corporal conserva fallback cuando no existe Worker",
+        animation.createMocapPoseWorker("worker.js")===null);
       const mask=animation.decodeMocapMask({width:3,height:2,runs:[2,0,3,1,1,0]});
       ok("las siluetas persistentes reconstruyen su máscara",Array.from(mask).join(",")==="0,0,255,255,255,0");
       ok("una máscara corregida se puede volver a comprimir sin pérdidas",
