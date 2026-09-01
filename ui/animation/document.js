@@ -698,15 +698,19 @@
       return bone;
     }
 
-    _syncRigPoseChannels(rig, id, keys) {
+    _syncRigPoseChannels(rig, id, keys, { replaceEase = false } = {}) {
       for (const property of ["x", "y", "r", "sx", "sy"]) {
-        const path = animation.rigChannelPath(id, property), values = {}, ease = {};
+        const path = animation.rigChannelPath(id, property), previous = rig.channels[path] || {},
+          values = {}, ease = {};
         for (const [frame, pose] of Object.entries(keys || {})) {
           const sx = pose.sx == null ? (pose.s == null ? 1 : +pose.s) : +pose.sx;
           const sy = pose.sy == null ? (pose.s == null ? 1 : +pose.s) : +pose.sy;
           values[frame] = property === "sx" ? sx : property === "sy" ? sy : (+pose[property] || 0);
           // el canal es el que termina interpolando: sin esto la curva no se veria
-          if (pose && pose.ease) ease[frame] = animation.rigEaseData(pose.ease);
+          // Una curva editada para una propiedad es autoritativa. Corregir una
+          // pose no debe volver a igualar X, Y, giro y escala accidentalmente.
+          if (!replaceEase && previous.ease?.[frame]) ease[frame] = animation.rigEaseData(previous.ease[frame]);
+          else if (pose && pose.ease) ease[frame] = animation.rigEaseData(pose.ease);
         }
         if (Object.keys(values).length) rig.channels[path] = animation.rigChannelData(path,
           { ...(rig.channels[path] || {}), keys: values, ease });
@@ -722,7 +726,7 @@
         if (!node || !node.keys[f]) return false;
         if (ease) node.keys[f].ease = animation.rigEaseData(ease);
         else delete node.keys[f].ease;
-        this._syncRigPoseChannels(rig, id, node.keys);
+        this._syncRigPoseChannels(rig, id, node.keys, { replaceEase: true });
         return true;
       });
     }
@@ -1254,6 +1258,35 @@
         let changed=false;
         for(const [rawFrame,poses] of Object.entries(sequence||{})){const f=Math.max(1,Math.round(Number(rawFrame)||1));for(const [id,pose] of Object.entries(poses||{})){const node=rig.nodes[id];if(!node)continue;const sx=pose.sx==null?1:+pose.sx,sy=pose.sy==null?1:+pose.sy;node.keys[f]={x:+pose.x||0,y:+pose.y||0,r:+pose.r||0,sx,sy};this._syncRigPoseChannels(rig,id,node.keys);changed=true;}}
         return changed;
+      });
+    }
+
+    /** Edita las tangentes de una sola propiedad. La pose se conserva: sólo
+     *  cambia el momento en que esa propiedad recorre el tramo. */
+    setRigChannelEase(path, frame, ease, data = {}) {
+      if (!path) return false;
+      return this._rigChange(data.label || "Cambiar curva de propiedad", (rig) => {
+        const channel = rig.channels[path], f = Math.max(1, Math.round(frame));
+        if (!channel || channel.keys?.[f] == null) return false;
+        channel.ease ||= {};
+        channel.ease[f] = animation.rigEaseData(ease);
+        return true;
+      });
+    }
+
+    /** Pega un timing completo sobre un tramo en una sola operación de Undo. */
+    pasteRigChannelCurve(path, fromFrame, toFrame, curve, data = {}) {
+      if (!path || !curve) return false;
+      return this._rigChange(data.label || "Pegar curva de propiedad", (rig) => {
+        const channel = rig.channels[path], a = Math.max(1, Math.round(fromFrame)),
+          b = Math.max(1, Math.round(toFrame));
+        if (!channel || channel.keys?.[a] == null || channel.keys?.[b] == null) return false;
+        const out = animation.rigEaseData(curve.out), incoming = animation.rigEaseData(curve.in);
+        channel.ease ||= {};
+        channel.ease[a] = out; channel.ease[b] = incoming;
+        channel.interpolation = curve.interpolation === "step" ? "step" :
+          (curve.interpolation === "linear" ? "linear" : "bezier");
+        return true;
       });
     }
 

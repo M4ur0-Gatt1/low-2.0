@@ -540,6 +540,30 @@
       history.undo();
       ok("undo de canal restaura clave y pose juntas",
         doc.scene.rigChannel(xPath).keys[11] == null && doc.scene.rigNode("cabeza").keys[11] == null);
+      history.redo();
+      const segment = animation.rigChannelSegment(doc.scene.rigChannel(xPath), 6);
+      ok("timeline y editor de funciones comparten el mismo tramo",
+        segment && segment.a === 1 && segment.b === 11 && segment.frame === 6 &&
+        segment.valueA === 0 && segment.valueB === 20);
+
+      history.clear();
+      doc.setRigChannelEase(xPath, 1, { eo: [.18, .72], ei: [.65, .91] });
+      doc.setRigPoseKeys({ cabeza: { x: 4, y: 6, r: 8, sx: 1, sy: 1 } }, 1);
+      ok("editar una pose conserva la curva particular de X",
+        Math.abs(doc.scene.rigChannel(xPath).ease[1].eo[0] - .18) < .001 &&
+        doc.scene.rigChannel(animation.rigChannelPath("cabeza", "y")).ease[1] == null);
+      const copiedCurve = animation.rigCurveClipboardData(doc.scene.rigChannel(xPath), 1, 11);
+      const yPath = animation.rigChannelPath("cabeza", "y");
+      history.clear();
+      doc.pasteRigChannelCurve(yPath, 1, 11, { ...copiedCurve, interpolation: "bezier" });
+      ok("copiar y pegar curva cambia el timing sin copiar valores",
+        doc.scene.rigChannel(yPath).interpolation === "bezier" &&
+        doc.scene.rigChannel(yPath).keys[1] === 6 &&
+        Math.abs(doc.scene.rigChannel(yPath).ease[1].eo[0] - .18) < .001);
+      history.undo();
+      ok("deshacer pegado de curva restaura el canal completo",
+        doc.scene.rigChannel(yPath).interpolation === "linear" &&
+        doc.scene.rigChannel(yPath).ease[1] == null);
 
       history.clear();
       ok("se agrega una constraint ordenada",
@@ -560,7 +584,7 @@
       const reopened = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
       ok("slots, attachments, canales y orden sobreviven guardar/reabrir",
         reopened.scene.rig.version === 4 && reopened.scene.rigActiveAttachment(slotId).elementId === "perfil" &&
-        reopened.scene.rigChannelValue(xPath, 1) === 0 && reopened.scene.rigOrderedConstraints()[0].id === "follow");
+        reopened.scene.rigChannelValue(xPath, 1) === 4 && reopened.scene.rigOrderedConstraints()[0].id === "follow");
       const broken = new animation.Scene({ rig: { version: 4,
         bones: { root: { id: "root" } },
         slots: { bad: { id: "bad", boneId: "missing", activeAttachmentId: "also-missing" } } } });

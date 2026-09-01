@@ -280,6 +280,32 @@
     valueType: raw.valueType || "number", interpolation: raw.interpolation || "linear",
     keys: clone(raw.keys || {}), ease: clone(raw.ease || {}) });
 
+  /** Devuelve el tramo de un canal que contiene un cuadro. Mantener esta
+   *  decisión en el modelo evita que Timeline, X-sheet y Function Editor
+   *  discrepen justo sobre una clave o fuera del rango animado. */
+  function rigChannelSegment(channel, frame) {
+    const keys = channel?.keys || {};
+    const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    if (frames.length < 2) return null;
+    const f = Number(frame) || frames[0];
+    let a = null, b = null;
+    for (const key of frames) { if (key <= f) a = key; else { b = key; break; } }
+    if (a == null) { a = frames[0]; b = frames[1]; }
+    else if (b == null) { a = frames.at(-2); b = frames.at(-1); }
+    return { a, b, frame: Math.max(a, Math.min(b, f)), frames,
+      valueA: clone(keys[a]), valueB: clone(keys[b]) };
+  }
+
+  /** Formato pequeño y portable para copiar solamente el timing de un tramo,
+   *  sin copiar ni deformar los valores de sus poses. */
+  function rigCurveClipboardData(channel, a, b) {
+    if (!channel?.keys || channel.keys[a] == null || channel.keys[b] == null) return null;
+    return { type: "low-rig-curve", version: 1,
+      interpolation: channel.interpolation === "step" ? "step" :
+        (channel.interpolation === "linear" ? "linear" : "bezier"),
+      out: rigEaseData(channel.ease?.[a]), in: rigEaseData(channel.ease?.[b]) };
+  }
+
   const rigConstraintData = (id, raw = {}, index = 0) => ({ ...clone(raw), id,
     type: raw.type || "transform", enabled: raw.enabled !== false,
     mix: Number.isFinite(+raw.mix) ? Math.max(0, Math.min(1, +raw.mix)) : 1,
@@ -1074,6 +1100,8 @@
   animation.rigDeformador = rigDeformador;
   animation.rigEaseT = rigEaseT;
   animation.rigChannelData = rigChannelData;
+  animation.rigChannelSegment = rigChannelSegment;
+  animation.rigCurveClipboardData = rigCurveClipboardData;
   animation.rigConstraintData = rigConstraintData;
   animation.rigDiagnostics = rigDiagnostics;
   animation.rigReadiness = rigReadiness;
