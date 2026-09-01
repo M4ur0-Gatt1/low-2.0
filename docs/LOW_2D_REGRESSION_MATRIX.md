@@ -61,6 +61,7 @@ tener una comprobación proporcional al riesgo.
 | MOCAP-09 | Reanalizar reemplaza detecciones automáticas pero conserva cuadros corregidos manualmente. | P0 — automatizado |
 | MOCAP-10 | Pose Landmarker ejecuta inferencia en un worker local y el hilo visual conserva un fallback seguro. | P1 — E2E Chromium |
 | MOCAP-11 | Los apoyos se agrupan por pie e intervalo; Pies firmes estabiliza el contacto sin deformar la pose relativa. | P1 — modelo/UI automatizados |
+| MOCAP-12 | La máscara semántica se proyecta desde la región del sujeto al cuadro completo sin borrar correcciones manuales. | P1 — modelo automatizado; aceptación humana pendiente |
 
 ## Regla para nuevos tests
 

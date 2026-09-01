@@ -45,8 +45,10 @@ agregar o borrar máscara con tableta, guía superpuesta en el lienzo y conversi
 reversible a un nivel de calco con exposiciones, persistencia del modelo y
 registro de motores, detección corporal local y retargeting humano. **Detectar
 cuerpo** usa Pose Landmarker Lite empaquetado dentro de LOW: procesa el video en
-el equipo, produce 33 hitos corporales y traduce 13 articulaciones al contrato
-del rig. No requiere internet ni envía imágenes. Las marcas corregidas a mano se
+el equipo, produce 33 hitos corporales, una máscara semántica del actor y traduce
+13 articulaciones al contrato del rig. La máscara respeta la región marcada y
+reemplaza la separación por fondo sólo cuando el modelo entrega un resultado
+válido. No requiere internet ni envía imágenes. Las marcas corregidas a mano se
 conservan al repetir el análisis y sustituyen a la detección automática de ese
 cuadro. Cada resultado conserva
 confianza, oclusión y límites del sujeto; **⚠→** recorre solamente los cuadros
@@ -55,8 +57,8 @@ local compara contra el fondo elegido y está pensada para cámara fija; no se p
 detección corporal. El sistema completa puntos sólo entre dos observaciones de
 la misma articulación, informa la cobertura antes de aplicar y reduce claves
 redundantes con una tolerancia elegida por el artista. Pendiente para producción:
-segmentación semántica estable y pruebas de aceptación con videos diversos. Los
-contactos de pie ya se detectan como intervalos y estabilizan el retargeting sin
+pruebas de aceptación con videos diversos. La segmentación semántica y los
+contactos de pie ya se integran al recorrido; los apoyos estabilizan el retargeting sin
 alterar la pose relativa. La inferencia corporal corre en un worker local para que el
 modelo no congele la mesa; conserva un fallback compatible para equipos donde
 esa capacidad no esté disponible.

@@ -473,8 +473,9 @@ reanalizar. La inferencia se ejecuta en un worker local para no bloquear la mesa
 de dibujo y cae de forma segura al hilo principal sólo cuando el entorno no
 admite workers. Los apoyos de ambos pies se detectan como intervalos; **Pies
 firmes** compensa el deslizamiento antes de retargetear sin cambiar la pose
-relativa del cuerpo. Las siguientes puertas son: segmentación semántica estable
-y prueba con videos reales variados.
+relativa del cuerpo. Pose Landmarker aporta además una máscara semántica del
+actor, ajustada a la región marcada y sin borrar resultados anteriores cuando
+no encuentra sujeto. La siguiente puerta es la prueba con videos reales variados.
 
 ### DESPUÉS — integración avanzada
 

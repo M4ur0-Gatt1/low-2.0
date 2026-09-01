@@ -220,6 +220,22 @@
   function retainManualPoseSamples(samples) {
     const retained={};Object.entries(samples||{}).forEach(([frame,sample])=>{if(!sample?.source||sample.source==="manual"||sample.corrected)retained[frame]=JSON.parse(JSON.stringify(sample));});return retained;
   }
+  function mergeSemanticMocapSilhouettes(previous, detected) {
+    const corrected={};Object.entries(previous||{}).forEach(([frame,item])=>{if(item?.corrected)corrected[frame]=JSON.parse(JSON.stringify(item));});return Object.assign({},detected||{},corrected);
+  }
+  function binaryPoseMask(mask) {
+    if(!mask)return null;const source=mask.getAsFloat32Array(),data=new Uint8Array(source.length);for(let index=0;index<source.length;index++)data[index]=source[index]>=.5?1:0;return{width:mask.width,height:mask.height,data};
+  }
+  function expandMocapRegionMask(mask, region, width, height) {
+    const outWidth=Math.max(1,Math.round(width)||1),outHeight=Math.max(1,Math.round(height)||1),out=new Uint8Array(outWidth*outHeight),roi=region||{x:0,y:0,w:1,h:1};if(!mask?.data||!mask.width||!mask.height)return out;
+    const x0=Math.max(0,Math.floor(roi.x*outWidth)),y0=Math.max(0,Math.floor(roi.y*outHeight)),x1=Math.min(outWidth,Math.ceil((roi.x+roi.w)*outWidth)),y1=Math.min(outHeight,Math.ceil((roi.y+roi.h)*outHeight));
+    for(let y=y0;y<y1;y++){const v=Math.max(0,Math.min(.999999,(y/outHeight-roi.y)/roi.h)),sy=Math.floor(v*mask.height);for(let x=x0;x<x1;x++){const u=Math.max(0,Math.min(.999999,(x/outWidth-roi.x)/roi.w)),sx=Math.floor(u*mask.width);out[y*outWidth+x]=mask.data[sy*mask.width+sx]?1:0;}}
+    return out;
+  }
+  function semanticMocapSilhouette(mask, region, width, height, previousBounds) {
+    const expanded=expandMocapRegionMask(mask,region,width,height),stable=filterMotionComponents(expanded,width,height,previousBounds),count=stable.mask.reduce((sum,value)=>sum+(value?1:0),0);
+    return{width,height,runs:encodeMask(stable.mask),coverage:count/stable.mask.length,bounds:stable.bounds,centroid:stable.centroid,components:stable.components,keptComponents:stable.keptComponents,confidence:stable.confidence,occluded:stable.occluded,source:"mediapipe",semantic:true};
+  }
   function createPoseWorker(url) {
     if(typeof Worker!=="function"||typeof createImageBitmap!=="function")return null;
     // MediaPipe 1.0.1 carga su fábrica WASM mediante importScripts; por eso el
@@ -241,26 +257,26 @@
       let poseWorker=createPoseWorker(workerUrl),landmarker=null,execution="worker";
       if(poseWorker){try{await poseWorker.call("init",{moduleUrl,wasmRoot,modelUrl,minimum});}catch(_){poseWorker.close();poseWorker=null;}}
       if(!poseWorker){execution="main";const module=await loadMediaPipeModule(moduleUrl),vision=await module.FilesetResolver.forVisionTasks(wasmRoot);landmarker=await module.PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:modelUrl,delegate:"CPU"},runningMode:"VIDEO",numPoses:1,
-        minPoseDetectionConfidence:minimum,minPosePresenceConfidence:minimum,minTrackingConfidence:minimum,outputSegmentationMasks:false});}
+        minPoseDetectionConfidence:minimum,minPosePresenceConfidence:minimum,minTrackingConfidence:minimum,outputSegmentationMasks:true});}
       const fps=Math.max(1,Number(track.doc?.scene?.fps)||24),last=Math.min(track.range.out,track.range.in+Math.max(1,Math.floor(video.duration*fps))-1),roi=track.subjectRegion||{x:0,y:0,w:1,h:1};
       const canvas=document.createElement("canvas"),sourceWidth=Math.max(1,video.videoWidth*roi.w),sourceHeight=Math.max(1,video.videoHeight*roi.h);
       canvas.width=Math.min(512,Math.max(192,Math.round(sourceWidth)));canvas.height=Math.max(108,Math.round(canvas.width*sourceHeight/sourceWidth));const ctx=canvas.getContext("2d",{willReadFrequently:true});
-      const previous=track.samples,retained=retainManualPoseSamples(previous);track.samples=Object.assign({},retained);
-      const oldTime=video.currentTime,oldPaused=video.paused,missedFrames=[];let detected=0,missed=0;video.pause();
+      const previous=track.samples,retained=retainManualPoseSamples(previous),previousSilhouettes=track.silhouettes;track.samples=Object.assign({},retained);
+      const oldTime=video.currentTime,oldPaused=video.paused,missedFrames=[],semanticSilhouettes={},semanticWidth=Math.min(320,Math.max(192,video.videoWidth)),semanticHeight=Math.max(108,Math.round(semanticWidth*video.videoHeight/video.videoWidth));let detected=0,missed=0,semantic=0,previousBounds=null;video.pause();
       try{
         for(let frame=track.range.in;frame<=last;frame++){
           if(options.signal?.aborted){const error=new Error("Detección cancelada");error.name="AbortError";throw error;}
-          if(!retained[frame]){const time=Math.min(video.duration-.001,track.timeAt(frame,fps));await seek(video,Math.max(0,time));ctx.drawImage(video,roi.x*video.videoWidth,roi.y*video.videoHeight,roi.w*video.videoWidth,roi.h*video.videoHeight,0,0,canvas.width,canvas.height);
-            let landmarks;if(poseWorker){const bitmap=await createImageBitmap(canvas),result=await poseWorker.call("detect",{bitmap,timestamp:Math.round(time*1000)},[bitmap]);landmarks=result?.landmarks?.[0];}else landmarks=landmarker.detectForVideo(canvas,Math.round(time*1000))?.landmarks?.[0];
-            const mapped=mediapipeLandmarksToLow(landmarks,roi,minimum);
-            if(Object.keys(mapped.joints).length){track.setPose(frame,mapped.joints,mapped.confidence,{source:"mediapipe",corrected:false});detected++;}else{missed++;missedFrames.push(frame);}
-          }
+          const time=Math.min(video.duration-.001,track.timeAt(frame,fps));await seek(video,Math.max(0,time));ctx.drawImage(video,roi.x*video.videoWidth,roi.y*video.videoHeight,roi.w*video.videoWidth,roi.h*video.videoHeight,0,0,canvas.width,canvas.height);
+          let landmarks,mask;if(poseWorker){const bitmap=await createImageBitmap(canvas),result=await poseWorker.call("detect",{bitmap,timestamp:Math.round(time*1000)},[bitmap]);landmarks=result?.landmarks?.[0];mask=result?.mask;}else{const result=landmarker.detectForVideo(canvas,Math.round(time*1000));landmarks=result?.landmarks?.[0];mask=binaryPoseMask(result?.segmentationMasks?.[0]);result?.close?.();}
+          if(!retained[frame]){const mapped=mediapipeLandmarksToLow(landmarks,roi,minimum);if(Object.keys(mapped.joints).length){track.setPose(frame,mapped.joints,mapped.confidence,{source:"mediapipe",corrected:false});detected++;}else{missed++;missedFrames.push(frame);}}
+          if(mask){const silhouette=semanticMocapSilhouette(mask,roi,semanticWidth,semanticHeight,previousBounds);if(silhouette.bounds){previousBounds=silhouette.bounds;semanticSilhouettes[frame]=silhouette;semantic++;}}
           if(options.onProgress)options.onProgress((frame-track.range.in+1)/(last-track.range.in+1),frame,last,detected,missed);await new Promise(resolve=>setTimeout(resolve,0));
         }
-      }catch(error){track.samples=previous;throw error;}
+      }catch(error){track.samples=previous;track.silhouettes=previousSilhouettes;throw error;}
       finally{try{poseWorker?.close();landmarker?.close();}catch(_){/* liberación defensiva */}await seek(video,Math.min(oldTime,video.duration-.001));if(!oldPaused)video.play().catch(()=>{});}
+      if(semantic)track.silhouettes=mergeSemanticMocapSilhouettes(previousSilhouettes,semanticSilhouettes);
       const contacts=mocapFootContacts(mocapPoseSequence(track,true));
-      track.poseEngine="mediapipe-pose";track.poseAnalysis={detected,missed,missedFrames,retained:Object.keys(retained).length,model:"pose_landmarker_lite",confidence:minimum,execution,contacts};track.status="tracked";return track;
+      track.poseEngine="mediapipe-pose";track.poseAnalysis={detected,missed,missedFrames,retained:Object.keys(retained).length,semantic,model:"pose_landmarker_lite",confidence:minimum,execution,contacts};track.status="tracked";return track;
     }
   };
   const RETARGET_CHAINS = [
@@ -349,6 +365,9 @@
   animation.filterMocapMotionComponents = filterMotionComponents;
   animation.mediapipeLandmarksToLow = mediapipeLandmarksToLow;
   animation.retainManualMocapPoses = retainManualPoseSamples;
+  animation.mergeSemanticMocapSilhouettes = mergeSemanticMocapSilhouettes;
+  animation.expandMocapRegionMask = expandMocapRegionMask;
+  animation.semanticMocapSilhouette = semanticMocapSilhouette;
   animation.createMocapPoseWorker = createPoseWorker;
   animation.mocapPoseSequence = mocapPoseSequence;
   animation.mocapFootContacts = mocapFootContacts;

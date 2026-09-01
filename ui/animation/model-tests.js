@@ -1064,6 +1064,10 @@
       put(0,.5,.15);put(11,.3,.35);put(12,.7,.35);put(13,.2,.5);put(14,.8,.5);put(15,.1,.65);put(16,.9,.65);put(23,.4,.62);put(24,.6,.62);put(25,.38,.78);put(26,.62,.78);put(27,.35,.95);put(28,.65,.95);put(19,.1,.7,.1);
       const body=animation.mediapipeLandmarksToLow(landmarks,{x:.2,y:.1,w:.5,h:.8},.45);
       ok("MediaPipe se traduce al contrato humano normalizado de LOW",Object.keys(body.joints).length===13&&Math.abs(body.joints.neck.x-.45)<.0001&&Math.abs(body.joints.hips.y-.596)<.0001&&body.confidence>.8,JSON.stringify(body));
+      const semantic=animation.semanticMocapSilhouette({width:2,height:2,data:new Uint8Array([1,0,0,0])},{x:.25,y:.25,w:.5,h:.5},8,8,null);
+      ok("la máscara semántica respeta la región marcada y el lienzo completo",semantic.semantic&&semantic.source==="mediapipe"&&semantic.bounds.x===.25&&semantic.bounds.y===.25&&semantic.bounds.w===.25&&semantic.bounds.h===.25,JSON.stringify(semantic));
+      const mergedMasks=animation.mergeSemanticMocapSilhouettes({1:{source:"motion"},2:{corrected:true,source:"manual"}},{1:{source:"mediapipe"},2:{source:"mediapipe"},3:{source:"mediapipe"}});
+      ok("reanalizar siluetas conserva cada corrección manual",mergedMasks[1].source==="mediapipe"&&mergedMasks[2].source==="manual"&&mergedMasks[3].source==="mediapipe",JSON.stringify(mergedMasks));
       const retained=animation.retainManualMocapPoses({1:{joints:{},confidence:1},2:{joints:{},source:"manual",corrected:true},3:{joints:{},source:"mediapipe"}});
       ok("reanalizar conserva marcas manuales y reemplaza sólo detecciones automáticas",!!retained[1]&&!!retained[2]&&!retained[3],JSON.stringify(retained));
       const history=new LOW.core.HistoryManager(),rotoDoc=new animation.LowDoc();rotoDoc.setHistory(history);

@@ -12,6 +12,13 @@ function plainLandmarks(list) {
   })));
 }
 
+function binaryMask(mask) {
+  if (!mask) return null;
+  const source = mask.getAsFloat32Array(), data = new Uint8Array(source.length);
+  for (let index = 0; index < source.length; index++) data[index] = source[index] >= .5 ? 1 : 0;
+  return { width: mask.width, height: mask.height, data };
+}
+
 self.onmessage = async event => {
   const message = event.data || {}, id = message.id;
   try {
@@ -25,16 +32,18 @@ self.onmessage = async event => {
         minPoseDetectionConfidence: message.minimum,
         minPosePresenceConfidence: message.minimum,
         minTrackingConfidence: message.minimum,
-        outputSegmentationMasks: false
+        outputSegmentationMasks: true
       });
       self.postMessage({ id, ok: true, value: { ready: true } });
       return;
     }
     if (message.type === "detect") {
       if (!landmarker) throw new Error("El detector corporal no fue inicializado");
-      const result = landmarker.detectForVideo(message.bitmap, message.timestamp);
+      const result = landmarker.detectForVideo(message.bitmap, message.timestamp), mask = binaryMask(result?.segmentationMasks?.[0]);
       message.bitmap?.close?.();
-      self.postMessage({ id, ok: true, value: { landmarks: plainLandmarks(result?.landmarks) } });
+      const value = { landmarks: plainLandmarks(result?.landmarks), mask };
+      result?.close?.();
+      self.postMessage({ id, ok: true, value }, mask ? [mask.data.buffer] : []);
       return;
     }
     if (message.type === "close") {
