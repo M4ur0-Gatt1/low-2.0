@@ -742,6 +742,7 @@
           <summary>Video · mocap · rotoscopía</summary>
           <div class="rig2-actions"><button class="primary" id="mocapImport">Importar video</button>
             <button id="mocapSubject" title="Arrastrá sobre el video para aislar a la persona">Marcar sujeto</button>
+            <button id="mocapBackground" title="Usar el cuadro actual del video como fondo limpio">Fondo</button>
             <button id="mocapAnalyze" title="Extrae localmente siluetas de movimiento cuadro a cuadro">Extraer siluetas</button></div>
           <div class="rig2-row mocap-analysis-options">
             <label title="Menor umbral detecta movimientos más sutiles">Sensibilidad <input id="mocapThreshold" type="range" min="18" max="140" value="54"></label>
@@ -754,6 +755,8 @@
             <button id="mocapPaint" title="Agregar zonas a la silueta">Agregar</button>
             <button id="mocapErase" title="Quitar zonas de la silueta">Borrar</button>
             <button id="mocapGuide" class="active" title="Mostrar u ocultar la silueta sobre el lienzo">Guía</button>
+            <button id="mocapValidate" title="Confirmar que la silueta de este cuadro está correcta" aria-label="Validar silueta">✓</button>
+            <button id="mocapNextIssue" title="Ir al próximo cuadro con baja confianza u oclusión" aria-label="Siguiente problema">⚠→</button>
             <label title="Tamaño del corrector">Punta <input id="mocapBrush" type="range" min="2" max="24" value="8"></label>
           </div>
           <button id="mocapToLevel" hidden>Crear nivel de calco</button>

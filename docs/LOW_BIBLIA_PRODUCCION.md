@@ -451,8 +451,9 @@ No entran nuevas familias de funciones durante esta etapa.
 
 #### Prioridad inmediata — video mocap y rotoscopía
 
-El recorrido obligatorio es: **Importar → marcar sujeto → analizar → corregir →
-aplicar**. Produce cuatro resultados separados y combinables: video de referencia,
+El recorrido obligatorio es: **Importar → elegir fondo limpio → marcar sujeto →
+analizar → revisar problemas → corregir/validar → aplicar**. Produce cuatro
+resultados separados y combinables: video de referencia,
 siluetas para calco, pose/esqueleto y curvas de movimiento retargeteables. El
 video nunca modifica directamente el personaje ni reemplaza sus claves sin una
 confirmación visible.
@@ -460,12 +461,14 @@ confirmación visible.
 La base funcional guarda una pista de video con duración, tamaño, rango,
 estado, muestras de pose y siluetas; sincroniza la referencia con el fotograma
 actual y permite que motores intercambiables realicen el análisis. La aplicación
-incluye un motor local honesto de silueta por diferencia temporal y permite
-marcar una región de sujeto antes de analizar. No confunde esa máscara con una
+incluye un motor local honesto de silueta por diferencia contra un fondo elegido,
+filtra componentes aislados, conserva continuidad espacial y permite marcar una
+región de sujeto antes de analizar. La confianza y las oclusiones guían una cola
+de revisión cuadro por cuadro; validar o corregir es reversible. No confunde esa máscara con una
 detección corporal. El mapeo humano manual, la interpolación acotada entre
 observaciones y la reducción reversible de claves ya forman un recorrido único
 con diagnóstico de cobertura. Las siguientes puertas son: segmentación semántica
-estable, detección corporal, contactos/oclusiones y prueba con videos reales.
+estable, detección corporal, contactos de pies y prueba con videos reales variados.
 
 ### DESPUÉS — integración avanzada
 

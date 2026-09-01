@@ -1030,13 +1030,13 @@
       });
       track.setPose(13,{nose:{x:.5,y:.2},left_shoulder:{x:.4,y:.35}},.91);
       track.setSubjectRegion({x:.2,y:.1,w:.5,h:.8});
-      track.analysisOptions={threshold:72,cleanup:6,poseInterpolation:false,keyTolerance:3.5};
+      track.analysisOptions={threshold:72,cleanup:6,backgroundTime:1.25,poseInterpolation:false,keyTolerance:3.5};
       doc.mocap = track;
       ok("video mocap traduce el cuadro a tiempo de video",Math.abs(track.timeAt(13,24)-.5)<.0001);
       track.setPose(14,{hips:{x:.5,y:.6}},1);ok("la pose manual queda asociada al cuadro exacto",track.poseAt(14).joints.hips.y===.6&&!track.poseAt(12));
       const reopened = animation.LowDoc.fromJSON(doc.toJSON());
       ok("video mocap persiste fuente, rango y muestras al reabrir",
-        reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91&&reopened.mocap.subjectRegion.w===.5&&reopened.mocap.analysisOptions.threshold===72&&reopened.mocap.analysisOptions.poseInterpolation===false&&reopened.mocap.analysisOptions.keyTolerance===3.5,
+        reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91&&reopened.mocap.subjectRegion.w===.5&&reopened.mocap.analysisOptions.threshold===72&&reopened.mocap.analysisOptions.backgroundTime===1.25&&reopened.mocap.analysisOptions.poseInterpolation===false&&reopened.mocap.analysisOptions.keyTolerance===3.5,
         JSON.stringify(reopened.mocap&&reopened.mocap.toJSON()));
       let rejected=false;
       try { animation.mocapEngines.register("roto",{}); } catch (_) { rejected=true; }
@@ -1047,6 +1047,14 @@
       ok("las siluetas persistentes reconstruyen su máscara",Array.from(mask).join(",")==="0,0,255,255,255,0");
       ok("una máscara corregida se puede volver a comprimir sin pérdidas",
         Array.from(animation.decodeMocapMask({width:3,height:2,runs:animation.encodeMocapMask(mask)})).join(",")===Array.from(mask).join(","));
+      const noisy=new Uint8Array(100);for(let y=1;y<=3;y++)for(let x=1;x<=3;x++)noisy[y*10+x]=1;noisy[99]=1;
+      const stable=animation.filterMocapMotionComponents(noisy,10,10,null);
+      ok("el estabilizador quita ruido aislado sin perder al sujeto",stable.mask.reduce((sum,value)=>sum+value,0)===9&&stable.components===2&&stable.keptComponents===1,JSON.stringify(stable));
+      const competing=new Uint8Array(100);for(let y=1;y<=2;y++)for(let x=1;x<=2;x++)competing[y*10+x]=1;for(let y=6;y<=7;y++)for(let x=7;x<=9;x++)competing[y*10+x]=1;
+      const continuous=animation.filterMocapMotionComponents(competing,10,10,{x:.1,y:.1,w:.2,h:.2});
+      ok("la continuidad mantiene al sujeto aunque aparezca otra mancha mayor",continuous.bounds.x<.3&&continuous.mask[11]===1&&continuous.mask[67]===0,JSON.stringify(continuous));
+      const hidden=animation.filterMocapMotionComponents(new Uint8Array(100),10,10,continuous.bounds);
+      ok("un cuadro sin sujeto queda marcado como oclusión revisable",hidden.occluded===true&&hidden.confidence===0&&hidden.bounds===null,JSON.stringify(hidden));
       const history=new LOW.core.HistoryManager(),rotoDoc=new animation.LowDoc();rotoDoc.setHistory(history);
       const originalLayer=rotoDoc.layerId,roto=rotoDoc.addReferenceSequence([{frame:1,content:"<image/>"},{frame:3,content:"<image/>"}],"Roto");
       ok("las siluetas crean un nivel de calco con exposiciones",roto&&rotoDoc.level.drawings.length===2&&roto.cellAt(3)===2);

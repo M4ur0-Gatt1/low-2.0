@@ -101,12 +101,18 @@ async function main() {
       exportPosed:exported.includes("matrix("),exportClean:!exported.includes("data-rigbase")};
     const track=new LOW.animation.MotionCaptureTrack(DZ.doc);
     track.setPose(1,{hips:{x:.45,y:.7},neck:{x:.45,y:.4}},1);
-    track.setPose(5,{hips:{x:.55,y:.7},neck:{x:.55,y:.4}},1);DZ.doc.mocap=track;dzMocapWire();
+    track.setPose(5,{hips:{x:.55,y:.7},neck:{x:.55,y:.4}},1);
+    track.analysisOptions.backgroundTime=1.25;
+    track.setSilhouette(2,{width:2,height:1,runs:[2,1],coverage:1,confidence:.2,occluded:true,corrected:false});DZ.doc.mocap=track;dzMocapWire();
     const complete=document.querySelector("#mocapPoseInterpolation"),tolerance=document.querySelector("#mocapKeyTolerance");
     complete.checked=true;complete.dispatchEvent(new Event("change",{bubbles:true}));tolerance.value="3";tolerance.dispatchEvent(new Event("input",{bubbles:true}));
-    const poseState=dzMocapPoseStatus(),mocap={generated:poseState.report.generatedFrames,spine:poseState.report.chainFrames.spine,
-      optionSaved:DZ.doc.mocap.analysisOptions.poseInterpolation===true&&DZ.doc.mocap.analysisOptions.keyTolerance===3,
-      applyVisible:!document.querySelector("#mocapApplyRig").hidden,status:document.querySelector("#mocapPoseStatus").textContent};
+    const poseState=dzMocapPoseStatus();document.querySelector("#mocapNextIssue").click();const issueNavigation=DZ.doc.frame===2;
+    document.querySelector("#mocapValidate").click();const validated=DZ.doc.mocap.silhouetteAt(2).corrected===true&&DZ.doc.mocap.silhouetteAt(2).confidence===1;
+    DZ.doc.history.undo();const validationUndo=DZ.doc.mocap.silhouetteAt(2).corrected===false;DZ.doc.history.redo();const validationRedo=DZ.doc.mocap.silhouetteAt(2).corrected===true;
+    const mocap={generated:poseState.report.generatedFrames,spine:poseState.report.chainFrames.spine,
+      optionSaved:DZ.doc.mocap.analysisOptions.poseInterpolation===true&&DZ.doc.mocap.analysisOptions.keyTolerance===3&&DZ.doc.mocap.analysisOptions.backgroundTime===1.25,
+      applyVisible:!document.querySelector("#mocapApplyRig").hidden,status:document.querySelector("#mocapPoseStatus").textContent,
+      issueNavigation,validated,validationUndo,validationRedo};
     dzSelect(document.getElementById("mano_izq"));
     dzReleaseFocus();
     window.__deleteSeen=null;
@@ -142,7 +148,8 @@ async function main() {
   if (value.persistence?.bindings < 18 || value.persistence.pose !== 28 || value.persistence.diagnostics ||
       !value.persistence.exportPosed || !value.persistence.exportClean)
     throw Error("REGRESIÓN: rig no sobrevive guardar/reabrir/exportar: " + JSON.stringify(value));
-  if (value.mocap?.generated !== 5 || value.mocap?.spine !== 5 || !value.mocap.optionSaved || !value.mocap.applyVisible)
+  if (value.mocap?.generated !== 5 || value.mocap?.spine !== 5 || !value.mocap.optionSaved || !value.mocap.applyVisible ||
+      !value.mocap.issueNavigation || !value.mocap.validated || !value.mocap.validationUndo || !value.mocap.validationRedo)
     throw Error("REGRESIÓN: diagnóstico/opciones de retargeting no funcionan en la interfaz: " + JSON.stringify(value));
   if (!value.deletion?.objectDeleted || !value.deletion?.boneDeleted)
     throw Error("REGRESIÓN: Supr no elimina objeto y hueso según contexto: " + JSON.stringify(value));

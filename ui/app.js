@@ -13974,6 +13974,9 @@ function dzMocapPoseStatus() {
     status.textContent=`${report.confirmedJoints}/${report.totalJoints} articulaciones · ${report.confirmedFrames} cuadros confirmados${expanded} · ${usable} cadenas utilizables`;}
   return {sequence,report};
 }
+function dzMocapIsIssue(data) {
+  return !!data && !data.corrected && (!!data.occluded || (data.confidence != null && Number(data.confidence) < .45));
+}
 function dzMocapRenderSilhouette() {
   const canvas = $("#mocapSilhouette"), track = DZ.doc && DZ.doc.mocap;
   const data = track && track.silhouetteAt && track.silhouetteAt(DZ.doc.frame);
@@ -13988,6 +13991,13 @@ function dzMocapRenderSilhouette() {
   const tools=$("#mocapCorrection"); if(tools)tools.hidden=false;
   const toLevel=$("#mocapToLevel");if(toLevel)toLevel.hidden=false;
   const poseTools=$("#mocapPoseTools");if(poseTools)poseTools.hidden=false;
+  const status=$("#mocapStatus"),confidence=Math.round(Math.max(0,Math.min(1,data.confidence==null?1:Number(data.confidence)||0))*100);
+  if(status){
+    if(data.corrected)status.textContent=`Cuadro ${DZ.doc.frame} validado manualmente`;
+    else if(data.occluded)status.textContent=`Cuadro ${DZ.doc.frame}: sujeto oculto o sin movimiento · corregí o validá la silueta`;
+    else if(dzMocapIsIssue(data))status.textContent=`Cuadro ${DZ.doc.frame}: confianza ${confidence}% · revisá la silueta`;
+    else status.textContent=`Cuadro ${DZ.doc.frame}: silueta estable · confianza ${confidence}%`;
+  }
   dzMocapRenderCanvasGuide();
 }
 function dzMocapMaskDataUrl(data,color) {
@@ -14009,11 +14019,12 @@ function dzMocapCommitMask(canvas,mask) {
   let minX=canvas.width,minY=canvas.height,maxX=-1,maxY=-1,count=0;
   for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++){const q=y*canvas.width+x;if(mask[q]){count++;minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);}}
   track.setSilhouette(DZ.doc.frame,{width:canvas.width,height:canvas.height,runs:LOW.animation.encodeMocapMask(mask),coverage:count/mask.length,
-    bounds:maxX<0?null:{x:minX/canvas.width,y:minY/canvas.height,w:(maxX-minX+1)/canvas.width,h:(maxY-minY+1)/canvas.height},corrected:true});
+    bounds:maxX<0?null:{x:minX/canvas.width,y:minY/canvas.height,w:(maxX-minX+1)/canvas.width,h:(maxY-minY+1)/canvas.height},corrected:true,
+    confidence:1,occluded:false,components:count?1:0,keptComponents:count?1:0});
   DZ.doc.touch(); dzMocapRenderSilhouette();
 }
 function dzMocapCorrectionWire() {
-  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush"),guide=$("#mocapGuide"),toLevel=$("#mocapToLevel"),joint=$("#mocapJoint"),placeJoint=$("#mocapPlaceJoint"),deleteJoint=$("#mocapDeleteJoint"),applyRig=$("#mocapApplyRig"),poseInterpolation=$("#mocapPoseInterpolation"),keyTolerance=$("#mocapKeyTolerance");
+  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush"),guide=$("#mocapGuide"),toLevel=$("#mocapToLevel"),joint=$("#mocapJoint"),placeJoint=$("#mocapPlaceJoint"),deleteJoint=$("#mocapDeleteJoint"),applyRig=$("#mocapApplyRig"),poseInterpolation=$("#mocapPoseInterpolation"),keyTolerance=$("#mocapKeyTolerance"),validate=$("#mocapValidate"),nextIssue=$("#mocapNextIssue");
   if(!canvas||canvas.dataset.correctorWired)return; canvas.dataset.correctorWired="1";
   let mode=null,drawing=false,mask=null,before=null;
   const activate=next=>{mode=next;paint?.classList.toggle("active",next==="paint");erase?.classList.toggle("active",next==="erase");canvas.classList.toggle("correcting",!!next);};
@@ -14029,6 +14040,17 @@ function dzMocapCorrectionWire() {
   canvas.addEventListener("click",e=>{if(!placingJoint)return;e.preventDefault();e.stopImmediatePropagation();const r=canvas.getBoundingClientRect();changeJoint(joint.value,{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height)),confidence:1},"Colocar articulación de video");placingJoint=false;placeJoint.classList.remove("active");canvas.classList.remove("placing-joint");});
   const syncPoseOptions=()=>{const track=DZ.doc?.mocap;if(!track)return;track.analysisOptions=Object.assign({},track.analysisOptions,{poseInterpolation:poseInterpolation?.checked!==false,keyTolerance:+keyTolerance?.value||0});DZ.doc.touch();dzMocapPoseStatus();};
   if(poseInterpolation)poseInterpolation.onchange=syncPoseOptions;if(keyTolerance)keyTolerance.oninput=syncPoseOptions;
+  if(validate)validate.onclick=()=>{
+    const track=DZ.doc?.mocap,frame=DZ.doc?.frame,current=track?.silhouetteAt?.(frame);if(!track||!frame||!current)return dzSetStatus(" No hay una silueta para validar en este cuadro");
+    const before=JSON.parse(JSON.stringify(current)),after=Object.assign({},before,{corrected:true,confidence:1,occluded:false});track.setSilhouette(frame,after);
+    if(DZ.doc.history){const doc=DZ.doc;DZ.doc.history.push({label:"Validar silueta",domain:"mocap",before,after:JSON.parse(JSON.stringify(after)),apply:(_dir,value)=>{doc.mocap.setSilhouette(frame,JSON.parse(JSON.stringify(value)));doc.touch();if(doc.frame===frame)dzMocapRenderSilhouette();}});}
+    DZ.doc.touch();dzMocapRenderSilhouette();dzSetStatus(` Silueta F${frame} validada · Ctrl+Z revierte`);
+  };
+  if(nextIssue)nextIssue.onclick=()=>{
+    const track=DZ.doc?.mocap;if(!track)return;const issues=Object.keys(track.silhouettes||{}).map(Number).filter(Number.isFinite).sort((a,b)=>a-b).filter(frame=>dzMocapIsIssue(track.silhouetteAt(frame)));
+    if(!issues.length)return dzSetStatus(" No quedan siluetas de baja confianza por revisar");
+    const target=issues.find(frame=>frame>DZ.doc.frame)||issues[0];DZ.doc.goTo(target);dzMocapRenderSilhouette();dzSetStatus(` Revisá la silueta F${target} · pintá, borrá o confirmá con ✓`);
+  };
   if(applyRig)applyRig.onclick=()=>{
     const track=DZ.doc?.mocap,rig=DZ.doc?.scene?.rig;if(!track||!rig)return;if(!Object.keys(rig.nodes||{}).length)return dzSetStatus(" Colocá o construí un esqueleto antes de transferir movimiento");
     const size={width:DZ.doc.scene.width,height:DZ.doc.scene.height},prepared=LOW.animation.mocapPoseSequence(track,track.analysisOptions?.poseInterpolation!==false),rawSequence={};
@@ -14057,7 +14079,7 @@ function dzMocapRenderSubject() {
   box.style.width=(r.w*vr.width)+"px"; box.style.height=(r.h*vr.height)+"px";
 }
 function dzMocapWire() {
-  const input = $("#mocapVideoFile"), open = $("#mocapImport"), analyze = $("#mocapAnalyze"), subject=$("#mocapSubject");
+  const input = $("#mocapVideoFile"), open = $("#mocapImport"), analyze = $("#mocapAnalyze"), subject=$("#mocapSubject"), background=$("#mocapBackground");
   const video = $("#mocapVideo"), status = $("#mocapStatus");
   if (!input) return;
   dzMocapCorrectionWire();
@@ -14065,9 +14087,10 @@ function dzMocapWire() {
   const current=DZ.doc?.mocap?.analysisOptions;if(current){threshold.value=current.threshold||54;cleanup.value=current.cleanup||4;if(poseInterpolation)poseInterpolation.checked=current.poseInterpolation!==false;if(keyTolerance)keyTolerance.value=current.keyTolerance??2;}dzMocapPoseStatus();
   if(input.dataset.wired)return;
   input.dataset.wired = "1";
-  const syncOptions=()=>{const track=dzMocapTrack();if(!track)return;track.analysisOptions={threshold:+threshold.value||54,cleanup:+cleanup.value||4,poseInterpolation:poseInterpolation?.checked!==false,keyTolerance:+keyTolerance?.value||0};DZ.doc.touch();};
+  const syncOptions=()=>{const track=dzMocapTrack();if(!track)return;track.analysisOptions=Object.assign({},track.analysisOptions,{threshold:+threshold.value||54,cleanup:+cleanup.value||4,poseInterpolation:poseInterpolation?.checked!==false,keyTolerance:+keyTolerance?.value||0});DZ.doc.touch();};
   threshold.oninput=syncOptions;cleanup.oninput=syncOptions;
   open.onclick = () => input.click();
+  if(background)background.onclick=()=>{const track=dzMocapTrack();if(!track||!video.src||!video.duration)return dzSetStatus(" Importá primero un video");const time=Math.max(0,Math.min(video.duration-.001,video.currentTime||0));track.analysisOptions=Object.assign({},track.analysisOptions,{backgroundTime:time});DZ.doc.touch();status.textContent=`Fondo limpio fijado en ${time.toFixed(2)} s · ahora extraé las siluetas`;dzSetStatus(" Cuadro de fondo guardado para separar mejor al personaje");};
   input.onchange = () => {
     const file = input.files && input.files[0]; input.value = "";
     if (!file) return;
@@ -14104,9 +14127,9 @@ function dzMocapWire() {
     DZ.mocapAbort=new AbortController();analyze.textContent="Cancelar";analyze.classList.add("danger"); track.status = "processing"; status.textContent = "Extrayendo siluetas localmente… 0%";
     try { await engine.analyze(track, video,{signal:DZ.mocapAbort.signal,onProgress:(p,f,last)=>{status.textContent=`Extrayendo siluetas… ${Math.round(p*100)}% · cuadro ${f}/${last}`;}});
       track.engine = id; track.status = "tracked"; DZ.doc.touch(); dzMocapRenderSilhouette();
-      const count=Object.keys(track.silhouettes||{}).length;
-      status.textContent=`${count} siluetas reales extraídas · avanzá por la línea de tiempo para revisarlas`;
-      dzSetStatus(` Captura terminada: ${count} siluetas de movimiento`); }
+      const count=Object.keys(track.silhouettes||{}).length,issues=Object.values(track.silhouettes||{}).filter(dzMocapIsIssue).length;
+      status.textContent=`${count} siluetas reales extraídas · ${issues} cuadro${issues===1?"":"s"} para revisar`;
+      dzSetStatus(` Captura terminada: ${count} siluetas de movimiento · ${issues} para revisar`); }
     catch (err) {if(err.name==="AbortError"){track.status=Object.keys(track.silhouettes||{}).length?"tracked":"reference";status.textContent="Análisis cancelado · se conservaron los resultados anteriores";dzSetStatus(" Captura cancelada sin perder datos");}else{track.status = "error"; status.textContent = "Falló el análisis: " + (err.message || err);}}
     finally { DZ.mocapAbort=null;analyze.textContent="Extraer siluetas";analyze.classList.remove("danger"); }
   };

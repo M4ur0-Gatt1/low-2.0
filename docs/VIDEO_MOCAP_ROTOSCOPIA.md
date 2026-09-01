@@ -9,10 +9,12 @@ artista conserva el control de cada corrección y de las claves generadas.
 ## Flujo de producción
 
 1. **Importar** un MP4, WebM, MOV o AVI y definir entrada/salida.
-2. **Marcar sujeto** cuando hay varias personas u oclusiones.
-3. **Analizar** por etapas: segmentación, pose y seguimiento temporal.
-4. **Corregir** máscara, articulaciones perdidas, escala y piso.
-5. **Aplicar** como siluetas, guía de dibujo, esqueleto nuevo o movimiento de un rig.
+2. Buscar un cuadro sin el actor y pulsar **Fondo** para fijar una referencia limpia.
+3. **Marcar sujeto** cuando hay varias personas u oclusiones.
+4. **Analizar** por etapas: separación del fondo, componentes y seguimiento temporal.
+5. Revisar los cuadros señalados con **⚠→**; corregir la máscara o confirmarla con **✓**.
+6. **Corregir** articulaciones perdidas, escala y piso.
+7. **Aplicar** como siluetas, guía de dibujo, esqueleto nuevo o movimiento de un rig.
 
 ## Contrato técnico
 
@@ -33,12 +35,15 @@ motor local, una GPU remota o una API sin contaminar el modelo de animación.
 
 ## Estado
 
-Base implementada: importación local, visor sincronizado, región de sujeto
-editable, extracción local de siluetas de movimiento, corrector por cuadro para
+Base implementada: importación local, visor sincronizado, fondo de referencia
+elegible, región de sujeto editable, extracción local de siluetas de movimiento,
+limpieza por componentes conectados con continuidad temporal, corrector por cuadro para
 agregar o borrar máscara con tableta, guía superpuesta en el lienzo y conversión
 reversible a un nivel de calco con exposiciones, persistencia del modelo y
-registro de motores y retargeting humano manual. La extracción local compara
-contra el primer cuadro y está pensada para cámara fija; no se presenta como
+registro de motores y retargeting humano manual. Cada resultado conserva
+confianza, oclusión y límites del sujeto; **⚠→** recorre solamente los cuadros
+problemáticos y **✓** guarda la validación como una acción reversible. La extracción
+local compara contra el fondo elegido y está pensada para cámara fija; no se presenta como
 detección corporal. El sistema completa puntos sólo entre dos observaciones de
 la misma articulación, informa la cobertura antes de aplicar y reduce claves
 redundantes con una tolerancia elegida por el artista. Pendiente para producción:
@@ -65,3 +70,7 @@ cadena se omite en vez de inventar movimiento.
 tolerancia visual; el cuadro de confirmación informa cuántas claves originales
 se descartarán. Ambas preferencias pertenecen al documento y sobreviven al
 guardado.
+
+La limpieza descarta manchas aisladas y prioriza la región que continúa al sujeto
+del cuadro anterior. No sustituye una segmentación semántica: ropa del mismo color
+que el fondo, cámara móvil u oclusiones largas todavía requieren corrección humana.

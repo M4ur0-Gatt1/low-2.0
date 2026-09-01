@@ -13,7 +13,7 @@
       this.status = "empty";
       this.engine = null;
       this.subjectRegion = null;
-      this.analysisOptions = { threshold: 54, cleanup: 4, poseInterpolation: true, keyTolerance: 2 };
+      this.analysisOptions = { threshold: 54, cleanup: 4, backgroundTime: 0, poseInterpolation: true, keyTolerance: 2 };
       this.samples = {};
       this.silhouettes = {};
     }
@@ -69,7 +69,7 @@
       this.status = data.status || (this.source ? "reference" : "empty");
       this.engine = data.engine || null;
       this.subjectRegion = data.subjectRegion ? this.setSubjectRegion(data.subjectRegion) : null;
-      this.analysisOptions = Object.assign({threshold:54,cleanup:4,poseInterpolation:true,keyTolerance:2},data.analysisOptions||{});
+      this.analysisOptions = Object.assign({threshold:54,cleanup:4,backgroundTime:0,poseInterpolation:true,keyTolerance:2},data.analysisOptions||{});
       this.samples = Object.assign({}, data.samples || {});
       this.silhouettes = Object.assign({}, data.silhouettes || {});
       return this;
@@ -114,6 +114,25 @@
     }
     return out;
   }
+  function filterMotionComponents(input, width, height, previousBounds) {
+    const size=Math.max(0,width*height),mask=input instanceof Uint8Array?input:new Uint8Array(input||[]),visited=new Uint8Array(size),components=[];
+    for(let start=0;start<size;start++){if(!mask[start]||visited[start])continue;const queue=[start],pixels=[];visited[start]=1;let minX=width,minY=height,maxX=-1,maxY=-1,sumX=0,sumY=0;
+      for(let at=0;at<queue.length;at++){const q=queue[at],x=q%width,y=Math.floor(q/width);pixels.push(q);sumX+=x;sumY+=y;minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);
+        for(let yy=Math.max(0,y-1);yy<=Math.min(height-1,y+1);yy++)for(let xx=Math.max(0,x-1);xx<=Math.min(width-1,x+1);xx++){const next=yy*width+xx;if(!visited[next]&&mask[next]){visited[next]=1;queue.push(next);}}}
+      components.push({pixels,area:pixels.length,minX,minY,maxX,maxY,cx:sumX/pixels.length/width,cy:sumY/pixels.length/height});
+    }
+    const empty={mask:new Uint8Array(size),bounds:null,centroid:null,components:0,keptComponents:0,confidence:0,occluded:true};if(!components.length)return empty;
+    const iou=component=>{if(!previousBounds)return 0;const ax=component.minX/width,ay=component.minY/height,aw=(component.maxX-component.minX+1)/width,ah=(component.maxY-component.minY+1)/height;
+      const x0=Math.max(ax,previousBounds.x),y0=Math.max(ay,previousBounds.y),x1=Math.min(ax+aw,previousBounds.x+previousBounds.w),y1=Math.min(ay+ah,previousBounds.y+previousBounds.h),intersection=Math.max(0,x1-x0)*Math.max(0,y1-y0),union=aw*ah+previousBounds.w*previousBounds.h-intersection;return union?intersection/union:0;};
+    const pcx=previousBounds?previousBounds.x+previousBounds.w/2:.5,pcy=previousBounds?previousBounds.y+previousBounds.h/2:.5;
+    const score=component=>component.area*(1+5*iou(component))/(1+(previousBounds?Math.hypot(component.cx-pcx,component.cy-pcy)*2:0));
+    const anchor=components.reduce((best,component)=>score(component)>score(best)?component:best,components[0]),minimum=Math.max(3,anchor.area*.015),focus=previousBounds||{x:anchor.minX/width,y:anchor.minY/height,w:(anchor.maxX-anchor.minX+1)/width,h:(anchor.maxY-anchor.minY+1)/height};
+    const inside=component=>component.cx>=focus.x-.18&&component.cx<=focus.x+focus.w+.18&&component.cy>=focus.y-.18&&component.cy<=focus.y+focus.h+.18;
+    const kept=components.filter(component=>component===anchor||(component.area>=minimum&&inside(component))),out=new Uint8Array(size);let minX=width,minY=height,maxX=-1,maxY=-1,sumX=0,sumY=0,keptArea=0,totalArea=0;
+    components.forEach(component=>{totalArea+=component.area;});kept.forEach(component=>{component.pixels.forEach(q=>{out[q]=1;});keptArea+=component.area;sumX+=component.cx*component.area;sumY+=component.cy*component.area;minX=Math.min(minX,component.minX);minY=Math.min(minY,component.minY);maxX=Math.max(maxX,component.maxX);maxY=Math.max(maxY,component.maxY);});
+    const bounds={x:minX/width,y:minY/height,w:(maxX-minX+1)/width,h:(maxY-minY+1)/height},continuity=previousBounds?Math.max(.2,Math.min(1,iou(anchor)*3+.25)):1;
+    return {mask:out,bounds,centroid:{x:sumX/keptArea,y:sumY/keptArea},components:components.length,keptComponents:kept.length,confidence:Math.max(0,Math.min(1,keptArea/Math.max(1,totalArea)*continuity)),occluded:false};
+  }
 
   /* Motor local y determinista. Extrae siluetas de movimiento comparando cada
      cuadro con el primero. No afirma estimar articulaciones: entrega material
@@ -134,11 +153,12 @@
       const rx0=Math.floor(roi.x*width), ry0=Math.floor(roi.y*height);
       const rx1=Math.ceil((roi.x+roi.w)*width), ry1=Math.ceil((roi.y+roi.h)*height);
       video.pause();
-      await seek(video, 0);
+      const backgroundTime=Math.max(0,Math.min(video.duration-.001,Number(analysis.backgroundTime)||0));
+      await seek(video, backgroundTime);
       ctx.drawImage(video, 0, 0, width, height);
       const background = ctx.getImageData(0, 0, width, height).data.slice();
       const last = Math.min(track.range.out, track.range.in + Math.max(1, Math.floor(video.duration * fps)) - 1);
-      const previous=track.silhouettes;track.silhouettes = {};
+      const previous=track.silhouettes;track.silhouettes = {};let previousBounds=null;
       try {
         for (let frame = track.range.in; frame <= last; frame++) {
           if (options.signal && options.signal.aborted) { const e=new Error("Análisis cancelado");e.name="AbortError";throw e; }
@@ -153,14 +173,16 @@
             const delta = Math.abs(pixels[p] - background[p]) + Math.abs(pixels[p+1] - background[p+1]) + Math.abs(pixels[p+2] - background[p+2]);
             raw[q] = delta > Math.max(1,Number(analysis.threshold)||54) ? 1 : 0;
           }
-          let minX=width,minY=height,maxX=-1,maxY=-1,count=0;
+          let count=0;
           for (let y=1;y<height-1;y++) for (let x=1;x<width-1;x++) {
             const q=y*width+x; let near=0;
             for(let yy=-1;yy<=1;yy++) for(let xx=-1;xx<=1;xx++) near+=raw[q+yy*width+xx];
-            if(near>=Math.max(1,Math.min(9,Number(analysis.cleanup)||4))){ mask[q]=1; count++; minX=Math.min(minX,x); minY=Math.min(minY,y); maxX=Math.max(maxX,x); maxY=Math.max(maxY,y); }
+            if(near>=Math.max(1,Math.min(9,Number(analysis.cleanup)||4))){ mask[q]=1; count++; }
           }
-          track.setSilhouette(frame,{width,height,runs:encodeMask(mask),coverage:count/mask.length,
-            bounds:maxX<0?null:{x:minX/width,y:minY/height,w:(maxX-minX+1)/width,h:(maxY-minY+1)/height}});
+          const stable=filterMotionComponents(mask,width,height,previousBounds);if(stable.bounds)previousBounds=stable.bounds;
+          const keptCount=stable.mask.reduce((sum,value)=>sum+(value?1:0),0);
+          track.setSilhouette(frame,{width,height,runs:encodeMask(stable.mask),coverage:keptCount/stable.mask.length,bounds:stable.bounds,centroid:stable.centroid,
+            components:stable.components,keptComponents:stable.keptComponents,confidence:stable.confidence,occluded:stable.occluded,rawCoverage:count/mask.length});
           if (options.onProgress) options.onProgress((frame-track.range.in+1)/(last-track.range.in+1), frame, last);
           if ((frame-track.range.in)%4===0) await new Promise(resolve => setTimeout(resolve,0));
         }
@@ -235,6 +257,7 @@
   animation.MotionCaptureTrack = MotionCaptureTrack;
   animation.encodeMocapMask = encodeMask;
   animation.decodeMocapMask = decodeMask;
+  animation.filterMocapMotionComponents = filterMotionComponents;
   animation.mocapPoseSequence = mocapPoseSequence;
   animation.mocapPoseReport = mocapPoseReport;
   animation.retargetHumanPose = retargetHumanPose;
