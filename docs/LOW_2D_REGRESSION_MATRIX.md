@@ -50,6 +50,11 @@ tener una comprobación proporcional al riesgo.
 | SAFE-01 | Inicio seguro usa workspace, shortcuts y brushes por defecto; no carga plugins ni proyecto previo. | P1 |
 | SAFE-02 | Reset UI/Shortcuts/Brushes/2D actúa por dominio y permite cancelar. | P1 |
 | RIG-01 | Un modo contextual explica por qué un Level no admite mesh/bones y cómo prepararlo. | P3 |
+| MOCAP-01 | Cancelar el análisis conserva íntegramente las siluetas anteriores y el estado del video. | P1 — automatizado en modelo/contrato |
+| MOCAP-02 | Un punto sólo se completa entre dos observaciones confirmadas; nunca se extrapola fuera de ellas. | P1 — automatizado |
+| MOCAP-03 | Reducir claves conserva extremos y cambios que superan la tolerancia elegida. | P1 — automatizado |
+| MOCAP-04 | Aplicar una toma al rig forma una sola transacción y no cambia pivotes ni jerarquía. | P1 — automatizado |
+| MOCAP-05 | Un video real con oclusiones, paneo y dos sujetos produce diagnóstico comprensible y corrección manual. | P1 — aceptación humana pendiente |
 
 ## Regla para nuevos tests
 

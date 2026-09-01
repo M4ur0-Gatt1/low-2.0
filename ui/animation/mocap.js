@@ -13,7 +13,7 @@
       this.status = "empty";
       this.engine = null;
       this.subjectRegion = null;
-      this.analysisOptions = { threshold: 54, cleanup: 4 };
+      this.analysisOptions = { threshold: 54, cleanup: 4, poseInterpolation: true, keyTolerance: 2 };
       this.samples = {};
       this.silhouettes = {};
     }
@@ -69,7 +69,7 @@
       this.status = data.status || (this.source ? "reference" : "empty");
       this.engine = data.engine || null;
       this.subjectRegion = data.subjectRegion ? this.setSubjectRegion(data.subjectRegion) : null;
-      this.analysisOptions = Object.assign({threshold:54,cleanup:4},data.analysisOptions||{});
+      this.analysisOptions = Object.assign({threshold:54,cleanup:4,poseInterpolation:true,keyTolerance:2},data.analysisOptions||{});
       this.samples = Object.assign({}, data.samples || {});
       this.silhouettes = Object.assign({}, data.silhouettes || {});
       return this;
@@ -177,8 +177,30 @@
     ["thigh_L","hips","left_knee"],["shin_L","left_knee","left_ankle"],
     ["thigh_R","hips","right_knee"],["shin_R","right_knee","right_ankle"]
   ];
+  const MOCAP_JOINTS = ["nose","neck","left_shoulder","right_shoulder","left_elbow","right_elbow","left_wrist","right_wrist","hips","left_knee","right_knee","left_ankle","right_ankle"];
+  const clone=value=>JSON.parse(JSON.stringify(value));
   const angle=(a,b)=>Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI;
   const normAngle=value=>{let n=(value+180)%360;if(n<0)n+=360;return n-180;};
+  function mocapPoseSequence(track, interpolate = true) {
+    const source=track&&track.samples||{},frames=Object.keys(source).map(Number).filter(Number.isFinite).sort((a,b)=>a-b),out={};
+    for(const frame of frames)out[frame]=clone(source[frame]);
+    if(!interpolate||frames.length<2)return out;
+    const names=new Set();for(const frame of frames)Object.keys(source[frame]?.joints||{}).forEach(name=>names.add(name));
+    for(const name of names){const keys=frames.filter(frame=>source[frame]?.joints?.[name]);
+      for(let index=0;index<keys.length-1;index++){const first=keys[index],last=keys[index+1],a=source[first].joints[name],b=source[last].joints[name];if(last-first<2)continue;
+        for(let frame=first+1;frame<last;frame++){out[frame]||(out[frame]={joints:{},confidence:1});out[frame].joints||(out[frame].joints={});if(out[frame].joints[name])continue;const t=(frame-first)/(last-first);
+          out[frame].joints[name]={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,confidence:Math.min(a.confidence??source[first].confidence??1,b.confidence??source[last].confidence??1),interpolated:true};}
+      }
+    }
+    return Object.fromEntries(Object.entries(out).sort((a,b)=>Number(a[0])-Number(b[0])));
+  }
+  function mocapPoseReport(track, sequence) {
+    const exact=track&&track.samples||{},expanded=sequence||mocapPoseSequence(track,true),confirmed=new Set();
+    Object.values(exact).forEach(sample=>Object.keys(sample?.joints||{}).forEach(name=>confirmed.add(name)));
+    const chainFrames={};for(const [suffix,a,b] of RETARGET_CHAINS)chainFrames[suffix]=Object.values(expanded).filter(sample=>sample?.joints?.[a]&&sample?.joints?.[b]).length;
+    return {confirmedFrames:Object.keys(exact).length,generatedFrames:Object.keys(expanded).length,confirmedJoints:confirmed.size,totalJoints:MOCAP_JOINTS.length,
+      missingJoints:MOCAP_JOINTS.filter(name=>!confirmed.has(name)),chainFrames};
+  }
   function retargetHumanPose(sample,rig,size) {
     const joints=sample&&sample.joints||{},nodes=rig&&rig.nodes||{},width=Math.max(1,size&&size.width||1),height=Math.max(1,size&&size.height||1);
     const bySuffix=suffix=>Object.values(nodes).find(n=>n.id===suffix||n.id.endsWith("_"+suffix));
@@ -192,10 +214,31 @@
     }
     return poses;
   }
+  function reduceRigPoseSequence(sequence, tolerance = 2) {
+    const amount=Math.max(0,Number(tolerance)||0);if(!amount)return clone(sequence||{});
+    const byNode={};for(const [rawFrame,poses] of Object.entries(sequence||{})){const frame=Number(rawFrame);for(const [id,pose] of Object.entries(poses||{}))(byNode[id]||(byNode[id]=[])).push({frame,pose});}
+    const result={},positionTolerance=Math.max(.01,amount),rotationTolerance=Math.max(.05,amount*.75),scaleTolerance=Math.max(.0001,amount/500);
+    const put=(frame,id,pose)=>{(result[frame]||(result[frame]={}))[id]=clone(pose);};
+    for(const [id,rawPoints] of Object.entries(byNode)){const points=rawPoints.sort((a,b)=>a.frame-b.frame);if(points.length<=2){points.forEach(point=>put(point.frame,id,point.pose));continue;}
+      const keep=new Set([0,points.length-1]);
+      const error=(point,start,end)=>{const span=end.frame-start.frame,t=span?Math.max(0,Math.min(1,(point.frame-start.frame)/span)):0,a=start.pose,b=end.pose,p=point.pose;
+        const linear=name=>(+a[name]||0)+((+b[name]||0)-(+a[name]||0))*t;
+        const predictedRotation=(+a.r||0)+normAngle((+b.r||0)-(+a.r||0))*t;
+        return Math.max(Math.abs((+p.x||0)-linear("x"))/positionTolerance,Math.abs((+p.y||0)-linear("y"))/positionTolerance,
+          Math.abs(normAngle((+p.r||0)-predictedRotation))/rotationTolerance,Math.abs((p.sx??1)-((a.sx??1)+((b.sx??1)-(a.sx??1))*t))/scaleTolerance,
+          Math.abs((p.sy??1)-((a.sy??1)+((b.sy??1)-(a.sy??1))*t))/scaleTolerance);};
+      const simplify=(first,last)=>{if(last-first<2)return;let worst=0,index=-1;for(let i=first+1;i<last;i++){const value=error(points[i],points[first],points[last]);if(value>worst){worst=value;index=i;}}if(worst>1&&index>first){keep.add(index);simplify(first,index);simplify(index,last);}};
+      simplify(0,points.length-1);Array.from(keep).sort((a,b)=>a-b).forEach(index=>put(points[index].frame,id,points[index].pose));
+    }
+    return Object.fromEntries(Object.entries(result).sort((a,b)=>Number(a[0])-Number(b[0])));
+  }
   animation.MotionCaptureTrack = MotionCaptureTrack;
   animation.encodeMocapMask = encodeMask;
   animation.decodeMocapMask = decodeMask;
+  animation.mocapPoseSequence = mocapPoseSequence;
+  animation.mocapPoseReport = mocapPoseReport;
   animation.retargetHumanPose = retargetHumanPose;
+  animation.reduceRigPoseSequence = reduceRigPoseSequence;
   animation.mocapEngines = {
     register: registerMocapEngine,
     get: (id) => engines.get(String(id)) || null,

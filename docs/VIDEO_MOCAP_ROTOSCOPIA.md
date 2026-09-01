@@ -39,9 +39,11 @@ agregar o borrar máscara con tableta, guía superpuesta en el lienzo y conversi
 reversible a un nivel de calco con exposiciones, persistencia del modelo y
 registro de motores y retargeting humano manual. La extracción local compara
 contra el primer cuadro y está pensada para cámara fija; no se presenta como
-detección corporal. Pendiente para producción: segmentación semántica estable,
-detección automática de pose, reducción de claves y pruebas de aceptación con
-videos diversos.
+detección corporal. El sistema completa puntos sólo entre dos observaciones de
+la misma articulación, informa la cobertura antes de aplicar y reduce claves
+redundantes con una tolerancia elegida por el artista. Pendiente para producción:
+segmentación semántica estable, detección automática de pose, contactos de pies
+y pruebas de aceptación con videos diversos.
 
 El análisis muestra progreso y se puede cancelar. Una cancelación restaura el
 conjunto anterior de siluetas y devuelve el video a su tiempo y reproducción
@@ -57,3 +59,9 @@ fueron confirmados: cadera/columna, cuello/cabeza, clavículas, brazos y piernas
 Convierte toda la toma en un solo lote reversible con `Ctrl+Z`; nunca cambia la
 geometría, los pivotes ni la jerarquía del esqueleto. Si faltan puntos, esa
 cadena se omite en vez de inventar movimiento.
+
+`Completar` nunca extrapola antes de la primera marca ni después de la última.
+`Reducción` conserva siempre extremos y cualquier desviación que supere la
+tolerancia visual; el cuadro de confirmación informa cuántas claves originales
+se descartarán. Ambas preferencias pertenecen al documento y sobreviven al
+guardado.

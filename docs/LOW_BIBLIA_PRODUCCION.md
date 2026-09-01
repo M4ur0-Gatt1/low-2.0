@@ -462,8 +462,10 @@ estado, muestras de pose y siluetas; sincroniza la referencia con el fotograma
 actual y permite que motores intercambiables realicen el análisis. La aplicación
 incluye un motor local honesto de silueta por diferencia temporal y permite
 marcar una región de sujeto antes de analizar. No confunde esa máscara con una
-detección corporal. Las siguientes puertas son: segmentación semántica estable, detección corporal, corrector de
-oclusiones, reducción de claves, mapeo de articulaciones y prueba con video real.
+detección corporal. El mapeo humano manual, la interpolación acotada entre
+observaciones y la reducción reversible de claves ya forman un recorrido único
+con diagnóstico de cobertura. Las siguientes puertas son: segmentación semántica
+estable, detección corporal, contactos/oclusiones y prueba con videos reales.
 
 ### DESPUÉS — integración avanzada
 

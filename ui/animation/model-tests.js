@@ -1030,13 +1030,13 @@
       });
       track.setPose(13,{nose:{x:.5,y:.2},left_shoulder:{x:.4,y:.35}},.91);
       track.setSubjectRegion({x:.2,y:.1,w:.5,h:.8});
-      track.analysisOptions={threshold:72,cleanup:6};
+      track.analysisOptions={threshold:72,cleanup:6,poseInterpolation:false,keyTolerance:3.5};
       doc.mocap = track;
       ok("video mocap traduce el cuadro a tiempo de video",Math.abs(track.timeAt(13,24)-.5)<.0001);
       track.setPose(14,{hips:{x:.5,y:.6}},1);ok("la pose manual queda asociada al cuadro exacto",track.poseAt(14).joints.hips.y===.6&&!track.poseAt(12));
       const reopened = animation.LowDoc.fromJSON(doc.toJSON());
       ok("video mocap persiste fuente, rango y muestras al reabrir",
-        reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91&&reopened.mocap.subjectRegion.w===.5&&reopened.mocap.analysisOptions.threshold===72,
+        reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91&&reopened.mocap.subjectRegion.w===.5&&reopened.mocap.analysisOptions.threshold===72&&reopened.mocap.analysisOptions.poseInterpolation===false&&reopened.mocap.analysisOptions.keyTolerance===3.5,
         JSON.stringify(reopened.mocap&&reopened.mocap.toJSON()));
       let rejected=false;
       try { animation.mocapEngines.register("roto",{}); } catch (_) { rejected=true; }
@@ -1060,6 +1060,16 @@
       ok("una secuencia mocap se aplica como lote atómico",rigDoc.setRigPoseSequence({1:mapped,3:mapped})&&rigDoc.scene.rigNode("mocap_spine").keys[3]);
       rigHistory.undo();ok("deshacer retargeting quita todas sus claves",!rigDoc.scene.rigNode("mocap_spine").keys[3]);
       rigHistory.redo();ok("rehacer retargeting recupera toda la secuencia",!!rigDoc.scene.rigNode("mocap_spine").keys[3]);
+      const sparse=new animation.MotionCaptureTrack(doc);sparse.setPose(1,{hips:{x:.4,y:.7},neck:{x:.4,y:.4}},1);sparse.setPose(5,{hips:{x:.6,y:.7},neck:{x:.6,y:.4}},1);
+      const completed=animation.mocapPoseSequence(sparse,true),middle=completed[3];
+      ok("mocap completa sólo entre dos articulaciones confirmadas",middle&&Math.abs(middle.joints.hips.x-.5)<.0001&&middle.joints.hips.interpolated===true&&!completed[6],JSON.stringify(completed));
+      const report=animation.mocapPoseReport(sparse,completed);
+      ok("el diagnóstico distingue confirmación de cuadros generados",report.confirmedFrames===2&&report.generatedFrames===5&&report.confirmedJoints===2&&report.chainFrames.spine===5,JSON.stringify(report));
+      const linear={};for(let frame=1;frame<=5;frame++)linear[frame]={bone:{x:frame*2,y:frame,r:frame*5,sx:1,sy:1}};
+      const compact=animation.reduceRigPoseSequence(linear,.1);
+      ok("la reducción elimina claves lineales redundantes",Object.keys(compact).length===2&&compact[1].bone&&compact[5].bone,JSON.stringify(compact));
+      linear[3].bone.r=35;const directed=animation.reduceRigPoseSequence(linear,1);
+      ok("la reducción conserva un cambio real de dirección",!!directed[3]?.bone,JSON.stringify(directed));
     }
 
     const fallan = res.filter((r) => !r.ok);

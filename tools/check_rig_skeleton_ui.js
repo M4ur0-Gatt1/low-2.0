@@ -99,6 +99,14 @@ async function main() {
     const persistence={bindings:Object.keys(reopened.scene.rig.bindings||{}).length,
       pose:reopenedArm?.keys?.[12]?.r,diagnostics:(reopened.scene.rig.diagnostics||[]).length,
       exportPosed:exported.includes("matrix("),exportClean:!exported.includes("data-rigbase")};
+    const track=new LOW.animation.MotionCaptureTrack(DZ.doc);
+    track.setPose(1,{hips:{x:.45,y:.7},neck:{x:.45,y:.4}},1);
+    track.setPose(5,{hips:{x:.55,y:.7},neck:{x:.55,y:.4}},1);DZ.doc.mocap=track;dzMocapWire();
+    const complete=document.querySelector("#mocapPoseInterpolation"),tolerance=document.querySelector("#mocapKeyTolerance");
+    complete.checked=true;complete.dispatchEvent(new Event("change",{bubbles:true}));tolerance.value="3";tolerance.dispatchEvent(new Event("input",{bubbles:true}));
+    const poseState=dzMocapPoseStatus(),mocap={generated:poseState.report.generatedFrames,spine:poseState.report.chainFrames.spine,
+      optionSaved:DZ.doc.mocap.analysisOptions.poseInterpolation===true&&DZ.doc.mocap.analysisOptions.keyTolerance===3,
+      applyVisible:!document.querySelector("#mocapApplyRig").hidden,status:document.querySelector("#mocapPoseStatus").textContent};
     dzSelect(document.getElementById("mano_izq"));
     dzReleaseFocus();
     window.__deleteSeen=null;
@@ -113,7 +121,7 @@ async function main() {
     const boneDeleted=!DZ.doc.scene.rigNode("mano_der");
     const deletion={objectDeleted,boneDeleted,objectBefore,eventSeen:window.__deleteSeen};
     const canvas={width:DZ.doc.scene.width,height:DZ.doc.scene.height};
-    return {rig,vector,transform,rigSampling,example,persistence,deletion,canvas};
+    return {rig,vector,transform,rigSampling,example,persistence,mocap,deletion,canvas};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   stage("evaluar resultado");
@@ -134,6 +142,8 @@ async function main() {
   if (value.persistence?.bindings < 18 || value.persistence.pose !== 28 || value.persistence.diagnostics ||
       !value.persistence.exportPosed || !value.persistence.exportClean)
     throw Error("REGRESIÓN: rig no sobrevive guardar/reabrir/exportar: " + JSON.stringify(value));
+  if (value.mocap?.generated !== 5 || value.mocap?.spine !== 5 || !value.mocap.optionSaved || !value.mocap.applyVisible)
+    throw Error("REGRESIÓN: diagnóstico/opciones de retargeting no funcionan en la interfaz: " + JSON.stringify(value));
   if (!value.deletion?.objectDeleted || !value.deletion?.boneDeleted)
     throw Error("REGRESIÓN: Supr no elimina objeto y hueso según contexto: " + JSON.stringify(value));
   if (value.canvas?.width !== 1920 || value.canvas?.height !== 1080)

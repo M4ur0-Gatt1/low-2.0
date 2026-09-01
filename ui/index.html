@@ -769,6 +769,11 @@
             <button id="mocapPlaceJoint" title="Después tocá la silueta para colocar la articulación">Colocar punto</button>
             <button id="mocapDeleteJoint" title="Quitar la articulación elegida del cuadro">Quitar punto</button>
           </div>
+          <div class="rig2-row mocap-analysis-options" id="mocapPoseOptions" hidden>
+            <label title="Completa solamente el espacio entre dos puntos confirmados de la misma articulación"><input id="mocapPoseInterpolation" type="checkbox" checked> Completar</label>
+            <label title="Elimina claves redundantes sin superar este error visual">Reducción <input id="mocapKeyTolerance" type="range" min="0" max="12" value="2" step="0.5"></label>
+          </div>
+          <p class="rig2-hint" id="mocapPoseStatus" hidden></p>
           <button id="mocapApplyRig" hidden title="Crea claves nuevas a partir de los puntos confirmados">Aplicar movimiento al rig…</button>
           <p class="rig2-hint" id="mocapStatus">Importá una actuación para verla sincronizada con los cuadros.</p>
         </details>
