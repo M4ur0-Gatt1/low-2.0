@@ -47,3 +47,6 @@ conjunto anterior de siluetas y devuelve el video a su tiempo y reproducción
 previos; cancelar nunca deja un análisis parcial presentado como completo.
 La sensibilidad y la limpieza pertenecen a la pista y se conservan al reabrir;
 el artista puede adaptarlas al ruido, compresión e iluminación de cada toma.
+Las articulaciones también pueden colocarse o quitarse manualmente por cuadro.
+Estos puntos son datos de pose persistentes y corregibles, no una detección
+automática simulada; serán la entrada verificable del retargeting.

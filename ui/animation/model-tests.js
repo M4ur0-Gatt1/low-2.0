@@ -1033,6 +1033,7 @@
       track.analysisOptions={threshold:72,cleanup:6};
       doc.mocap = track;
       ok("video mocap traduce el cuadro a tiempo de video",Math.abs(track.timeAt(13,24)-.5)<.0001);
+      track.setPose(14,{hips:{x:.5,y:.6}},1);ok("la pose manual queda asociada al cuadro exacto",track.poseAt(14).joints.hips.y===.6&&!track.poseAt(12));
       const reopened = animation.LowDoc.fromJSON(doc.toJSON());
       ok("video mocap persiste fuente, rango y muestras al reabrir",
         reopened.mocap&&reopened.mocap.source.name==="actuacion.mp4"&&reopened.mocap.poseAt(13).confidence===.91&&reopened.mocap.subjectRegion.w===.5&&reopened.mocap.analysisOptions.threshold===72,

@@ -13974,8 +13974,10 @@ function dzMocapRenderSilhouette() {
   const mask=LOW.animation.decodeMocapMask(data);
   for(let i=0,p=0;i<mask.length;i++,p+=4){ image.data[p]=255; image.data[p+1]=74; image.data[p+2]=32; image.data[p+3]=mask[i]; }
   ctx.clearRect(0,0,canvas.width,canvas.height); ctx.putImageData(image,0,0);
+  const pose=track.poseAt?.(DZ.doc.frame);if(pose?.joints){ctx.save();ctx.fillStyle="#30cbbc";ctx.strokeStyle="#081515";ctx.lineWidth=1.2;Object.entries(pose.joints).forEach(([name,j])=>{if(!j)return;const x=j.x*canvas.width,y=j.y*canvas.height;ctx.beginPath();ctx.arc(x,y,3.2,0,Math.PI*2);ctx.fill();ctx.stroke();});ctx.restore();}
   const tools=$("#mocapCorrection"); if(tools)tools.hidden=false;
   const toLevel=$("#mocapToLevel");if(toLevel)toLevel.hidden=false;
+  const poseTools=$("#mocapPoseTools");if(poseTools)poseTools.hidden=false;
   dzMocapRenderCanvasGuide();
 }
 function dzMocapMaskDataUrl(data,color) {
@@ -14001,7 +14003,7 @@ function dzMocapCommitMask(canvas,mask) {
   DZ.doc.touch(); dzMocapRenderSilhouette();
 }
 function dzMocapCorrectionWire() {
-  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush"),guide=$("#mocapGuide"),toLevel=$("#mocapToLevel");
+  const canvas=$("#mocapSilhouette"),paint=$("#mocapPaint"),erase=$("#mocapErase"),brush=$("#mocapBrush"),guide=$("#mocapGuide"),toLevel=$("#mocapToLevel"),joint=$("#mocapJoint"),placeJoint=$("#mocapPlaceJoint"),deleteJoint=$("#mocapDeleteJoint");
   if(!canvas||canvas.dataset.correctorWired)return; canvas.dataset.correctorWired="1";
   let mode=null,drawing=false,mask=null,before=null;
   const activate=next=>{mode=next;paint?.classList.toggle("active",next==="paint");erase?.classList.toggle("active",next==="erase");canvas.classList.toggle("correcting",!!next);};
@@ -14009,6 +14011,12 @@ function dzMocapCorrectionWire() {
   guide.onclick=()=>{guide.classList.toggle("active");dzMocapRenderCanvasGuide();};
   toLevel.onclick=()=>{const track=DZ.doc?.mocap;if(!track)return;const size=dzCurrentDocumentSize(),items=Object.keys(track.silhouettes||{}).map(Number).sort((a,b)=>a-b).map(frame=>{const data=track.silhouetteAt(frame),url=dzMocapMaskDataUrl(data,[40,40,40]);return{frame,content:`<image href="${url}" x="${size.x}" y="${size.y}" width="${size.width}" height="${size.height}" opacity=".6" preserveAspectRatio="none" data-low-roto="1"/>`};});
     const layer=DZ.doc.addReferenceSequence(items,"Rotoscopía");if(layer){dzBuildLayers();dzSetStatus(` Nivel de calco creado: ${items.length} dibujos`);}};
+  let placingJoint=false;
+  placeJoint.onclick=()=>{placingJoint=!placingJoint;placeJoint.classList.toggle("active",placingJoint);canvas.classList.toggle("placing-joint",placingJoint);activate(null);};
+  const changeJoint=(name,value,label)=>{const track=DZ.doc?.mocap,frame=DZ.doc?.frame;if(!track||!frame)return;const before=JSON.parse(JSON.stringify(track.poseAt(frame)||{joints:{},confidence:1})),joints=JSON.parse(JSON.stringify(before.joints||{}));if(value)joints[name]=value;else delete joints[name];track.setPose(frame,joints,1);const after=JSON.parse(JSON.stringify(track.poseAt(frame)));
+    if(DZ.doc.history){const doc=DZ.doc;DZ.doc.history.push({label,domain:"mocap",before,after,apply:(_dir,next)=>{doc.mocap.setPose(frame,next.joints,next.confidence);doc.touch();if(doc.frame===frame)dzMocapRenderSilhouette();}});}DZ.doc.touch();dzMocapRenderSilhouette();};
+  deleteJoint.onclick=()=>changeJoint(joint.value,null,"Quitar articulación de video");
+  canvas.addEventListener("click",e=>{if(!placingJoint)return;e.preventDefault();e.stopImmediatePropagation();const r=canvas.getBoundingClientRect();changeJoint(joint.value,{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height)),confidence:1},"Colocar articulación de video");placingJoint=false;placeJoint.classList.remove("active");canvas.classList.remove("placing-joint");});
   const apply=e=>{if(!drawing||!mode||!mask)return;const r=canvas.getBoundingClientRect(),cx=(e.clientX-r.left)/r.width*canvas.width,cy=(e.clientY-r.top)/r.height*canvas.height,rad=+(brush?.value||8);
     for(let y=Math.max(0,Math.floor(cy-rad));y<Math.min(canvas.height,Math.ceil(cy+rad));y++)for(let x=Math.max(0,Math.floor(cx-rad));x<Math.min(canvas.width,Math.ceil(cx+rad));x++)if((x-cx)**2+(y-cy)**2<=rad**2)mask[y*canvas.width+x]=mode==="paint"?255:0;
     const ctx=canvas.getContext("2d"),image=ctx.createImageData(canvas.width,canvas.height);for(let i=0,p=0;i<mask.length;i++,p+=4){image.data[p]=255;image.data[p+1]=74;image.data[p+2]=32;image.data[p+3]=mask[i];}ctx.putImageData(image,0,0);};

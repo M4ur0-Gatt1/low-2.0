@@ -757,6 +757,18 @@
             <label title="Tamaño del corrector">Punta <input id="mocapBrush" type="range" min="2" max="24" value="8"></label>
           </div>
           <button id="mocapToLevel" hidden>Crear nivel de calco</button>
+          <div class="rig2-actions" id="mocapPoseTools" hidden>
+            <select id="mocapJoint" title="Articulación que se colocará sobre la silueta">
+              <option value="nose">Cabeza</option><option value="neck">Cuello</option>
+              <option value="left_shoulder">Hombro izq.</option><option value="right_shoulder">Hombro der.</option>
+              <option value="left_elbow">Codo izq.</option><option value="right_elbow">Codo der.</option>
+              <option value="left_wrist">Mano izq.</option><option value="right_wrist">Mano der.</option>
+              <option value="hips">Cadera</option><option value="left_knee">Rodilla izq.</option><option value="right_knee">Rodilla der.</option>
+              <option value="left_ankle">Pie izq.</option><option value="right_ankle">Pie der.</option>
+            </select>
+            <button id="mocapPlaceJoint" title="Después tocá la silueta para colocar la articulación">Colocar punto</button>
+            <button id="mocapDeleteJoint" title="Quitar la articulación elegida del cuadro">Quitar punto</button>
+          </div>
           <p class="rig2-hint" id="mocapStatus">Importá una actuación para verla sincronizada con los cuadros.</p>
         </details>
         <div class="rig2-hint" id="rigHint">Armado: registrá las piezas. En la mesa, arrastrá un círculo para colocar su pivote y el cuadrado para vincular esa pieza con su padre.</div>
