@@ -14035,8 +14035,10 @@ function dzMocapCorrectionWire() {
   const activate=next=>{mode=next;paint?.classList.toggle("active",next==="paint");erase?.classList.toggle("active",next==="erase");canvas.classList.toggle("correcting",!!next);};
   paint.onclick=()=>activate(mode==="paint"?null:"paint"); erase.onclick=()=>activate(mode==="erase"?null:"erase");
   guide.onclick=()=>{guide.classList.toggle("active");dzMocapRenderCanvasGuide();};
-  toLevel.onclick=()=>{const track=DZ.doc?.mocap;if(!track)return;const size=dzCurrentDocumentSize(),items=Object.keys(track.silhouettes||{}).map(Number).sort((a,b)=>a-b).map(frame=>{const data=track.silhouetteAt(frame),url=dzMocapMaskDataUrl(data,[40,40,40]);return{frame,content:`<image href="${url}" x="${size.x}" y="${size.y}" width="${size.width}" height="${size.height}" opacity=".6" preserveAspectRatio="none" data-low-roto="1"/>`};});
-    const layer=DZ.doc.addReferenceSequence(items,"Rotoscopía");if(layer){dzBuildLayers();dzSetStatus(` Nivel de calco creado: ${items.length} dibujos`);}};
+  toLevel.onclick=()=>{const track=DZ.doc?.mocap;if(!track)return;const size=dzCurrentDocumentSize(),frames=Object.keys(track.silhouettes||{}).map(Number).filter(Number.isFinite).sort((a,b)=>a-b),items=[],empty=[];
+    frames.forEach(frame=>{const data=track.silhouetteAt(frame),content=LOW.animation.mocapMaskSvgContent?.(data,size,{fill:"#282828",opacity:.68});if(content)items.push({frame,content});else empty.push(frame);});
+    if(!items.length){dzSetStatus(" No se creó un nivel vacío: las máscaras no contienen al sujeto · usá Detectar cuerpo o elegí un fondo limpio y analizá otra vez");return;}
+    const layer=DZ.doc.addReferenceSequence(items,"Rotoscopía");if(layer){dzBuildLayers();dzCanvasSet(DZ.doc.drawing?.content||"");dzTlFramesRender();const skipped=empty.length?` · ${empty.length} vacíos omitidos`:"";dzSetStatus(` Nivel de calco creado: ${items.length} siluetas visibles${skipped}`);}};
   let placingJoint=false;
   placeJoint.onclick=()=>{placingJoint=!placingJoint;placeJoint.classList.toggle("active",placingJoint);canvas.classList.toggle("placing-joint",placingJoint);activate(null);};
   const changeJoint=(name,value,label)=>{const track=DZ.doc?.mocap,frame=DZ.doc?.frame;if(!track||!frame)return;const previous=track.poseAt(frame),before={sample:previous?JSON.parse(JSON.stringify(previous)):null,missedFrames:[...(track.poseAnalysis?.missedFrames||[])]},joints=JSON.parse(JSON.stringify(previous?.joints||{}));if(value)joints[name]=value;else delete joints[name];
@@ -14100,7 +14102,7 @@ function dzMocapWire() {
   const syncOptions=()=>{const track=dzMocapTrack();if(!track)return;track.analysisOptions=Object.assign({},track.analysisOptions,{threshold:+threshold.value||54,cleanup:+cleanup.value||4,poseConfidence:+poseConfidence?.value||.45,poseInterpolation:poseInterpolation?.checked!==false,keyTolerance:+keyTolerance?.value||0});DZ.doc.touch();};
   threshold.oninput=syncOptions;cleanup.oninput=syncOptions;if(poseConfidence)poseConfidence.oninput=syncOptions;
   open.onclick = () => input.click();
-  if(background)background.onclick=()=>{const track=dzMocapTrack();if(!track||!video.src||!video.duration)return dzSetStatus(" Importá primero un video");const time=Math.max(0,Math.min(video.duration-.001,video.currentTime||0));track.analysisOptions=Object.assign({},track.analysisOptions,{backgroundTime:time});DZ.doc.touch();status.textContent=`Fondo limpio fijado en ${time.toFixed(2)} s · ahora extraé las siluetas`;dzSetStatus(" Cuadro de fondo guardado para separar mejor al personaje");};
+  if(background)background.onclick=()=>{const track=dzMocapTrack();if(!track||!video.src||!video.duration)return dzSetStatus(" Importá primero un video");const time=Math.max(0,Math.min(video.duration-.001,video.currentTime||0));track.analysisOptions=Object.assign({},track.analysisOptions,{backgroundTime:time,backgroundLocked:true});DZ.doc.touch();status.textContent=`Fondo limpio fijado en ${time.toFixed(2)} s · ahora extraé las siluetas`;dzSetStatus(" Cuadro de fondo guardado para separar mejor al personaje");};
   input.onchange = () => {
     const file = input.files && input.files[0]; input.value = "";
     if (!file) return;
@@ -14144,9 +14146,9 @@ function dzMocapWire() {
     DZ.mocapAbort=new AbortController();analyze.textContent="Cancelar";analyze.classList.add("danger");if(detectPose)detectPose.disabled=true; track.status = "processing"; status.textContent = "Extrayendo siluetas localmente… 0%";
     try { await engine.analyze(track, video,{signal:DZ.mocapAbort.signal,onProgress:(p,f,last)=>{status.textContent=`Extrayendo siluetas… ${Math.round(p*100)}% · cuadro ${f}/${last}`;}});
       track.engine = id; track.status = "tracked"; DZ.doc.touch(); dzMocapRenderSilhouette();
-      const count=Object.keys(track.silhouettes||{}).length,issues=Object.values(track.silhouettes||{}).filter(dzMocapIsIssue).length;
-      status.textContent=`${count} siluetas reales extraídas · ${issues} cuadro${issues===1?"":"s"} para revisar`;
-      dzSetStatus(` Captura terminada: ${count} siluetas de movimiento · ${issues} para revisar`); }
+      const count=Object.keys(track.silhouettes||{}).length,usable=Object.values(track.silhouettes||{}).filter(item=>LOW.animation.mocapMaskStats?.(item).usable).length,issues=Object.values(track.silhouettes||{}).filter(dzMocapIsIssue).length;
+      status.textContent=usable?`${usable}/${count} siluetas visibles · ${issues} cuadro${issues===1?"":"s"} para revisar`:`No se encontró una silueta visible · marcá al sujeto y usá Detectar cuerpo`;
+      dzSetStatus(usable?` Captura terminada: ${usable} siluetas visibles · ${issues} para revisar`:` El análisis no encontró al sujeto: no se generarán cuadros blancos`); }
     catch (err) {if(err.name==="AbortError"){track.status=Object.keys(track.silhouettes||{}).length?"tracked":"reference";status.textContent="Análisis cancelado · se conservaron los resultados anteriores";dzSetStatus(" Captura cancelada sin perder datos");}else{track.status = "error"; status.textContent = "Falló el análisis: " + (err.message || err);}}
     finally { DZ.mocapAbort=null;analyze.textContent="Extraer siluetas";analyze.classList.remove("danger");if(detectPose)detectPose.disabled=false; }
   };

@@ -1052,6 +1052,18 @@
       ok("las siluetas persistentes reconstruyen su máscara",Array.from(mask).join(",")==="0,0,255,255,255,0");
       ok("una máscara corregida se puede volver a comprimir sin pérdidas",
         Array.from(animation.decodeMocapMask({width:3,height:2,runs:animation.encodeMocapMask(mask)})).join(",")===Array.from(mask).join(","));
+      const maskSvg=animation.mocapMaskSvgContent({width:3,height:2,runs:[2,0,3,1,1,0]},{width:300,height:200});
+      ok("una silueta útil crea geometría SVG visible y autónoma",
+        maskSvg.includes("data-low-roto")&&maskSvg.includes("<path")&&!maskSvg.includes("data:image"),maskSvg);
+      ok("una máscara vacía no crea un cuadro blanco de rotoscopía",
+        animation.mocapMaskSvgContent({width:3,height:2,runs:[6,0]},{width:300,height:200})===null&&
+        animation.mocapMaskStats({width:3,height:2,runs:[6,0]}).empty);
+      const autoBackground=animation.medianMocapBackground([
+        new Uint8ClampedArray([10,20,30,255]),new Uint8ClampedArray([220,210,200,255]),
+        new Uint8ClampedArray([12,22,32,255]),new Uint8ClampedArray([11,21,31,255]),
+        new Uint8ClampedArray([9,19,29,255])]);
+      ok("el fondo automático descarta al actor transitorio mediante mediana",
+        Array.from(autoBackground).join(",")==="11,21,31,255",Array.from(autoBackground).join(","));
       const noisy=new Uint8Array(100);for(let y=1;y<=3;y++)for(let x=1;x<=3;x++)noisy[y*10+x]=1;noisy[99]=1;
       const stable=animation.filterMocapMotionComponents(noisy,10,10,null);
       ok("el estabilizador quita ruido aislado sin perder al sujeto",stable.mask.reduce((sum,value)=>sum+value,0)===9&&stable.components===2&&stable.keptComponents===1,JSON.stringify(stable));

@@ -9,7 +9,9 @@ artista conserva el control de cada corrección y de las claves generadas.
 ## Flujo de producción
 
 1. **Importar** un MP4, WebM, MOV o AVI y definir entrada/salida.
-2. Buscar un cuadro sin el actor y pulsar **Fondo** para fijar una referencia limpia.
+2. Si existe, buscar un cuadro sin el actor y pulsar **Fondo**. Si no se fija,
+   LOW estima automáticamente el fondo estático con varias muestras temporales;
+   nunca toma silenciosamente el primer cuadro con el actor como fondo limpio.
 3. **Marcar sujeto** cuando hay varias personas u oclusiones.
 4. **Analizar** por etapas: **Detectar cuerpo** obtiene articulaciones reales y
    **Extraer siluetas** separa fondo, componentes y seguimiento temporal.
@@ -35,14 +37,17 @@ motor local, una GPU remota o una API sin contaminar el modelo de animación.
 - El retargeting crea una capa de movimiento reversible.
 - Reducir claves respeta contactos de pies, manos y extremos de movimiento.
 - Guardar, cerrar y reabrir conserva resultados aunque el video necesite revincularse.
+- **Crear nivel de calco** omite máscaras vacías y no genera hojas blancas. Si
+  ninguna contiene sujeto, detiene la operación y pide revisar/detectar antes.
 
 ## Estado
 
 Base implementada: importación local, visor sincronizado, fondo de referencia
-elegible, región de sujeto editable, extracción local de siluetas de movimiento,
+elegible o estimado por mediana temporal, región de sujeto editable, extracción local de siluetas de movimiento,
 limpieza por componentes conectados con continuidad temporal, corrector por cuadro para
 agregar o borrar máscara con tableta, guía superpuesta en el lienzo y conversión
-reversible a un nivel de calco con exposiciones, persistencia del modelo y
+reversible a un nivel de calco con exposiciones SVG autónomas —sin PNGs
+transparentes embebidos—, persistencia del modelo y
 registro de motores, detección corporal local y retargeting humano. **Detectar
 cuerpo** usa Pose Landmarker Lite empaquetado dentro de LOW: procesa el video en
 el equipo, produce 33 hitos corporales, una máscara semántica del actor y traduce

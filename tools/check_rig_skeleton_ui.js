@@ -112,11 +112,13 @@ async function main() {
     document.querySelector("#mocapValidate").click();const validated=DZ.doc.mocap.silhouetteAt(2).corrected===true&&DZ.doc.mocap.silhouetteAt(2).confidence===1;
     DZ.doc.history.undo();const validationUndo=DZ.doc.mocap.silhouetteAt(2).corrected===false;DZ.doc.history.redo();const validationRedo=DZ.doc.mocap.silhouetteAt(2).corrected===true;
     document.querySelector("#mocapNextPoseIssue").click();const poseIssueNavigation=DZ.doc.frame===4;
+    const rotoSvg=LOW.animation.mocapMaskSvgContent(track.silhouetteAt(2),{width:1920,height:1080});
     const mocap={generated:poseState.report.generatedFrames,spine:poseState.report.chainFrames.spine,
       optionSaved:DZ.doc.mocap.analysisOptions.poseInterpolation===true&&DZ.doc.mocap.analysisOptions.footLock===true&&DZ.doc.mocap.analysisOptions.keyTolerance===3&&DZ.doc.mocap.analysisOptions.backgroundTime===1.25&&DZ.doc.mocap.analysisOptions.poseConfidence===.6,
       footContacts:poseState.contacts?.ranges?.left?.length===1&&poseState.contacts?.ranges?.right?.length===1,
       applyVisible:!document.querySelector("#mocapApplyRig").hidden,detectorVisible:!!document.querySelector("#mocapDetectPose")&&!document.querySelector("#mocapDetectPose").hidden,status:document.querySelector("#mocapPoseStatus").textContent,
-      issueNavigation,poseIssueVisible,poseIssueNavigation,validated,validationUndo,validationRedo};
+      issueNavigation,poseIssueVisible,poseIssueNavigation,validated,validationUndo,validationRedo,
+      rotoscopeSvg:!!rotoSvg&&rotoSvg.includes("<path")&&!rotoSvg.includes("data:image")};
     dzSelect(document.getElementById("mano_izq"));
     dzReleaseFocus();
     window.__deleteSeen=null;
@@ -158,7 +160,7 @@ async function main() {
       !value.persistence.exportPosed || !value.persistence.exportClean)
     throw Error("REGRESIÓN: rig no sobrevive guardar/reabrir/exportar: " + JSON.stringify(value));
   if (value.mocap?.generated !== 5 || value.mocap?.spine !== 5 || !value.mocap.optionSaved || !value.mocap.applyVisible || !value.mocap.detectorVisible ||
-       !value.mocap.footContacts || !value.mocap.issueNavigation || !value.mocap.poseIssueVisible || !value.mocap.poseIssueNavigation || !value.mocap.validated || !value.mocap.validationUndo || !value.mocap.validationRedo)
+       !value.mocap.footContacts || !value.mocap.issueNavigation || !value.mocap.poseIssueVisible || !value.mocap.poseIssueNavigation || !value.mocap.validated || !value.mocap.validationUndo || !value.mocap.validationRedo || !value.mocap.rotoscopeSvg)
     throw Error("REGRESIÓN: diagnóstico/opciones de retargeting no funcionan en la interfaz: " + JSON.stringify(value));
   if (!value.deletion?.objectDeleted || !value.deletion?.boneDeleted)
     throw Error("REGRESIÓN: Supr no elimina objeto y hueso según contexto: " + JSON.stringify(value));

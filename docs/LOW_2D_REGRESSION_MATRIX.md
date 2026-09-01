@@ -53,6 +53,7 @@ tener una comprobación proporcional al riesgo.
 | MOCAP-01 | Cancelar el análisis conserva íntegramente las siluetas anteriores y el estado del video. | P1 — automatizado en modelo/contrato |
 | MOCAP-02 | Un punto sólo se completa entre dos observaciones confirmadas; nunca se extrapola fuera de ellas. | P1 — automatizado |
 | MOCAP-03 | Reducir claves conserva extremos y cambios que superan la tolerancia elegida. | P1 — automatizado |
+| MOCAP-07 | Una máscara válida produce geometría SVG visible; una máscara vacía no crea un cuadro blanco. | P0 — automatizado en modelo y Chromium |
 | MOCAP-04 | Aplicar una toma al rig forma una sola transacción y no cambia pivotes ni jerarquía. | P1 — automatizado |
 | MOCAP-05 | Un video real con oclusiones, paneo y dos sujetos produce diagnóstico comprensible y corrección manual. | P1 — aceptación humana pendiente |
 | MOCAP-06 | El filtro elimina ruido aislado, mantiene continuidad de identidad y marca ausencia del sujeto como oclusión. | P1 — automatizado |

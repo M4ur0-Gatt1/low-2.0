@@ -15,7 +15,7 @@
       this.poseEngine = null;
       this.poseAnalysis = null;
       this.subjectRegion = null;
-      this.analysisOptions = { threshold: 54, cleanup: 4, backgroundTime: 0, poseConfidence: .45, poseInterpolation: true, footLock: true, keyTolerance: 2 };
+      this.analysisOptions = { threshold: 54, cleanup: 4, backgroundTime: 0, backgroundLocked: false, poseConfidence: .45, poseInterpolation: true, footLock: true, keyTolerance: 2 };
       this.samples = {};
       this.silhouettes = {};
     }
@@ -75,7 +75,11 @@
       this.poseEngine = data.poseEngine || null;
       this.poseAnalysis = data.poseAnalysis ? Object.assign({},data.poseAnalysis) : null;
       this.subjectRegion = data.subjectRegion ? this.setSubjectRegion(data.subjectRegion) : null;
-      this.analysisOptions = Object.assign({threshold:54,cleanup:4,backgroundTime:0,poseConfidence:.45,poseInterpolation:true,footLock:true,keyTolerance:2},data.analysisOptions||{});
+      this.analysisOptions = Object.assign({threshold:54,cleanup:4,backgroundTime:0,backgroundLocked:false,poseConfidence:.45,poseInterpolation:true,footLock:true,keyTolerance:2},data.analysisOptions||{});
+      // Migración: en escenas anteriores sólo un tiempo distinto de cero prueba
+      // que el usuario eligió un fondo; cero era también el valor automático.
+      if(data.analysisOptions && data.analysisOptions.backgroundLocked == null)
+        this.analysisOptions.backgroundLocked = Number(data.analysisOptions.backgroundTime) > 0;
       this.samples = Object.assign({}, data.samples || {});
       this.silhouettes = Object.assign({}, data.silhouettes || {});
       return this;
@@ -120,6 +124,60 @@
     }
     return out;
   }
+
+  function mocapMaskStats(data) {
+    const mask = decodeMask(data || {}), pixels = mask.length;
+    let count = 0;
+    for (const value of mask) if (value) count++;
+    const minimum = Math.max(1, Math.min(4, Math.ceil(pixels * .0004)));
+    return { pixels, count, coverage: pixels ? count / pixels : 0,
+      empty: count === 0, usable: count >= minimum };
+  }
+
+  /** Convierte la máscara binaria en geometría SVG autónoma. Los calcos dejan
+   *  de depender de un PNG data: embebido (que algunos WebView empaquetados
+   *  no repintan al cambiar de Drawing) y una máscara vacía ya no se confunde
+   *  con un dibujo blanco válido. Cada tramo horizontal se guarda como un
+   *  rectángulo dentro de un único path compacto. */
+  function mocapMaskSvgContent(data, size = {}, options = {}) {
+    const width = Math.max(1, Math.round(Number(data?.width) || 0));
+    const height = Math.max(1, Math.round(Number(data?.height) || 0));
+    const mask = decodeMask(data || {}), stats = mocapMaskStats(data);
+    if (!stats.usable || mask.length !== width * height) return null;
+    const path = [];
+    for (let y = 0; y < height; y++) {
+      const row = y * width;
+      for (let x = 0; x < width;) {
+        while (x < width && !mask[row + x]) x++;
+        if (x >= width) break;
+        const start = x;
+        while (x < width && mask[row + x]) x++;
+        path.push(`M${start} ${y}h${x - start}v1h${start - x}z`);
+      }
+    }
+    const targetWidth = Math.max(1, Number(size.width) || width),
+      targetHeight = Math.max(1, Number(size.height) || height),
+      x = Number(size.x) || 0, y = Number(size.y) || 0,
+      fill = options.fill || "#282828",
+      opacity = Number.isFinite(+options.opacity) ? Math.max(0, Math.min(1, +options.opacity)) : .6;
+    return `<g data-low-roto="1" data-mask-width="${width}" data-mask-height="${height}" ` +
+      `transform="translate(${x} ${y}) scale(${targetWidth / width} ${targetHeight / height})">` +
+      `<path d="${path.join("")}" fill="${fill}" opacity="${opacity}"/></g>`;
+  }
+
+  function medianMocapBackground(samples) {
+    const usable = (samples || []).filter(frame => frame && frame.length);
+    if (!usable.length) return new Uint8ClampedArray();
+    const length = Math.min(...usable.map(frame => frame.length)), out = new Uint8ClampedArray(length);
+    for (let p = 0; p < length; p += 4) {
+      for (let channel = 0; channel < 3; channel++) {
+        const values = usable.map(frame => frame[p + channel]).sort((a, b) => a - b);
+        out[p + channel] = values[Math.floor(values.length / 2)];
+      }
+      out[p + 3] = 255;
+    }
+    return out;
+  }
   function filterMotionComponents(input, width, height, previousBounds) {
     const size=Math.max(0,width*height),mask=input instanceof Uint8Array?input:new Uint8Array(input||[]),visited=new Uint8Array(size),components=[];
     for(let start=0;start<size;start++){if(!mask[start]||visited[start])continue;const queue=[start],pixels=[];visited[start]=1;let minX=width,minY=height,maxX=-1,maxY=-1,sumX=0,sumY=0;
@@ -159,10 +217,23 @@
       const rx0=Math.floor(roi.x*width), ry0=Math.floor(roi.y*height);
       const rx1=Math.ceil((roi.x+roi.w)*width), ry1=Math.ceil((roi.y+roi.h)*height);
       video.pause();
-      const backgroundTime=Math.max(0,Math.min(video.duration-.001,Number(analysis.backgroundTime)||0));
-      await seek(video, backgroundTime);
-      ctx.drawImage(video, 0, 0, width, height);
-      const background = ctx.getImageData(0, 0, width, height).data.slice();
+      const hasCleanBackground=analysis.backgroundLocked===true;
+      let background;
+      if(hasCleanBackground){
+        const backgroundTime=Math.max(0,Math.min(video.duration-.001,Number(analysis.backgroundTime)));
+        await seek(video,backgroundTime);ctx.drawImage(video,0,0,width,height);
+        background=ctx.getImageData(0,0,width,height).data.slice();
+      }else{
+        // Sin una toma limpia explícita, el primer cuadro no sirve como fondo:
+        // suele contener al actor y produce máscaras vacías. Una mediana temporal
+        // recupera el fondo estático mientras la persona se desplaza por el plano.
+        const samples=[];
+        for(let sample=1;sample<=5;sample++){
+          await seek(video,Math.max(0,Math.min(video.duration-.001,video.duration*sample/6)));
+          ctx.drawImage(video,0,0,width,height);samples.push(ctx.getImageData(0,0,width,height).data.slice());
+        }
+        background=medianMocapBackground(samples);
+      }
       const last = Math.min(track.range.out, track.range.in + Math.max(1, Math.floor(video.duration * fps)) - 1);
       const previous=track.silhouettes;track.silhouettes = {};let previousBounds=null;
       try {
@@ -362,6 +433,9 @@
   animation.MotionCaptureTrack = MotionCaptureTrack;
   animation.encodeMocapMask = encodeMask;
   animation.decodeMocapMask = decodeMask;
+  animation.mocapMaskStats = mocapMaskStats;
+  animation.mocapMaskSvgContent = mocapMaskSvgContent;
+  animation.medianMocapBackground = medianMocapBackground;
   animation.filterMocapMotionComponents = filterMotionComponents;
   animation.mediapipeLandmarksToLow = mediapipeLandmarksToLow;
   animation.retainManualMocapPoses = retainManualPoseSamples;
