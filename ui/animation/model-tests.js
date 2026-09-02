@@ -1137,6 +1137,45 @@
       ok("la reducción conserva un cambio real de dirección",!!directed[3]?.bone,JSON.stringify(directed));
     }
 
+    // 34. Coloreo: identidad, seguimiento seguro y undo atómico de un rango.
+    {
+      const C = animation.coloring;
+      const w = 24, h = 24, mask = (x0, y0, x1, y1) => {
+        const out = new Uint8Array(w * h);
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) out[y * w + x] = 1;
+        return C.describeMask(out, w, h);
+      };
+      const source = mask(2, 5, 8, 17), moved = mask(5, 5, 11, 17), wrong = mask(15, 3, 22, 10);
+      let match = C.matchRegion(source, [wrong, moved], { predicted: { x: moved.centroid.x, y: moved.centroid.y } });
+      ok("el coloreo sigue la misma zona aunque se mueva", match.accepted && match.candidate === moved,
+        JSON.stringify({ confidence: match.confidence, reason: match.reason }));
+      match = C.matchRegion(source, [moved, { ...moved }], { predicted: moved.centroid });
+      ok("el coloreo no adivina entre dos zonas indistinguibles", !match.accepted && match.reason === "ambiguous",
+        JSON.stringify({ confidence: match.confidence, reason: match.reason }));
+      ok("cada zona de color recibe identidad estable", C.zoneId() !== C.zoneId());
+
+      const doc = new animation.LowDoc(), history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      doc.setCell(1, 1); doc.setCell(2, 2);
+      doc.level.byNumber(1).content = '<path id="a"/>';
+      doc.level.byNumber(2).content = '<path id="b"/>';
+      doc.goTo(1);
+      ok("el alcance Cuadro no atraviesa un hold ni otro dibujo",
+        C.scopeTargets(doc, "current").length === 1 && C.scopeTargets(doc, "current")[0].number === 1);
+      doc.selectCellRange(doc.layerId, 1, doc.layerId, 2);
+      ok("el alcance X-sheet procesa dibujos únicos del rango",
+        C.scopeTargets(doc, "selection").map((item) => item.number).join(",") === "1,2");
+      const count = doc.applyDrawingContents([
+        { levelId: doc.level.id, number: 1, content: '<path id="a" data-low-zone="z"/>' },
+        { levelId: doc.level.id, number: 2, content: '<path id="b" data-low-zone="z"/>' },
+      ], "Colorear rango");
+      ok("colorear un rango modifica todos sus dibujos", count === 2 && doc.level.drawings.every((d) => d.content.includes('data-low-zone="z"')));
+      history.undo();
+      ok("un solo Ctrl+Z deshace todo el rango coloreado",
+        !doc.level.byNumber(1).content.includes("data-low-zone") && !doc.level.byNumber(2).content.includes("data-low-zone"));
+      history.redo();
+      ok("rehacer recupera el coloreo completo", doc.level.drawings.every((d) => d.content.includes('data-low-zone="z"')));
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

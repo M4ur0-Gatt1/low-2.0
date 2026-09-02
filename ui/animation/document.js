@@ -1036,6 +1036,26 @@
       }
       return true;
     }
+    /** Cambia varios dibujos como UNA operación. El coloreo por rango usa este
+     *  contrato para que Ctrl+Z nunca deje medio nivel pintado y medio nivel
+     *  sin pintar. Los cambios inválidos o idénticos se ignoran. */
+    applyDrawingContents(changes, label = "Colorear dibujos") {
+      const valid = [], levelIds = new Set();
+      for (const change of changes || []) {
+        const lv = this.scene.level(change && change.levelId);
+        const d = lv && lv.byNumber(change.number);
+        const content = change && typeof change.content === "string" ? change.content : null;
+        if (!d || content == null || d.content === content) continue;
+        valid.push({ d, content }); levelIds.add(lv.id);
+      }
+      if (!valid.length) return 0;
+      const before = this._snapshot([], [...levelIds]);
+      for (const change of valid) change.d.content = change.content;
+      const after = this._snapshot([], [...levelIds]);
+      this.touch(); this.emit("content"); this.emit("level"); this.emit("frame");
+      this._histRange(label, before, after);
+      return valid.length;
+    }
 
     /** Suelta el arte de un hueso sin borrar el hueso, el slot ni sus dibujos
      * alternativos. Permite corregir un reparto sin reconstruir el esqueleto. */

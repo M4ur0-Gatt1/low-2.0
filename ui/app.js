@@ -5469,84 +5469,308 @@ function dzPaletteRemember(color) {
   const palette = dzPaletteLoad().filter(c => String(c).toLowerCase() !== color.toLowerCase());
   palette.unshift(color); dzPaletteSave(palette); dzPaletteRender();
 }
-/* ══ Balde (G): RELLENO POR ÁREA (flood fill, estilo Toon Boom). Clic dentro
-   de una zona cerrada por líneas y la pinta con una forma vectorial nueva,
-   detrás de las líneas. Antes recoloreaba el elemento bajo el cursor, pero
-   sobre líneas (fill=none) o zonas cerradas eso "no hacía nada" — por eso ahora
-   trabaja por región. Shift = pinta con el color de trazo. ══ */
+/* ══ Balde (G): COLOR POR ZONA, no por coordenada =========================
+   La geometría vive en Color Art, el contorno en Line Art y cada zona recibe
+   una identidad estable. Al propagar, LOW compara forma+tamaño+trayectoria; si
+   hay dos regiones posibles no adivina: omite ese dibujo y lo informa. */
+function dzColoringPrefs() {
+  if (!DZ.coloringPrefs) {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem("low.coloring.v1") || "{}"); } catch (_) { /* */ }
+    DZ.coloringPrefs = LOW.animation.coloring.normalizeSettings(saved);
+  }
+  return DZ.coloringPrefs;
+}
+function dzColoringPrefsSet(key, value) {
+  DZ.coloringPrefs = LOW.animation.coloring.normalizeSettings({ ...dzColoringPrefs(), [key]: value });
+  try { localStorage.setItem("low.coloring.v1", JSON.stringify(DZ.coloringPrefs)); } catch (_) { /* */ }
+  return DZ.coloringPrefs;
+}
+function dzFillZoneAtPoint(e, svg) {
+  const stack = document.elementsFromPoint(e.clientX, e.clientY);
+  for (const node of stack) {
+    if (!svg.contains(node) || !node.matches) continue;
+    const fill = node.matches('[data-low-zone],[data-low="fill"]') ? node :
+      node.closest('[data-low-zone],[data-low="fill"]');
+    if (fill && svg.contains(fill) && !fill.closest(".dz-onion,.dz-penui")) return fill;
+  }
+  return null;
+}
+function dzFillFindZone(root, zoneId) {
+  if (!zoneId) return null;
+  return [...root.querySelectorAll("[data-low-zone]")].find((n) => n.getAttribute("data-low-zone") === zoneId) || null;
+}
+function dzFillRemoveZone(root, zoneId) {
+  let count = 0;
+  [...root.querySelectorAll("[data-low-zone]")].forEach((n) => {
+    if (n.getAttribute("data-low-zone") === zoneId) { n.remove(); count++; }
+  });
+  return count;
+}
+function dzFillRoot(content, vb) {
+  const root = document.createElementNS(SVGNS, "svg");
+  root.setAttribute("xmlns", SVGNS); root.setAttribute("viewBox", vb.join(" "));
+  root.setAttribute("width", vb[2]); root.setAttribute("height", vb[3]);
+  root.innerHTML = content || "";
+  return root;
+}
+function dzFillPrepareSvg(root, vb) {
+  const clean = root.cloneNode(true);
+  clean.setAttribute("xmlns", SVGNS); clean.setAttribute("viewBox", vb.join(" "));
+  // El SVG vivo lleva el zoom/pan del visor en `style`. Serializar ese estilo
+  // dentro del bitmap encogía o desplazaba también la geometría analizada.
+  clean.removeAttribute("style"); clean.removeAttribute("class");
+  clean.querySelectorAll('.dz-onion,.dz-penui,[data-dz3d],g[data-low-art="colour"],style.dz-palcss,[data-low="fill"]').forEach((n) => n.remove());
+  clean.querySelectorAll("image,text,foreignObject").forEach((n) => n.remove());
+  clean.querySelectorAll("path,rect,circle,ellipse,line,polyline,polygon").forEach((el) => {
+    if (el.closest("defs")) return;
+    const sw = parseFloat(el.getAttribute("stroke-width") || "0");
+    el.setAttribute("fill", "none"); el.setAttribute("stroke", "#000000");
+    el.setAttribute("stroke-width", String(Math.max(1.5, Number.isFinite(sw) ? sw : 1.5)));
+    el.setAttribute("opacity", "1");
+    if (el.style) { el.style.fill = "none"; el.style.stroke = "#000000"; el.style.opacity = "1"; }
+  });
+  const bg = document.createElementNS(SVGNS, "rect");
+  bg.setAttribute("x", vb[0]); bg.setAttribute("y", vb[1]);
+  bg.setAttribute("width", vb[2]); bg.setAttribute("height", vb[3]);
+  bg.setAttribute("fill", "#ffffff"); bg.setAttribute("stroke", "none");
+  clean.insertBefore(bg, clean.firstChild);
+  return clean;
+}
+function dzFillRegionSet(imgData, w, h, gap) {
+  const px = imgData.data, total = w * h, raw = new Uint8Array(total);
+  for (let i = 0; i < total; i++) {
+    const p = i * 4, alpha = px[p + 3], lum = .2126 * px[p] + .7152 * px[p + 1] + .0722 * px[p + 2];
+    if (alpha > 10 && lum < 245) raw[i] = 1;
+  }
+  let blocked = raw;
+  const radius = Math.ceil(Math.max(0, Math.min(10, gap || 0)) / 2);
+  if (radius) {
+    blocked = new Uint8Array(raw);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (raw[y * w + x]) {
+      for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+        if (dx * dx + dy * dy > radius * radius) continue;
+        const xx = x + dx, yy = y + dy;
+        if (xx >= 0 && yy >= 0 && xx < w && yy < h) blocked[yy * w + xx] = 1;
+      }
+    }
+  }
+  const labels = new Int32Array(total), queue = new Int32Array(total), all = [];
+  for (let i = 0; i < total; i++) if (blocked[i]) labels[i] = -1;
+  let next = 0;
+  for (let seed = 0; seed < total; seed++) {
+    if (labels[seed]) continue;
+    const label = ++next; let head = 0, tail = 0, count = 0, sx = 0, sy = 0;
+    let minX = w, minY = h, maxX = -1, maxY = -1, edge = false;
+    labels[seed] = label; queue[tail++] = seed;
+    while (head < tail) {
+      const at = queue[head++], x = at % w, y = (at / w) | 0;
+      count++; sx += x; sy += y; edge = edge || x === 0 || y === 0 || x === w - 1 || y === h - 1;
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      const push = (n) => { if (!labels[n]) { labels[n] = label; queue[tail++] = n; } };
+      if (x > 0) push(at - 1); if (x + 1 < w) push(at + 1);
+      if (y > 0) push(at - w); if (y + 1 < h) push(at + w);
+    }
+    all.push({ label, count, sx, sy, minX, minY, maxX, maxY, edge });
+  }
+  const grid = dzColoringPrefs().grid, candidates = all.filter((r) => !r.edge && r.count > 12 && r.count < total * .9);
+  const byLabel = new Map(candidates.map((r) => [r.label, r]));
+  for (const r of candidates) r.signature = new Array(grid * grid).fill(0);
+  for (let i = 0; i < total; i++) {
+    const r = byLabel.get(labels[i]); if (!r) continue;
+    const x = i % w, y = (i / w) | 0, bw = r.maxX - r.minX + 1, bh = r.maxY - r.minY + 1;
+    const gx = Math.min(grid - 1, Math.floor((x - r.minX) / bw * grid));
+    const gy = Math.min(grid - 1, Math.floor((y - r.minY) / bh * grid));
+    r.signature[gy * grid + gx]++;
+  }
+  for (const r of candidates) {
+    const bw = r.maxX - r.minX + 1, bh = r.maxY - r.minY + 1;
+    for (let gy = 0; gy < grid; gy++) for (let gx = 0; gx < grid; gx++) {
+      const x0 = Math.floor(gx * bw / grid), x1 = Math.floor((gx + 1) * bw / grid);
+      const y0 = Math.floor(gy * bh / grid), y1 = Math.floor((gy + 1) * bh / grid);
+      r.signature[gy * grid + gx] /= Math.max(1, (x1 - x0) * (y1 - y0));
+    }
+    Object.assign(r, {
+      area: r.count / total,
+      centroid: { x: (r.sx / r.count + .5) / w, y: (r.sy / r.count + .5) / h },
+      bbox: { x: r.minX / w, y: r.minY / h, w: bw / w, h: bh / h },
+      aspect: bw / bh,
+    });
+  }
+  return { labels, regions: candidates, components: all.map((r) => ({
+    label: r.label, count: r.count, edge: r.edge,
+    bbox: { x: r.minX, y: r.minY, w: r.maxX - r.minX + 1, h: r.maxY - r.minY + 1 }
+  })) };
+}
+function dzFillNearestRegion(labels, regions, w, h, x, y) {
+  const allowed = new Set(regions.map((r) => r.label));
+  for (let radius = 0; radius <= 5; radius++) for (let dy = -radius; dy <= radius; dy++)
+    for (let dx = -radius; dx <= radius; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+      const label = labels[yy * w + xx];
+      if (allowed.has(label)) return regions.find((r) => r.label === label) || null;
+    }
+  return null;
+}
+async function dzFillAnalyze(root, vb, point, gap) {
+  const clean = dzFillPrepareSvg(root, vb), durl = await dzRasterize(clean.outerHTML, 720);
+  const img = new Image();
+  await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = durl; });
+  const canvas = document.createElement("canvas"); canvas.width = img.width; canvas.height = img.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
+  const set = dzFillRegionSet(ctx.getImageData(0, 0, img.width, img.height), img.width, img.height, gap);
+  let region = null;
+  if (point) {
+    const x = Math.max(0, Math.min(img.width - 1, Math.round((point.x - vb[0]) / vb[2] * (img.width - 1))));
+    const y = Math.max(0, Math.min(img.height - 1, Math.round((point.y - vb[1]) / vb[3] * (img.height - 1))));
+    region = dzFillNearestRegion(set.labels, set.regions, img.width, img.height, x, y);
+  }
+  return { ...set, width: img.width, height: img.height, region };
+}
+function dzFillMask(analysis, region) {
+  const mask = new Uint8Array(analysis.labels.length), label = region && region.label;
+  for (let i = 0; i < mask.length; i++) if (analysis.labels[i] === label) mask[i] = 1;
+  return mask;
+}
+function dzFillPathData(analysis, region, vb) {
+  const loops = dzTraceMaskJS(dzFillMask(analysis, region), analysis.width, analysis.height);
+  const sx = vb[2] / analysis.width, sy = vb[3] / analysis.height;
+  return loops.map((loop) => {
+    let pts = loop.slice(0, -1).map(([x, y]) => [vb[0] + x * sx, vb[1] + y * sy]);
+    pts = dzRDP(pts, Math.max(sx, sy) * 1.25);
+    return pts.length >= 3 ? dzSmoothPath(pts) + " Z" : "";
+  }).filter(Boolean).join(" ");
+}
+function dzFillStyleIndex(color) {
+  if (!DZ.doc || !DZ.doc.palette) return null;
+  const pal = DZ.doc.palette;
+  let style = pal.byColor(color);
+  if (!style) style = DZ.doc.addStyle(color, `Relleno ${pal.nextIndex()}`);
+  return style && style.index;
+}
+function dzFillPut(root, analysis, region, vb, zoneId, color, styleIndex, mode) {
+  const exact = dzFillFindZone(root, zoneId);
+  if (mode === "unpainted" && exact) return false;
+  const arts = dzArtEnsure(root);
+  if (exact) {
+    exact.setAttribute("fill", color);
+    if (styleIndex) exact.setAttribute(LOW.animation.palette.ATTR.paint, String(styleIndex));
+    exact.setAttribute("data-low", "fill"); arts.colour.appendChild(exact);
+    return true;
+  }
+  const d = dzFillPathData(analysis, region, vb); if (!d) return false;
+  const path = document.createElementNS(SVGNS, "path");
+  path.setAttribute("d", d); path.setAttribute("fill", color); path.setAttribute("fill-rule", "evenodd");
+  path.setAttribute("data-low", "fill"); path.setAttribute("data-low-zone", zoneId);
+  if (styleIndex) path.setAttribute(LOW.animation.palette.ATTR.paint, String(styleIndex));
+  arts.colour.appendChild(path);
+  return true;
+}
+function dzColoringReportShow() {
+  const report = DZ.lastColorReport; if (!report) return;
+  const rows = (report.skipped || []).map((item) => `<li><button class="ghost colour-report-frame" data-frame="${item.frame || ""}">Cuadro ${item.frame || "—"} · dibujo ${item.number}</button> <span>${item.reason === "ambiguous" ? "zona ambigua" : item.reason === "low-confidence" ? "coincidencia débil" : "sin zona compatible"}</span></li>`).join("");
+  openModal(`<h2>Informe de coloreo</h2><p>${report.changed} dibujo(s) actualizados. ${report.skipped.length} omitidos para evitar errores.</p>${rows ? `<ul>${rows}</ul>` : "<p>No hubo cuadros dudosos.</p>"}<div class="m-actions"><button class="primary" id="colourReportOk">Cerrar</button></div>`);
+  $("#colourReportOk").onclick = closeModal;
+  document.querySelectorAll(".colour-report-frame[data-frame]").forEach((button) => {
+    button.onclick = () => {
+      const frame = Number(button.dataset.frame); closeModal();
+      if (frame > 0 && DZ.doc) dzDocGoTo(frame);
+    };
+  });
+}
 async function dzBucketApply(e) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
-  if (!svg) return;
-  const vb = dzVB(), W = vb[2] || 1080, H = vb[3] || 1080;
+  if (!svg || DZ.coloringBusy) return;
+  const coloring = LOW.animation.coloring, prefs = dzColoringPrefs(), vb = dzVB();
   const p = dzToUser(e.clientX, e.clientY);
-  dzSetStatus("🪣 Rellenando la zona…");
-  // rasterizar el dibujo (sin overlays de UI ni planos 3D)
-  const clean = svg.cloneNode(true);
-  clean.querySelectorAll(".dz-onion,.dz-penui,[data-dz3d]").forEach(n => n.remove());
-  clean.removeAttribute("style");
-  let durl;
-  try { durl = await dzRasterize(clean.outerHTML, 1000); }
-  catch (err) { return dzSetStatus("🪣 no pude preparar el relleno"); }
-  const img = new Image();
-  try { await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = durl; }); }
-  catch (err) { return dzSetStatus("🪣 no pude cargar el raster"); }
-  const rw = img.width, rh = img.height;
-  const c = document.createElement("canvas"); c.width = rw; c.height = rh;
-  const ctx = c.getContext("2d"); ctx.drawImage(img, 0, 0);
-  let data;
-  try { data = ctx.getImageData(0, 0, rw, rh); }
-  catch (err) { return dzSetStatus("🪣 no pude leer los píxeles"); }
-  const sx = Math.round((p.x - vb[0]) / W * rw), sy = Math.round((p.y - vb[1]) / H * rh);
-  if (sx < 0 || sy < 0 || sx >= rw || sy >= rh) return dzSetStatus("🪣 clic fuera del lienzo");
-  const res = dzFloodMask(data, rw, rh, sx, sy, 64);
-  if (!res) return dzSetStatus("🪣 no hay una zona para rellenar ahí");
-  if (res.count > rw * rh * 0.9) return dzSetStatus("🪣 la zona no está cerrada — cerrá el contorno con líneas");
-  const loops = dzTraceMaskJS(res.mask, rw, rh);
-  if (!loops.length) return dzSetStatus("🪣 no pude trazar la zona");
-  const sxU = W / rw, syU = H / rh;
-  const parts = loops.map(loop => {
-    let pts = loop.slice(0, -1).map(([x, y]) => [vb[0] + x * sxU, vb[1] + y * syU]);
-    pts = dzRDP(pts, 1.3 * sxU);
-    return pts.length >= 3 ? dzSmoothPath(pts) + " Z" : "";
-  }).filter(Boolean);
-  if (!parts.length) return dzSetStatus("🪣 zona muy chica");
-  dzSnapshot();
-  const path = document.createElementNS(SVGNS, "path");
-  path.setAttribute("d", parts.join(" "));
-  path.setAttribute("fill", e.shiftKey ? (DZ.drawColor || "#1a1a1a") : (DZ.fillColor || "#F0450E"));
-  path.setAttribute("fill-rule", "evenodd");
-  path.setAttribute("data-low", "fill");
-  // detrás de las líneas, pero por encima de un fondo de página que cubra el lienzo
-  let ref = [...svg.children].find(n => !DZ_SKIP_TAGS.includes(n.tagName.toLowerCase()));
-  while (ref && ref.tagName.toLowerCase() === "rect" &&
-         (+ref.getAttribute("width") || 0) * (+ref.getAttribute("height") || 0) >= W * H * 0.9)
-    ref = ref.nextElementSibling;
-  svg.insertBefore(path, ref || null);
-  dzMarkDirty(); dzBuildLayers();
-  dzSetStatus("🪣 Zona rellenada");
-}
-/* flood fill 4-conexo sobre el ImageData; frena en píxeles de distinto color
-   (las líneas). Devuelve {mask, count} o null. */
-function dzFloodMask(imgData, w, h, sx, sy, tol) {
-  const d = imgData.data;
-  const seed = (sy * w + sx) * 4;
-  const sr = d[seed], sg = d[seed + 1], sb = d[seed + 2];
-  const mask = new Uint8Array(w * h);
-  const stack = [sy * w + sx];
-  let count = 0;
-  while (stack.length) {
-    const m = stack.pop();
-    if (mask[m]) continue;
-    const i = m * 4;
-    if (Math.abs(d[i] - sr) + Math.abs(d[i + 1] - sg) + Math.abs(d[i + 2] - sb) > tol) continue;
-    mask[m] = 1; count++;
-    const x = m % w, y = (m / w) | 0;
-    if (x + 1 < w) stack.push(m + 1);
-    if (x - 1 >= 0) stack.push(m - 1);
-    if (y + 1 < h) stack.push(m + w);
-    if (y - 1 >= 0) stack.push(m - w);
-  }
-  return count > 4 ? { mask, count } : null;
+  const existing = dzFillZoneAtPoint(e, svg);
+  if (prefs.mode === "unpainted" && existing) return dzSetStatus("🪣 La zona ya tiene color · usá Pintar o Recolorear");
+  if ((prefs.mode === "repaint" || prefs.mode === "unpaint") && !existing)
+    return dzSetStatus("🪣 No hay un relleno en ese punto");
+  const beforeCanvas = dzCanvasInner();
+  let applied = false;
+  DZ.coloringBusy = true;
+  try {
+    if (DZ.doc) { clearTimeout(DZ_DOC_TIMER); dzDocCommit(); }
+    else dzSnapshot();
+    const zoneId = existing?.getAttribute("data-low-zone") || coloring.zoneId();
+    const targets = DZ.doc ? coloring.scopeTargets(DZ.doc, prefs.scope) : [];
+    const currentNumber = DZ.doc?.drawing?.number;
+    const changes = [], skipped = [];
+    if (prefs.mode === "unpaint") {
+      if (existing && !existing.getAttribute("data-low-zone")) existing.remove();
+      else dzFillRemoveZone(svg, zoneId);
+      if (DZ.doc?.drawing) changes.push({ levelId: DZ.doc.level.id, number: currentNumber, content: dzCanvasInner() });
+      for (const item of targets) {
+        if (item.number === currentNumber) continue;
+        const root = dzFillRoot(item.drawing.content, vb);
+        if (dzFillRemoveZone(root, zoneId)) changes.push({ levelId: item.levelId, number: item.number, content: root.innerHTML });
+      }
+      const changed = DZ.doc ? DZ.doc.applyDrawingContents(changes, "Borrar color de zona") : 1;
+      applied = true;
+      if (!DZ.doc) dzMarkDirty(); else DZ.dirty = true;
+      DZ.lastColorReport = { changed, skipped: [] }; dzBuildLayers();
+      return dzSetStatus(`🪣 Color eliminado en ${changed || 1} dibujo(s)`);
+    }
+    dzSetStatus("🪣 Analizando la zona y su movimiento…");
+    const source = await dzFillAnalyze(svg, vb, p, prefs.gap);
+    DZ.lastColorDebug = { point: { x: p.x, y: p.y }, width: source.width, height: source.height,
+      candidates: source.regions.length, picked: source.region ? source.region.bbox : null };
+    if (!source.region) return dzSetStatus("🪣 La zona no está cerrada · aumentá Cerrar hueco o corregí el contorno");
+    const color = e.shiftKey ? (DZ.drawColor || "#1a1a1a") : (DZ.fillColor || "#F0450E");
+    const styleIndex = dzFillStyleIndex(color);
+    if (existing && !existing.getAttribute("data-low-zone")) existing.setAttribute("data-low-zone", zoneId);
+    dzFillPut(svg, source, source.region, vb, zoneId, color, styleIndex, prefs.mode);
+    if (DZ.doc?.drawing) changes.push({ levelId: DZ.doc.level.id, number: currentNumber, content: dzCanvasInner() });
+    const sourceIndex = targets.findIndex((item) => item.number === currentNumber);
+    const sequences = sourceIndex < 0 ? [targets] :
+      [targets.slice(sourceIndex + 1), targets.slice(0, sourceIndex).reverse()];
+    const totalTargets = sequences.reduce((sum, list) => sum + list.length, 0);
+    let propagated = 0, visited = 0;
+    // Se sigue hacia adelante y hacia atrás por separado. Mezclar ambos lados
+    // en una sola caminata hacía que una pose anterior contaminara la
+    // predicción de la pose siguiente.
+    for (const sequence of sequences) {
+      let reference = source.region, velocity = { x: 0, y: 0 };
+      for (const item of sequence) {
+        visited++;
+        const root = dzFillRoot(item.drawing.content, vb), exact = dzFillFindZone(root, zoneId);
+        dzSetStatus(`🪣 Siguiendo zona ${visited}/${totalTargets} · dibujo ${item.number}`);
+        if (exact) {
+          if (prefs.mode !== "unpainted") {
+            dzFillPut(root, null, null, vb, zoneId, color, styleIndex, prefs.mode);
+            changes.push({ levelId: item.levelId, number: item.number, content: root.innerHTML }); propagated++;
+          }
+          continue;
+        }
+        let analysis;
+        try { analysis = await dzFillAnalyze(root, vb, null, prefs.gap); }
+        catch (_) { skipped.push({ number: item.number, frame: item.frame, reason: "raster-error" }); continue; }
+        const predicted = { x: reference.centroid.x + velocity.x, y: reference.centroid.y + velocity.y };
+        const match = coloring.matchRegion(reference, analysis.regions, { ...prefs, predicted });
+        if (!match.accepted) { skipped.push({ number: item.number, frame: item.frame, reason: match.reason, confidence: match.confidence }); continue; }
+        const previous = reference.centroid;
+        if (dzFillPut(root, analysis, match.candidate, vb, zoneId, color, styleIndex, prefs.mode)) {
+          changes.push({ levelId: item.levelId, number: item.number, content: root.innerHTML }); propagated++;
+        }
+        reference = match.candidate;
+        velocity = { x: reference.centroid.x - previous.x, y: reference.centroid.y - previous.y };
+      }
+    }
+    const changed = DZ.doc ? DZ.doc.applyDrawingContents(changes, "Colorear zona en varios dibujos") : 1;
+    applied = true;
+    if (!DZ.doc) dzMarkDirty(); else DZ.dirty = true;
+    DZ.lastColorReport = { changed, propagated, skipped, zoneId };
+    dzPalCssRender(); dzBuildLayers();
+    dzSetStatus(`🪣 ${changed || 1} dibujo(s) coloreados${skipped.length ? ` · ${skipped.length} omitidos por seguridad (Informe)` : " · sin conflictos"}`);
+    dzToolOptsRender();
+  } catch (err) {
+    console.error("LOW coloring", err);
+    if (!applied) dzCanvasSet(beforeCanvas);
+    dzSetStatus("🪣 No se pudo completar el coloreo · no se modificaron los otros dibujos");
+  } finally { DZ.coloringBusy = false; }
 }
 /* traza los bordes de la máscara en lazos cerrados (borde exterior + huecos) */
 function dzTraceMaskJS(mask, w, h) {
@@ -10817,8 +11041,12 @@ function dzToolOptsRender() {
       (t === "brush" ? `<span class="dz-hint">el grosor sigue la presión de la tableta</span>` : "") +
       (DZ.mirror ? `<span class="dz-hint">🔄 espejo activo</span>` : "");
   } else if (t === "bucket") {
+    const cp = dzColoringPrefs();
     html += `<label>Relleno <input type="color" id="toFill" value="${dzHex(DZ.fillColor) || "#F0450E"}"></label>
-      <span class="dz-hint">clic pinta el relleno · Shift+clic pinta el trazo</span>`;
+      <label>Modo <select id="toFillMode" class="langsel"><option value="paint"${cp.mode === "paint" ? " selected" : ""}>Pintar</option><option value="unpainted"${cp.mode === "unpainted" ? " selected" : ""}>Sólo vacío</option><option value="repaint"${cp.mode === "repaint" ? " selected" : ""}>Recolorear</option><option value="unpaint"${cp.mode === "unpaint" ? " selected" : ""}>Borrar color</option></select></label>
+      <label>Aplicar <select id="toFillScope" class="langsel"><option value="current"${cp.scope === "current" ? " selected" : ""}>Cuadro</option><option value="selection"${cp.scope === "selection" ? " selected" : ""}>Rango X-sheet</option><option value="onion"${cp.scope === "onion" ? " selected" : ""}>Mesa de luz</option><option value="level"${cp.scope === "level" ? " selected" : ""}>Nivel completo</option></select></label>
+      <label title="Cierra discontinuidades pequeñas sin modificar el dibujo">Hueco <input type="number" id="toFillGap" min="0" max="10" value="${cp.gap}" class="dz-win"> px</label>
+      ${DZ.lastColorReport ? '<button class="ghost" id="toFillReport" title="Ver cuadros coloreados y omitidos">Informe</button>' : ""}`;
   } else if (t === "ruler") {
     html += `<label>Trazo <input type="color" id="toColor" value="${dzHex(DZ.drawColor) || "#1a1a1a"}"></label>
       <label>Grosor <input type="number" id="toW" min="1" max="40" value="${DZ.drawW || 4}" class="dz-win"></label>
@@ -10876,6 +11104,10 @@ function dzToolOptsRender() {
     try { localStorage.setItem("fidel.dzsmooth", String(DZ.smooth)); } catch (err) { /* */ }
   };
   const of2 = $("#toFill"); if (of2) of2.oninput = e => { DZ.fillColor = e.target.value; const p = $("#dzPFill"); if (p) p.value = e.target.value; };
+  const fillMode = $("#toFillMode"); if (fillMode) fillMode.onchange = e => dzColoringPrefsSet("mode", e.target.value);
+  const fillScope = $("#toFillScope"); if (fillScope) fillScope.onchange = e => dzColoringPrefsSet("scope", e.target.value);
+  const fillGap = $("#toFillGap"); if (fillGap) fillGap.onchange = e => { e.target.value = dzColoringPrefsSet("gap", e.target.value).gap; };
+  const fillReport = $("#toFillReport"); if (fillReport) fillReport.onclick = dzColoringReportShow;
   const pump = $("#toPumpSensitivity"); if (pump) pump.oninput = e => dzVectorPrefsSet("pumpSensitivity", +e.target.value);
   const passes = $("#toIronPasses"); if (passes) passes.oninput = e => dzVectorPrefsSet("ironPasses", Math.max(1, Math.min(5, +e.target.value || 1)));
   const radius = $("#toMagnetRadius"); if (radius) radius.oninput = e => dzVectorPrefsSet("magnetRadius", +e.target.value);

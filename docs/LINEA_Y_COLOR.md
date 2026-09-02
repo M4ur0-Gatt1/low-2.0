@@ -14,6 +14,9 @@ La barra contextual permite elegir el plano activo con dos símbolos: `╱` para
 3. Volver a Línea para retoques del contorno.
 4. Usar la selección múltiple para mover piezas entre planos cuando sea necesario.
 
+El balde profesional, la propagación segura entre dibujos y sus modos de
+alcance están especificados en [COLORING_SYSTEM.md](COLORING_SYSTEM.md).
+
 Los documentos anteriores siguen siendo compatibles: al activar el sistema, los objetos sueltos se agrupan en Línea y el fondo del lienzo permanece fuera de ambos planos.
 
 ## Referencias funcionales

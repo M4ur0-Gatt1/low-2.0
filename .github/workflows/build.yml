@@ -35,7 +35,7 @@ jobs:
         run: node tools/run_2d_model_tests.js
       - name: Contratos críticos de interacción 2D
         run: python tools/check_2d_interaction_contracts.py
-      - name: Recorrido real — rigging y gestos vectoriales
+      - name: Recorridos reales — rigging, gestos vectoriales y coloreo
         run: |
           python -m http.server 8791 --bind 127.0.0.1 >/tmp/low-http.log 2>&1 &
           CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium)"
@@ -52,6 +52,7 @@ jobs:
             exit 1
           }
           node tools/check_rig_skeleton_ui.js
+          node tools/check_coloring_ui.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools
 
