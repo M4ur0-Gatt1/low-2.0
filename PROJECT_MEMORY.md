@@ -50,6 +50,14 @@ por vistas. No llamar “rig completo” a controles que sólo modifican el DOM.
 
 ## Últimos bloques 2D confirmados
 
+- v4.4.0 (5-sep-2026, commit `e7353c6`): diálogos propios en toda la interfaz
+  (no queda `confirm/alert/prompt` nativo fuera de `vendor/`), guía del eje en el
+  modo espejo, riel de herramientas con las primarias primero —el reordenado las
+  mandaba al final con `appendChild` y quedaban fuera de la vista— y en columnas
+  cuando no entra, panel separado de Herramientas con iconos y acople al muelle
+  previo, y Composición con efectos por plano dentro de la mesa, `Escalonar Z`
+  reversible y estados vacío/plano. CI verde; falta el smoke del ejecutable.
+
 - Rangos rectangulares multi-columna, copy/cut/paste y Undo en XSheet.
 - Selección múltiple y drag Level Strip → XSheet.
 - Papel cebolla visible y conectado al documento.
