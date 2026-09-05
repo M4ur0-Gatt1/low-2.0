@@ -384,6 +384,22 @@
         this._histStyle("Cambiar un color", pal.id, st.id, antes, st.color);
       return true;
     }
+    /** Opacidad global del estilo. Sigue la misma regla gestual que el color:
+     *  preview continuo mientras se arrastra y una sola entrada al soltar. */
+    setStyleOpacity(index, opacity, registrar = true, opacityAntes) {
+      const pal = this.palette;
+      const st = pal && pal.byIndex(index);
+      if (!st || pal.locked) return false;
+      const antes = opacityAntes == null ? st.opacity : animation.Style.normalizeOpacity(opacityAntes);
+      st.setOpacity(opacity);
+      this.touch(); this.emit("palette");
+      if (registrar && antes !== st.opacity && this.history) {
+        const doc=this, palId=pal.id, stId=st.id;
+        this.history.push({ label:"Cambiar opacidad de estilo", domain:"anim", before:antes, after:st.opacity,
+          apply:(_dir,value)=>{const p=doc.scene.palette(palId),s=p&&p.style(stId);if(s){s.setOpacity(value);doc.emit("palette");}} });
+      }
+      return true;
+    }
     _histStyle(label, paletteId, styleId, antes, despues) {
       if (!this.history || antes === despues) return;
       const doc = this;
@@ -435,6 +451,16 @@
           },
         });
       }
+      return true;
+    }
+    setStyleGroup(index, group) {
+      const pal=this.palette, st=pal&&pal.byIndex(index);
+      if(!st||pal.locked)return false;
+      const before=String(st.meta?.group||""), after=String(group||"").trim();
+      if(before===after)return true;
+      st.meta=st.meta||{};if(after)st.meta.group=after;else delete st.meta.group;
+      this.touch();this.emit("palette");
+      if(this.history){const doc=this,palId=pal.id,stId=st.id;this.history.push({label:"Cambiar grupo de estilo",domain:"anim",before,after,apply:(_dir,value)=>{const p=doc.scene.palette(palId),s=p&&p.style(stId);if(s){s.meta=s.meta||{};if(value)s.meta.group=value;else delete s.meta.group;doc.emit("palette");}}});}
       return true;
     }
     /** Saca un estilo únicamente cuando ya no tiene referencias. Un estilo
@@ -1308,6 +1334,77 @@
         const d = rig.deformers && rig.deformers[boneId], f = Math.max(1, Math.round(frame));
         if (!d || !d.keys[f]) return false;
         delete d.keys[f]; return true;
+      });
+    }
+
+    /* == MALLA DE DEFORMACIÓN (nivel profesional, biblia §4.3) ==============
+       Una rejilla regular de cols×rows puntos sobre el bounding box de la pieza.
+       Mientras la rejilla posada sea igual al reposo, el dibujo no cambia. */
+    createRigMesh(boneId, opts) {
+      if (!boneId || !this.scene.rigNode(boneId)) return false;
+      opts = opts || {};
+      const nx = Math.max(2, Math.min(12, (opts.cols | 0) || 3));
+      const ny = Math.max(2, Math.min(12, (opts.rows | 0) || 3));
+      const box = opts.box || {};
+      const bx = +box.x || 0, by = +box.y || 0;
+      const bw = +(box.width != null ? box.width : box.w) || 0;
+      const bh = +(box.height != null ? box.height : box.h) || 0;
+      if (!(bw > 0) || !(bh > 0)) return false;
+      const rest = [];
+      for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++)
+        rest.push({ x: bx + bw * c / (nx - 1), y: by + bh * r / (ny - 1) });
+      return this._rigChange("Crear malla de deformación", (rig) => {
+        rig.meshes = rig.meshes || {};
+        if (rig.meshes[boneId]) return false;
+        rig.meshes[boneId] = { id: `mesh:${boneId}`, boneId, type: "mesh",
+          enabled: true, cols: nx, rows: ny, rest, keys: {} };
+        const bone = rig.bones[boneId];
+        if (bone && bone.binding) bone.binding.mode = "weightedMesh";
+        return true;
+      });
+    }
+
+    removeRigMesh(boneId) {
+      return this._rigChange("Quitar la malla", (rig) => {
+        if (!rig.meshes || !rig.meshes[boneId]) return false;
+        delete rig.meshes[boneId];
+        const bone = rig.bones[boneId];
+        if (bone && bone.binding && bone.binding.mode === "weightedMesh") bone.binding.mode = "rigid";
+        return true;
+      });
+    }
+
+    /** Clava la rejilla posada (cols*rows puntos) en un cuadro. */
+    setRigMeshKey(boneId, frame, pts) {
+      const f = Math.max(1, Math.round(frame));
+      return this._rigChange("Deformar la malla", (rig) => {
+        const m = rig.meshes && rig.meshes[boneId];
+        if (!m) return false;
+        const grid = (pts || []).map((q) => ({ x: +q.x || 0, y: +q.y || 0 }));
+        if (grid.length !== m.cols * m.rows) return false;
+        m.keys[f] = grid; return true;
+      }, { frame: f });
+    }
+
+    /** Mueve UN punto de control en un cuadro (para el arrastre en la mesa):
+        parte de la rejilla vigente en ese cuadro y sobreescribe sólo ese índice. */
+    setRigMeshPoint(boneId, index, x, y, frame) {
+      const f = Math.max(1, Math.round(frame));
+      const m = this.scene.rigMesh ? this.scene.rigMesh(boneId) : null;
+      if (!m) return false;
+      const n = m.cols * m.rows;
+      if (!(index >= 0 && index < n)) return false;
+      const base = (this.scene.rigMeshAt && this.scene.rigMeshAt(boneId, f)) || m.rest;
+      const grid = base.map((q) => ({ x: +q.x || 0, y: +q.y || 0 }));
+      grid[index] = { x: +x || 0, y: +y || 0 };
+      return this.setRigMeshKey(boneId, f, grid);
+    }
+
+    deleteRigMeshKey(boneId, frame) {
+      return this._rigChange("Borrar la deformación de este cuadro", (rig) => {
+        const m = rig.meshes && rig.meshes[boneId], f = Math.max(1, Math.round(frame));
+        if (!m || !m.keys[f]) return false;
+        delete m.keys[f]; return true;
       });
     }
 

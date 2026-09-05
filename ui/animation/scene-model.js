@@ -276,6 +276,71 @@
     return out;
   };
 
+  /* == MALLA DE DEFORMACIÓN (lattice / FFD) =================================
+     Nivel "profesional" (biblia §4.3): en vez de seguir un hueso rígido, el
+     dibujo se DOBLA arrastrando una rejilla de puntos de control encima suyo.
+     Cómo: la rejilla en reposo es regular sobre el bounding box de la pieza;
+     cada punto del dibujo se ubica por sus coordenadas bilineales dentro de su
+     celda y se lo recoloca con las MISMAS coords sobre la rejilla POSADA. Si
+     reposo == posado, el punto no se mueve (una malla recién creada no cambia
+     nada, igual que el deformador de curva). */
+  function rigMalla(reposo, posado, nx, ny) {
+    nx = Math.max(2, nx | 0); ny = Math.max(2, ny | 0);
+    let bx = Infinity, by = Infinity, mx = -Infinity, my = -Infinity;
+    for (const p of reposo) { if (p.x < bx) bx = p.x; if (p.y < by) by = p.y; if (p.x > mx) mx = p.x; if (p.y > my) my = p.y; }
+    const bw = (mx - bx) || 1e-9, bh = (my - by) || 1e-9;
+    const idx = (c, r) => r * nx + c;
+    return {
+      nx, ny,
+      punto(p) {
+        let gx = ((p.x - bx) / bw) * (nx - 1), gy = ((p.y - by) / bh) * (ny - 1);
+        gx = Math.max(0, Math.min(nx - 1, gx)); gy = Math.max(0, Math.min(ny - 1, gy));
+        const c = Math.min(nx - 2, Math.floor(gx)), r = Math.min(ny - 2, Math.floor(gy));
+        const u = gx - c, v = gy - r;
+        const a = posado[idx(c, r)], b = posado[idx(c + 1, r)], d0 = posado[idx(c, r + 1)], e = posado[idx(c + 1, r + 1)];
+        const tx = a.x + (b.x - a.x) * u, ty = a.y + (b.y - a.y) * u;
+        const sx = d0.x + (e.x - d0.x) * u, sy = d0.y + (e.y - d0.y) * u;
+        return { x: tx + (sx - tx) * v, y: ty + (sy - ty) * v };
+      }
+    };
+  }
+
+  /* Interpola una rejilla de puntos entre claves (lineal), o el reposo si no
+     hay claves. Compartido por la malla; misma semántica que las poses. */
+  function rigInterpGrid(rest, keys, frame) {
+    const nums = Object.keys(keys || {}).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!nums.length) return clone(rest);
+    const f = Number(frame) || 1;
+    const mezcla = (A, B, t) => A.map((pt, i) => ({ x: pt.x + (((B[i] || pt).x) - pt.x) * t, y: pt.y + (((B[i] || pt).y) - pt.y) * t }));
+    if (keys[f]) return clone(keys[f]);
+    if (f <= nums[0]) return clone(keys[nums[0]]);
+    if (f >= nums.at(-1)) return clone(keys[nums.at(-1)]);
+    let a = nums[0], b = nums.at(-1);
+    for (const k of nums) { if (k <= f) a = k; else { b = k; break; } }
+    return mezcla(keys[a], keys[b], (f - a) / (b - a));
+  }
+
+  /** Mallas por pieza. Se descarta la que no tenga cols*rows puntos de reposo;
+      una clave con otra cantidad de puntos no se puede mezclar con el reposo. */
+  const rigMeshesData = (source = {}) => {
+    const punto = (q) => ({ x: +q.x || 0, y: +q.y || 0 });
+    const lista = (arr) => Array.isArray(arr) ? arr.filter((q) => q && Number.isFinite(+q.x) && Number.isFinite(+q.y)).map(punto) : [];
+    const out = {};
+    for (const [boneId, m] of Object.entries(source || {})) {
+      const nx = Math.max(2, (m && m.cols) | 0), ny = Math.max(2, (m && m.rows) | 0);
+      const rest = lista(m && m.rest);
+      if (rest.length !== nx * ny) continue;
+      const keys = {};
+      for (const [frame, pts] of Object.entries((m && m.keys) || {})) {
+        const f = Math.max(1, Math.round(+frame)), grid = lista(pts);
+        if (Number.isFinite(f) && grid.length === nx * ny) keys[f] = grid;
+      }
+      out[boneId] = { id: (m && m.id) || `mesh:${boneId}`, boneId, type: "mesh",
+        enabled: !(m && m.enabled === false), cols: nx, rows: ny, rest, keys };
+    }
+    return out;
+  };
+
   const rigChannelData = (path, raw = {}) => ({ path,
     valueType: raw.valueType || "number", interpolation: raw.interpolation || "linear",
     keys: clone(raw.keys || {}), ease: clone(raw.ease || {}) });
@@ -500,7 +565,7 @@
     const rig = { version: 4,
       setup: { mode: source.setup?.mode || "cutout", restFrame: Math.max(1, Math.round(source.setup?.restFrame || 1)),
         units: source.setup?.units || "px" },
-      bones, slots, attachments, bindings, meshes: clone(source.meshes || {}),
+      bones, slots, attachments, bindings, meshes: rigMeshesData(source.meshes),
       deformers: rigDeformersData(source.deformers), constraints,
       constraintOrder: [...requestedOrder, ...remainder], controllers: clone(source.controllers || {}),
       actions: clone(source.actions || {}), channels, switches: rigSwitchesData(source.switches, attachments),
@@ -1004,6 +1069,31 @@
       return rigDeformador(d.rest, posado);
     }
 
+    /** La malla de una pieza. */
+    rigMesh(boneId) { return (this.rig.meshes || {})[boneId] || null; }
+
+    /** La rejilla POSADA de una malla en un cuadro (interpolada entre claves;
+     *  sin claves, la rejilla en reposo → el dibujo sin deformar). */
+    rigMeshAt(boneId, frame) {
+      const m = this.rigMesh(boneId);
+      if (!m || !Array.isArray(m.rest) || m.rest.length < 4) return null;
+      return rigInterpGrid(m.rest, m.keys || {}, frame);
+    }
+
+    /** El mapeador de la malla listo para deformar el dibujo en un cuadro, o
+     *  null si no hay malla o está en reposo (así el dibujo no se reescribe al
+     *  pedo). Devuelve { punto(p) } — mismo contrato que rigDeformadorAt. */
+    rigMallaAt(boneId, frame) {
+      const m = this.rigMesh(boneId);
+      if (!m || m.enabled === false) return null;
+      const posado = this.rigMeshAt(boneId, frame);
+      if (!posado) return null;
+      const quieto = m.rest.every((pt, i) =>
+        Math.abs(pt.x - posado[i].x) < 1e-6 && Math.abs(pt.y - posado[i].y) < 1e-6);
+      if (quieto) return null;
+      return rigMalla(m.rest, posado, m.cols, m.rows);
+    }
+
     /** El attachment vigente en un cuadro segun las claves de sustitucion. */
     rigSwitchAt(slotId, frame) {
       const sw = this.rigSwitch(slotId), keys = sw && sw.keys;
@@ -1298,6 +1388,8 @@
   animation.rigSinTope = rigSinTope;
   animation.rigAplicarTope = rigAplicarTope;
   animation.rigDeformador = rigDeformador;
+  animation.rigMalla = rigMalla;
+  animation.rigMeshesData = rigMeshesData;
   animation.rigEaseT = rigEaseT;
   animation.rigChannelData = rigChannelData;
   animation.rigChannelSegment = rigChannelSegment;

@@ -1,245 +1,172 @@
-/* ══════════════════════════════════════════════════════════════════════════
-   PALETA — el panel
-
-   La paleta vieja de LOW era un tacho de colores en `localStorage`: hacer clic
-   pintaba lo seleccionado con un color literal y ahí terminaba la historia. Lo
-   que se ve acá es otra cosa: cada casillero es un ESTILO NUMERADO de la
-   escena, y el número es lo que queda escrito en el trazo. Mover el selector
-   de color recolorea, en vivo, todo lo que usa ese estilo — en todos los
-   dibujos, expuestos o no.
-
-   Por eso cada casillero muestra su número y cuántos elementos lo usan: es la
-   información que hace falta para animarse a tocar un color sin miedo, y para
-   saber cuál está de adorno.
-
-   El botón "Adoptar" existe porque nadie empieza de cero: mete en la paleta los
-   colores de lo que ya estaba dibujado, sin cambiar cómo se ve. Sin eso la
-   paleta gobernaría solo lo nuevo.
-
-   @module animation/palette-view
-   ══════════════════════════════════════════════════════════════════════════ */
+/* Color Studio — edición profesional de estilos de escena. */
 (function (global) {
   "use strict";
   const LOW = global.LOW = global.LOW || {};
   const animation = LOW.animation = LOW.animation || {};
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, Number(n) || 0));
 
   class PaletteView {
     constructor(host, doc, opts = {}) {
       this.host = typeof host === "string" ? document.querySelector(host) : host;
-      this.doc = doc;
-      this.onPick = opts.onPick || null;      // avisa qué estilo quedó activo
-      this.current = opts.current || null;    // índice del estilo en uso
+      this.doc = doc; this.onPick = opts.onPick || null; this.current = opts.current || null;
+      this.target = opts.target === "paint" ? "paint" : "ink";
+      this.currents = { ink: opts.currents?.ink || this.current, paint: opts.currents?.paint || null };
+      this._editing = false; this._before = null; this._opacityBefore = null;
+      try { this.recent = JSON.parse(localStorage.getItem("low.color.recent.v1") || "[]"); } catch (_) { this.recent = []; }
       this._sub(doc);
     }
     _sub(doc) {
       if (this._desuscribir) this._desuscribir();
-      this._desuscribir = doc ? doc.subscribe((_d, m) => {
-        if (m === "palette" || m === "content" || m === "level" || m === "layer") this.render();
+      this._desuscribir = doc ? doc.subscribe((_d, reason) => {
+        if (!/^(palette|content|level|layer)$/.test(reason)) return;
+        if (this._editing && reason === "palette") return this._syncEditor();
+        this.render();
       }) : null;
     }
     setDoc(doc) { this.doc = doc; this._sub(doc); this.render(); }
     dispose() { if (this._desuscribir) this._desuscribir(); if (this.host) this.host.innerHTML = ""; }
-
-    /** El estilo activo, o el primero de la paleta si el activo ya no está. */
-    activo() {
-      const pal = this.doc && this.doc.palette;
-      if (!pal) return null;
-      return pal.byIndex(this.current) || pal.styles[0] || null;
+    activo() { const p = this.doc?.palette; return p ? (p.byIndex(this.current) || p.styles[0] || null) : null; }
+    setTarget(target) {
+      this.currents[this.target] = this.current;
+      this.target = target === "paint" ? "paint" : "ink";
+      this.current = this.currents[this.target] || this.current;
+      const st = this.activo(); if (st && this.onPick) this.onPick(st, this.target); this.render();
     }
-    setCurrent(i) {
-      const pal = this.doc && this.doc.palette;
-      const st = pal && pal.byIndex(i);
-      if (!st) return false;
-      this.current = st.index;
-      if (this.onPick) this.onPick(st);
-      this.render();
-      return true;
+    setCurrent(index) {
+      const st = this.doc?.palette?.byIndex(index); if (!st) return false;
+      this.current = st.index; this.currents[this.target] = st.index;
+      if (this.onPick) this.onPick(st, this.target); this.render(); return true;
     }
-
+    _color(hex, commit = false) {
+      const st = this.activo(), P = animation.palette, next = P.normColor(hex);
+      if (!st || !/^#[0-9a-f]{6}$/i.test(next) || this.doc.palette.locked) return false;
+      if (this._before == null) this._before = st.color;
+      const previous = this._before;
+      this._editing = !commit; this.doc.setStyleColor(st.index, next, commit, this._before);
+      if (commit) { this._remember(previous); this._remember(next); this._editing = false; this._before = null; }
+      if (this.onPick) this.onPick(st, this.target); this._syncEditor(); return true;
+    }
+    _syncEditor() {
+      const st = this.activo(), P = animation.palette; if (!st || !this.host) return;
+      const rgb = P.hexToRgb(st.color), hsv = P.hexToHsv(st.color);
+      const set = (q, value) => { const n = this.host.querySelector(q); if (n) n.value = value; };
+      set("[data-color-hex]", st.color.toUpperCase());
+      if (rgb) { set('[data-channel="r"]', rgb.r); set('[data-channel="g"]', rgb.g); set('[data-channel="b"]', rgb.b); }
+      if (hsv) {
+        set('[data-channel="h"]', Math.round(hsv.h)); set('[data-channel="s"]', Math.round(hsv.s)); set('[data-channel="v"]', Math.round(hsv.v)); set("[data-hue]", Math.round(hsv.h));
+        const spectrum = this.host.querySelector(".pal2-spectrum"); if (spectrum) spectrum.style.setProperty("--hue", `hsl(${hsv.h} 100% 50%)`);
+        const cursor = this.host.querySelector(".pal2-cursor"); if (cursor) { cursor.style.left = hsv.s + "%"; cursor.style.top = (100 - hsv.v) + "%"; }
+      }
+      const preview = this.host.querySelector(".pal2-preview"); if (preview) preview.style.background = st.color;
+      const swatch = this.host.querySelector(`.pal2-item[data-index="${st.index}"] .pal2-sw`); if (swatch) swatch.style.background = st.color;
+      const opacity=this.host.querySelector("[data-style-opacity]");if(opacity)opacity.value=Math.round(st.opacity*100);
+      const opacityOut=this.host.querySelector("[data-style-opacity-out]");if(opacityOut)opacityOut.textContent=Math.round(st.opacity*100)+"%";
+    }
+    _opacity(value, commit=false) {
+      const st=this.activo();if(!st||this.doc.palette.locked)return false;
+      if(this._opacityBefore==null)this._opacityBefore=st.opacity;
+      this._editing=!commit;this.doc.setStyleOpacity(st.index,clamp(value,0,100)/100,commit,this._opacityBefore);
+      if(commit){this._editing=false;this._opacityBefore=null;}this._syncEditor();return true;
+    }
+    _remember(color) {
+      const value = animation.palette.normColor(color);
+      if (!/^#[0-9a-f]{6}$/i.test(value)) return;
+      this.recent = [value, ...(this.recent || []).filter((c) => c !== value)].slice(0, 8);
+      try { localStorage.setItem("low.color.recent.v1", JSON.stringify(this.recent)); } catch (_) { /* opcional */ }
+    }
+    async _importFile(file) {
+      if (!file || this.doc?.palette?.locked) return 0;
+      const colors = animation.palette.parsePaletteFile(file.name, await file.arrayBuffer());
+      if (!colors.length) { this._notice("El archivo no contiene colores compatibles"); return 0; }
+      const pal=this.doc.palette, history=this.doc.history, ownTx=!!history&&!history.transaction, group=file.name.replace(/\.[^.]+$/,""); let added=0;
+      if (ownTx) history.begin(`Importar paleta ${file.name}`);
+      for (const entry of colors) {
+        if (pal.byColor(entry.color)) continue;
+        let name=(entry.name||`Color ${pal.nextIndex()}`).trim(), suffix=2;
+        while (pal.styleByName(name)) name=`${entry.name||"Color"} ${suffix++}`;
+        const created=this.doc.addStyle(entry.color,name);if(created){this.doc.setStyleGroup(created.index,group);added++;}
+      }
+      if (ownTx) history.commit();
+      this._notice(added ? `${added} colores importados de ${file.name}` : "Todos esos colores ya estaban en la paleta");
+      return added;
+    }
+    _exportGpl() {
+      const text=animation.palette.exportGPL(this.doc?.palette), blob=new Blob([text],{type:"text/plain;charset=utf-8"}), url=URL.createObjectURL(blob), a=document.createElement("a");
+      a.href=url;a.download=(this.doc?.palette?.name||"paleta").replace(/[^a-z0-9_-]+/gi,"-")+".gpl";a.click();setTimeout(()=>URL.revokeObjectURL(url),0);
+      this._notice("Paleta GPL exportada para Photoshop, Krita y GIMP");
+    }
+    _channelChange(input) {
+      const P = animation.palette; if (!this.activo()) return;
+      if (/^[rgb]$/.test(input.dataset.channel)) {
+        const v = {}; this.host.querySelectorAll('[data-channel="r"],[data-channel="g"],[data-channel="b"]').forEach((n) => v[n.dataset.channel] = clamp(n.value, 0, 255));
+        this._color(P.rgbToHex(v.r, v.g, v.b), true);
+      } else {
+        const v = {}; this.host.querySelectorAll('[data-channel="h"],[data-channel="s"],[data-channel="v"]').forEach((n) => v[n.dataset.channel] = clamp(n.value, 0, n.dataset.channel === "h" ? 359 : 100));
+        this._color(P.hsvToHex(v.h, v.s, v.v), true);
+      }
+    }
     render() {
       if (!this.host || !this.doc) return;
-      const doc = this.doc, P = animation.palette;
-      const pal = doc.palette;
-      if (!pal) { this.host.innerHTML = ""; return; }
-      const uso = P.usage(doc.scene, pal);
-      const sueltos = P.orphans(doc.scene, pal);
-      if (!pal.byIndex(this.current)) this.current = pal.styles[0] ? pal.styles[0].index : null;
+      const doc = this.doc, P = animation.palette, pal = doc.palette; if (!pal) return this.host.replaceChildren();
+      if (!pal.byIndex(this.current)) this.current = pal.styles[0]?.index || null;
+      this.currents[this.target] = this.current;
+      const st = this.activo(), usage = P.usage(doc.scene, pal), orphans = P.orphans(doc.scene, pal);
+      const box = el("div", "pal2 color-studio" + (pal.locked ? " bloqueada" : ""));
+      const head = el("header", "pal2-head"), title = el("div", "pal2-title"), name = el("b", "pal2-name", pal.name);
+      name.title = "Doble clic para renombrar"; name.ondblclick = () => { const n = prompt("Nombre de la paleta:", pal.name); if (n?.trim()) { pal.name = n.trim(); doc.touch(); doc.emit("palette"); } };
+      title.append(name, el("small", "", "Estilos vinculados a toda la escena"));
+      const actions = el("div", "pal2-actions"), adopt = el("button", "pal2-btn", "Adoptar"), add = el("button", "pal2-btn primary", "+ Estilo");
+      adopt.title = "Convertir colores literales en estilos editables"; adopt.onclick = () => { const r = doc.adoptColors(); this._notice(r?.elementos ? `${r.elementos} elementos vinculados` : "La escena ya está vinculada"); };
+      add.onclick = () => { const n = doc.addStyle(st?.color || "#000000"); if (n) this.setCurrent(n.index); }; add.disabled = adopt.disabled = pal.locked;
+      actions.append(adopt, add); head.append(title, actions); box.append(head);
 
-      const box = document.createElement("div");
-      box.className = "pal2" + (pal.locked ? " bloqueada" : "");
+      const filebar=el("div","pal2-filebar"), importButton=el("button","","Importar ASE / ACO / GPL"), exportButton=el("button","","Exportar GPL"), picker=el("input","");
+      picker.type="file";picker.accept=".ase,.aco,.gpl,.json,.lowpalette";picker.hidden=true;picker.onchange=async()=>{await this._importFile(picker.files?.[0]);picker.value="";};
+      importButton.disabled=pal.locked;importButton.onclick=()=>picker.click();exportButton.onclick=()=>this._exportGpl();filebar.append(importButton,exportButton,picker);box.appendChild(filebar);
 
-      // ── encabezado: nombre de la paleta y qué se puede hacer con ella ──
-      const head = document.createElement("div");
-      head.className = "pal2-head";
-      const nombre = document.createElement("b");
-      nombre.className = "pal2-name";
-      nombre.textContent = pal.name;
-      nombre.title = "Doble clic para renombrar la paleta";
-      nombre.ondblclick = () => {
-        const n = prompt("Nombre de la paleta:", pal.name);
-        if (n != null && n.trim()) { pal.name = n.trim(); doc.touch(); doc.emit("palette"); }
-      };
-      const add = document.createElement("button");
-      add.className = "pal2-btn"; add.textContent = "+";
-      add.title = "Estilo nuevo, con el color del estilo activo";
-      add.onclick = () => {
-        const base = this.activo();
-        const st = doc.addStyle(base ? base.color : "#000000");
-        if (st) this.setCurrent(st.index);
-      };
-      const adoptar = document.createElement("button");
-      adoptar.className = "pal2-btn pal2-adopt"; adoptar.textContent = "Adoptar";
-      adoptar.title = "Meter en la paleta los colores de lo que ya está dibujado " +
-                      "(no cambia cómo se ve: habilita recolorearlo)";
-      adoptar.onclick = () => {
-        const r = doc.adoptColors();
-        if (!r || !r.elementos) { this._aviso("Todo lo dibujado ya usa la paleta."); return; }
-        this._aviso(`${r.elementos} elemento(s) entraron a la paleta` +
-                    (r.estilosNuevos ? ` · ${r.estilosNuevos} estilo(s) nuevo(s)` : ""));
-      };
-      if (pal.locked) {
-        // el modelo canonico permite bloquear una paleta; si esta bloqueada, el
-        // panel no ofrece lo que despues el modelo va a rechazar
-        add.disabled = adoptar.disabled = true;
-        add.title = adoptar.title = "La paleta esta bloqueada";
+      const targets = el("div", "pal2-targets"); targets.setAttribute("aria-label", "Destino del color");
+      [["ink", "Línea"], ["paint", "Pintura"]].forEach(([id, label]) => { const b = el("button", this.target === id ? "active" : "", label); b.dataset.target = id; b.onclick = () => this.setTarget(id); targets.appendChild(b); });
+      box.appendChild(targets);
+      if (st) {
+        const editor = el("section", "pal2-editor"), spectrum = el("div", "pal2-spectrum"); spectrum.tabIndex = pal.locked ? -1 : 0;
+        spectrum.setAttribute("role", "slider"); spectrum.setAttribute("aria-label", "Saturación y valor"); spectrum.appendChild(el("i", "pal2-cursor"));
+        const fromPointer = (e, commit) => { const r = spectrum.getBoundingClientRect(), hsv = P.hexToHsv(this.activo().color); this._color(P.hsvToHex(hsv.h, clamp((e.clientX-r.left)/r.width*100,0,100), 100-clamp((e.clientY-r.top)/r.height*100,0,100)), commit); };
+        spectrum.onpointerdown = (e) => { if (pal.locked) return; spectrum.setPointerCapture(e.pointerId); fromPointer(e, false); spectrum.onpointermove = (m) => fromPointer(m, false); spectrum.onpointerup = (u) => { spectrum.onpointermove = null; fromPointer(u, true); }; };
+        const hue = el("input", "pal2-hue"); hue.type = "range"; hue.min = 0; hue.max = 359; hue.dataset.hue = ""; hue.disabled = pal.locked;
+        hue.oninput = () => { const x = P.hexToHsv(this.activo().color); this._color(P.hsvToHex(hue.value, x.s, x.v), false); };
+        hue.onchange = () => { const x = P.hexToHsv(this.activo().color); this._color(P.hsvToHex(hue.value, x.s, x.v), true); }; editor.append(spectrum, hue);
+        const readout = el("div", "pal2-readout"); readout.appendChild(el("i", "pal2-preview"));
+        const hex = el("input", "pal2-hex"); hex.dataset.colorHex = ""; hex.maxLength = 7; hex.spellcheck = false; hex.disabled = pal.locked; hex.setAttribute("aria-label", "Color hexadecimal"); hex.onchange = () => this._color(hex.value.startsWith("#") ? hex.value : "#" + hex.value, true);
+        readout.append(hex, el("span", "pal2-gamut", "sRGB")); editor.appendChild(readout);
+        const channels = el("div", "pal2-channels");
+        [["r","R",255],["g","G",255],["b","B",255],["h","H",359],["s","S",100],["v","V",100]].forEach(([id,label,max]) => { const wrap = el("label", ""); wrap.appendChild(el("span", "", label)); const input = el("input", ""); input.type="number"; input.min=0; input.max=max; input.dataset.channel=id; input.disabled=pal.locked; input.onchange=()=>this._channelChange(input); wrap.appendChild(input); channels.appendChild(wrap); });
+        editor.appendChild(channels);
+        const opacity=el("label","pal2-opacity");opacity.appendChild(el("span","","Opacidad"));const opacityRange=el("input","");opacityRange.type="range";opacityRange.min=0;opacityRange.max=100;opacityRange.dataset.styleOpacity="";opacityRange.disabled=pal.locked;opacityRange.oninput=()=>this._opacity(opacityRange.value,false);opacityRange.onchange=()=>this._opacity(opacityRange.value,true);const opacityOut=el("output","","100%");opacityOut.dataset.styleOpacityOut="";opacity.append(opacityRange,opacityOut);editor.appendChild(opacity);
+        const harmony = el("div", "pal2-harmonies"); harmony.appendChild(el("span", "pal2-section-label", "Armonía")); const row = el("div", "pal2-harmony-row");
+        P.harmonies(st.color).forEach((h) => { const b = el("button", ""); b.style.background=h.color; b.title=`${h.name} · ${h.color}`; b.disabled=pal.locked; b.onclick=()=>this._color(h.color,true); row.appendChild(b); }); harmony.appendChild(row); editor.appendChild(harmony);
+        if (this.recent?.length) { const recent=el("div","pal2-recent"); recent.appendChild(el("span","pal2-section-label","Recientes")); const recentRow=el("div","pal2-recent-row"); this.recent.forEach((color)=>{const b=el("button","");b.style.background=color;b.title=color.toUpperCase();b.disabled=pal.locked;b.onclick=()=>this._color(color,true);recentRow.appendChild(b);});recent.appendChild(recentRow);editor.appendChild(recent); }
+        box.appendChild(editor);
       }
-      head.append(nombre, add, adoptar);
-      box.appendChild(head);
-
-      // ── los casilleros ────────────────────────────────────────────────
-      const grid = document.createElement("div");
-      grid.className = "pal2-grid";
-      for (const st of pal.styles) {
-        const u = uso[st.index] || { total: 0 };
-        const cel = document.createElement("div");
-        cel.className = "pal2-item" + (st.index === this.current ? " actual" : "") +
-                        (u.total ? "" : " sinuso");
-        cel.title = `${(st.name || `Estilo ${st.index}`)} · ${st.color} · ` +
-                    (u.total ? `lo usan ${u.total} elemento(s)` : "no lo usa nada todavía") +
-                    "\nclic: activarlo para dibujar · doble clic: renombrar";
-
-        const sw = document.createElement("i");
-        sw.className = "pal2-sw";
-        sw.style.background = st.color;
-        const num = document.createElement("b");
-        num.className = "pal2-num";
-        num.textContent = st.index;
-        const nom = document.createElement("span");
-        nom.className = "pal2-lbl";
-        nom.textContent = (st.name || `Estilo ${st.index}`);
-        const cuenta = document.createElement("i");
-        cuenta.className = "pal2-use";
-        cuenta.textContent = u.total || "";
-
-        // El selector de color va adentro del casillero: recolorear es la
-        // operación principal de una paleta, no puede estar a dos clics.
-        const col = document.createElement("input");
-        col.type = "color"; col.value = st.color; col.className = "pal2-color";
-        col.title = "Cambiar el color de este estilo (recolorea todo lo que lo usa)";
-        let desde = null;
-        col.oninput = () => {
-          if (desde == null) desde = st.color;         // color de partida, para el historial
-          doc.setStyleColor(st.index, col.value, false);
-          sw.style.background = col.value;             // sin re-render: no se pierde el foco
-        };
-        col.onchange = () => {
-          doc.setStyleColor(st.index, col.value, true, desde);
-          desde = null;
-          if (st.index === this.current && this.onPick) this.onPick(st);
-        };
-        col.onclick = (e) => e.stopPropagation();
-        if (pal.locked) { col.disabled = true; col.title = "La paleta esta bloqueada"; }
-
-        cel.append(sw, num, nom, cuenta, col);
-        cel.onclick = () => this.setCurrent(st.index);
-        cel.ondblclick = () => {
-          if (pal.locked) return;
-          const n = prompt(`Nombre del estilo ${st.index}:`, st.name);
-          if (n != null) doc.renameStyle(st.index, n.trim());
-        };
-        cel.oncontextmenu = (e) => { e.preventDefault(); this._menu(e, st, u, pal); };
-        grid.appendChild(cel);
-      }
-      box.appendChild(grid);
-
-      // ── referencias a estilos que ya no existen ────────────────────────
-      if (sueltos.length) {
-        const aviso = document.createElement("div");
-        aviso.className = "pal2-orphans";
-        aviso.textContent = `Hay trazos que apuntan a estilos borrados (${sueltos.join(", ")}): ` +
-                            "se ven con su último color. Clic derecho en un estilo → " +
-                            "\"Traer los sueltos\" para reasignarlos.";
-        box.appendChild(aviso);
-      }
-
-      const pie = document.createElement("div");
-      pie.className = "pal2-foot";
-      const act = this.activo();
-      pie.textContent = pal.locked
-        ? "La paleta está bloqueada: se puede dibujar con sus estilos, no cambiarlos."
-        : act ? `Dibujás con el estilo ${act.index} · ${(act.name || `Estilo ${act.index}`)}`
-              : "La paleta está vacía";
-      box.appendChild(pie);
-
-      this.host.innerHTML = "";
-      this.host.appendChild(box);
+      const library = el("section", "pal2-library"), libraryHead = el("div", "pal2-library-head"); libraryHead.append(el("span", "pal2-section-label", `Estilos · ${pal.styles.length}`), el("small", "", "uso en escena")); library.appendChild(libraryHead);
+      const filters=el("div","pal2-filterbar"),search=el("input","pal2-search"),groupFilter=el("select","pal2-group-filter");search.type="search";search.placeholder="Buscar estilos";search.setAttribute("aria-label","Buscar estilos");groupFilter.setAttribute("aria-label","Filtrar por grupo");groupFilter.appendChild(new Option("Todos los grupos",""));[...new Set(pal.styles.map(s=>s.meta?.group).filter(Boolean))].sort().forEach(g=>groupFilter.appendChild(new Option(g,g)));filters.append(search,groupFilter);library.appendChild(filters);
+      const grid = el("div", "pal2-grid");
+      pal.styles.forEach((style) => { const count = usage[style.index] || {ink:0,paint:0,total:0}; const item = el("button", "pal2-item"+(style.index===this.current?" actual":"")+(!count.total?" sinuso":"")); item.dataset.index=style.index;
+        const sw = el("i", "pal2-sw"); sw.style.background=style.color; const copy=el("span","pal2-item-copy"); copy.append(el("b","",style.name||`Estilo ${style.index}`),el("small","",`${style.meta?.group?style.meta.group+" · ":""}#${style.index} · ${style.color.toUpperCase()}`)); const use=el("span","pal2-use",count.total?`${count.total}`:"—"); use.title=`${count.ink} líneas · ${count.paint} rellenos`;item.dataset.group=style.meta?.group||"";
+        item.append(sw,copy,use); item.onclick=()=>this.setCurrent(style.index); item.ondblclick=()=>{ if(!pal.locked){const n=prompt(`Nombre del estilo ${style.index}:`,style.name);if(n?.trim())doc.renameStyle(style.index,n.trim());}}; item.oncontextmenu=(e)=>{e.preventDefault();this._menu(e,style,count,pal);}; grid.appendChild(item); });
+      const applyFilter=()=>{const term=search.value.trim().toLowerCase(),group=groupFilter.value;grid.querySelectorAll(".pal2-item").forEach((item)=>item.hidden=(!!term&&!item.textContent.toLowerCase().includes(term))||(!!group&&item.dataset.group!==group));};search.oninput=applyFilter;groupFilter.onchange=applyFilter;
+      library.appendChild(grid); box.appendChild(library);
+      if (orphans.length) box.appendChild(el("div", "pal2-orphans", `Referencias sin estilo: ${orphans.join(", ")}. Reasignalas desde el menú de un estilo.`));
+      box.appendChild(el("footer", "pal2-foot", pal.locked ? "Paleta bloqueada" : "Clic derecho: duplicar, reasignar o borrar")); this.host.replaceChildren(box); this._syncEditor();
     }
-
-    _aviso(txt) {
-      const pie = this.host.querySelector(".pal2-foot");
-      if (pie) pie.textContent = txt;
-      if (global.dzSetStatus) global.dzSetStatus(" " + txt);
-    }
-
-    _menu(e, st, u, pal) {
-      const doc = this.doc, P = animation.palette;
-      document.querySelectorAll(".ls2-menu").forEach((m) => m.remove());
-      const m = document.createElement("div");
-      m.className = "ls2-menu";
-      m.style.left = e.clientX + "px";
-      m.style.top = e.clientY + "px";
-      const item = (txt, fn) => {
-        const b = document.createElement("button");
-        b.textContent = txt;
-        b.onclick = () => { m.remove(); fn(); };
-        m.appendChild(b);
-      };
-      item("Activarlo para dibujar", () => this.setCurrent(st.index));
-      item("Duplicar el estilo", () => {
-        const nuevo = doc.addStyle(st.color, st.name ? st.name + " (copia)" : "");
-        if (nuevo) this.setCurrent(nuevo.index);
-      });
-      const otros = pal.styles.filter((s) => s.index !== st.index);
-      if (u.total && otros.length) {
-        item(`Pasar sus ${u.total} elemento(s) a otro estilo…`, () => {
-          const n = prompt(`Pasar lo que usa el estilo ${st.index} al estilo número:`,
-                           String(otros[0].index));
-          if (n == null) return;
-          const movidos = doc.reassignStyle(st.index, parseInt(n, 10));
-          this._aviso(movidos ? `${movidos} elemento(s) pasaron al estilo ${parseInt(n, 10)}`
-                              : "Ese estilo no existe: no se movió nada");
-        });
-      }
-      const sueltos = P.orphans(doc.scene, pal);
-      if (sueltos.length) {
-        item(`Traer los sueltos (${sueltos.join(", ")}) a este estilo`, () => {
-          let total = 0;
-          for (const i of sueltos) total += doc.reassignStyle(i, st.index);
-          this._aviso(`${total} elemento(s) sueltos ahora usan el estilo ${st.index}`);
-        });
-      }
-      item("Borrar el estilo", () => {
-        if (u.total) {
-          this._aviso(`No se puede borrar: ${u.total} elemento(s) usan el estilo ${st.index}. Reasignalos primero.`);
-          return;
-        }
-        if (!doc.removeStyle(st.index)) this._aviso("El estilo no pudo borrarse");
-      });
-      document.body.appendChild(m);
-      const cerrar = () => { m.remove(); document.removeEventListener("pointerdown", cerrar); };
-      setTimeout(() => document.addEventListener("pointerdown", cerrar), 0);
+    _notice(text) { const f=this.host.querySelector(".pal2-foot"); if(f)f.textContent=text; if(global.dzSetStatus)global.dzSetStatus(" "+text); }
+    _menu(e, st, usage, pal) {
+      document.querySelectorAll(".ls2-menu").forEach((n)=>n.remove()); const menu=el("div","ls2-menu"); menu.style.left=e.clientX+"px"; menu.style.top=e.clientY+"px";
+      const action=(label,fn,disabled=false)=>{const b=el("button","",label);b.disabled=disabled;b.onclick=()=>{menu.remove();fn();};menu.appendChild(b);}; action("Usar este estilo",()=>this.setCurrent(st.index)); action("Duplicar",()=>{let name=st.name+" copia",i=2;while(pal.styleByName(name))name=st.name+` copia ${i++}`;const h=this.doc.history,tx=!!h&&!h.transaction;if(tx)h.begin("Duplicar estilo");const n=this.doc.addStyle(st.color,name);if(n&&st.meta?.group)this.doc.setStyleGroup(n.index,st.meta.group);if(tx)h.commit();if(n)this.setCurrent(n.index);},pal.locked);
+      action(st.meta?.group?`Grupo: ${st.meta.group}…`:"Asignar a grupo…",()=>{const group=prompt("Grupo del estilo (vacío para quitar):",st.meta?.group||"");if(group!=null)this.doc.setStyleGroup(st.index,group);},pal.locked);
+      const others=pal.styles.filter((s)=>s.index!==st.index); action(`Reasignar ${usage.total||0} usos…`,()=>{const n=prompt("Número del estilo de destino:",String(others[0]?.index||""));if(n!=null)this._notice(`${this.doc.reassignStyle(st.index,parseInt(n,10))||0} elementos reasignados`);},!usage.total||!others.length||pal.locked); action("Borrar estilo",()=>this.doc.removeStyle(st.index)||this._notice("No puede borrarse mientras esté en uso"),usage.total||pal.locked);
+      document.body.appendChild(menu); const close=()=>{menu.remove();document.removeEventListener("pointerdown",close);};setTimeout(()=>document.addEventListener("pointerdown",close),0);
     }
   }
-
   animation.PaletteView = PaletteView;
 })(window);

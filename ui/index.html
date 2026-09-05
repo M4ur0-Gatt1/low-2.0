@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=4.2.2">
-<link rel="stylesheet" href="design/studio-polish.css?v=4.2.2">
+<link rel="stylesheet" href="app.css?v=4.3.0">
+<link rel="stylesheet" href="design/studio-polish.css?v=4.3.0">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -666,6 +666,7 @@
           <div class="rig2-title"><b>Jerarquía</b><span><i id="rigCount">0</i> piezas</span></div>
           <div class="rig2-flow"><span>1 Objetos</span><i>›</i><span>2 Alambre</span><i>›</i><span>3 Pivotes</span><i>›</i><span>4 Repartir</span></div>
           <div class="rig2-tree" id="rigTree" aria-label="Jerarquía del personaje"></div>
+          <div class="rig2-schematic" id="rigSchematic" role="group" aria-label="Esquema del esqueleto"></div>
           <details class="rig2-disclosure">
             <summary>Ajustes de la pieza</summary>
             <div class="rig2-row rig2-wide"><input type="text" id="rigId" placeholder="nombre de la pieza" title="ID estable de la pieza">
@@ -680,7 +681,8 @@
             </div>
             <div class="rig2-limits"><span>Giro</span>
               <label>mín<input type="number" id="rigMin" value="-180" min="-360" max="360"></label>
-              <label>máx<input type="number" id="rigMax" value="180" min="-360" max="360"></label></div>
+              <label>máx<input type="number" id="rigMax" value="180" min="-360" max="360"></label>
+              <button id="rigNoTope" type="button" title="Liberar el giro de TODOS los huesos: 360°, sin límites">Sin topes</button></div>
           </details>
         </section>
         <section class="rig2-section" data-rig-section="pose">
@@ -1003,57 +1005,58 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=4.2.2"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=4.3.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=4.2.2"></script>
-<script src="core/pointer-controller.js?v=4.2.2"></script>
-<script src="application/mode-machine.js?v=4.2.2"></script>
-<script src="animation/palette.js?v=4.2.2"></script>
-<script src="animation/coloring.js?v=4.2.2"></script>
-<script src="animation/scene-model.js?v=4.2.2"></script>
-<script src="animation/rig-policy.js?v=4.2.2"></script>
-<script src="rigging/binding.js?v=4.2.2"></script>
-<script src="rigging/rig-input.js?v=4.2.2"></script>
-<script src="animation/exposures.js?v=4.2.2"></script>
-<script src="animation/onion.js?v=4.2.2"></script>
-<script src="animation/mocap.js?v=4.2.2"></script>
-<script src="animation/document.js?v=4.2.2"></script>
-<script src="animation/rig-library.js?v=4.2.2"></script>
-<script src="animation/character-library.js?v=4.2.2"></script>
-<script src="animation/timeline.js?v=4.2.2"></script>
-<script src="animation/xsheet-view.js?v=4.2.2"></script>
-<script src="animation/timeline-view.js?v=4.2.2"></script>
-<script src="animation/level-strip.js?v=4.2.2"></script>
-<script src="animation/palette-view.js?v=4.2.2"></script>
-<script src="animation/audio.js?v=4.2.2"></script>
-<script src="animation/shortcuts.js?v=4.2.2"></script>
-<script src="storyboard/shot-model.js?v=4.2.2"></script>
-<script src="storyboard/stage-view.js?v=4.2.2"></script>
-<script src="storyboard/board-view.js?v=4.2.2"></script>
-<script src="animation/model-tests.js?v=4.2.2"></script>
-<script src="animation/xsheet.js?v=4.2.2"></script>
-<script src="animation/playback.js?v=4.2.2"></script>
-<script src="animation/camera.js?v=4.2.2"></script>
-<script src="composition/multiplane-model.js?v=4.2.2"></script>
-<script src="composition/controller.js?v=4.2.2"></script>
-<script src="composition/multiplane-view.js?v=4.2.2"></script>
-<script src="drawing/stabilization.js?v=4.2.2"></script>
-<script src="drawing/selection.js?v=4.2.2"></script>
-<script src="drawing/transforms.js?v=4.2.2"></script>
-<script src="drawing/pointer-input.js?v=4.2.2"></script>
-<script src="drawing/brushes.js?v=4.2.2"></script>
-<script src="drawing/stroke-engine.js?v=4.2.2"></script>
-<script src="drawing/brush-engine-pro.js?v=4.2.2"></script>
-<script src="drawing/brush-studio.js?v=4.2.2"></script>
-<script src="collaboration/session.js?v=4.2.2"></script>
-<script src="workspace/panels.js?v=4.2.2"></script>
-<script src="workspace/workspaces.js?v=4.2.2"></script>
-<script src="workspace/windows.js?v=4.2.2"></script>
-<script src="workspace/layouts.js?v=4.2.2"></script>
-<script src="workspace/recovery.js?v=4.2.2"></script>
-<script src="ai/commands.js?v=4.2.2"></script>
-<script src="ai/task-runner.js?v=4.2.2"></script>
-<script src="ai/recovery.js?v=4.2.2"></script>
-<script src="app.js?v=4.2.2"></script>
+<script src="core/history.js?v=4.3.0"></script>
+<script src="core/pointer-controller.js?v=4.3.0"></script>
+<script src="application/mode-machine.js?v=4.3.0"></script>
+<script src="animation/palette.js?v=4.3.0"></script>
+<script src="animation/coloring.js?v=4.3.0"></script>
+<script src="animation/scene-model.js?v=4.3.0"></script>
+<script src="animation/rig-policy.js?v=4.3.0"></script>
+<script src="rigging/binding.js?v=4.3.0"></script>
+<script src="rigging/rig-input.js?v=4.3.0"></script>
+<script src="rigging/rig-schematic.js?v=4.3.0"></script>
+<script src="animation/exposures.js?v=4.3.0"></script>
+<script src="animation/onion.js?v=4.3.0"></script>
+<script src="animation/mocap.js?v=4.3.0"></script>
+<script src="animation/document.js?v=4.3.0"></script>
+<script src="animation/rig-library.js?v=4.3.0"></script>
+<script src="animation/character-library.js?v=4.3.0"></script>
+<script src="animation/timeline.js?v=4.3.0"></script>
+<script src="animation/xsheet-view.js?v=4.3.0"></script>
+<script src="animation/timeline-view.js?v=4.3.0"></script>
+<script src="animation/level-strip.js?v=4.3.0"></script>
+<script src="animation/palette-view.js?v=4.3.0"></script>
+<script src="animation/audio.js?v=4.3.0"></script>
+<script src="animation/shortcuts.js?v=4.3.0"></script>
+<script src="storyboard/shot-model.js?v=4.3.0"></script>
+<script src="storyboard/stage-view.js?v=4.3.0"></script>
+<script src="storyboard/board-view.js?v=4.3.0"></script>
+<script src="animation/model-tests.js?v=4.3.0"></script>
+<script src="animation/xsheet.js?v=4.3.0"></script>
+<script src="animation/playback.js?v=4.3.0"></script>
+<script src="animation/camera.js?v=4.3.0"></script>
+<script src="composition/multiplane-model.js?v=4.3.0"></script>
+<script src="composition/controller.js?v=4.3.0"></script>
+<script src="composition/multiplane-view.js?v=4.3.0"></script>
+<script src="drawing/stabilization.js?v=4.3.0"></script>
+<script src="drawing/selection.js?v=4.3.0"></script>
+<script src="drawing/transforms.js?v=4.3.0"></script>
+<script src="drawing/pointer-input.js?v=4.3.0"></script>
+<script src="drawing/brushes.js?v=4.3.0"></script>
+<script src="drawing/stroke-engine.js?v=4.3.0"></script>
+<script src="drawing/brush-engine-pro.js?v=4.3.0"></script>
+<script src="drawing/brush-studio.js?v=4.3.0"></script>
+<script src="collaboration/session.js?v=4.3.0"></script>
+<script src="workspace/panels.js?v=4.3.0"></script>
+<script src="workspace/workspaces.js?v=4.3.0"></script>
+<script src="workspace/windows.js?v=4.3.0"></script>
+<script src="workspace/layouts.js?v=4.3.0"></script>
+<script src="workspace/recovery.js?v=4.3.0"></script>
+<script src="ai/commands.js?v=4.3.0"></script>
+<script src="ai/task-runner.js?v=4.3.0"></script>
+<script src="ai/recovery.js?v=4.3.0"></script>
+<script src="app.js?v=4.3.0"></script>
 </body>
 </html>

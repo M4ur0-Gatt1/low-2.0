@@ -714,12 +714,41 @@
         h.undo();
         ok("Ctrl+Z devuelve el color anterior del estilo", pal.byIndex(2).color === "#f0450e",
           pal.byIndex(2).color);
+        doc.setStyleOpacity(2, .35);
+        ok("la opacidad del estilo entra en la hoja global", P.css(pal).includes("opacity:0.35"));
+        h.undo();
+        ok("Ctrl+Z devuelve la opacidad anterior del estilo", pal.byIndex(2).opacity === 1,
+          String(pal.byIndex(2).opacity));
+        doc.setStyleGroup(2,"Personaje");
+        ok("un estilo puede organizarse en un grupo persistente", pal.byIndex(2).meta.group === "Personaje");
+        h.undo();
+        ok("Ctrl+Z devuelve la organización anterior", !pal.byIndex(2).meta.group);
       }
 
       const doc2 = LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
       ok("al reabrir vuelve la paleta con sus numeros y colores",
         doc2.palette.byIndex(1).color === "#00aa55" && doc2.palette.byIndex(3).color === "#ffffff",
         doc2.palette.styles.map((s) => s.index + ":" + s.color).join(" "));
+
+      const hsvRojo = P.hexToHsv("#ff0000");
+      ok("Color Studio convierte HEX a HSV sin deriva",
+        hsvRojo.h === 0 && hsvRojo.s === 100 && hsvRojo.v === 100, JSON.stringify(hsvRojo));
+      ok("Color Studio convierte HSV a HEX sin deriva", P.hsvToHex(210, 67, 60) === "#326699",
+        P.hsvToHex(210, 67, 60));
+      const armonia = P.harmonies("#ff0000");
+      ok("la armonía entrega base, análogos, complemento y tríada",
+        armonia.length === 6 && armonia[3].color === "#00ffff", JSON.stringify(armonia));
+      const acoBuffer = new ArrayBuffer(14), aco = new DataView(acoBuffer);
+      aco.setUint16(0,1);aco.setUint16(2,1);aco.setUint16(4,0);aco.setUint16(6,65535);aco.setUint16(8,0);aco.setUint16(10,32896);aco.setUint16(12,0);
+      ok("importa una muestra Adobe ACO RGB", P.parseACO(acoBuffer)[0]?.color === "#ff0080",
+        JSON.stringify(P.parseACO(acoBuffer)));
+      const aseBuffer = new ArrayBuffer(46), ase = new DataView(aseBuffer), sig = new Uint8Array(aseBuffer);
+      "ASEF".split("").forEach((c,i)=>sig[i]=c.charCodeAt(0));ase.setUint16(4,1);ase.setUint16(6,0);ase.setUint32(8,1);ase.setUint16(12,1);ase.setUint32(14,28);ase.setUint16(18,4);
+      "Sky".split("").forEach((c,i)=>ase.setUint16(20+i*2,c.charCodeAt(0)));["R","G","B"," "].forEach((c,i)=>sig[28+i]=c.charCodeAt(0));ase.setFloat32(32,.2);ase.setFloat32(36,.4);ase.setFloat32(40,.8);ase.setUint16(44,0);
+      const parsedAse=P.parseASE(aseBuffer);
+      ok("importa nombres y color desde Adobe ASE", parsedAse[0]?.name === "Sky" && parsedAse[0]?.color === "#3366cc", JSON.stringify(parsedAse));
+      const gpl=P.exportGPL(pal), parsedGpl=P.parseGPL(gpl);
+      ok("exportar e importar GPL conserva los colores compatibles", parsedGpl.length === pal.styles.length && parsedGpl[0].color === pal.styles[0].color);
     }
 
     // 21. ADOPTAR: lo dibujado antes de que la paleta gobernara entra a la paleta.

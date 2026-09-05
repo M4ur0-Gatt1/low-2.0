@@ -1198,6 +1198,28 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .rig2-node:hover { background: var(--surface-hover); color: var(--txt); }.rig2-node.on { color: var(--txt); background: var(--redsoft); }
 .rig2-node i { width: 10px; height: 10px; border: 1.5px solid #e98b55; border-radius: 50%; }.rig2-node.root i { border-radius: 2px; background: #4f8bb8; }
 .rig2-node small { margin-left: auto; opacity: .6; }.rig2-node span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ── Schematic básico del esqueleto (grafo de nodos por rol) ── */
+.rig2-schematic { max-height: 200px; overflow: auto; margin-top: 7px; border: 1px solid var(--line2); border-radius: 5px; background: #171615; }
+.rig2-schematic[hidden] { display: none; }
+.rig-sch-svg { display: block; width: 100%; height: auto; padding: 4px 2px; }
+.rig-sch-edge { fill: none; stroke: rgba(255,248,235,.16); stroke-width: 1.5; }
+.rig-sch-node { cursor: pointer; }
+.rig-sch-node circle { fill: #2a2825; stroke: #e98b55; stroke-width: 2; transition: stroke .15s, fill .15s; }
+.rig-sch-node.role-control circle { stroke: var(--cyan); }
+.rig-sch-node.role-deformer circle { stroke: #b58bd8; }
+.rig-sch-label { fill: var(--mut); font-size: 11px; font-family: inherit; pointer-events: none; }
+.rig-sch-node:hover circle { fill: #3a3733; }
+.rig-sch-node:hover .rig-sch-label { fill: var(--txt); }
+.rig-sch-node:focus { outline: none; }
+.rig-sch-node:focus circle { stroke: var(--cyanh); }
+.rig-sch-node.on circle { fill: var(--redsoft); stroke: var(--red); stroke-width: 2.6; }
+.rig-sch-node.on .rig-sch-label { fill: var(--txt); }
+.rig2-schematic.reparenting { cursor: grabbing; }
+.rig2-schematic.reparenting .rig-sch-svg { touch-action: none; }
+.rig-sch-node.drag-src circle { fill: var(--redsoft); stroke-dasharray: 3 2; }
+.rig-sch-node.drop-ok circle { fill: var(--cyansoft); stroke: var(--cyan); stroke-width: 3; }
+.rig-sch-node.drop-ok .rig-sch-label { fill: var(--txt); }
+@media (prefers-reduced-motion: reduce) { .rig-sch-node circle { transition: none; } }
 .rig2-keys { min-height: 25px; padding-top: 6px; }.rig2-target { margin-top: 6px; align-items: baseline; }.rig2-target span { width: 57px; }.rig2-target small { margin-left: auto; font-size: 9px; }
 .rig2-performance { padding: 8px; border-bottom: 1px solid var(--line2); }.rig2-performance summary { cursor: pointer; color: var(--txt); font-weight: 650; }
 .rig2-performance input { width: 58px; }.rig2-hint { padding: 8px 10px 10px; color: var(--mut); font-size: 10px; line-height: 1.35; }

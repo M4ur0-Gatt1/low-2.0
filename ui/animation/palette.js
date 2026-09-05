@@ -65,6 +65,124 @@
   }
 
   const normColor = (c) => (animation.Style ? animation.Style.normalizeColor(c) : c);
+  function hexToRgb(color) {
+    const h = normColor(color);
+    const m = /^#([0-9a-f]{6})$/i.exec(h);
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function rgbToHex(r, g, b) {
+    const byte = (n) => Math.max(0, Math.min(255, Math.round(Number(n) || 0)));
+    return "#" + [byte(r), byte(g), byte(b)].map((n) => n.toString(16).padStart(2, "0")).join("");
+  }
+  function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    let h = 0;
+    if (d) {
+      if (max === r) h = 60 * (((g - b) / d) % 6);
+      else if (max === g) h = 60 * (((b - r) / d) + 2);
+      else h = 60 * (((r - g) / d) + 4);
+    }
+    if (h < 0) h += 360;
+    return { h, s: max ? d / max * 100 : 0, v: max * 100 };
+  }
+  function hexToHsv(color) {
+    const rgb = hexToRgb(color);
+    return rgb ? rgbToHsv(rgb.r, rgb.g, rgb.b) : null;
+  }
+  function hsvToHex(h, s, v) {
+    h = ((Number(h) || 0) % 360 + 360) % 360;
+    s = Math.max(0, Math.min(100, Number(s) || 0)) / 100;
+    v = Math.max(0, Math.min(100, Number(v) || 0)) / 100;
+    const c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c;
+    let q = [0, 0, 0];
+    if (h < 60) q = [c, x, 0]; else if (h < 120) q = [x, c, 0];
+    else if (h < 180) q = [0, c, x]; else if (h < 240) q = [0, x, c];
+    else if (h < 300) q = [x, 0, c]; else q = [c, 0, x];
+    return rgbToHex((q[0] + m) * 255, (q[1] + m) * 255, (q[2] + m) * 255);
+  }
+  function harmonies(color) {
+    const hsv = hexToHsv(color);
+    if (!hsv) return [];
+    const tone = (name, offset, s = hsv.s, v = hsv.v) =>
+      ({ name, color: hsvToHex(hsv.h + offset, s, v) });
+    return [tone("Base", 0), tone("Análogo -", -30), tone("Análogo +", 30),
+      tone("Complementario", 180), tone("Tríada A", 120), tone("Tríada B", 240)];
+  }
+
+  /* ── intercambio de paletas (Adobe / GIMP / Krita) ─────────────────── */
+  const _utf16be = (view, offset, chars) => {
+    let out = "";
+    for (let i = 0; i < chars; i++) { const code = view.getUint16(offset + i * 2, false); if (code) out += String.fromCharCode(code); }
+    return out;
+  };
+  function _exchangeColor(model, values) {
+    if (model === "RGB ") return rgbToHex(values[0] * 255, values[1] * 255, values[2] * 255);
+    if (model === "Gray") return rgbToHex(values[0] * 255, values[0] * 255, values[0] * 255);
+    if (model === "CMYK") {
+      const [c,m,y,k] = values; return rgbToHex(255*(1-c)*(1-k),255*(1-m)*(1-k),255*(1-y)*(1-k));
+    }
+    return null;
+  }
+  function parseASE(buffer) {
+    const view = new DataView(buffer), bytes = new Uint8Array(buffer);
+    if (buffer.byteLength < 12 || String.fromCharCode(...bytes.slice(0,4)) !== "ASEF") return [];
+    let offset = 12; const count = view.getUint32(8, false), out = [];
+    for (let block = 0; block < count && offset + 6 <= view.byteLength; block++) {
+      const type = view.getUint16(offset, false), length = view.getUint32(offset + 2, false), end = offset + 6 + length;
+      offset += 6; if (end > view.byteLength) break;
+      if (type === 1 && offset + 2 <= end) {
+        const nameLen = view.getUint16(offset, false); offset += 2;
+        const name = _utf16be(view, offset, Math.max(0, nameLen - 1)); offset += nameLen * 2;
+        const model = String.fromCharCode(...bytes.slice(offset, offset + 4)); offset += 4;
+        const n = model === "CMYK" ? 4 : (model === "Gray" ? 1 : 3), values = [];
+        for (let i = 0; i < n && offset + 4 <= end; i++, offset += 4) values.push(view.getFloat32(offset, false));
+        const color = _exchangeColor(model, values); if (color) out.push({ name: name || `Adobe ${out.length + 1}`, color });
+      }
+      offset = end;
+    }
+    return out;
+  }
+  function parseACO(buffer) {
+    const view = new DataView(buffer), out = []; let offset = 0, block = 0;
+    while (offset + 4 <= view.byteLength && block++ < 2) {
+      const version = view.getUint16(offset, false), count = view.getUint16(offset + 2, false); offset += 4;
+      if (version !== 1 && version !== 2) break;
+      const current = [];
+      for (let i = 0; i < count && offset + 10 <= view.byteLength; i++) {
+        const space=view.getUint16(offset,false), a=view.getUint16(offset+2,false), b=view.getUint16(offset+4,false), c=view.getUint16(offset+6,false), d=view.getUint16(offset+8,false); offset += 10;
+        let color = null;
+        if (space === 0) color = rgbToHex(a/257,b/257,c/257);
+        else if (space === 1) color = hsvToHex(a/65535*360,b/65535*100,c/65535*100);
+        else if (space === 2) color = rgbToHex(255*(1-a/65535)*(1-d/65535),255*(1-b/65535)*(1-d/65535),255*(1-c/65535)*(1-d/65535));
+        else if (space === 8) color = rgbToHex(a/10000*255,a/10000*255,a/10000*255);
+        let name = `Adobe ${i + 1}`;
+        if (version === 2 && offset + 4 <= view.byteLength) { const len=view.getUint32(offset,false);offset+=4;name=_utf16be(view,offset,Math.max(0,len-1))||name;offset+=len*2; }
+        if (color) current.push({name,color});
+      }
+      if (version === 2 || !out.length) { out.length = 0; out.push(...current); }
+    }
+    return out;
+  }
+  function parseGPL(text) {
+    const out=[];
+    String(text||"").split(/\r?\n/).forEach((line) => { const m=/^\s*(\d+)\s+(\d+)\s+(\d+)\s*(.*)$/.exec(line); if(m)out.push({name:m[4].trim()||`Color ${out.length+1}`,color:rgbToHex(m[1],m[2],m[3])}); });
+    return out;
+  }
+  function parsePaletteFile(name, buffer) {
+    const ext=String(name||"").toLowerCase().split(".").pop();
+    if(ext==="ase")return parseASE(buffer); if(ext==="aco")return parseACO(buffer);
+    const text=new TextDecoder("utf-8").decode(buffer);
+    if(ext==="gpl")return parseGPL(text);
+    if(ext==="json"||ext==="lowpalette") { try { const data=JSON.parse(text), list=Array.isArray(data)?data:(data.styles||[]); return list.map((x,i)=>({name:x.name||`Color ${i+1}`,color:normColor(x.color||x)})).filter(x=>/^#[0-9a-f]{6}$/i.test(x.color)); } catch(_){ return []; } }
+    return [];
+  }
+  function exportGPL(palette) {
+    const rows=(palette?.styles||[]).map((s)=>{const c=hexToRgb(s.color);return c?`${String(c.r).padStart(3)} ${String(c.g).padStart(3)} ${String(c.b).padStart(3)}\t${s.name||`Estilo ${s.index}`}`:null;}).filter(Boolean);
+    return `GIMP Palette\nName: ${palette?.name||"LOW"}\nColumns: 8\n# Exportado por LOW\n${rows.join("\n")}\n`;
+  }
   /** ¿Es un color de verdad, o un "none"/vacío? Solo los de verdad se adoptan. */
   function esColor(v) {
     if (!v) return false;
@@ -236,5 +354,7 @@
     return out;
   }
 
-  animation.palette = { ATTR, SEMILLA, seed, css, usage, orphans, reassign, adopt, tag, normColor };
+  animation.palette = { ATTR, SEMILLA, seed, css, usage, orphans, reassign, adopt, tag, normColor,
+    hexToRgb, rgbToHex, rgbToHsv, hexToHsv, hsvToHex, harmonies,
+    parseASE, parseACO, parseGPL, parsePaletteFile, exportGPL };
 })(window);

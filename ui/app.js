@@ -518,6 +518,7 @@ function bind() {
     if (a) await api.preview_html(a.path || "", a.html);
   };
   // entorno de diseño
+  dzStudioHierarchyInit();
   $("#dzClose").onclick = closeDesign;
   $("#dzSave").onclick = dzSave;
   // Pointer Events sirven tanto para mouse como para lápiz/tableta. Usar
@@ -976,6 +977,13 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     DZ.doc.setRigLimits(node.id, +$("#rigMin").value, +$("#rigMax").value);
     dzRigPanelSync(); dzRigOverlayRender();
   }));
+  // "Sin topes": libera el giro de TODOS los huesos del personaje actual (360°).
+  $("#rigNoTope")?.addEventListener("click", () => {
+    if (!DZ.doc) return;
+    const nodes = Object.values(DZ.doc.scene.rig?.nodes || {});
+    nodes.forEach(n => DZ.doc.setRigLimits(n.id, -180, 180));
+    dzRigPanelSync(); dzRigOverlayRender();
+  });
   $("#rigKey").onclick = () => {
     if (!dzRigSelectedNode()) return dzSetStatus("Seleccioná una pieza registrada o usá Preparar dibujo");
     dzRigSetKey(dzRigSelectedNode().id, dzRigCur(), dzRigReadPanel());
@@ -1109,6 +1117,14 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       if (k === "n") { e.preventDefault(); dzDocumentNew(); return; }
       if (k === "o") { e.preventDefault(); dzSceneOpen(); return; }
       if (k === "s") { e.preventDefault(); DZ.doc ? dzSceneSave(!!e.shiftKey) : dzSave(); return; }
+      if (k === "w") { e.preventDefault(); closeDesign(); return; }
+      if (k === "tab" && DZ.documentTabs.length > 1) {
+        e.preventDefault();
+        const at = DZ.documentTabs.findIndex(tab => tab.id === DZ.activeDocumentTab);
+        const step = e.shiftKey ? -1 : 1;
+        const next = (at + step + DZ.documentTabs.length) % DZ.documentTabs.length;
+        dzDocumentTabActivate(DZ.documentTabs[next].id); return;
+      }
       if (k === "z" && !e.shiftKey) { e.preventDefault(); dzUndo(); return; }
       if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); dzRedo(); return; }
     }
@@ -2496,7 +2512,167 @@ window.addEventListener("message", async (event) => {
 });
 
 /* ══ Entorno de diseño: SVG vivo + inspector por elemento ══ */
-const DZ = { path: null, sel: null, zoom: 1, rigTool: "select", rigAutoKey: true };
+const DZ = { path: null, sel: null, zoom: 1, rigTool: "select", rigAutoKey: true,
+  documentTabs: [], activeDocumentTab: null };
+
+/* La aplicación, las opciones y los documentos son niveles distintos. Photoshop
+   acierta en esta jerarquía: el archivo no es un rótulo de la app, sino una
+   superficie de trabajo con pestaña propia. Se construye acá para no acoplar el
+   modelo de documentos al HTML histórico. */
+function dzStudioHierarchyInit() {
+  const view = $("#designView"), menu = $("#dzMenubar"), options = $("#dzToolOpts");
+  if (!view || !menu || !options) return;
+  menu.setAttribute("role", "menubar");
+  const menuOrder = ["archivo", "edicion", "capa", "animacion", "vista", "ventana", "ayuda"];
+  const spacer = menu.querySelector(":scope > .flex1");
+  menuOrder.forEach(id => {
+    const item = menu.querySelector(`:scope > .dz-menu[data-menu="${id}"]`);
+    if (item) { item.setAttribute("role", "menuitem"); menu.insertBefore(item, spacer); }
+  });
+  const title = $("#dzTitle");
+  if (title) { title.hidden = true; title.setAttribute("aria-hidden", "true"); }
+
+  let tabs = $("#dzDocumentTabs");
+  if (!tabs) {
+    tabs = document.createElement("div");
+    tabs.id = "dzDocumentTabs"; tabs.className = "dz-document-tabs";
+    tabs.setAttribute("role", "tablist"); tabs.setAttribute("aria-label", "Documentos abiertos");
+    options.insertAdjacentElement("afterend", tabs);
+  }
+
+  // Orden funcional de uso: seleccionar, pintar, construir, navegar. La mano
+  // deja de interrumpir las herramientas de edición primaria.
+  const tools = view.querySelector(".dz-tools");
+  if (tools && !tools.dataset.hierarchy) {
+    tools.dataset.hierarchy = "photoshop";
+    const ordered = [
+      '[data-tool="select"]','[data-tool="direct"]','[data-tool="nodes"]',
+      '[data-tool="brush"]','[data-tool="pencil"]','[data-tool="eraser"]',
+      '[data-tool="bucket"]','[data-tool="dropper"]','[data-tool="pen"]',
+      '#dzShapePicker','#dzAddText','#dzAddLine','[data-tool="ruler"]',
+      '[data-tool="hand"]'
+    ];
+    ordered.forEach(selector => { const node = tools.querySelector(selector); if (node) tools.appendChild(node); });
+  }
+  dzDocumentTabsRender();
+}
+
+function dzDocumentTabName(path, fallback) {
+  return String(fallback || path || "Sin título").split(/[\\/]/).pop() || "Sin título";
+}
+function dzDocumentTabCurrent() {
+  return DZ.documentTabs.find(tab => tab.id === DZ.activeDocumentTab) || null;
+}
+function dzDocumentTabFind(path) {
+  const key = String(path || "").toLowerCase();
+  return DZ.documentTabs.find(tab => String(tab.path || "").toLowerCase() === key) || null;
+}
+function dzDocumentTabCapture() {
+  const tab = dzDocumentTabCurrent();
+  if (!tab) return;
+  const svg = $("#dzCanvas")?.querySelector(":scope > svg:not(#dzRigOverlay):not(#dzMocapSheet)");
+  if (svg) tab.content = dzSerialize(svg);
+  tab.dirty = !!(DZ.dirty || DZ.doc?.dirty);
+  tab.runtime = {
+    path: DZ.path || null,
+    doc: DZ.doc || null, anim: DZ.anim || null, scene: DZ.scene || null,
+    history: DZ.history || null,
+    onionOn: !!DZ.onionOn, zoom: DZ.zoom || 1, panX: DZ.panX || 0,
+    panY: DZ.panY || 0, viewRot: DZ.viewRot || 0
+  };
+  if (DZ.doc?.dirty) dzSceneAutosave(DZ.doc, tab);
+  dzDocumentTabsRender();
+}
+function dzDocumentTabParkRuntime() {
+  clearTimeout(DZ_DOC_TIMER); clearTimeout(DZ_RECOVERY_TIMER);
+  if (DZ.anim?.playing) dzAnimStop();
+  if (DZ.playback?.stop) DZ.playback.stop();
+  if (DZ.playbackUiUnsub) { DZ.playbackUiUnsub(); DZ.playbackUiUnsub = null; }
+  ["xsView", "tlView", "lsView", "palView"].forEach(key => {
+    try { DZ[key]?.dispose?.(); } catch (_) { /* separar nunca debe bloquear */ }
+  });
+  Object.assign(DZ, { path: null, doc: null, anim: null, scene: {}, history: null, playback: null,
+    xsView: null, tlView: null, lsView: null, palView: null });
+  DZ.sel = null; DZ.multi = []; DZ.dirty = false;
+}
+function dzDocumentTabRegister(path, name) {
+  let tab = dzDocumentTabFind(path);
+  if (!tab) {
+    tab = { id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      path, name: dzDocumentTabName(path, name), content: null, dirty: false, runtime: null };
+    DZ.documentTabs.push(tab);
+  } else if (name) tab.name = dzDocumentTabName(path, name);
+  DZ.activeDocumentTab = tab.id;
+  dzDocumentTabsRender();
+  return tab;
+}
+function dzDocumentTabsRender() {
+  const host = $("#dzDocumentTabs"); if (!host) return;
+  host.hidden = !DZ.documentTabs.length;
+  host.innerHTML = "";
+  DZ.documentTabs.forEach(tab => {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "dz-document-tab";
+    button.dataset.tabId = tab.id; button.draggable = true; button.setAttribute("role", "tab");
+    const active = tab.id === DZ.activeDocumentTab;
+    button.classList.toggle("active", active); button.setAttribute("aria-selected", String(active));
+    button.title = tab.path || tab.name;
+    const dirty = document.createElement("span"); dirty.className = "dz-document-dirty";
+    dirty.textContent = tab.dirty ? "●" : ""; dirty.setAttribute("aria-label", tab.dirty ? "Cambios sin guardar" : "");
+    const label = document.createElement("span"); label.className = "dz-document-name"; label.textContent = tab.name;
+    const close = document.createElement("span"); close.className = "dz-document-close"; close.textContent = "×";
+    close.setAttribute("role", "button"); close.setAttribute("aria-label", `Cerrar ${tab.name}`);
+    button.append(dirty, label, close);
+    button.onclick = event => event.target === close ? dzDocumentTabClose(tab.id) : dzDocumentTabActivate(tab.id);
+    button.ondragstart = event => event.dataTransfer?.setData("text/low-document-tab", tab.id);
+    button.ondragover = event => event.preventDefault();
+    button.ondrop = event => {
+      event.preventDefault(); const from = event.dataTransfer?.getData("text/low-document-tab");
+      const a = DZ.documentTabs.findIndex(item => item.id === from), b = DZ.documentTabs.findIndex(item => item.id === tab.id);
+      if (a < 0 || b < 0 || a === b) return;
+      const [moved] = DZ.documentTabs.splice(a, 1); DZ.documentTabs.splice(b, 0, moved); dzDocumentTabsRender();
+    };
+    host.appendChild(button);
+  });
+}
+async function dzDocumentTabActivate(id) {
+  if (!id || id === DZ.activeDocumentTab) return true;
+  const target = DZ.documentTabs.find(tab => tab.id === id); if (!target) return false;
+  dzDocumentTabCapture(); dzDocumentTabParkRuntime(); DZ.activeDocumentTab = id;
+  await openDesign(target.path, { fromTab: true, sourceSvg: target.content });
+  const state = target.runtime;
+  if (state) {
+    Object.assign(DZ, state);
+    DZ.path = state.path || (state.doc ? null : target.path);
+    DZ.playback = null; DZ.xsView = null; DZ.tlView = null; DZ.lsView = null; DZ.palView = null;
+    DZ.dirty = !!target.dirty; DZ.sel = null; DZ.multi = [];
+    if (DZ.doc && DZ.history) DZ.doc.setHistory(DZ.history);
+    if (DZ.doc) {
+      const drawing = DZ.doc.drawing;
+      dzCanvasSet(drawing ? drawing.content : target.content || "");
+      dzSyncCanvasDocument(true); dzSyncTransportFromDoc(); dzOnionRender(); dzOnion2Render();
+      if (!$("#dzTimeline")?.hidden) await dzTlMount();
+      if (!$("#dzXs")?.hidden) await dzXsMount();
+      dzPalMount();
+    }
+    dzApplyZoom(); dzBuildLayers(); dzPaletteRender();
+  }
+  DZ.activeDocumentTab = id; dzDocumentTabsRender();
+  return true;
+}
+async function dzDocumentTabClose(id) {
+  const tab = DZ.documentTabs.find(item => item.id === id); if (!tab) return false;
+  if (tab.id === DZ.activeDocumentTab) dzDocumentTabCapture();
+  if (tab.dirty && !confirm(`«${tab.name}» tiene cambios sin guardar. ¿Cerrar igualmente?`)) return false;
+  const index = DZ.documentTabs.indexOf(tab); DZ.documentTabs.splice(index, 1);
+  if (tab.id !== DZ.activeDocumentTab) { dzDocumentTabsRender(); return true; }
+  DZ.activeDocumentTab = null;
+  const next = DZ.documentTabs[Math.min(index, DZ.documentTabs.length - 1)];
+  if (next) return dzDocumentTabActivate(next.id);
+  if (DZ.d3) dz3dExit(true);
+  $("#designView").hidden = true; DZ.sel = null; if (RULER) dzRulerClear();
+  dzDocumentTabsRender(); return true;
+}
 const DZModeMachine = window.LOW?.application?.createModeMachine?.() || null;
 const DZRigGestures = window.LOW?.input?.pointerController
   || window.LOW?.rigging?.input?.createGestureController?.() || null;
@@ -2557,10 +2733,17 @@ const DZ_PAIRS = [
   ["Trebuchet MS", "Georgia"], ["Figtree", "JetBrains Mono"],
 ];
 
-async function openDesign(path) {
-  if (DZ.path && DZ.path !== path) await dzPersist();
+async function openDesign(path, options = {}) {
+  const frameOfCurrentScene = !!(DZ.doc && DZ.anim?.frames?.includes(path));
+  if (!options.fromTab && !frameOfCurrentScene) {
+    const existing = dzDocumentTabFind(path);
+    if (existing && existing.id !== DZ.activeDocumentTab) return dzDocumentTabActivate(existing.id);
+    if (DZ.path && DZ.path !== path) { dzDocumentTabCapture(); dzDocumentTabParkRuntime(); }
+  } else if (frameOfCurrentScene && DZ.path && DZ.path !== path) await dzPersist();
   dzWsInit();          // el editor abre en el workspace donde se dejó
-  const r = await api.image_data(path);
+  const r = options.sourceSvg
+    ? { svg: options.sourceSvg, name: dzDocumentTabName(path) }
+    : await api.image_data(path);
   if (!r || r.error || !r.svg) return sysMsg(" No pude abrir el diseño: " + ((r && r.error) || path));
   DZ.path = path; DZ.sel = null;
   $("#dzTitle").textContent = r.name || path.split(/[\\/]/).pop();
@@ -2571,7 +2754,7 @@ async function openDesign(path) {
   [...cv.children]
     .filter(n => n.tagName.toLowerCase() === "svg" && !["dzRigOverlay","dzMocapSheet"].includes(n.id))
     .forEach(n => n.remove());
-  let sourceSvg = r.svg;
+  let sourceSvg = options.sourceSvg || r.svg;
   const recovery = window.LOW?.workspace?.recovery?.get(path);
   if (recovery && recovery.content !== r.svg) {
     if (confirm("LOW encontró cambios recuperables que no llegaron a guardarse. ¿Querés restaurarlos?")) sourceSvg = recovery.content;
@@ -2583,7 +2766,6 @@ async function openDesign(path) {
   cv.insertBefore(svg, $("#dzHandle"));
   // La resolución vive en el archivo. El panel puede cambiar de tamaño, pero
   // eso sólo afecta al zoom: nunca se vuelve a inferir otro ancho/alto visual.
-  const frameOfCurrentScene = !!(DZ.doc && DZ.anim?.frames?.includes(path));
   dzNormalizeSvgDocument(svg, frameOfCurrentScene ? {
     width: DZ.doc.scene.width, height: DZ.doc.scene.height
   } : null);
@@ -2604,11 +2786,15 @@ async function openDesign(path) {
   $("#dzHandle").hidden = true;
   $("#dzCode").hidden = true;
   dzBuildLayers();
+  if (!frameOfCurrentScene) dzDocumentTabRegister(path, r.name || dzDocumentTabName(path));
   if (DZ.d3) dz3dBuild();       // en espacio 3D: reconstruir los planos del cuadro nuevo
   $("#designView").hidden = false;
   requestAnimationFrame(() => { if (!$("#designView").hidden) dzFitView(); });
 }
-function closeDesign() { dzPersist(); if (DZ.d3) dz3dExit(true); $("#designView").hidden = true; DZ.sel = null; if (RULER) dzRulerClear(); }
+function closeDesign() {
+  const current = dzDocumentTabCurrent();
+  return current ? dzDocumentTabClose(current.id) : dzDocumentClose();
+}
 
 /* Escape en el estudio 2D es una orden de CANCELAR, no de abandonar el
    espacio de trabajo. La salida queda reservada al botón X y al menú Archivo. */
@@ -4205,6 +4391,7 @@ let DZ_RECOVERY_TIMER = null;
 let DZ_DOC_TIMER = null;
 function dzMarkDirty() {
   DZ.dirty = true;
+  const tab = dzDocumentTabCurrent(); if (tab) { tab.dirty = true; dzDocumentTabsRender(); }
   // Toda edición del lienzo entra al DIBUJO del modelo. Antes solo se volcaba
   // al cambiar de frame: si dibujabas y guardabas sin moverte, ese trazo no
   // llegaba nunca al documento. Con retardo, para no serializar el SVG en cada
@@ -7179,6 +7366,7 @@ async function dzPersist() {
   try {
     await api.save_file(DZ.path, txt);
     DZ.dirty = false;
+    const tab = dzDocumentTabCurrent(); if (tab) { tab.dirty = false; tab.content = txt; dzDocumentTabsRender(); }
     window.LOW?.workspace?.recovery?.clear(DZ.path);
     if (DZ.anim) DZ.anim.cache[DZ.path] = txt;   // la cache/miniatura ve lo nuevo
     setStatus(" auto-guardado");
@@ -7766,6 +7954,10 @@ function dzRigApplyLive(num, overrides = {}) {
           ? LOW.animation.rigDeformador(deformer.rest, preview)
           : (DZ.doc.scene.rigDeformadorAt ? DZ.doc.scene.rigDeformadorAt(node.id, num) : null);
         if (doblez) dzDeformarElemento(el, doblez, svg);
+        // Malla de deformación (nivel profesional): deforma el dibujo real por el
+        // mismo camino que la curva; una malla en reposo devuelve null y no toca nada.
+        const malla = DZ.doc.scene.rigMallaAt ? DZ.doc.scene.rigMallaAt(node.id, num) : null;
+        if (malla) dzDeformarElemento(el, malla, svg);
         dzRigApplyMatrix(el, DZ.doc.scene.rigWorldMatrix(node.id, num, overrides));
       }
     }
@@ -9218,6 +9410,73 @@ function dzRigReadinessStatus() {
     structuralErrors: access.structuralErrors };
 }
 
+/* Schematic básico: grafo de nodos del esqueleto (padre→hijo), coloreado por rol.
+   El layout lo decide LOW.rigging.schematicLayout (puro, testeado); acá sólo se pinta. */
+function dzRigSchematicRender(nodes, current) {
+  const host = $("#rigSchematic"); if (!host) return;
+  nodes = nodes || (DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : []);
+  if (!nodes.length || !LOW.rigging || !LOW.rigging.schematicLayout) { host.innerHTML = ""; host.hidden = true; return; }
+  host.hidden = false;
+  if (current === undefined) current = dzRigSelectedNode();
+  const L = LOW.rigging.schematicLayout(nodes.map(n => ({ id: n.id, name: n.name || n.id, parentId: n.parentId, role: n.role })));
+  const byId = Object.fromEntries(L.nodes.map(n => [n.id, n]));
+  const esc = s => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const parts = [];
+  L.edges.forEach(e => {
+    const a = byId[e.from], b = byId[e.to]; if (!a || !b) return;
+    const my = (a.y + b.y) / 2;
+    parts.push(`<path class="rig-sch-edge" d="M${a.x} ${a.y} C ${a.x} ${my}, ${b.x} ${my}, ${b.x} ${b.y}"/>`);
+  });
+  L.nodes.forEach(n => {
+    const on = current && current.id === n.id;
+    const full = n.name || n.id, label = full.length > 13 ? full.slice(0, 12) + "…" : full;
+    parts.push(
+      `<g class="rig-sch-node role-${n.role}${on ? " on" : ""}" data-id="${esc(n.id)}" transform="translate(${n.x} ${n.y})" tabindex="0" role="listitem" aria-label="${esc(full)}">` +
+      `<circle r="11"/><text class="rig-sch-label" y="27" text-anchor="middle">${esc(label)}</text><title>${esc(full)}</title></g>`
+    );
+  });
+  host.innerHTML = `<svg class="rig-sch-svg" viewBox="0 0 ${L.width} ${L.height}" preserveAspectRatio="xMidYMin meet" role="list" aria-label="Esquema del esqueleto">${parts.join("")}</svg>`;
+  // Interacción: click = seleccionar · arrastrar un nodo sobre otro = reparentar (jerarquía).
+  // El reparentado usa el comando real DZ.doc.setRigParent (guarda de ciclos incluida);
+  // canReparent sólo decide el resaltado del destino válido antes de soltar.
+  let drag = null;
+  const clearHints = () => host.querySelectorAll(".drop-ok,.drag-src").forEach(n => n.classList.remove("drop-ok", "drag-src"));
+  const nodeIdAt = (cx, cy) => { const el = document.elementFromPoint(cx, cy); const g = el && el.closest && el.closest(".rig-sch-node"); return g ? g.getAttribute("data-id") : null; };
+  host.querySelectorAll(".rig-sch-node").forEach(g => {
+    const id = g.getAttribute("data-id");
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); dzRigSelectNode(id); } });
+    g.addEventListener("pointerdown", e => {
+      if (e.button != null && e.button !== 0) return;
+      drag = { id, x0: e.clientX, y0: e.clientY, moved: false };
+      g.classList.add("drag-src"); try { g.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    g.addEventListener("pointermove", e => {
+      if (!drag || drag.id !== id) return;
+      if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 5) return;
+      drag.moved = true; host.classList.add("reparenting");
+      host.querySelectorAll(".rig-sch-node.drop-ok").forEach(n => n.classList.remove("drop-ok"));
+      const over = nodeIdAt(e.clientX, e.clientY);
+      if (over && over !== drag.id && LOW.rigging.canReparent(nodes, drag.id, over)) {
+        const t = [...host.querySelectorAll(".rig-sch-node")].find(n => n.getAttribute("data-id") === over);
+        if (t) t.classList.add("drop-ok");
+      }
+    });
+    g.addEventListener("pointerup", e => {
+      if (!drag || drag.id !== id) return;
+      const wasDrag = drag.moved, dragId = drag.id;
+      try { g.releasePointerCapture(e.pointerId); } catch (_) {}
+      host.classList.remove("reparenting"); clearHints(); drag = null;
+      if (!wasDrag) { dzRigSelectNode(dragId); return; }
+      if (!DZ.doc) return;
+      const over = nodeIdAt(e.clientX, e.clientY);
+      if (over && LOW.rigging.canReparent(nodes, dragId, over)) { DZ.doc.setRigParent(dragId, over); dzRigSelectNode(dragId); }
+      else if (!over && LOW.rigging.canReparent(nodes, dragId, null)) { DZ.doc.setRigParent(dragId, null); dzRigSelectNode(dragId); }
+    });
+    g.addEventListener("pointercancel", () => { host.classList.remove("reparenting"); clearHints(); drag = null; });
+  });
+}
+
 function dzRigPanelSync() {
   if ($("#dzRigPanel").hidden) return;
   const el = DZ.sel, num = dzRigCur(), nodes = DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : [], current = dzRigSelectedNode();
@@ -9250,6 +9509,7 @@ function dzRigPanelSync() {
     tree.appendChild(row); nodes.filter(n => n.parentId === node.id).forEach(child => drawBranch(child, depth + 1));
   };
   nodes.filter(n => !n.parentId || !DZ.doc.scene.rigNode(n.parentId)).forEach(n => drawBranch(n, 0));
+  dzRigSchematicRender(nodes, current);
   const chips = $("#rigChips"); chips.innerHTML = ""; const trk = (current && dzRigTracks()[current.id]) || {};
   Object.keys(trk).map(Number).sort((a, b) => a - b).forEach(n => {
     const c = document.createElement("span"); c.className = "dz-chip" + (n === num ? " on" : ""); c.textContent = " " + n;
@@ -15172,6 +15432,8 @@ async function dzSceneSave(comoNuevo) {
     if (r && r.path) {
       DZ.doc.path = r.path;
       DZ.doc.dirty = false;
+      const tab = dzDocumentTabCurrent();
+      if (tab) { tab.path = r.path; tab.name = dzDocumentTabName(r.path, r.name || tab.name); tab.dirty = false; dzDocumentTabsRender(); }
       try { localStorage.removeItem(DZ_SCENE_KEY); } catch (_) { /* sin storage */ }
       dzSetStatus(" Escena guardada: " + (r.name || r.path));
       return true;
@@ -15196,6 +15458,7 @@ async function dzSceneOpen() {
     dzDocUse(doc);
     $("#designView").hidden = false;
     $("#dzTitle").textContent = r.name || doc.scene.name || "Documento de animación";
+    dzDocumentTabRegister(r.path || doc.path || `scene:${Date.now()}`, r.name || doc.scene.name || "Documento de animación");
     requestAnimationFrame(() => dzFitView());
     dzSetStatus(" Escena abierta: " + (r.name || r.path));
     return true;
@@ -15406,6 +15669,8 @@ DZ.doc = null;      // LowDoc
 DZ.xsView = null;   // XsheetView
 DZ.palView = null;  // PaletteView
 DZ.palStyle = null; // numero del estilo con el que se dibuja
+DZ.palTarget = "ink"; // Línea o pintura: destino explícito del Color Studio
+DZ.palStyles = { ink: null, paint: null }; // estilos independientes, como ink & paint tradicional
 
 /* == PALETA: el color como referencia =====================================
    El trazo no guarda un color, guarda el NUMERO de un estilo, y el color lo
@@ -15415,14 +15680,18 @@ DZ.palStyle = null; // numero del estilo con el que se dibuja
    para abrirlo en cualquier visor. */
 
 /** El estilo con el que se esta dibujando. */
-function dzPalActual() {
+function dzPalActual(papel = DZ.palTarget || "ink") {
   if (!DZ.doc || !LOW.animation.palette) return null;
   const pal = DZ.doc.palette;
   if (!pal) return null;
-  let st = DZ.palStyle != null ? pal.byIndex(DZ.palStyle) : null;
+  const role = papel === "paint" ? "paint" : "ink";
+  let st = DZ.palStyles?.[role] != null ? pal.byIndex(DZ.palStyles[role]) : null;
   // primera vez: se engancha al estilo que ya tiene el color del lapiz, para
   // que empezar a usar la paleta no cambie de color lo que estabas dibujando
-  if (!st) st = pal.byColor(DZ.drawColor) || pal.styles[0] || null;
+  if (!st) st = pal.byColor(role === "paint" ? DZ.fillColor : DZ.drawColor) ||
+                pal.styles[role === "paint" ? 2 : 0] || pal.styles[0] || null;
+  if (!DZ.palStyles) DZ.palStyles = { ink: null, paint: null };
+  DZ.palStyles[role] = st ? st.index : null;
   DZ.palStyle = st ? st.index : null;
   return st;
 }
@@ -15432,7 +15701,7 @@ function dzPalActual() {
  *  cinta rellena. */
 function dzStyleTag(el, papel) {
   if (!el || !el.setAttribute) return el;
-  const st = dzPalActual();
+  const st = dzPalActual(papel);
   if (!st || !st.index) return el;
   const A = LOW.animation.palette.ATTR;
   el.setAttribute(papel === "paint" ? A.paint : A.ink, String(st.index));
@@ -15461,19 +15730,32 @@ function dzPalMount() {
   const host = $("#dzPalette");
   if (!host || !LOW.animation.PaletteView || !DZ.doc) return false;
   if (!DZ.palView) {
+    const pal = DZ.doc.palette;
+    const inkInitial = DZ.palStyles.ink || pal?.byColor(DZ.drawColor)?.index || pal?.styles[0]?.index;
+    const paintInitial = DZ.palStyles.paint || pal?.byColor(DZ.fillColor)?.index || pal?.styles[2]?.index || inkInitial;
+    DZ.palStyles = { ink: inkInitial || null, paint: paintInitial || null };
     DZ.palView = new LOW.animation.PaletteView(host, DZ.doc, {
-      current: DZ.palStyle,
+      current: DZ.palTarget === "paint" ? paintInitial : inkInitial,
+      target: DZ.palTarget,
+      currents: DZ.palStyles,
       // elegir un estilo cambia con que se dibuja: el color del lapiz sigue al
       // estilo activo, asi el resto del editor no se entera de nada
-      onPick: (st) => {
+      onPick: (st, target = "ink") => {
         DZ.palStyle = st.index;
-        DZ.drawColor = st.color;
-        if ($("#dzPStroke")) $("#dzPStroke").value = st.color;
-        dzSetStatus(` Estilo ${st.index} - ${st.name || ""}`);
+        DZ.palTarget = target;
+        DZ.palStyles[target === "paint" ? "paint" : "ink"] = st.index;
+        if (target === "paint") {
+          DZ.fillColor = st.color;
+          if ($("#dzPFill")) $("#dzPFill").value = st.color;
+        } else {
+          DZ.drawColor = st.color;
+          if ($("#dzPStroke")) $("#dzPStroke").value = st.color;
+        }
+        dzSetStatus(` ${target === "paint" ? "Pintura" : "Línea"} · Estilo ${st.index} — ${st.name || ""}`);
       },
     });
   } else DZ.palView.setDoc(DZ.doc);
-  const st = dzPalActual();
+  const st = dzPalActual(DZ.palTarget);
   if (st) DZ.palView.current = st.index;
   DZ.palView.render();
   return true;
@@ -15716,6 +15998,8 @@ function dzWsAplicar(ws) {
   const cat = LOW.workspace.PANEL_CATALOG;
   const body = $(".dz-body");
   if (!ws || !body) return;
+  $("#designView")?.classList.toggle("color-workspace", ws.id === "color");
+  $("#dzInspector")?.classList.toggle("color-studio-open", ws.id === "color");
   const compositor = $("#dzCompositor"); if (compositor) compositor.hidden = ws.id !== "composite";
 
   for (const [id, meta] of Object.entries(cat)) {
@@ -16364,7 +16648,11 @@ async function dzSave() {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg || !DZ.path) return;
   const r = await api.save_file(DZ.path, dzSerialize(svg));
-  if (r) { DZ.dirty = false; window.LOW?.workspace?.recovery?.clear(DZ.path); setStatus(" " + (r.name || "diseño guardado")); sysMsg(" Diseño guardado: " + (r.name || DZ.path)); }
+  if (r) {
+    const txt = dzSerialize(svg); DZ.dirty = false;
+    const tab = dzDocumentTabCurrent(); if (tab) { tab.dirty = false; tab.content = txt; dzDocumentTabsRender(); }
+    window.LOW?.workspace?.recovery?.clear(DZ.path); setStatus(" " + (r.name || "diseño guardado")); sysMsg(" Diseño guardado: " + (r.name || DZ.path));
+  }
 }
 
 /* ── Herramientas del agente (qué puede hacer solo) ── */
