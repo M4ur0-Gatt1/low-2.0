@@ -50,6 +50,16 @@
       const head = document.createElement("div");
       head.className = "ls2-head";
       head.textContent = lv ? lv.name : "Sin nivel";
+      // LEVEL-01: el nombre del nivel se puede corregir. Cambia lo que ve la
+      // persona; el id interno —lo que referencian capas, celdas y paleta— no
+      // se toca, así que renombrar nunca rompe una referencia.
+      head.title = lv ? "Doble clic para renombrar el nivel" : "";
+      head.ondblclick = async (event) => {
+        if (!lv || event.target !== head || !global.dzPromptModal) return;
+        const nombre = await global.dzPromptModal("Renombrar nivel",
+          "nombre descriptivo — ej. «Cabeza», «Fondo»", lv.name);
+        if (nombre != null && doc.renameLevel(lv.id, nombre)) this.render();
+      };
       const nuevo = document.createElement("button");
       nuevo.className = "ls2-add";
       nuevo.textContent = "+";

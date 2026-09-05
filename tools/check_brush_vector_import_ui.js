@@ -45,7 +45,32 @@ async function main() {
     const countBeforeEdit=LOW.drawing.brushes.all().length, sizeControl=studio.querySelector('[data-p="size"]'); sizeControl.value="17"; sizeControl.dispatchEvent(new Event("input",{bubbles:true}));
     studioState.customCreated=LOW.drawing.brushes.all().length===countBeforeEdit+1&&DZ.brushPreset.startsWith("custom-");
     DZ.pressureMin=.1;DZ.pressureMax=.9;
-    return {pieces:pieces?.length,ids:pieces?.map(n=>n.id),wrappers:pieces?.every(n=>n.tagName.toLowerCase()==='g'),
+    // El trazo del pincel es una cinta RELLENA: si se la etiqueta con el papel
+    // "paint" queda atada al estilo Relleno (blanco por defecto) y la hoja de
+    // la paleta lo impone con !important. El pincel dibujaba blanco sobre
+    // blanco y parecia no dibujar. Tiene que salir del color de TINTA.
+    LOW.workspace.workspaces.activate("drawing",dzWsAplicar); await wait(200);
+    const lienzo=document.querySelector("#dzCanvas"), hoja=lienzo.querySelector(":scope > svg");
+    hoja.innerHTML=""; dzSetTool("brush"); await wait(120);
+    const caja=lienzo.getBoundingClientRect();
+    const px=Math.round(caja.left+caja.width*.3), py=Math.round(caja.top+caja.height*.5);
+    const puntero=(t,x,y)=>lienzo.dispatchEvent(new PointerEvent(t,{bubbles:true,cancelable:true,pointerId:1,
+      pointerType:"pen",isPrimary:true,button:t==="pointerdown"?0:-1,buttons:t==="pointerup"?0:1,
+      clientX:x,clientY:y,pressure:.7}));
+    puntero("pointerdown",px,py);
+    for(let i=1;i<=14;i++){puntero("pointermove",px+i*8,py+Math.round(Math.sin(i/2)*18));await wait(12);}
+    puntero("pointerup",px+112,py); await wait(400);
+    const cinta=hoja.querySelector('[data-low="brush"]');
+    const tinta=dzPalActual("ink"), relleno=dzPalActual("paint");
+    const color=(hex)=>{const n=parseInt(hex.slice(1),16);
+      return "rgb(" + (n>>16&255) + ", " + (n>>8&255) + ", " + (n&255) + ")";};
+    const pincelColor={hay:!!cinta,
+      computado:cinta?getComputedStyle(cinta).fill:null,
+      esperado:tinta?color(tinta.color):null,
+      colorDeRelleno:relleno?color(relleno.color):null,
+      etiquetaTinta:cinta?cinta.getAttribute(LOW.animation.palette.ATTR.paint):null,
+      indiceTinta:tinta?String(tinta.index):null};
+    return {pincelColor,pieces:pieces?.length,ids:pieces?.map(n=>n.id),wrappers:pieces?.every(n=>n.tagName.toLowerCase()==='g'),
       brushes:importedDelta,selected:brush?.name,stamps:made?.querySelectorAll('use').length,
       portable:made?.querySelectorAll('image[href^="data:image/png"]').length===1,filter:!!made?.querySelector('filter feComposite'),
       longStamps:longMade?.querySelectorAll('use').length,longSource:+(longMade?.getAttribute('data-source-dab-count')||0),longAssets:longMade?.querySelectorAll('image[href^="data:image/png"]').length,
@@ -59,6 +84,12 @@ async function main() {
   if (value.brushes !== 1 || value.selected !== "Tinta importada" || !value.stamps || !value.portable || !value.filter) throw Error("Pincel importado no produce stamps: " + JSON.stringify(value));
   if (!value.procedural || value.proceduralKind !== "raster-brush") throw Error("Pincel raster incorporado volvió a cinta vectorial: " + JSON.stringify(value));
   if (!value.longStamps || value.longStamps > 1600 || value.longSource <= value.longStamps || value.longAssets !== 1) throw Error("Trazo raster largo no está optimizado: " + JSON.stringify(value));
+  const pc = value.pincelColor;
+  if (!pc?.hay) throw Error("REGRESIÓN: el pincel no dejó ningún trazo: " + JSON.stringify(pc));
+  if (pc.computado !== pc.esperado || pc.etiquetaTinta !== pc.indiceTinta)
+    throw Error("REGRESIÓN: el pincel no dibuja con el color de tinta configurado: " + JSON.stringify(pc));
+  if (pc.colorDeRelleno && pc.computado === pc.colorDeRelleno && pc.esperado !== pc.colorDeRelleno)
+    throw Error("REGRESIÓN: el pincel volvió a pintarse con el estilo Relleno: " + JSON.stringify(pc));
   if (!value.studio?.visible || value.studio.workspace !== "drawing" || !value.studio.docked || !value.studio.cards || value.studio.controls !== 9 || !value.studio.preview || !value.studio.customCreated) throw Error("Brush Studio incompleto: " + JSON.stringify(value));
   if (value.penLow !== 0 || value.penHigh !== 1 || value.mouse !== 1) throw Error("Calibración de tableta incorrecta: " + JSON.stringify(value));
   if (errors.length) throw Error(errors.join(" | "));

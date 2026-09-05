@@ -34,6 +34,15 @@
 
   const impl = {
     log_js: m => console.log("[js→py]", m),
+    crash_report: async (data) => {
+      // el mock imita la lista blanca del puente: si el informe filtra algo
+      // privado, la prueba tiene que poder verlo
+      const permitidos = ["motivo", "error", "origen", "version", "sistema", "gpu",
+        "escena", "ultimoComando", "herramienta", "cuandoUI"];
+      const limpio = {}; permitidos.forEach(k => { if (data && data[k] != null) limpio[k] = data[k]; });
+      window.__ultimoInforme = { enviado: data, guardado: limpio };
+      return { path: "C:\\mock\\fallos\\fallo-mock.json", name: "fallo-mock.json", campos: Object.keys(limpio).sort() };
+    },
     // paneles separados: el mock guarda el buzón en memoria y deja ver los
     // comandos, para poder probar el flujo sin ventanas nativas
     __panels: {},

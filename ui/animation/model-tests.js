@@ -159,6 +159,29 @@
          JSON.stringify(cells(ly, 6)) === JSON.stringify([1,3,5,7,9,11]), JSON.stringify(cells(ly, 6)));
     }
 
+    // ── LEVEL-01: el nombre es de la persona, el id es del documento ──
+    {
+      const { LowDoc } = animation;
+      const doc = new LowDoc();
+      const h = new LOW.core.HistoryManager();
+      doc.setHistory(h);
+      const nivel = doc.scene.levels[0];
+      const idOriginal = nivel.id;
+      ok("un nivel nace con un id interno propio", !!idOriginal && idOriginal !== nivel.name);
+      ok("renombrar acepta un nombre descriptivo", doc.renameLevel(idOriginal, "  Cabeza  ") === true);
+      ok("y lo guarda sin los espacios de más", doc.scene.level(idOriginal).name === "Cabeza");
+      ok("el id NO cambia al renombrar", doc.scene.level(idOriginal).id === idOriginal);
+      ok("un nombre vacío no borra el que había", doc.renameLevel(idOriginal, "   ") === false
+        && doc.scene.level(idOriginal).name === "Cabeza");
+      h.undo();
+      ok("Ctrl+Z devuelve el nombre anterior y conserva el id",
+        doc.scene.level(idOriginal).name !== "Cabeza" && doc.scene.level(idOriginal).id === idOriginal);
+      h.redo();
+      const reabierto = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("al reabrir el nivel conserva id y nombre",
+        !!reabierto.scene.level(idOriginal) && reabierto.scene.level(idOriginal).name === "Cabeza");
+    }
+
     // ── 9. TEST DE ACEPTACIÓN: el flujo completo ──
     {
       const sc = new Scene({ fps: 24, name: "Prueba" });
@@ -723,6 +746,38 @@
         ok("un estilo puede organizarse en un grupo persistente", pal.byIndex(2).meta.group === "Personaje");
         h.undo();
         ok("Ctrl+Z devuelve la organización anterior", !pal.byIndex(2).meta.group);
+      }
+
+      // ── STYLE-02: reasignar + borrar es UNA operación reversible ──
+      if (LOW.core && LOW.core.HistoryManager) {
+        const h2 = new LOW.core.HistoryManager();
+        doc.setHistory(h2);
+        const sobrante = doc.addStyle("#445566", "Sobrante").index;
+        const destino = doc.addStyle("#778899", "Destino").index;
+        const dw = doc.level.byNumber(2);
+        dw.content = `<path data-stk="${sobrante}" d="M0 0 L9 9"/>` + dw.content;
+        const pasos = h2.undoStack.length;
+        const r = doc.replaceStyle(sobrante, destino);
+        ok("reasignar y borrar mueve los usos y saca el estilo",
+          r.reasignados === 1 && r.borrado === true && !pal.byIndex(sobrante),
+          JSON.stringify(r));
+        ok("y lo hace en UN solo paso de historial", h2.undoStack.length - pasos === 1,
+          String(h2.undoStack.length - pasos));
+        ok("sin dejar referencias huérfanas",
+          JSON.stringify(P.orphans(doc.scene, pal)) === "[]",
+          JSON.stringify(P.orphans(doc.scene, pal)));
+        h2.undo();
+        ok("un Ctrl+Z devuelve el estilo Y sus usos, no la mitad",
+          !!pal.byIndex(sobrante) && (P.usage(doc.scene, pal)[sobrante] || {}).ink === 1,
+          JSON.stringify(P.usage(doc.scene, pal)[sobrante] || null));
+        ok("y tampoco deja huérfanos al deshacer",
+          JSON.stringify(P.orphans(doc.scene, pal)) === "[]",
+          JSON.stringify(P.orphans(doc.scene, pal)));
+        h2.redo();
+        ok("y rehacer vuelve a dejarlo reasignado y borrado",
+          !pal.byIndex(sobrante) && JSON.stringify(P.orphans(doc.scene, pal)) === "[]");
+        doc.replaceStyle(destino, destino);
+        ok("reasignar un estilo sobre sí mismo no hace nada", !!pal.byIndex(destino));
       }
 
       const doc2 = LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));

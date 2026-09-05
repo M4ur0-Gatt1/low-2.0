@@ -20,6 +20,16 @@ def function_body(name: str, next_name: str) -> str:
     return APP[start:end]
 
 
+DOCUMENT = (ROOT / "ui" / "animation" / "document.js").read_text(encoding="utf-8")
+MAIN = (ROOT / "main.py").read_text(encoding="utf-8")
+
+
+def function_body_doc(name: str, next_name: str) -> str:
+    start = DOCUMENT.index(f"{name}(")
+    end = DOCUMENT.index(f"{next_name}(", start)
+    return DOCUMENT[start:end]
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit("CONTRATO 2D INCUMPLIDO: " + message)
@@ -141,5 +151,24 @@ require('decision === "discard"' in APP and 'dzQuiereRecuperar' not in APP,
         "cancelar la recuperacion vuelve a descartar el trabajo en silencio")
 require("dzModalDismiss" in function_body("dzConfirmModal", "dzNotice"),
         "cerrar un modal con Escape vuelve a dejar su promesa colgada para siempre")
+
+fin_trazo = function_body("_drawFinish", "_drawCommit") if "function _drawCommit(" in APP else APP[APP.index("function _drawFinish("):APP.index("function _drawFinish(") + 2500]
+require("dzStyleTagInkAsFill(ribbon)" in fin_trazo and 'dzStyleTag(ribbon, "paint")' not in APP,
+        "el pincel volvio a etiquetarse como Relleno: dibuja blanco sobre blanco")
+require("ATTR.paint" in function_body("dzStyleTagInkAsFill", "dzStyleTag"),
+        "la cinta del pincel dejo de aplicar el color de tinta sobre el relleno")
+barra = function_body("dzToolsBarInit", "dzToolsBarFit")
+require("dz-tools-grip" in barra and "pointerdown" in barra,
+        "la barra de herramientas dejo de poder moverse")
+require("dzToolsBarFit" in APP and "ResizeObserver" in barra,
+        "la barra dejo de repartir entre riel y cajon segun el alto disponible")
+require("dz-tools-drawer" in barra and "dzToolsDrawerHide" in APP,
+        "desaparecio el cajon de herramientas de menos uso")
+require("replaceStyle" in DOCUMENT and "history.begin" in function_body_doc("replaceStyle", "renameLevel"),
+        "reasignar y borrar un estilo dejo de ser una sola transaccion")
+require("renameLevel" in DOCUMENT and "lv.name = limpio" in function_body_doc("renameLevel", "reassignStyle"),
+        "renombrar un nivel dejo de conservar su identidad")
+require("dzCrashReport" in APP and "CRASH_FIELDS" in MAIN,
+        "el informe de fallo dejo de existir o de filtrar sus campos")
 
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")

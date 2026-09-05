@@ -53,6 +53,58 @@ function reportErr(msg) {
   window.__errs.push(msg);
   try { if (api) api.log_js(msg); } catch (e) { /* sin puente */ }
   try { sysMsg(" Error interno: " + msg); } catch (e) { /* UI no lista */ }
+  try { dzCrashReport("error no atrapado", msg); } catch (e) { /* informe best effort */ }
+}
+
+/* ── CRASH-01 de la matriz ──────────────────────────────────────────────────
+   Un error tirado al log no alcanza para entender un fallo ajeno: hace falta
+   saber con qué versión, en qué sistema, con qué GPU, cuánto pesaba la escena
+   y qué se estaba haciendo. Lo que NO hace falta es el dibujo, la conversación
+   ni la ruta completa del disco de nadie, así que el informe arma sus campos a
+   mano —nunca vuelca objetos enteros— y del archivo guarda sólo el nombre.
+   El backend vuelve a filtrar por lista blanca antes de escribir. */
+let DZ_CRASH_ULTIMO = 0;
+function dzCrashDatos() {
+  const doc = DZ && DZ.doc;
+  const escena = doc ? {
+    // sólo el NOMBRE del archivo: la ruta completa dice dónde vive y cómo se
+    // llama quien lo usa, y para diagnosticar un fallo no hace ninguna falta
+    archivo: (doc.path || DZ.path) ? String(doc.path || DZ.path).split(/[\\/]/).pop() : null,
+    niveles: doc.scene.levels.length, capas: doc.scene.layers.length,
+    dibujos: doc.scene.levels.reduce((n, lv) => n + lv.drawings.length, 0),
+    cuadro: doc.frame, fps: doc.scene.fps, sinGuardar: !!doc.dirty,
+  } : null;
+  let gpu = "";
+  try {
+    const gl = document.createElement("canvas").getContext("webgl");
+    const info = gl && gl.getExtension("WEBGL_debug_renderer_info");
+    gpu = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : (gl ? "webgl sin detalle" : "sin webgl");
+  } catch (e) { gpu = "no disponible"; }
+  return {
+    version: S.version || "", sistema: navigator.userAgent, gpu, escena,
+    ultimoComando: (DZ.history && DZ.history.undoStack.at(-1) || {}).label || DZ.ultimoComando || "",
+    herramienta: DZ.tool || "select", cuandoUI: new Date().toISOString(),
+  };
+}
+/** Informe pedido a mano desde Ayuda: sirve para adjuntar a un reporte aunque
+    la aplicación no se haya caído, y hace visible QUÉ se manda. */
+async function dzCrashReportManual() {
+  DZ_CRASH_ULTIMO = 0;                       // un pedido explícito nunca se saltea
+  const r = await dzCrashReport("informe pedido por la persona", "", "ayuda");
+  if (!r || !r.path) return dzNotice("No pude escribir el informe de fallo.", "Informe de fallo");
+  const datos = dzCrashDatos();
+  return dzNotice("Informe guardado en " + r.name + ". Incluye versión, sistema, GPU (" +
+    (datos.gpu || "?") + "), tamaño de la escena y el último comando. No incluye el dibujo, " +
+    "la conversación ni rutas completas. Está en " + r.path, "Informe de fallo");
+}
+async function dzCrashReport(motivo, error, origen) {
+  const ahora = Date.now();
+  if (ahora - DZ_CRASH_ULTIMO < 4000) return null;   // un fallo en cadena no escribe cien informes
+  DZ_CRASH_ULTIMO = ahora;
+  if (!api || !api.crash_report) return null;
+  const payload = { motivo, error: String(error == null ? "" : error).slice(0, 800),
+    origen: origen || "ui", ...dzCrashDatos() };
+  try { return await api.crash_report(payload); } catch (e) { return null; }
 }
 window.addEventListener("error", e =>
   reportErr(`${e.message} @${(e.filename || "").split("/").pop()}:${e.lineno}`));
@@ -2529,6 +2581,169 @@ const DZ = { path: null, sel: null, zoom: 1, rigTool: "select", rigAutoKey: true
    acierta en esta jerarquía: el archivo no es un rótulo de la app, sino una
    superficie de trabajo con pestaña propia. Se construye acá para no acoplar el
    modelo de documentos al HTML histórico. */
+/* ══ BARRA DE HERRAMIENTAS MOVIBLE, AL MODO PHOTOSHOP ═════════════════════
+   Dos decisiones prestadas de Photoshop, por la misma razón que allá:
+
+   1) La barra se puede mover. Se arrastra del grip y flota; soltarla contra un
+      borde la acopla de ese lado. En dos monitores o zurdo, el lugar de la
+      barra es una decisión del artista, no del programa.
+   2) Lo que casi no se usa vive detrás de "⋯". Ensanchar el riel para que
+      entrara todo costaba lienzo en TODAS las ventanas; el cajón cuesta un
+      clic y sólo cuando hace falta.
+
+   Las herramientas del cajón siguen existiendo en el DOM: atajos, el panel
+   separado y la sincronización de herramienta activa las siguen encontrando.
+   ═══════════════════════════════════════════════════════════════════════ */
+const DZ_TOOLBAR_KEY = "low.toolbar.v1";
+let DZ_TOOLS_DRAWER = null;
+let DZ_TOOLS_FIT = () => {};
+
+function dzToolsBarState() {
+  try { return JSON.parse(localStorage.getItem(DZ_TOOLBAR_KEY) || "null") || { modo: "dock", lado: "left" }; }
+  catch (_) { return { modo: "dock", lado: "left" }; }
+}
+function dzToolsBarSave(state) {
+  try { localStorage.setItem(DZ_TOOLBAR_KEY, JSON.stringify(state)); } catch (_) { /* sin storage */ }
+}
+/** Devuelve la barra a la fila: a la izquierda del lienzo o a su derecha. */
+function dzToolsDock(rail, lado) {
+  const body = $(".dz-body"), canvas = $(".dz-canvas");
+  if (!body || !canvas) return;
+  rail.classList.remove("dz-tools-float");
+  rail.style.left = rail.style.top = "";
+  if (lado === "right") body.insertBefore(rail, canvas.nextSibling);
+  else body.insertBefore(rail, body.firstChild);
+  dzToolsDrawerHide();
+  dzToolsBarSave({ modo: "dock", lado: lado === "right" ? "right" : "left" });
+  DZ_TOOLS_FIT();
+}
+function dzToolsFloat(rail, x, y) {
+  const ancho = 44, alto = Math.min(rail.scrollHeight || 400, innerHeight - 120);
+  const left = Math.max(6, Math.min(innerWidth - ancho - 6, x));
+  const top = Math.max(48, Math.min(innerHeight - Math.max(120, alto) - 6, y));
+  rail.classList.add("dz-tools-float");
+  rail.style.left = left + "px"; rail.style.top = top + "px";
+  dzToolsDrawerHide();
+  dzToolsBarSave({ modo: "float", x: left, y: top });
+}
+function dzToolsDrawerHide() {
+  if (DZ_TOOLS_DRAWER) DZ_TOOLS_DRAWER.hidden = true;
+  $("#dzToolsMore")?.classList.remove("active");
+}
+function dzToolsBarInit(rail, primarias) {
+  if (!rail || rail.dataset.bar) return;
+  rail.dataset.bar = "photoshop";
+
+  const grip = document.createElement("div");
+  grip.className = "dz-tools-grip";
+  grip.textContent = "⠿";
+  grip.title = "Arrastrá para mover la barra · doble clic para acoplarla al borde";
+  rail.insertBefore(grip, rail.firstChild);
+
+  // Cajón: todo lo que no está en el orden funcional de uso diario.
+  const drawer = document.createElement("div");
+  drawer.className = "dz-tools-drawer"; drawer.id = "dzToolsDrawer"; drawer.hidden = true;
+  document.body.appendChild(drawer);
+  DZ_TOOLS_DRAWER = drawer;
+  [...rail.children].forEach(node => {
+    if (node === grip || primarias.includes(node)) return;
+    drawer.appendChild(node);
+  });
+  while (drawer.firstElementChild && drawer.firstElementChild.classList.contains("hsep"))
+    drawer.firstElementChild.remove();
+
+  const secundarias = [...drawer.children];
+  const more = document.createElement("button");
+  more.className = "ibtn dz-tools-more"; more.id = "dzToolsMore";
+  more.textContent = "⋯";
+  more.title = "Más herramientas: vectores, pivote, espejo, imagen, cámara, esqueleto y escenario";
+  more.setAttribute("aria-haspopup", "true");
+  rail.appendChild(more);
+  more.onclick = (event) => {
+    event.stopPropagation();
+    if (!drawer.hidden) return dzToolsDrawerHide();
+    drawer.hidden = false;
+    const r = more.getBoundingClientRect(), caja = drawer.getBoundingClientRect();
+    const aLaDerecha = r.left < innerWidth / 2;
+    drawer.style.left = Math.max(6, Math.min(innerWidth - caja.width - 6,
+      aLaDerecha ? r.right + 6 : r.left - caja.width - 6)) + "px";
+    drawer.style.top = Math.max(48, Math.min(innerHeight - caja.height - 8, r.top - caja.height / 2)) + "px";
+    more.classList.add("active");
+  };
+  // elegir una herramienta del cajón lo cierra: es un menú, no un panel
+  drawer.addEventListener("click", (event) => { if (event.target.closest("button")) dzToolsDrawerHide(); });
+  document.addEventListener("pointerdown", (event) => {
+    if (drawer.hidden || event.target.closest("#dzToolsDrawer,#dzToolsMore")) return;
+    dzToolsDrawerHide();
+  });
+
+  // Arrastre del grip: flota mientras se mueve, y se acopla si se suelta
+  // contra un borde. El umbral es generoso porque acoplar es lo que uno
+  // quiere el 90% de las veces.
+  grip.addEventListener("pointerdown", (event) => {
+    if (event.button) return;
+    event.preventDefault();
+    const r = rail.getBoundingClientRect();
+    const dx = event.clientX - r.left, dy = event.clientY - r.top;
+    const mover = (e) => dzToolsFloat(rail, e.clientX - dx, e.clientY - dy);
+    const soltar = (e) => {
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+      const vista = ($(".dz-body") || document.body).getBoundingClientRect();
+      if (e.clientX < vista.left + 90) dzToolsDock(rail, "left");
+      else if (e.clientX > vista.right - 90) dzToolsDock(rail, "right");
+    };
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+  });
+  grip.addEventListener("dblclick", () => dzToolsDock(rail, dzToolsBarState().lado || "left"));
+
+  // Cuántas entran lo decide el alto disponible, no una lista fija: en una
+  // ventana baja las últimas primarias bajan al cajón en vez de quedar debajo
+  // del borde, que es exactamente el defecto que tenía el riel viejo.
+  // El reparto se recalcula cuando el layout YA se acomodó: leer el alto en el
+  // mismo evento de resize devuelve el alto viejo y la barra se queda con más
+  // herramientas de las que entran.
+  let pendiente = 0;
+  DZ_TOOLS_FIT = () => {
+    clearTimeout(pendiente);
+    pendiente = setTimeout(() => requestAnimationFrame(
+      () => dzToolsBarFit(rail, primarias, secundarias, more, drawer)), 60);
+  };
+  DZ_TOOLS_FIT();
+  addEventListener("resize", () => DZ_TOOLS_FIT());
+  // Al arrancar, el riel todavía mide 0: el editor no se mostró. Esperar al
+  // resize de la ventana no alcanza —abrir un diseño o cambiar de workspace le
+  // cambia el alto sin que la ventana se mueva—, así que se observa el riel.
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => DZ_TOOLS_FIT()).observe(rail);
+
+  const guardado = dzToolsBarState();
+  if (guardado.modo === "float") dzToolsFloat(rail, guardado.x || 60, guardado.y || 120);
+  else if (guardado.lado === "right") dzToolsDock(rail, "right");
+  DZ_TOOLS_FIT();
+}
+/** Reparte las herramientas entre el riel y el cajón según el alto real. */
+let DZ_TOOLS_FITTING = false;
+function dzToolsBarFit(rail, primarias, secundarias, more, drawer) {
+  if (!rail || rail.hidden || DZ_TOOLS_FITTING) return;
+  const grip = rail.querySelector(".dz-tools-grip");
+  const alto = rail.classList.contains("dz-tools-float")
+    ? Math.min(innerHeight - 120, 33 * (primarias.length + 1) + 24)
+    : rail.clientHeight;
+  if (!alto) return;
+  const util = alto - (grip ? grip.offsetHeight + 3 : 0) - 33 - 10;   // grip + "⋯" + padding
+  const paso = 33;
+  let entran = Math.max(3, Math.floor(util / paso));
+  if (entran >= primarias.length) entran = primarias.length;
+  DZ_TOOLS_FITTING = true;
+  const enRiel = primarias.slice(0, entran), alCajon = primarias.slice(entran);
+  enRiel.forEach(node => rail.insertBefore(node, more));
+  // el cajón se rearma en orden: primero lo que no entró, después lo de siempre
+  alCajon.concat(secundarias).forEach(node => drawer.appendChild(node));
+  more.hidden = !drawer.children.length;
+  DZ_TOOLS_FITTING = false;
+}
+
 function dzStudioHierarchyInit() {
   const view = $("#designView"), menu = $("#dzMenubar"), options = $("#dzToolOpts");
   if (!view || !menu || !options) return;
@@ -2575,6 +2790,7 @@ function dzStudioHierarchyInit() {
       const previo = node.previousElementSibling;
       if (node.classList.contains("hsep") && (!previo || previo.classList.contains("hsep"))) node.remove();
     });
+    dzToolsBarInit(tools, primarias);
   }
   dzDocumentTabsRender();
 }
@@ -5035,7 +5251,7 @@ function _drawFinish() {
     const ribbon = dzBrushFinalElement(pts, DZ.drawColor || "#F0450E");
     if (ribbon) {
       if (t.el.hasAttribute("opacity")) ribbon.setAttribute("opacity", t.el.getAttribute("opacity"));
-      dzStyleTag(ribbon, "paint");          // el trazo terminado es una cinta RELLENA
+      dzStyleTagInkAsFill(ribbon);          // cinta RELLENA, pero color de LÍNEA
       t.el.replaceWith(ribbon); finalEl = ribbon;
     }
     else { t.el.remove(); finalEl = null; }
@@ -11681,9 +11897,11 @@ const DZ_TOOL_NAMES = { select: "seleccionar", hand: "mano", nodes: "nodos",
   inflator: "inflador", handler: "manejador", iron: "plancha", pliers: "pinza", magnet: "imán",
   camera: "cámara 2D" };
 function dzMenuAction(act) {
+  DZ.ultimoComando = act || "";   // CRASH-01: qué se estaba haciendo al fallar
   // menú Ventana: comparte implementación con dzRunAction (atajos de teclado)
   if (act && (act.startsWith("win-") || act.startsWith("ws-"))) return dzRunAction(act);
   if (act && act.startsWith("panel-")) return dzWindowPanelToggle(act.slice(6));
+  if (act === "informefallo") return dzCrashReportManual();
   const A = {
     storyboard: dzStoryboardToggle,
     nuevo: dzDocumentNew,
@@ -12828,7 +13046,7 @@ function dzPanelCellSelection() {
     anchorLayerId: DZ.doc.layerId, anchorFrame: DZ.doc.frame,
     from: DZ.doc.frame, to: DZ.doc.frame };
 }
-function dzPanelCellCommand(action) {
+async function dzPanelCellCommand(action) {
   const doc = DZ.doc, selection = dzPanelCellSelection();
   if (!doc || !selection) { dzSetStatus("Abrí una escena de animación para editar celdas"); return false; }
   const clip = LOW.animation.shortcuts && LOW.animation.shortcuts.clip;
@@ -12836,7 +13054,16 @@ function dzPanelCellCommand(action) {
     if (doc.cell == null) doc.ensureDrawing();
     else { const drawing = doc.duplicateDrawing(doc.cell); if (drawing) doc.setCell(doc.frame, drawing.number); }
     doc.emit("frame");
-  } else if (action === "new-level") { doc.addLayer(); doc.emit("frame"); }
+  } else if (action === "new-level") {
+    // LEVEL-01: un nivel nuevo PROPONE un nombre descriptivo en vez de crear
+    // "Nivel 7" en silencio. El id interno no depende del nombre, así que
+    // renombrarlo después no rompe ninguna referencia.
+    const propuesto = `Nivel ${doc.scene.levels.length + 1}`;
+    const nombre = await dzPromptModal("Nivel nuevo",
+      "nombre descriptivo — ej. «Cabeza», «Fondo», «Mano izquierda»", propuesto);
+    if (nombre == null) { dzSetStatus("Nivel no creado"); return false; }
+    doc.addLayer(String(nombre).trim() || propuesto); doc.emit("frame");
+  }
   else if (action === "copy-cells" && clip) {
     clip.range = doc.readCells(selection); dzSetStatus(`${clip.range.width} × ${clip.range.height} celdas copiadas`);
   } else if (action === "cut-cells" && clip) {
@@ -15929,6 +16156,19 @@ function dzPalActual(papel = DZ.palTarget || "ink") {
 /** Marca un elemento nuevo con el estilo activo. `papel` es "ink" (la linea) o
  *  "paint" (el relleno): el lapiz y la pluma son linea, el pincel de LOW es una
  *  cinta rellena. */
+/** El trazo terminado del pincel es una cinta RELLENA, pero conceptualmente es
+    LÍNEA: tiene que salir del color de tinta configurado, igual que el lápiz.
+    Etiquetarlo con el PAPEL "paint" lo ataba al estilo «Relleno» —blanco por
+    defecto— y la hoja de la paleta lo impone con !important, así que le ganaba
+    al fill del propio trazo: el pincel dibujaba blanco sobre papel blanco y
+    parecía que no dibujaba. Acá se separan las dos cosas que estaban mezcladas:
+    QUÉ estilo manda (el de tinta) y en QUÉ atributo se aplica (el relleno). */
+function dzStyleTagInkAsFill(el) {
+  const st = dzPalActual("ink");
+  if (!el || !el.setAttribute || !st || !st.index) return el;
+  el.setAttribute(LOW.animation.palette.ATTR.paint, String(st.index));
+  return el;
+}
 function dzStyleTag(el, papel) {
   if (!el || !el.setAttribute) return el;
   const st = dzPalActual(papel);

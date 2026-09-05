@@ -19,10 +19,10 @@ tener una comprobación proporcional al riesgo.
 | RECV-01 | Un checkpoint conserva ruta, contenido, hora y última operación. | Unidad | Automatizado |
 | RECV-02 | Tras cierre inesperado se ofrecen Recover, Discard y Compare sin cargar silenciosamente el archivo. | E2E | Automatizado (`check_save_recovery_ui.js`) |
 | RECV-03 | Descartar una recuperación no modifica el documento guardado ni vuelve a ofrecerla. | Unidad/E2E | Unidad automatizada |
-| CRASH-01 | Un crash report incluye versión, OS, GPU/render, escena y último comando sin contenido privado innecesario. | Integración | Pendiente |
-| LEVEL-01 | Crear un Level exige o propone un nombre descriptivo y conserva un ID interno estable. | Interacción/modelo | Pendiente |
+| CRASH-01 | Un crash report incluye versión, OS, GPU/render, escena y último comando sin contenido privado innecesario. | Integración | Implementado con lista blanca en los dos lados del puente |
+| LEVEL-01 | Crear un Level exige o propone un nombre descriptivo y conserva un ID interno estable. | Interacción/modelo | Automatizado (modelo) + propuesta de nombre y renombrado en la UI |
 | STYLE-01 | Un estilo usado no puede borrarse sin reasignación. | Modelo | Automatizado |
-| STYLE-02 | Reasignar y borrar forma una operación reversible y no deja referencias huérfanas. | Modelo | Reasignación automatizada; transacción pendiente |
+| STYLE-02 | Reasignar y borrar forma una operación reversible y no deja referencias huérfanas. | Modelo | Automatizado (`replaceStyle`, una transacción) |
 
 ## P1 — estados que deben explicarse solos
 

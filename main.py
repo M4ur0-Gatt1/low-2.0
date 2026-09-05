@@ -10,6 +10,7 @@ import difflib
 import html as _html
 import http.server
 import json
+import platform
 import os
 import re
 import shutil
@@ -48,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.4.1"
+LOW_VERSION = "4.4.2"
 
 
 def atomic_write_text(path, content, encoding="utf-8"):
@@ -763,6 +764,34 @@ class Api:
     def log_js(s, msg):
         """El frontend reporta acá sus errores y el boot — queda en low.log."""
         log(f"[js] {msg}")
+
+    # Campos que puede contener un informe de fallo. Es una lista BLANCA a
+    # propósito: CRASH-01 pide versión, sistema, GPU, escena y último comando,
+    # y nada más. Cualquier cosa que mande el frontend fuera de esta lista se
+    # descarta acá, para que un informe no arrastre el dibujo, la conversación
+    # ni las rutas completas del disco de nadie.
+    CRASH_FIELDS = ("motivo", "error", "origen", "version", "sistema", "gpu",
+                    "escena", "ultimoComando", "herramienta", "cuandoUI")
+
+    def crash_report(s, data=None):
+        """Guarda un informe de fallo legible, sin contenido del documento."""
+        if not isinstance(data, dict):
+            return {"error": "informe vacío"}
+        limpio = {k: data.get(k) for k in s.CRASH_FIELDS if data.get(k) is not None}
+        limpio["version"] = LOW_VERSION          # la fuente de verdad es Python
+        limpio["python"] = platform.python_version()
+        limpio["plataforma"] = platform.platform()
+        limpio["cuando"] = datetime.datetime.now().isoformat(timespec="seconds")
+        destino = data_dir() / "fallos"
+        nombre = "fallo-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".json"
+        try:
+            destino.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(destino / nombre, json.dumps(limpio, ensure_ascii=False, indent=1))
+        except OSError as e:
+            log(f"crash_report: no pude escribir el informe: {e}")
+            return {"error": str(e)}
+        log(f"[fallo] {nombre}: {limpio.get('error') or limpio.get('motivo') or 'sin detalle'}")
+        return {"path": str(destino / nombre), "name": nombre, "campos": sorted(limpio)}
 
     def _base(s):
         """Workspace efectivo para las tools. Si no hay, lanza excepción

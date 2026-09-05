@@ -490,6 +490,52 @@
       }
       return true;
     }
+    /** STYLE-02 de la matriz: reasignar y borrar son UNA operación reversible.
+     *  Hechas por separado, un solo Ctrl+Z deshacía el borrado y dejaba los
+     *  usos ya reasignados —o al revés—, que es justo la referencia huérfana
+     *  que la matriz prohíbe. Devuelve qué pasó, sin inventar éxitos. */
+    replaceStyle(from, to) {
+      const pal = this.palette;
+      if (!pal || pal.locked || !animation.palette) return { reasignados: 0, borrado: false };
+      const origen = pal.byIndex(from), destino = pal.byIndex(to);
+      if (!origen || !destino || origen.id === destino.id) return { reasignados: 0, borrado: false };
+      const enTransaccion = !!this.history && !this.history.transaction;
+      if (enTransaccion) this.history.begin("Reasignar y borrar estilo");
+      let reasignados = 0, borrado = false;
+      try {
+        reasignados = this.reassignStyle(from, to);
+        borrado = this.removeStyle(from);
+      } finally {
+        // se confirma lo que YA se aplicó al modelo: cancelar dejaría el
+        // documento cambiado y sin forma de volver atrás
+        if (enTransaccion) this.history.commit();
+      }
+      return { reasignados, borrado };
+    }
+    /** LEVEL-01: renombrar no puede cambiar la identidad. El id interno del
+     *  Level es lo que referencian capas, celdas y paletas; sólo cambia el
+     *  nombre que ve la persona, y se deshace. */
+    renameLevel(levelId, nombre) {
+      const lv = this.scene.level(levelId);
+      const limpio = String(nombre == null ? "" : nombre).trim();
+      if (!lv || !limpio || limpio === lv.name) return false;
+      const antes = lv.name;
+      lv.name = limpio;
+      this.touch(); this.emit("level"); this.emit("layers");
+      if (this.history) {
+        const doc = this;
+        this.history.push({
+          label: "Renombrar nivel", domain: "anim", before: antes, after: limpio,
+          apply: (dir, valor) => {
+            const nivel = doc.scene.level(levelId);
+            if (!nivel) return;
+            nivel.name = valor;
+            doc.touch(); doc.emit("level"); doc.emit("layers");
+          },
+        });
+      }
+      return true;
+    }
     /** Pasa todo lo que usaba un estilo a usar otro: para unificar dos colores
      *  y para vaciar un estilo antes de borrarlo. */
     reassignStyle(from, to) {
