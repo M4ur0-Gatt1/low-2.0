@@ -442,7 +442,11 @@ No entran nuevas familias de funciones durante esta etapa.
 
 1. **Video mocap y rotoscopía asistida**: importar actuación, sincronizarla,
    extraer silueta y pose, corregir resultados y retargetearlos sin destruir el rig.
-2. Editor de curvas.
+2. ~~Editor de curvas.~~ **Hecho en v4.5.0**: canales por propiedad, curvas
+   Bezier editables con manijas, tangentes Suave/Lineal/Escalón, edición
+   numérica, regiones de tiempo, copiar y pegar sólo el timing, filtro por lo
+   seleccionado y una única cabeza lectora con Timeline y X-sheet. Verificado
+   por `tools/check_function_editor_ui.js`.
 3. Pesos, flexi-binding y mallas.
 4. Smart Bones y acciones.
 5. Audio, lipsync y sustituciones consolidadas.

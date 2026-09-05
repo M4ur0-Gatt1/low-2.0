@@ -14,7 +14,7 @@ tener una comprobación proporcional al riesgo.
 | SAVE-03 | Si falla la escritura, la versión guardada anterior permanece intacta y el documento sigue dirty. | Integración host/filesystem | Automatizado (`check_save_recovery_ui.js`) |
 | SAVE-04 | El mensaje de éxito sólo aparece después de confirmar la escritura completa. | Interacción | Automatizado (`check_save_recovery_ui.js`) |
 | HIST-01 | Cada comando destructivo publica nombres concretos para Undo y Redo. | Unidad | Automatizado |
-| HIST-02 | Copy/cut/paste desde Xsheet y Timeline ejecutan los mismos comandos y producen el mismo estado. | Modelo/interacción | Parcial: modelo automatizado |
+| HIST-02 | Copy/cut/paste desde Xsheet y Timeline ejecutan los mismos comandos y producen el mismo estado. | Modelo/interacción | Automatizado (comando único `shortcuts.cells`) |
 | HIST-03 | Una transacción compuesta se deshace en un solo paso y en orden inverso. | Unidad | Automatizado por HistoryManager |
 | RECV-01 | Un checkpoint conserva ruta, contenido, hora y última operación. | Unidad | Automatizado |
 | RECV-02 | Tras cierre inesperado se ofrecen Recover, Discard y Compare sin cargar silenciosamente el archivo. | E2E | Automatizado (`check_save_recovery_ui.js`) |

@@ -908,6 +908,8 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#dzBlend").onchange = e => dzLayerBlend(e.target.value);
   $("#dzLayOpacity").oninput = e => dzLayerOpacity(e.target.value, false);
   $("#dzLayOpacity").onchange = e => dzLayerOpacity(e.target.value, true);
+  const fnBtn = $("#tlFnOpen");
+  if (fnBtn) fnBtn.onclick = () => { dzFnToggle(); fnBtn.classList.toggle("active", !$("#dzFnEditor").hidden); };
   dzCompositorWire();
   $("#dzRlTop").addEventListener("pointerdown", e => dzRulerPull(e, "h"));
   $("#dzRlBottom").addEventListener("pointerdown", e => dzRulerPull(e, "h"));
@@ -13049,7 +13051,7 @@ function dzPanelCellSelection() {
 async function dzPanelCellCommand(action) {
   const doc = DZ.doc, selection = dzPanelCellSelection();
   if (!doc || !selection) { dzSetStatus("Abrí una escena de animación para editar celdas"); return false; }
-  const clip = LOW.animation.shortcuts && LOW.animation.shortcuts.clip;
+  const cells = LOW.animation.shortcuts && LOW.animation.shortcuts.cells;
   if (action === "new-drawing") {
     if (doc.cell == null) doc.ensureDrawing();
     else { const drawing = doc.duplicateDrawing(doc.cell); if (drawing) doc.setCell(doc.frame, drawing.number); }
@@ -13064,12 +13066,14 @@ async function dzPanelCellCommand(action) {
     if (nombre == null) { dzSetStatus("Nivel no creado"); return false; }
     doc.addLayer(String(nombre).trim() || propuesto); doc.emit("frame");
   }
-  else if (action === "copy-cells" && clip) {
-    clip.range = doc.readCells(selection); dzSetStatus(`${clip.range.width} × ${clip.range.height} celdas copiadas`);
-  } else if (action === "cut-cells" && clip) {
-    clip.range = doc.readCells(selection); doc.clearCells(selection, "Cortar rango");
-  } else if (action === "paste-cells" && clip && clip.range) {
-    doc.pasteCells(clip.range, doc.layerId, doc.frame, { label: "Pegar rango" });
+  // HIST-02: los tres caminos (X-sheet, barra de la Timeline y teclado) llaman
+  // al MISMO comando; antes cada uno tenia su propia copia de la maniobra.
+  else if (action === "copy-cells" && cells) {
+    const r = cells.copy(doc, selection); if (r) dzSetStatus(cells.medida(r) + " copiadas");
+  } else if (action === "cut-cells" && cells) {
+    const r = cells.cut(doc, selection); if (r) dzSetStatus(cells.medida(r) + " cortadas");
+  } else if (action === "paste-cells" && cells) {
+    const r = cells.paste(doc); if (r) dzSetStatus(cells.medida(r) + " pegadas");
   } else if (action === "clear-cells") doc.clearCells(selection, "Vaciar rango");
   else if (action === "shorter-exposure") doc.apply("stepChange", doc.frame, -1);
   else if (action === "longer-exposure") doc.apply("stepChange", doc.frame, +1);
@@ -15364,6 +15368,43 @@ function dzStoryboardToggle() {
   if (panel.hidden) void dzSbMount(); else panel.hidden = true;
 }
 
+/* ── FUNCTION EDITOR: la ventana de las curvas ─────────────────────────────
+   El editor lee el modelo y escribe con los comandos del documento, así que
+   Undo, guardado y reapertura funcionan sin que la vista guarde nada propio.
+   Su cabeza lectora es el cuadro del documento: mover una es mover las tres
+   —Timeline, X-sheet y curvas— porque hay un solo tiempo. */
+function dzFnMount() {
+  const host = $("#dzFnEditor");
+  if (!host || !LOW.animation.FunctionEditor || !DZ.doc) return null;
+  if (!DZ.fnView) {
+    DZ.fnView = new LOW.animation.FunctionEditor(host, {
+      getDoc: () => DZ.doc,
+      onFrame: (f) => { if (DZ.doc) dzDocGoTo(f); },
+      status: (t) => dzSetStatus(t),
+      // el filtro "Selección" sigue al hueso activo del rig
+      getSelection: () => DZ.rigSelectedId || null,
+    });
+  }
+  DZ.fnView.setDoc(DZ.doc);
+  DZ.fnView.render();
+  return DZ.fnView;
+}
+function dzFnSetVisible(show) {
+  const panel = $("#dzFnEditor");
+  if (!panel) return;
+  show = !!show && !dzIsPanelDetached("fn");
+  panel.hidden = !show;
+  if (show) dzFnMount();
+}
+function dzFnToggle() {
+  const panel = $("#dzFnEditor");
+  if (!panel) return;
+  const abrir = panel.hidden;
+  if (abrir && !DZ.doc) return dzSetStatus("Abrí una animación para ver sus curvas");
+  dzFnSetVisible(abrir);
+  dzSetStatus(abrir ? "Editor de funciones abierto" : "Editor de funciones cerrado");
+}
+
 function dzLsMount() {
   const host = $("#dzLsBody");
   if (!host || !LOW.animation.LevelStrip || !DZ.doc) return;
@@ -16518,6 +16559,8 @@ function dzWsAplicar(ws) {
       if (!oculto) dzTlMount();
     } else if (id === "xsheet") {
       if (typeof dzXsSetVisible === "function") dzXsSetVisible(!oculto);
+    } else if (id === "fn") {
+      dzFnSetVisible(!oculto);
     } else if (id === "multiplane") {
       dzCompositionViewShow(!oculto);
       $("#dzZBtn")?.classList.toggle("active", !oculto);

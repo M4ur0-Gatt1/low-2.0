@@ -22,6 +22,7 @@ const files = [
   "ui/animation/character-library.js",
   "ui/animation/playback.js",
   "ui/animation/timeline.js",
+  "ui/animation/shortcuts.js",
   "ui/drawing/selection.js",
   "ui/drawing/transforms.js",
   "ui/workspace/panels.js",

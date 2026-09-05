@@ -171,4 +171,20 @@ require("renameLevel" in DOCUMENT and "lv.name = limpio" in function_body_doc("r
 require("dzCrashReport" in APP and "CRASH_FIELDS" in MAIN,
         "el informe de fallo dejo de existir o de filtrar sus campos")
 
+FN = (ROOT / "ui" / "animation" / "function-editor.js").read_text(encoding="utf-8")
+SHORTCUTS_CELLS = SHORTCUTS[SHORTCUTS.index("const cells = {"):SHORTCUTS.index("function wire(")]
+require("animation.shortcuts = { wire, clip, cells }" in SHORTCUTS,
+        "el comando unico de celdas dejo de exportarse")
+require("readCells" not in APP and "pasteCells(clip.range" not in APP,
+        "algun camino de la UI volvio a implementar copiar/pegar celdas por su cuenta")
+require(all(x in FN for x in ("TANGENTES", "suave", "lineal", "escalon")),
+        "el editor de curvas perdio alguna de sus tangentes")
+require(all(x in FN for x in ("setRigChannelKey", "removeRigChannelKey", "setRigChannelEase",
+                             "pasteRigChannelCurve", "rigCurveClipboardData")),
+        "el editor de curvas dejo de escribir por los comandos del documento")
+require("onFrame" in FN and "fn2-cabeza" in FN,
+        "el editor de curvas dejo de compartir la cabeza lectora")
+require('id="dzFnEditor"' in INDEX and "function-editor.js" in INDEX,
+        "el panel del editor de funciones no esta montado")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")

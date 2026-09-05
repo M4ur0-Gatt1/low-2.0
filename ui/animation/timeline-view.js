@@ -212,15 +212,18 @@
         doc.emit("frame");
       });
       button(edit, "i-level", "Crear un nivel y una columna", () => { doc.addLayer(); doc.emit("frame"); });
-      const clipboard = group(), clip = animation.shortcuts && animation.shortcuts.clip;
+      // HIST-02: el mismo comando que usan la X-sheet y el teclado
+      const clipboard = group(), cells = animation.shortcuts && animation.shortcuts.cells;
       button(clipboard, "i-cut", "Cortar las celdas seleccionadas", () => {
-        if (!clip) return; clip.range = doc.readCells(selected()); doc.clearCells(selected(), "Cortar rango");
+        if (cells) cells.cut(doc, selected());
       });
       button(clipboard, "i-copy", "Copiar las celdas seleccionadas", () => {
-        if (!clip) return; clip.range = doc.readCells(selected()); if (this.status) this.status("Celdas copiadas");
+        const r = cells && cells.copy(doc, selected());
+        if (r && this.status) this.status(cells.medida(r) + " copiadas");
       });
       button(clipboard, "i-paste", "Pegar desde la celda actual", () => {
-        if (clip && clip.range) doc.pasteCells(clip.range, doc.layerId, doc.frame, { label: "Pegar rango" });
+        const r = cells && cells.paste(doc);
+        if (r && this.status) this.status(cells.medida(r) + " pegadas");
       });
       const timing = group();
       button(timing, "i-insert", "Insertar una celda antes del fotograma actual", () => doc.apply("insert", doc.frame, 1));

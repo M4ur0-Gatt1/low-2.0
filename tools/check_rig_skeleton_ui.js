@@ -43,6 +43,12 @@ async function main() {
   // anterior y la prueba certifica código que ya no existe.
   await send("Network.enable"); await send("Network.setCacheDisabled", { cacheDisabled: true });
   stage("navegar");
+  // Arranque determinista: el workspace guardado de una corrida anterior decide
+  // si la X-sheet esta abierta, y con la X-sheet abierta Supr lo maneja ella.
+  // Sin esto la prueba mide el estado que dejo OTRA prueba, no una regresion.
+  await send("Page.navigate", { url: pageUrl });
+  await new Promise(ok => setTimeout(ok, 600));
+  await send("Runtime.evaluate", { expression: "try{localStorage.clear()}catch(e){}" });
   await send("Page.navigate", { url: pageUrl });
   await new Promise(ok => setTimeout(ok, 1800));
   stage("ejecutar flujo");

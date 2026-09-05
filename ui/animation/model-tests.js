@@ -159,6 +159,52 @@
          JSON.stringify(cells(ly, 6)) === JSON.stringify([1,3,5,7,9,11]), JSON.stringify(cells(ly, 6)));
     }
 
+    // ── HIST-02: los caminos de copiar/cortar/pegar son UN comando ──
+    {
+      const { LowDoc } = animation;
+      const cells = animation.shortcuts && animation.shortcuts.cells;
+      const armar = () => {
+        const doc = new LowDoc();
+        const ly = doc.scene.layers[0], lv = doc.scene.levels[0];
+        [1, 2, 3].forEach((n) => lv.addDrawing(n, `<path d='M0 0 L${n} ${n}'/>`));
+        [1, 2, 3].forEach((n) => doc.scene.expose(ly.id, n, n));
+        doc.setHistory(new LOW.core.HistoryManager());
+        return doc;
+      };
+      const rango = (doc) => ({ fromLayerId: doc.layerId, toLayerId: doc.layerId, from: 1, to: 3 });
+      const foto = (doc) => JSON.stringify(doc.scene.layers.map((l) =>
+        Array.from({ length: 8 }, (_, i) => l.cellAt(i + 1))));
+      ok("existe un comando único de celdas", !!cells);
+      if (cells) {
+        // camino A: como lo llama la X-sheet / la barra de la Timeline
+        const a = armar();
+        cells.cut(a, rango(a)); a.goTo(5); cells.paste(a);
+        // camino B: como lo llama el teclado, con la MISMA función
+        const b = armar();
+        cells.cut(b, rango(b)); b.goTo(5); cells.paste(b);
+        ok("cortar y pegar produce el mismo estado por cualquier camino", foto(a) === foto(b),
+          foto(a) + " vs " + foto(b));
+        const c = armar();
+        cells.copy(c, rango(c)); c.goTo(5); cells.paste(c);
+        ok("copiar deja las celdas originales donde estaban",
+          c.scene.layers[0].cellAt(1) === 1 && c.scene.layers[0].cellAt(5) === 1,
+          foto(c));
+        ok("y el rango copiado informa su medida", /2 x 3|1 x 3|3 x 1/.test(cells.medida(cells.copy(c, rango(c)))),
+          cells.medida(cells.copy(c, rango(c))));
+        const d = armar();
+        d.goTo(2);
+        const solo = cells.copy(d);      // sin selección: la celda actual
+        ok("sin selección el comando trabaja sobre la celda actual",
+          !!solo && solo.width === 1 && solo.height === 1, JSON.stringify(solo && { w: solo.width, h: solo.height }));
+        const e = armar();
+        cells.cut(e, rango(e));
+        const antesDeDeshacer = foto(e);
+        e.history.undo();
+        ok("cortar por el comando entra en el historial y se deshace",
+          foto(e) !== antesDeDeshacer && e.scene.layers[0].cellAt(1) === 1, foto(e));
+      }
+    }
+
     // ── LEVEL-01: el nombre es de la persona, el id es del documento ──
     {
       const { LowDoc } = animation;

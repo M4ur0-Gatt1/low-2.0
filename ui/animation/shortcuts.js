@@ -39,6 +39,39 @@
    *  de tener el nivel separado del tiempo. */
   const clip = { range: null };
 
+  /** HIST-02 de la matriz: copiar, cortar y pegar celdas es UN comando, no una
+   *  copia por cada camino de entrada. Antes vivía tres veces —X-sheet, barra
+   *  de la Timeline y teclado— y bastaba tocar una para que las tres dejaran de
+   *  producir el mismo estado. Acá el rango, las etiquetas de Undo y el mensaje
+   *  son los mismos vengan de donde vengan. */
+  const cells = {
+    copy(doc, seleccion) {
+      const sel = cells.rango(doc, seleccion);
+      if (!doc || !sel) return null;
+      clip.range = doc.readCells(sel);
+      return clip.range;
+    },
+    cut(doc, seleccion) {
+      const sel = cells.rango(doc, seleccion);
+      if (!doc || !sel) return null;
+      clip.range = doc.readCells(sel);
+      doc.clearCells(sel, "Cortar rango");
+      return clip.range;
+    },
+    paste(doc) {
+      if (!doc || !clip.range) return null;
+      doc.pasteCells(clip.range, doc.layerId, doc.frame, { label: "Pegar rango" });
+      return clip.range;
+    },
+    /** Sin selección explícita, el comando trabaja sobre la celda actual. */
+    rango(doc, seleccion) {
+      if (seleccion) return seleccion;
+      if (!doc) return null;
+      return { fromLayerId: doc.layerId, toLayerId: doc.layerId, from: doc.frame, to: doc.frame };
+    },
+    medida(rango) { return rango ? `${rango.width} x ${rango.height} celdas` : ""; },
+  };
+
   function wire(getDoc, getPlayback, opciones) {
     const opts = opciones || {};
     if (global.__lowAnimKeys) return;
@@ -95,17 +128,13 @@
         const sel = (opts.getSelection && opts.getSelection()) || {
           fromLayerId: doc.layerId, toLayerId: doc.layerId, from: doc.frame, to: doc.frame };
         if (k === "c") {
-          clip.range = doc.readCells(sel);
-          manejado = true;
-          if (opts.status) opts.status(`${clip.range.width} x ${clip.range.height} celdas copiadas`);
+          const r = cells.copy(doc, sel); manejado = true;
+          if (opts.status && r) opts.status(cells.medida(r) + " copiadas");
         } else if (k === "x") {
-          clip.range = doc.readCells(sel);
-          doc.clearCells(sel, "Cortar rango");
-          manejado = true;
+          cells.cut(doc, sel); manejado = true;
         } else if (k === "v" && clip.range) {
-          doc.pasteCells(clip.range, doc.layerId, doc.frame, { label: "Pegar rango" });
-          manejado = true;
-          if (opts.status) opts.status(`${clip.range.width} x ${clip.range.height} celdas pegadas`);
+          const r = cells.paste(doc); manejado = true;
+          if (opts.status && r) opts.status(cells.medida(r) + " pegadas");
         }
       }
 
@@ -113,5 +142,5 @@
     }, true);   // en captura: los atajos de animación mandan sobre los del editor
   }
 
-  animation.shortcuts = { wire, clip };
+  animation.shortcuts = { wire, clip, cells };
 })(window);

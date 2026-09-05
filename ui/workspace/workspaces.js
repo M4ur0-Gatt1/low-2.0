@@ -45,6 +45,8 @@
       allowedDocks: ["left", "right", "bottom"] },
     storyboard: { label: "Storyboard", element: "#dzStoryboard", externalizable: true,
       allowedDocks: ["left", "right", "bottom"] },
+    fn:         { label: "Editor de funciones", element: "#dzFnEditor", externalizable: true,
+      allowedDocks: ["bottom", "left", "right"] },
     color:      { label: "Paleta", element: "#dzPalette", owner: "layers", allowedDocks: ["left", "right"] },
     code:       { label: "Código SVG", element: ".dz-code", allowedDocks: ["left", "right"] },
   };
@@ -69,6 +71,7 @@
     { id: "animation", name: "Animación",
       descripcion: "Timing, exposiciones y poses. Acá la X-sheet es la protagonista.",
       panels: [
+        { id: "fn",       hidden: true },
         { id: "tools",    dock: "left" },
         { id: "canvas",   dock: "center" },
         { id: "xsheet",   dock: "right" },

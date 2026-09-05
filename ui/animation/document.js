@@ -1552,6 +1552,55 @@
     }
 
     /** Pega un timing completo sobre un tramo en una sola operación de Undo. */
+    /** Borra una clave de un canal. Un editor de curvas sin borrar no es un
+     *  editor: se puede crear timing pero no corregirlo. Si la clave venía de
+     *  una pose de hueso, también sale de ahí, o el canal y la pose quedarían
+     *  contando historias distintas sobre el mismo cuadro. */
+    removeRigChannelKey(path, frame) {
+      if (!path) return false;
+      return this._rigChange("Borrar clave de propiedad", (rig) => {
+        const channel = rig.channels[path], f = Math.max(1, Math.round(frame));
+        if (!channel || channel.keys[f] == null) return false;
+        delete channel.keys[f];
+        if (channel.ease) delete channel.ease[f];
+        const match = /^bones\/([^/]+)\/pose\/(x|y|r|sx|sy)$/.exec(path);
+        if (match) {
+          const node = rig.bones[decodeURIComponent(match[1])];
+          // la pose sólo se va cuando NINGUNA propiedad la sostiene
+          if (node && node.keys[f] && !["x", "y", "r", "sx", "sy"].some((prop) =>
+            rig.channels[animation.rigChannelPath(decodeURIComponent(match[1]), prop)]?.keys?.[f] != null))
+            delete node.keys[f];
+        }
+        if (!Object.keys(channel.keys).length) delete rig.channels[path];
+        return true;
+      });
+    }
+    /** La curva de UNA clave de un canal cualquiera (no sólo de un hueso):
+     *  `eo` como sale, `ei` como llega, `hold` para escalón. */
+    setRigChannelEase(path, frame, ease) {
+      if (!path) return false;
+      return this._rigChange("Cambiar la curva de una clave", (rig) => {
+        const channel = rig.channels[path], f = Math.max(1, Math.round(frame));
+        if (!channel || channel.keys[f] == null) return false;
+        channel.ease ||= {};
+        if (ease) channel.ease[f] = animation.rigEaseData(ease);
+        else delete channel.ease[f];
+        if (channel.interpolation === "linear" && ease && !ease.hold) channel.interpolation = "bezier";
+        return true;
+      });
+    }
+    /** Modo de interpolación del canal entero: escalón, recta o curva. */
+    setRigChannelInterpolation(path, modo) {
+      if (!path) return false;
+      return this._rigChange("Cambiar la interpolación del canal", (rig) => {
+        const channel = rig.channels[path];
+        if (!channel) return false;
+        const valor = modo === "step" ? "step" : modo === "linear" ? "linear" : "bezier";
+        if (channel.interpolation === valor) return false;
+        channel.interpolation = valor;
+        return true;
+      });
+    }
     pasteRigChannelCurve(path, fromFrame, toFrame, curve, data = {}) {
       if (!path || !curve) return false;
       return this._rigChange(data.label || "Pegar curva de propiedad", (rig) => {
