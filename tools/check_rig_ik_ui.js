@@ -58,11 +58,18 @@ async function main() {
     const espera=ms=>new Promise(r=>setTimeout(r,ms));
     await openDesign("C:\\\\mock\\\\rig-test.svg");
     await dzDocInit();
+    // La Timeline se abre ANTES de armar nada: encenderla llama a make_frame y,
+    // si devuelve otra ruta, openDesign REEMPLAZA el documento. Hacerlo a mitad
+    // del recorrido dejaba al rig en un doc y a la vista en otro — el síntoma
+    // era una pista de sustituciones que no aparecía nunca.
+    if(document.querySelector("#dzTimeline")?.hidden) await dzAnimToggle();
+    await dzTlMount();
+    await espera(300);
+
     if(!DZ.rigMode) dzRigToggle();
     dzRigLibraryAdd("human_standard");
     dzRigPanelSync();
     await espera(300);
-
     const doc=DZ.doc, ids=Object.keys(doc.scene.rig.nodes);
     const buscar=fin=>ids.find(id=>id===fin||id.endsWith("_"+fin)||id.endsWith(fin));
     const brazo=buscar("upper_arm_L"), antebrazo=buscar("forearm_L"), mano=buscar("hand_L");
@@ -182,19 +189,21 @@ async function main() {
 
     // 8. Sustituciones VISIBLES: la fila aparece sólo si hay cambios de dibujo,
     //    distingue el cambio del sostenido y se puede borrar desde la mesa.
-    // El workspace persistido puede dejar la Timeline cerrada. La prueba debe
-    // abrir la superficie que pretende verificar, no depender del E2E que haya
-    // corrido antes en el mismo perfil de Chromium.
-    if(document.querySelector("#dzTimeline")?.hidden) dzAnimToggle();
-    dzTlMount();
+    await dzTlMount();
     await espera(250);
     const slot=doc.ensureRigSlot(mano);
     const puno=doc.addRigAttachment(slot,{name:"puño"});
-    const swap={filaAntes:!!document.querySelector("#dzTlgRows .tl2-row.tl2-swap")};
-    doc.setRigSwitchKey(slot,4,puno);
-    await espera(500);
     const filaSwap=()=>document.querySelector("#dzTlgRows .tl2-row.tl2-swap");
+    const swap={filaAntes:!!filaSwap()};
+    doc.setRigSwitchKey(slot,4,puno);
+    // Esperar por CONDICIoN, no por reloj: el re-render de la Timeline es asincronico
+    // y bajo carga (skeleton + worker de MediaPipe vivos, o CI) no llega en 500 ms.
+    // Se re-monta y se reintenta hasta ~6 s: aislado aparece al toque, en rafaga tambien.
+    for(let i=0;i<40 && !filaSwap();i++){ dzTlMount(); await espera(150); }
     swap.filaDespues=!!filaSwap();
+    // Guarda contra la causa raíz de arriba: si alguien vuelve a mover el
+    // encendido de la Timeline, esto lo dice en vez de dejar un fallo mudo.
+    swap.mismoDocumento=DZ.doc===doc&&DZ.tlView?.doc===doc;
     const celda=f=>filaSwap()&&filaSwap().querySelector('.tl2-cell.swap[data-frame="'+f+'"]');
     swap.cambioEnF4=!!celda(4)&&celda(4).classList.contains("swapkey");
     swap.sostieneEnF6=!!celda(6)&&celda(6).classList.contains("swaphold")
@@ -243,6 +252,8 @@ async function main() {
     throw Error("REGRESIÓN: soltar el apoyo no devuelve el comportamiento normal: " + JSON.stringify(pin));
   if (!fk?.apagada || !fk.sinSalto || !fk.clavesReales)
     throw Error("REGRESIÓN: Pasar a FK no hornea la pose o mueve el dibujo: " + JSON.stringify(fk));
+  if (swap?.mismoDocumento === false)
+    throw Error("REGRESIÓN: el rig y la Timeline quedaron en documentos distintos: " + JSON.stringify(swap));
   if (swap?.filaAntes !== false || swap?.filaDespues !== true)
     throw Error("REGRESIÓN: la pista de sustituciones no aparece con el primer cambio de dibujo: " + JSON.stringify(swap));
   if (!swap.cambioEnF4 || !swap.sostieneEnF6 || !swap.antesLimpio)
