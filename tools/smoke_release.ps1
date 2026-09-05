@@ -20,4 +20,10 @@ finally {
     Stop-Process -Id $process.Id -Force
     $process.WaitForExit()
   }
+  # PyInstaller one-file puede relanzar el ejecutable como proceso hijo. El
+  # padre ya terminó, pero ese hijo conserva el archivo bloqueado. Cerramos
+  # sólo instancias cuya ruta coincide exactamente con el artefacto probado.
+  Get-CimInstance Win32_Process -Filter "Name = 'LOW.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -eq $resolved.Path } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }

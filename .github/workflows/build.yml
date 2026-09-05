@@ -51,7 +51,7 @@ jobs:
           python -m http.server 8791 --bind 127.0.0.1 >/tmp/low-http.log 2>&1 &
           CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium)"
           test -n "$CHROME"
-          "$CHROME" --headless=new --disable-gpu --no-sandbox \
+          "$CHROME" --headless=new --disable-gpu --no-sandbox --window-size=1366,768 \
             --remote-debugging-port=9223 --user-data-dir=/tmp/low-e2e about:blank \
             >/tmp/low-chrome.log 2>&1 &
           for attempt in $(seq 1 20); do

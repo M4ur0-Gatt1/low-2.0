@@ -19,7 +19,9 @@ async function main() {
     pending.set(id, { resolve: value => { clearTimeout(timer); resolve(value); }, reject: value => { clearTimeout(timer); reject(Error(JSON.stringify(value))); } });
     ws.send(JSON.stringify({ id, method, params }));
   });
-  await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable"); await send("Network.setCacheDisabled", { cacheDisabled: true });
+  await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
+  await send("Emulation.setDeviceMetricsOverride", { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
+  await send("Network.setCacheDisabled", { cacheDisabled: true });
   await send("Page.navigate", { url: pageUrl }); await new Promise(resolve => setTimeout(resolve, 2200));
   const expression = `(async()=>{
     const wait=ms=>new Promise(r=>setTimeout(r,ms));
