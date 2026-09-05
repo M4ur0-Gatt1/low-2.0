@@ -1438,6 +1438,12 @@ async function save() {
   if (!t) return;
   const r = await api.save_file(t.path, cm.getValue());
   if (!r) return;
+  if (!dzSaveOk(r)) {
+    t.modified = true; renderTabs();
+    setStatus("⚠ sin guardar: " + dzSaveError(r));
+    return sysMsg("⚠ No se guardó «" + (t.name || t.path) + "»: " + dzSaveError(r) +
+      ". El archivo anterior en disco sigue intacto.");
+  }
   t.path = r.path; t.name = r.name; t.id = t.id.startsWith("*") ? r.path : t.id;
   if (S.cur.startsWith("*")) S.cur = t.id;
   t.modified = false;
@@ -2442,12 +2448,16 @@ window.addEventListener("message", async (event) => {
       // el primer guardado (path vacío).
       const known = typeof msg.path === "string" && msg.path ? msg.path : "";
       const r = await api.save_file(known, msg.json, msg.name || "proyecto.low3d");
-      if (r && r.path) {
+      if (dzSaveOk(r)) {
         // avisarle al estudio con qué archivo quedó, para que el próximo
         // Ctrl+S no vuelva a preguntar
         frame.contentWindow && frame.contentWindow.postMessage(
           { type: "low:saved", path: r.path }, "*");
         setStatus(" " + (r.name || "proyecto 3D guardado"));
+      } else if (r && r.error) {
+        setStatus("⚠ sin guardar: " + dzSaveError(r));
+        sysMsg("⚠ El proyecto 3D NO se guardó: " + dzSaveError(r) +
+          ". El archivo anterior en disco sigue intacto.");
       } else if (!known) setStatus("Guardado cancelado");
     } catch (err) {
       setStatus("No se pudo guardar el proyecto 3D");
@@ -2769,10 +2779,12 @@ async function openDesign(path, options = {}) {
   let sourceSvg = options.sourceSvg || r.svg;
   const recovery = window.LOW?.workspace?.recovery?.get(path);
   if (recovery && recovery.content !== r.svg) {
-    const dzQuiereRecuperar = /[?&]mock=1/.test(location.search) ? false
-      : await dzConfirmModal("LOW encontró cambios recuperables que no llegaron a guardarse. ¿Querés restaurarlos?", { ok: "Restaurar" });
-    if (dzQuiereRecuperar) sourceSvg = recovery.content;
-    else LOW.workspace.recovery.clear(path);
+    // en mock no hay nadie para contestar: se conserva el punto y se abre el
+    // archivo del disco, que es la salida segura (nunca descartar sin elegir)
+    const decision = /[?&]mock=1/.test(location.search) ? "keep"
+      : await dzRecoveryDecide(path, r.svg, recovery);
+    if (decision === "recover") sourceSvg = recovery.content;
+    else if (decision === "discard") LOW.workspace.recovery.clear(path);
   } else if (recovery) LOW.workspace.recovery.clear(path);
   const tmp = document.createElement("div"); tmp.innerHTML = sourceSvg;
   const svg = tmp.querySelector("svg");
@@ -4107,6 +4119,17 @@ function dzPromptModal(title, ph, def) {
 /* ── Diálogos orgánicos (reemplazan a confirm()/alert() del navegador, que en
    pywebview salen como chrome del SO y rompen el diseño; el confirm() nativo
    además congela el renderer). Mismo lenguaje visual que dzPromptModal. ── */
+/** Escape y el clic fuera cierran el modal por su cuenta, sin pasar por los
+    botones: sin esto la promesa quedaba pendiente para siempre y el flujo que
+    la esperaba se colgaba en silencio. Devuelve una funcion para soltar el
+    vigia cuando el cierre SI viene de un boton. */
+function dzModalDismiss(alCerrar) {
+  const overlay = $("#overlay");
+  if (!overlay) return () => {};
+  const obs = new MutationObserver(() => { if (overlay.hidden) { obs.disconnect(); alCerrar(); } });
+  obs.observe(overlay, { attributes: true, attributeFilter: ["hidden"] });
+  return () => obs.disconnect();
+}
 function dzConfirmModal(mensaje, opts = {}) {
   const esc = s => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   const ok = opts.ok || "Aceptar", cancel = opts.cancel || "Cancelar";
@@ -4117,8 +4140,9 @@ function dzConfirmModal(mensaje, opts = {}) {
       <div class="m-actions"><button class="ghost" id="dzCfX">${esc(cancel)}</button>
       <button class="${primary}" id="dzCfOk">${esc(ok)}</button></div>`);
     setTimeout(() => { const b = $("#dzCfOk"); if (b) b.focus(); }, 30);
-    $("#dzCfX").onclick = () => { closeModal(); resolve(false); };
-    $("#dzCfOk").onclick = () => { closeModal(); resolve(true); };
+    const soltar = dzModalDismiss(() => resolve(false));
+    $("#dzCfX").onclick = () => { soltar(); closeModal(); resolve(false); };
+    $("#dzCfOk").onclick = () => { soltar(); closeModal(); resolve(true); };
   });
 }
 
@@ -4130,7 +4154,76 @@ function dzNotice(mensaje, title) {
       <p class="m-msg">${esc(mensaje)}</p>
       <div class="m-actions"><button class="primary" id="dzNoOk">Entendido</button></div>`);
     setTimeout(() => { const b = $("#dzNoOk"); if (b) b.focus(); }, 30);
-    $("#dzNoOk").onclick = () => { closeModal(); resolve(); };
+    const soltar = dzModalDismiss(() => resolve());
+    $("#dzNoOk").onclick = () => { soltar(); closeModal(); resolve(); };
+  });
+}
+
+/* ── RECV-02 de la matriz ───────────────────────────────────────────────────
+   Tras un cierre inesperado, el trabajo recuperable NO se carga ni se descarta
+   en silencio: se ofrecen las tres salidas de la matriz —Recuperar, Comparar y
+   Descartar— con la hora del punto y la última operación a la vista. Comparar
+   muestra las dos versiones dibujadas, que es la única forma honesta de elegir.
+   Cerrar el diálogo sin elegir CONSERVA el punto: cancelar no puede ser una
+   manera silenciosa de perder trabajo.
+   Devuelve "recover" | "discard" | "keep". */
+function dzRecoveryDecide(path, discoSvg, recovery) {
+  return new Promise(resolve => {
+    const esc = t => String(t == null ? "" : t).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const meta = recovery.metadata || {};
+    const cuando = new Date(recovery.savedAt || Date.now());
+    const hora = isNaN(cuando) ? "hora desconocida" : cuando.toLocaleString();
+    const kb = n => Math.max(1, Math.round((n || 0) / 1024)) + " KB";
+    const detalle = [meta.op ? "última operación: " + meta.op : null,
+      meta.frame ? "cuadro " + meta.frame : null,
+      meta.tool ? "herramienta " + meta.tool : null].filter(Boolean).join(" · ");
+    const nombre = dzDocumentTabName(path);
+    let soltar = () => {};
+    const terminar = valor => { soltar(); closeModal(); resolve(valor); };
+
+    const acciones = `<div class="m-actions">
+        <button class="ghost danger" id="dzRcDiscard">Descartar</button>
+        <button class="ghost" id="dzRcCompare">Comparar</button>
+        <button class="primary" id="dzRcRecover">Recuperar</button></div>`;
+
+    const cablear = () => {
+      soltar = dzModalDismiss(() => resolve("keep"));
+      $("#dzRcRecover").onclick = () => terminar("recover");
+      $("#dzRcDiscard").onclick = () => terminar("discard");
+      const comparar = $("#dzRcCompare");
+      if (comparar) comparar.onclick = () => { soltar(); pintarComparacion(); };
+      const volver = $("#dzRcBack");
+      if (volver) volver.onclick = () => { soltar(); pintarResumen(); };
+    };
+
+    const pintarResumen = () => {
+      openModal(`<h2>Hay trabajo sin guardar</h2>
+        <p class="m-msg">«${esc(nombre)}» tiene cambios que no llegaron al disco.
+        Punto de recuperación del ${esc(hora)}${detalle ? " · " + esc(detalle) : ""}.</p>
+        <p class="dz-rc-sizes">En disco ${esc(kb(discoSvg.length))} · recuperado ${esc(kb(recovery.content.length))}</p>
+        ${acciones}`);
+      cablear();
+    };
+
+    const pintarComparacion = () => {
+      openModal(`<h2>Comparar versiones</h2>
+        <div class="dz-rc-compare">
+          <figure><figcaption>En disco · ${esc(kb(discoSvg.length))}</figcaption><div class="dz-rc-pane" id="dzRcDisk"></div></figure>
+          <figure><figcaption>Recuperado · ${esc(hora)} · ${esc(kb(recovery.content.length))}</figcaption><div class="dz-rc-pane" id="dzRcMem"></div></figure>
+        </div>
+        <div class="m-actions">
+          <button class="ghost" id="dzRcBack">Volver</button>
+          <button class="ghost danger" id="dzRcDiscard">Descartar</button>
+          <button class="primary" id="dzRcRecover">Recuperar</button></div>`);
+      // Se dibujan de verdad las dos versiones: comparar tamaños no alcanza
+      // para decidir cuál es el trabajo que uno quiere conservar.
+      const pintar = (id, texto) => { const caja = $(id); if (caja) caja.innerHTML = texto; };
+      pintar("#dzRcDisk", discoSvg);
+      pintar("#dzRcMem", recovery.content);
+      cablear();
+    };
+
+    pintarResumen();
   });
 }
 
@@ -7408,14 +7501,20 @@ async function dzPersist() {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg || !DZ.path || !DZ.dirty) return;
   const txt = dzSerialize(svg);
-  try {
-    await api.save_file(DZ.path, txt);
-    DZ.dirty = false;
-    const tab = dzDocumentTabCurrent(); if (tab) { tab.dirty = false; tab.content = txt; dzDocumentTabsRender(); }
-    window.LOW?.workspace?.recovery?.clear(DZ.path);
-    if (DZ.anim) DZ.anim.cache[DZ.path] = txt;   // la cache/miniatura ve lo nuevo
-    setStatus(" auto-guardado");
-  } catch (e) { sysMsg(" auto-guardado falló: " + (e.message || e)); }
+  let r = null, err = null;
+  try { r = await api.save_file(DZ.path, txt); } catch (e) { err = e; }
+  if (!dzSaveOk(r)) {
+    // Un auto-guardado que falla es MAS grave que uno manual: nadie lo esta
+    // mirando. Se conserva el trabajo en el punto de recuperacion y el
+    // documento sigue sucio, en vez de darlo por guardado.
+    window.LOW?.workspace?.recovery?.saveNow(DZ.path, txt, { op: "auto-guardado fallido" });
+    return dzSaveFallo("El auto-guardado", dzSaveError(r, err));
+  }
+  DZ.dirty = false;
+  const tab = dzDocumentTabCurrent(); if (tab) { tab.dirty = false; tab.content = txt; dzDocumentTabsRender(); }
+  window.LOW?.workspace?.recovery?.clear(DZ.path);
+  if (DZ.anim) DZ.anim.cache[DZ.path] = txt;   // la cache/miniatura ve lo nuevo
+  setStatus(" auto-guardado");
 }
 
 async function dzGoFrame(i) {
@@ -15527,6 +15626,32 @@ async function dzDocumentTrash() {
   return true;
 }
 
+/* ── SAVE-03 / SAVE-04 de la matriz de regresion ────────────────────────────
+   El puente devuelve un OBJETO tambien cuando la escritura falla
+   ({error, path, recoverable}) — y todo objeto es truthy. Los guardados que
+   preguntaban `if (r)` o `if (r && r.path)` daban por escrito lo que nunca se
+   escribio: marcaban el documento limpio, BORRABAN el punto de recuperacion y
+   anunciaban exito. Un disco lleno se llevaba el trabajo en silencio.
+   Un guardado es exitoso solo si trae `path` y no trae `error`. */
+function dzSaveOk(r) { return !!(r && r.path && !r.error); }
+function dzSaveError(r, err) {
+  if (err) return err.message || String(err);
+  return (r && r.error) || "no se pudo escribir en disco";
+}
+/** Deja el documento como lo que es: sin guardar. Conserva el punto de
+    recuperacion y lo dice, en vez de anunciar un exito que no ocurrio. */
+function dzSaveFallo(que, detalle) {
+  DZ.dirty = true;
+  if (DZ.doc) DZ.doc.dirty = true;
+  const tab = dzDocumentTabCurrent();
+  if (tab) { tab.dirty = true; dzDocumentTabsRender(); }
+  setStatus("⚠ sin guardar: " + detalle);
+  sysMsg("⚠ " + que + " NO se guardó: " + detalle +
+    ". La versión anterior en disco sigue intacta y el punto de recuperación se " +
+    "conserva — reintentá o usá Guardar como.");
+  return false;
+}
+
 async function dzSceneSave(comoNuevo) {
   if (!DZ.doc) return false;
   dzDocCommit();                      // lo que esté en el lienzo, adentro
@@ -15534,7 +15659,7 @@ async function dzSceneSave(comoNuevo) {
   const nombre = (DZ.doc.scene.name || "escena").replace(/[^\w\-.]+/g, "_") + ".lowscene";
   try {
     const r = await api.save_file(comoNuevo ? "" : (DZ.doc.path || ""), json, nombre);
-    if (r && r.path) {
+    if (dzSaveOk(r)) {
       DZ.doc.path = r.path;
       DZ.doc.dirty = false;
       const tab = dzDocumentTabCurrent();
@@ -16782,12 +16907,16 @@ function dzHex(c) {
 async function dzSave() {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg || !DZ.path) return;
-  const r = await api.save_file(DZ.path, dzSerialize(svg));
-  if (r) {
-    const txt = dzSerialize(svg); DZ.dirty = false;
-    const tab = dzDocumentTabCurrent(); if (tab) { tab.dirty = false; tab.content = txt; dzDocumentTabsRender(); }
-    window.LOW?.workspace?.recovery?.clear(DZ.path); setStatus(" " + (r.name || "diseño guardado")); sysMsg(" Diseño guardado: " + (r.name || DZ.path));
-  }
+  const txt = dzSerialize(svg);
+  let r = null, err = null;
+  try { r = await api.save_file(DZ.path, txt); } catch (e) { err = e; }
+  if (!r && !err) return;                       // el diálogo se canceló: no hay nada que decir
+  if (!dzSaveOk(r)) return dzSaveFallo("El diseño", dzSaveError(r, err));
+  DZ.dirty = false;
+  const tab = dzDocumentTabCurrent(); if (tab) { tab.dirty = false; tab.content = txt; dzDocumentTabsRender(); }
+  // el punto de recuperación se borra SOLO cuando el disco confirmó
+  window.LOW?.workspace?.recovery?.clear(DZ.path);
+  setStatus(" " + (r.name || "diseño guardado")); sysMsg(" Diseño guardado: " + (r.name || DZ.path));
 }
 
 /* ── Herramientas del agente (qué puede hacer solo) ── */

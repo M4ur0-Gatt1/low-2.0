@@ -122,4 +122,24 @@ require('icon: (b.querySelector("use")' in APP,
 require("panels?.get?.(kind)?.dock" in APP,
         "acoplar un panel separado vuelve a mandarlo siempre a la derecha")
 
+guardado_diseno = function_body("dzSave", "modalTools")
+auto_guardado = function_body("dzPersist", "dzGoFrame")
+recuperacion = function_body("dzRecoveryDecide", "dzGenBg")
+require('r.path && !r.error' in APP,
+        "un guardado fallido vuelve a contar como exitoso: el puente devuelve un objeto tambien al fallar")
+require(APP.count("dzSaveOk(") >= 5,
+        "algun camino de guardado dejo de verificar que la escritura ocurrio")
+require("dzSaveOk(r)" in guardado_diseno and "dzSaveFallo" in guardado_diseno,
+        "Ctrl+S del diseno volvio a dar por guardado lo que no se escribio")
+require("dzSaveOk(r)" in auto_guardado and "saveNow" in auto_guardado,
+        "el auto-guardado fallido dejo de conservar el trabajo en el punto de recuperacion")
+require(auto_guardado.index("recovery?.clear") > auto_guardado.index("dzSaveOk(r)"),
+        "el auto-guardado borra el punto de recuperacion antes de confirmar la escritura")
+require(all(x in recuperacion for x in ('"recover"', '"discard"', '"keep"', "dzRcCompare")),
+        "el dialogo de recuperacion perdio alguna de sus tres salidas o la comparacion")
+require('decision === "discard"' in APP and 'dzQuiereRecuperar' not in APP,
+        "cancelar la recuperacion vuelve a descartar el trabajo en silencio")
+require("dzModalDismiss" in function_body("dzConfirmModal", "dzNotice"),
+        "cerrar un modal con Escape vuelve a dejar su promesa colgada para siempre")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")
