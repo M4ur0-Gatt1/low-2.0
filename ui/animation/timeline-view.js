@@ -420,6 +420,45 @@
         fila.appendChild(track); cont.appendChild(fila);
       }
 
+      // ── SUSTITUCIONES: cuándo cambia el dibujo de una pieza ──
+      // La mano abierta que pasa a puño ya funcionaba, pero el cuadro exacto en
+      // que ocurre era invisible: un timing que no se ve no se puede corregir.
+      // El cambio se marca fuerte; el sostenido, tenue, para leer de un vistazo
+      // cuánto dura cada dibujo.
+      const swaps = this._timeline().switchTrack
+        ? this._timeline().switchTrack(sc, total) : [];
+      if (swaps.some(Boolean)) {
+        const fila = document.createElement("div");
+        fila.className = "tl2-row tl2-swap" + (this._isCollapsed("swaps") ? " collapsed" : "");
+        const cab = document.createElement("div"); cab.className = "tl2-name";
+        const badge = document.createElement("span"); badge.textContent = "▣";
+        const nombre = document.createElement("span"); nombre.textContent = "Sustituciones";
+        cab.title = "Sustituciones de dibujo";
+        cab.append(foldButton("swaps"), badge, nombre); fila.appendChild(cab);
+        const track = document.createElement("div"); track.className = "tl2-track";
+        for (let f = 1; f <= total; f++) {
+          const mark = swaps[f];
+          const c = document.createElement("i"); c.dataset.frame = String(f);
+          c.className = "tl2-cell swap" + (mark && mark.change ? " swapkey" : "")
+            + (mark && mark.held ? " swaphold" : "") + (f === doc.frame ? " actual" : "");
+          // Lo que ENTRA y lo que viene sostenido se dicen por separado: en un
+          // cuadro puede cambiar la cabeza mientras la mano sólo continúa.
+          const partes = [];
+          if (mark && mark.labels.length) partes.push("entra " + mark.labels.join(" · "));
+          if (mark && mark.holds.length) partes.push("sostiene " + mark.holds.join(" · "));
+          c.title = mark
+            ? `F${f} · ` + partes.join(" · ") + (mark.change ? " · Alt+clic: borrar el cambio" : "")
+            : `F${f} · sin sustituciones`;
+          c.onclick = (e) => {
+            if (e.altKey && mark && mark.change)
+              mark.slots.forEach((slotId) => doc.deleteRigSwitchKey(slotId, f));
+            else doc.goTo(f);
+          };
+          track.appendChild(c);
+        }
+        fila.appendChild(track); cont.appendChild(fila);
+      }
+
       // ── una fila por capa ──
       const visibleLayers = this._timeline().visibleLayers
         ? this._timeline().visibleLayers(sc.layers, this.view, doc.layerId) : sc.layers;

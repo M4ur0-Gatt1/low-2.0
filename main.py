@@ -48,7 +48,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.1.0"
+LOW_VERSION = "4.2.0"
 
 
 def atomic_write_text(path, content, encoding="utf-8"):
@@ -1191,7 +1191,7 @@ class Api:
         try:
             r = s._window.create_file_dialog(
                 webview.OPEN_DIALOG, allow_multiple=False,
-                file_types=("Personaje (*.svg;*.png;*.jpg;*.jpeg;*.webp;*.gif)",))
+                file_types=("Personaje vectorial o raster (*.svg;*.ai;*.pdf;*.png;*.jpg;*.jpeg;*.webp;*.gif)",))
         except Exception as e:
             return {"error": str(e)}
         if not r:
@@ -1203,9 +1203,30 @@ class Api:
             return {"error": str(e)}
         if len(raw) > 12_000_000:
             return {"error": "archivo muy pesado (>12MB) — achicalo antes"}
-        if fp.suffix.lower() == ".svg":
+        suffix = fp.suffix.lower()
+        if suffix in (".ai", ".pdf"):
+            import shutil
+            import tempfile
+            converter = shutil.which("inkscape")
+            if not converter:
+                return {"error": "Para importar AI/PDF conservando vectores instalá Inkscape. "
+                                 "También podés exportar desde Illustrator como SVG con "
+                                 "'Conservar capacidades de edición' y abrir ese SVG directamente."}
+            out = Path(tempfile.gettempdir()) / (fp.stem + "_low_import.svg")
             try:
-                return {"svg": raw.decode("utf-8-sig"), "name": fp.name, "kind": "svg"}
+                result = subprocess.run([converter, str(fp), "--export-type=svg",
+                                         "--export-filename", str(out)],
+                                        capture_output=True, text=True, timeout=90)
+                if result.returncode != 0 or not out.exists():
+                    return {"error": "Inkscape no pudo convertir el AI/PDF: " +
+                                     ((result.stderr or result.stdout or "")[-240:])}
+                raw = out.read_bytes()
+            except (OSError, subprocess.SubprocessError) as e:
+                return {"error": f"No pude convertir el archivo vectorial: {e}"}
+        if suffix in (".svg", ".ai", ".pdf"):
+            try:
+                return {"svg": raw.decode("utf-8-sig"), "name": fp.name,
+                        "kind": "svg", "source_kind": suffix.lstrip(".")}
             except UnicodeDecodeError:
                 return {"error": "el SVG no está codificado como UTF-8"}
         mime = s.IMG_MIME.get(fp.suffix.lower())
@@ -1213,6 +1234,106 @@ class Api:
             return {"error": f"formato no soportado: {fp.suffix}"}
         return {"data": f"data:{mime};base64," + base64.b64encode(raw).decode("ascii"),
                 "name": fp.name, "kind": "raster"}
+
+    def import_brush_pack(s):
+        """Importa puntas de pincel sin acoplar el motor a formatos externos.
+
+        PNG/JPEG/WebP son puntas directas; brushset se abre como ZIP y ABR
+        moderno se admite cuando contiene previews PNG/JPEG embebidos. Todos
+        se normalizan al mismo contrato de presets que consume el frontend.
+        """
+        if not s._window:
+            return {"error": "sin ventana"}
+        try:
+            chosen = s._window.create_file_dialog(
+                webview.OPEN_DIALOG, allow_multiple=False,
+                file_types=("Pinceles (*.abr;*.brushset;*.lowbrush;*.json;*.png;*.jpg;*.jpeg;*.webp)",))
+        except Exception as e:
+            return {"error": str(e)}
+        if not chosen:
+            return {"cancel": True}
+        fp = Path(chosen[0] if isinstance(chosen, (list, tuple)) else chosen)
+        try:
+            raw = fp.read_bytes()
+        except OSError as e:
+            return {"error": str(e)}
+        if len(raw) > 80_000_000:
+            return {"error": "paquete de pinceles demasiado grande (>80 MB)"}
+
+        suffix = fp.suffix.lower()
+        if suffix in (".lowbrush", ".json"):
+            try:
+                data = json.loads(raw.decode("utf-8-sig"))
+                presets = data.get("brushes", data if isinstance(data, list) else [data])
+                return {"presets": presets, "name": fp.name, "format": "lowbrush"}
+            except (ValueError, UnicodeDecodeError) as e:
+                return {"error": f"preset JSON inválido: {e}"}
+
+        tips = []
+        if suffix == ".brushset":
+            import io
+            import zipfile
+            try:
+                with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                    for name in archive.namelist():
+                        if Path(name).suffix.lower() in (".png", ".jpg", ".jpeg"):
+                            tips.append((Path(name).stem, archive.read(name)))
+                            if len(tips) >= 32:
+                                break
+            except (OSError, zipfile.BadZipFile) as e:
+                return {"error": f"brushset inválido: {e}"}
+        elif suffix == ".abr":
+            # Algunos ABR incluyen previews codificados como imágenes completas.
+            # Se extraen sin intentar adivinar los descriptores propietarios.
+            cursor = 0
+            while len(tips) < 32:
+                png = raw.find(b"\x89PNG\r\n\x1a\n", cursor)
+                jpg = raw.find(b"\xff\xd8\xff", cursor)
+                starts = [(p, "png") for p in (png,) if p >= 0] + [(p, "jpg") for p in (jpg,) if p >= 0]
+                if not starts:
+                    break
+                start, kind = min(starts)
+                if kind == "png":
+                    end = raw.find(b"IEND\xaeB`\x82", start)
+                    end = end + 8 if end >= 0 else -1
+                else:
+                    end = raw.find(b"\xff\xd9", start + 3)
+                    end = end + 2 if end >= 0 else -1
+                if end <= start:
+                    break
+                tips.append((f"{fp.stem} {len(tips)+1}", raw[start:end]))
+                cursor = end
+            if not tips:
+                return {"error": "Este ABR usa puntas comprimidas sin preview compatible. "
+                                 "Exportá las puntas como PNG desde Photoshop por ahora."}
+        else:
+            tips = [(fp.stem, raw)]
+
+        try:
+            import io
+            from PIL import Image, ImageChops, ImageOps
+            normalized = []
+            for index, (name, blob) in enumerate(tips):
+                image = Image.open(io.BytesIO(blob)).convert("RGBA")
+                image.thumbnail((256, 256), Image.Resampling.LANCZOS)
+                # Photoshop/Procreate suelen guardar la punta como tinta negra
+                # sobre blanco; otros packs usan alpha real. Unificamos ambos
+                # casos como máscara negra transparente para poder recolorearla.
+                luminance = ImageOps.grayscale(image.convert("RGB"))
+                ink = ImageOps.invert(luminance)
+                alpha = ImageChops.multiply(ink, image.getchannel("A"))
+                normalized_tip = Image.new("RGBA", image.size, (0, 0, 0, 0))
+                normalized_tip.putalpha(alpha)
+                out = io.BytesIO(); normalized_tip.save(out, format="PNG", optimize=True)
+                data = "data:image/png;base64," + base64.b64encode(out.getvalue()).decode("ascii")
+                normalized.append({"id": f"imported-{fp.stem}-{index+1}", "name": name,
+                    "engine": "raster", "size": 36, "opacity": 1, "flow": .72,
+                    "spacing": .12, "pressureSize": .72, "pressureOpacity": .18,
+                    "hardness": .8, "tipData": data, "sourceFormat": suffix.lstrip(".")})
+        except Exception as e:
+            return {"error": f"No pude leer las puntas del pincel: {e}"}
+        return {"presets": normalized, "name": fp.name,
+                "format": suffix.lstrip("."), "count": len(normalized)}
 
     def gen_background(s, prompt, size="1024x1024"):
         """Genera una IMAGEN DE FONDO con IA y la devuelve como data URL, para que

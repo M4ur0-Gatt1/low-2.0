@@ -31,11 +31,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Dependencias Python para pruebas del puente
+        run: pip install -r requirements.txt
       - name: Pruebas del modelo 2D
         run: node tools/run_2d_model_tests.js
+      - name: Modelos de composición, colaboración y storyboard
+        run: |
+          node tools/run_multiplane_tests.js
+          node tools/run_drawing_collaboration_tests.js
+          node tools/run_storyboard_tests.js
+      - name: Puentes de guardado e importación
+        run: |
+          python tools/check_multiplane_backend.py
+          python tools/check_asset_import_backend.py
       - name: Contratos críticos de interacción 2D
         run: python tools/check_2d_interaction_contracts.py
-      - name: Recorridos reales — rigging, gestos vectoriales y coloreo
+      - name: Recorridos reales — dibujo, rigging, composición y storyboard
         run: |
           python -m http.server 8791 --bind 127.0.0.1 >/tmp/low-http.log 2>&1 &
           CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium)"
@@ -52,7 +63,12 @@ jobs:
             exit 1
           }
           node tools/check_rig_skeleton_ui.js
+          node tools/check_rig_ik_ui.js
           node tools/check_coloring_ui.js
+          node tools/check_workspace_ui.js
+          node tools/check_multiplane_ui.js
+          node tools/check_brush_vector_import_ui.js
+          node tools/check_storyboard_ui.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools
 

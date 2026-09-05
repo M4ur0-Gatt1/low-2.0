@@ -6,7 +6,7 @@
 ; (el workflow la deriva del tag). El default acá es solo para builds manuales
 ; y debe coincidir con LOW_VERSION en main.py.
 #ifndef AppVersion
-  #define AppVersion "4.1.0"
+  #define AppVersion "4.2.0"
 #endif
 #define AppExe "LOW.exe"
 
@@ -48,4 +48,3 @@ Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags
 ; la config y el historial quedan en %APPDATA%\LOW por si reinstala;
 ; solo se borra lo instalado
 Type: filesandordirs; Name: "{app}"
-

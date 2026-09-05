@@ -1424,6 +1424,73 @@
         T.normalizeViewState(null).compact === false);
     }
 
+    // 41. Sustituciones VISIBLES en el tiempo. Cambiar de mano abierta a puño
+    //     ya funcionaba, pero en la timeline no se veía ni dónde ocurre ni
+    //     cuánto se sostiene: un timing invisible no se puede corregir.
+    {
+      const T = animation.timeline, doc = new animation.LowDoc();
+      // `ensureRigNode` ya crea el slot con el nombre del hueso: la pieza que ve
+      // el artista se llama como el hueso, y eso es lo que debe decir la marca.
+      doc.ensureRigNode("mano_izq", { pivot: { x: 0, y: 0 } });
+      const slot = doc.ensureRigSlot("mano_izq");
+      const abierta = doc.addRigAttachment(slot, { name: "abierta" });
+      const puno = doc.addRigAttachment(slot, { name: "puño" });
+      doc.setRigSwitchKey(slot, 4, puno);
+      doc.setRigSwitchKey(slot, 9, abierta);
+
+      const pista = T.switchTrack(doc.scene, 12);
+      ok("marca el cuadro donde el dibujo CAMBIA, no los de alrededor",
+        pista[4].change === true && !pista[3] && pista[5].change === false,
+        JSON.stringify({ f3: pista[3], f4: pista[4], f5: pista[5] }));
+      ok("el sostenido se ve hasta la sustitución siguiente",
+        pista[5].held === true && pista[8].held === true && pista[9].change === true,
+        JSON.stringify({ f8: pista[8], f9: pista[9] }));
+      ok("la última sustitución se sostiene hasta el final del tramo",
+        pista[12].held === true && !pista[13]);
+      ok("cada marca dice qué pieza y qué dibujo, para el tooltip",
+        pista[4].labels[0] === "mano_izq: puño" && pista[9].labels[0] === "mano_izq: abierta",
+        JSON.stringify(pista[4].labels));
+      // El slot se llama como el ID del hueso; la marca tiene que mostrar el
+      // nombre VISIBLE de la pieza, no un identificador interno.
+      doc.scene.rig.nodes["mano_izq"].name = "Mano izq.";
+      ok("la marca prefiere el nombre visible de la pieza al identificador",
+        T.switchTrack(doc.scene, 12)[4].labels[0] === "Mano izq.: puño",
+        JSON.stringify(T.switchTrack(doc.scene, 12)[4].labels));
+      ok("la marca de cambio sabe a qué slot borrarle la clave",
+        pista[4].slots[0] === slot && pista[5].slots.length === 0);
+      ok("el sostenido se lista aparte del cambio, no mezclado",
+        pista[4].holds.length === 0 && pista[5].labels.length === 0 &&
+        pista[5].holds[0] === "mano_izq: puño", JSON.stringify(pista[5]));
+
+      // Caso mezclado: en un mismo cuadro una pieza CAMBIA y otra sólo sigue.
+      // Antes las dos aparecían como cambio y el tooltip mentía.
+      doc.ensureRigNode("cabeza", { pivot: { x: 0, y: 0 } });
+      const slotCabeza = doc.ensureRigSlot("cabeza");
+      doc.setRigSwitchKey(slotCabeza, 7, doc.addRigAttachment(slotCabeza, { name: "perfil" }));
+      // `ensureRigSlot` bautiza el slot con SU id (`slot:<hueso>`), distinto del
+      // nombre por defecto que pone `ensureRigNode`. Los dos son autogenerados
+      // y ninguno se puede mostrar: la marca tiene que caer al nombre del hueso.
+      doc.scene.rig.nodes["cabeza"].name = "Cabeza";
+      doc.scene.rig.slots[slotCabeza].name = slotCabeza;
+      const mezcla = T.switchTrack(doc.scene, 12)[7];
+      ok("en un cuadro mixto, cambia una pieza y la otra sólo se sostiene",
+        mezcla.labels.length === 1 && mezcla.labels[0] === "Cabeza: perfil" &&
+        mezcla.holds.length === 1 && mezcla.holds[0] === "Mano izq.: puño" &&
+        mezcla.slots.length === 1 && mezcla.slots[0] === slotCabeza,
+        JSON.stringify(mezcla));
+
+      // Una clave que apunta a un dibujo borrado no puede pintar una marca
+      // fantasma. El comando la RECHAZA, así que sólo puede llegar desde un
+      // archivo donde el dibujo se borró después: se inyecta como vendría de ahí.
+      ok("el comando ni siquiera acepta una sustitución a un dibujo inexistente",
+        doc.setRigSwitchKey(slot, 2, "attachment:inexistente") === false);
+      doc.scene.rig.switches[slot].keys[2] = "attachment:inexistente";
+      ok("una sustitución rota no deja marca fantasma", !T.switchTrack(doc.scene, 12)[2],
+        JSON.stringify(T.switchTrack(doc.scene, 12)[2]));
+      ok("sin sustituciones la pista queda vacía y no dibuja fila",
+        T.switchTrack(new animation.LowDoc().scene, 8).every((m) => !m));
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

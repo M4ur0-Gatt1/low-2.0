@@ -752,6 +752,56 @@
       scaleY: data.scaleY == null ? 1 : Number(data.scaleY) };
   }
 
+  /* STORYBOARD: la secuencia de paneles es parte del documento, igual que las
+     capas o el rig. Un panel guarda la DECISIÓN de la toma (tipo, ángulo y la
+     cámara que la produce), no sólo coordenadas sueltas: así se puede volver a
+     generar, reencuadrar o cambiar de lente sin perder la intención. */
+  const STAGE_POSES = ["de-pie", "caminando", "sentado", "senalando"];
+  function storyboardCast(source) {
+    const out = [], seen = new Set();
+    for (const raw of Array.isArray(source) ? source : []) {
+      if (!raw) continue;
+      const id = typeof raw.id === "string" && raw.id ? raw.id : `fig_${out.length + 1}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, name: typeof raw.name === "string" ? raw.name : "",
+        x: Number(raw.x) || 0, z: Number(raw.z) || 0,
+        // Una figura sin altura no se puede encuadrar; 170 es la de referencia.
+        height: Math.max(20, Math.min(400, Number(raw.height) || 170)),
+        rotation: Number(raw.rotation) || 0,
+        pose: STAGE_POSES.includes(raw.pose) ? raw.pose : "de-pie" });
+    }
+    return out;
+  }
+
+  function storyboardBoard(data = {}, index = 0) {
+    const shot = data.shot && typeof data.shot === "object" ? data.shot : {};
+    return { id: data.id || `board_${Date.now().toString(36)}_${index}_${Math.random().toString(36).slice(2, 6)}`,
+      name: typeof data.name === "string" ? data.name : "",
+      action: typeof data.action === "string" ? data.action : "",
+      dialogue: typeof data.dialogue === "string" ? data.dialogue : "",
+      notes: typeof data.notes === "string" ? data.notes : "",
+      // Un panel de cero cuadros no se vería nunca: no es un panel.
+      duration: Math.max(1, Math.round(Number(data.duration) || 1)),
+      drawingRef: data.drawingRef == null ? null : clone(data.drawingRef),
+      shot: { type: typeof shot.type === "string" ? shot.type : "plano-medio",
+        angle: typeof shot.angle === "string" ? shot.angle : "nivel",
+        camera: clone(shot.camera || null), subject: clone(shot.subject || null),
+        // El REPARTO en el piso del escenario: quién está y dónde. `focus` dice
+        // a quién encuadra la cámara; sin reparto no hay a quién medirle el plano.
+        cast: storyboardCast(shot.cast),
+        focus: typeof shot.focus === "string" ? shot.focus : null } };
+  }
+  function storyboardData(data = {}) {
+    const seen = new Set(), boards = [];
+    for (const raw of Array.isArray(data.boards) ? data.boards : []) {
+      const board = storyboardBoard(raw || {}, boards.length);
+      if (seen.has(board.id)) continue;      // un id repetido rompería el orden
+      seen.add(board.id); boards.push(board);
+    }
+    return { version: 1, boards, settings: clone(data.settings || {}) };
+  }
+
   function compositionData(data = {}) {
     const planes = {};
     for (const [id, plane] of Object.entries(data.planes || {})) {
@@ -776,6 +826,7 @@
       this.palettes = (data.palettes || []).map((p) => new Palette(p));
       this.camera = clone(data.camera || { keys: {} });
       this.composition = compositionData(data.composition);
+      this.storyboard = storyboardData(data.storyboard);
       this.audio = clone(data.audio || []);
       this.rig = rigData(data.rig);
       this.revision = Number(data.revision) || 0;
@@ -791,6 +842,21 @@
     }
     level(id) { return this.levels.find((l) => l.id === id) || null; }
     layer(id) { return this.layers.find((l) => l.id === id) || null; }
+
+    board(id) { return this.storyboard.boards.find((b) => b.id === id) || null; }
+    /** De qué cuadro a qué cuadro va cada panel. El tiempo del storyboard es
+     *  la suma de sus paneles: no hay una segunda fuente que pueda discrepar. */
+    boardTiming() {
+      let cursor = 1;
+      return this.storyboard.boards.map((board) => {
+        const from = cursor, to = cursor + board.duration - 1;
+        cursor = to + 1;
+        return { id: board.id, from, to, duration: board.duration };
+      });
+    }
+    boardDuration() {
+      return this.storyboard.boards.reduce((total, board) => total + board.duration, 0);
+    }
 
     compositionPlane(id) { return this.composition.planes[id] || null; }
     ensureCompositionPlane(id, source = {}) {
@@ -1196,7 +1262,8 @@
                levels: this.levels.map((l) => l.toJSON()),
                layers: this.layers.map((l) => l.toJSON()),
                palettes: this.palettes.map((p) => p.toJSON()),
-               camera: this.camera, composition: clone(this.composition), audio: this.audio,
+               camera: this.camera, composition: clone(this.composition),
+               storyboard: clone(this.storyboard), audio: this.audio,
                rig: rigToJSON(this.rig), revision: this.revision };
     }
 
@@ -1236,6 +1303,10 @@
   animation.rigChannelSegment = rigChannelSegment;
   animation.rigCurveClipboardData = rigCurveClipboardData;
   animation.rigConstraintData = rigConstraintData;
+  animation.storyboardBoard = storyboardBoard;
+  animation.storyboardCast = storyboardCast;
+  animation.STAGE_POSES = STAGE_POSES;
+  animation.storyboardData = storyboardData;
   animation.rigDiagnostics = rigDiagnostics;
   animation.rigReadiness = rigReadiness;
   animation.rigConstraintHasCycle = rigConstraintHasCycle;

@@ -1,6 +1,8 @@
 /* E2E Chromium: viewport 3D → inspector/gizmo → Undo/Redo → Auto-key → reapertura. */
+const fs = require("fs");
 const endpoint = process.argv[2] || "http://127.0.0.1:9223";
 const pageUrl = process.argv[3] || "http://127.0.0.1:8791/ui/index.html?mock=1";
+const screenshotPath = process.argv[4] || "";
 
 async function main() {
   const stage = name => console.error("E2E etapa: " + name);
@@ -46,6 +48,12 @@ async function main() {
     root.focus(); root.dispatchEvent(new KeyboardEvent("keydown",{key:"g",bubbles:true})); root.dispatchEvent(new KeyboardEvent("keydown",{key:"z",bubbles:true}));
     const shortcut={tool:DZ_COMPOSITION_VIEW.pendingTool,label:root.querySelector('.cmp3-mode').textContent};
     root.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+    const box=n=>{const r=n.getBoundingClientRect();return {l:r.left,r:r.right,t:r.top,b:r.bottom,w:r.width,h:r.height}};
+    const toolbar=root.querySelector('.cmp3-toolbar');
+    const layout={root:box(root),toolbar:{...box(toolbar),scrollLeft:toolbar.scrollLeft,scrollWidth:toolbar.scrollWidth,clientWidth:toolbar.clientWidth},outliner:box(root.querySelector('.cmp3-outliner')),
+      stage:box(root.querySelector('.cmp3-stage')),inspector:box(root.querySelector('.cmp3-inspector')),
+      editorInspector:getComputedStyle(document.querySelector('.dz-inspector')).display,
+      codePanel:getComputedStyle(document.querySelector('.dz-code')).display};
     const changed={panel:!root.hidden&&document.querySelector("#dzZPanel").hidden,z:DZ.doc.scene.compositionTransformAt(ref.id).z,
       attr:+el.getAttribute("data-z"),history:DZ.history.undoStack.length-history0,planes:root.querySelectorAll('.cmp3-card').length,
       outliner:root.querySelectorAll('.cmp3-list button').length,gizmos:root.querySelectorAll('.cmp3-gizmo [data-axis]').length,
@@ -66,7 +74,7 @@ async function main() {
     const savedOk=await dzSceneSave(true), diskDoc=saved&&LOW.animation.LowDoc.fromJSON(saved.content);
     const exportSvg=dzCuadroSvgTexto(8), cameraSvg=dzCamView(exportSvg,dzCamDefault());
     DZ.tlView?.render(); await wait(100);
-    return {changed,shortcut,undone,redone,keyed,keyedRotation,reopened:reopened.compositionTransformAt(ref.id,8)?.z,
+    return {changed,shortcut,layout,undone,redone,keyed,keyedRotation,reopened:reopened.compositionTransformAt(ref.id,8)?.z,
       disk:{ok:savedOk,name:saved?.name,z:diskDoc?.scene.compositionTransformAt(ref.id,8)?.z},
       export:{z:/data-z=["']240["']/.test(exportSvg),rotation:/data-comp-rz=["']12["']/.test(exportSvg),wrapped:cameraSvg.includes("translate(")},
       timeline:{keys:document.querySelectorAll('.tl2-tick.compkey').length,title:[...document.querySelectorAll('.tl2-tick.compkey')].some(n=>/composición/.test(n.title))}};
@@ -81,6 +89,9 @@ async function main() {
     throw Error("REGRESIÓN: viewport, outliner o gizmo incompletos: " + JSON.stringify(value));
   if (value.shortcut?.tool !== "z" || value.shortcut?.label !== "Mover Z")
     throw Error("REGRESIÓN: atajo G Z no activa profundidad: " + JSON.stringify(value));
+  const l=value.layout;
+  if (!l || l.editorInspector !== "none" || l.codePanel !== "none" || l.outliner.r > l.stage.l+.5 || l.stage.r > l.inspector.l+.5 || l.toolbar.b > l.stage.t+.5 || l.stage.w < 480)
+    throw Error("REGRESIÓN: layout de Composición superpuesto o aplastado: " + JSON.stringify(value));
   if (value.changed.feather) throw Error("REGRESIÓN: Composición abrió el módulo Feather: " + JSON.stringify(value));
   if (value.undone.z !== 0 || value.undone.attr !== 0 || value.redone.z !== 180 || value.redone.attr !== 180)
     throw Error("REGRESIÓN: Undo/Redo no sincronizó modelo y vista: " + JSON.stringify(value));
@@ -94,6 +105,10 @@ async function main() {
     throw Error("REGRESIÓN: Timeline no muestra claves de composición: " + JSON.stringify(value));
   if (errores.length) throw Error("REGRESIÓN: excepciones UI: " + errores.slice(0, 3).join(" | "));
   console.log("E2E multiplano OK", JSON.stringify(value));
+  if (screenshotPath) {
+    const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+    fs.writeFileSync(screenshotPath, Buffer.from(shot.data, "base64"));
+  }
   try { await fetch(endpoint + "/json/close/" + created.id); } catch (_) {}
 }
 main().catch(error => { console.error(error.stack || error); process.exit(1); });

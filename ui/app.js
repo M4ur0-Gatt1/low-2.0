@@ -596,6 +596,8 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   };
   // gamma de presión (OpenToonz V_BrushPressureSensitivity): <1 más sensible al inicio
   DZ.pressureGamma = +(localStorage.getItem("low.dzgamma") || 0.85);
+  DZ.pressureMin = +(localStorage.getItem("low.dzpressuremin") || 0);
+  DZ.pressureMax = +(localStorage.getItem("low.dzpressuremax") || 1);
   $("#dzPrefs").onclick = dzPrefsModal;
   $("#dzRotate").addEventListener("pointerdown", dzRotateDown);
   $("#dzGroup").onclick = (e) => dzGroupSel(e.shiftKey);
@@ -4501,6 +4503,71 @@ function dzSmoothPressure(pr, track) {
   return Math.pow(avg, gamma);
 }
 
+function dzCurrentBrush() {
+  return window.LOW?.drawing?.brushes?.get?.(DZ.brushPreset || "") || null;
+}
+
+/** Construye el resultado final con el motor del preset. Las puntas raster se
+ * guardan como stamps SVG embebidos: siguen siendo portables dentro del archivo. */
+function dzBrushFinalElement(points, color) {
+  const preset = dzCurrentBrush(), engine = window.LOW?.drawing?.brushEngine;
+  if (!preset || !engine) return dzBrushRibbon(points, DZ.drawW || 6, color);
+  const samples = points.map(p => ({ x: p[0], y: p[1], pressure: p[2],
+    tiltX: p[3] || 0, tiltY: p[4] || 0, twist: p[5] || 0, time: p[6] || 0 }));
+  const brush = { ...preset, size: DZ.drawW || preset.size || 6 };
+  if (brush.engine === "raster") {
+    const dabs = engine.buildRasterDabs(samples, brush);
+    if (!dabs.length) return null;
+    // Un trazo largo no puede convertirse en decenas de miles de nodos SVG.
+    // Conservamos una muestra uniforme (incluidos ambos extremos) y dejamos el
+    // conteo original como diagnóstico. 1600 dabs mantiene detalle a zoom de
+    // trabajo sin convertir guardar/undo/colaboración en operaciones pesadas.
+    const maxDabs = 1600;
+    const renderedDabs = dabs.length <= maxDabs ? dabs : Array.from({ length: maxDabs }, (_, index) =>
+      dabs[Math.round(index * (dabs.length - 1) / (maxDabs - 1))]);
+    const group = document.createElementNS(SVGNS, "g");
+    group.setAttribute("data-low", brush.tipData ? "imported-brush" : "raster-brush"); group.setAttribute("data-brush-id", brush.id);
+    group.setAttribute("data-dab-count", renderedDabs.length); group.setAttribute("data-source-dab-count", dabs.length);
+    if (brush.tipData) {
+      const defs = document.createElementNS(SVGNS, "defs"), filter = document.createElementNS(SVGNS, "filter"), flood = document.createElementNS(SVGNS, "feFlood"), composite = document.createElementNS(SVGNS, "feComposite");
+      const filterId = dzUniqueId("brush_color_"), tipId = dzUniqueId("brush_tip_");
+      filter.id = filterId; filter.setAttribute("x", "-50%"); filter.setAttribute("y", "-50%"); filter.setAttribute("width", "200%"); filter.setAttribute("height", "200%");
+      flood.setAttribute("flood-color", color); flood.setAttribute("result", "brushColor");
+      composite.setAttribute("in", "brushColor"); composite.setAttribute("in2", "SourceGraphic"); composite.setAttribute("operator", "in");
+      const symbol = document.createElementNS(SVGNS, "symbol"), texture = document.createElementNS(SVGNS, "image");
+      symbol.id = tipId; symbol.setAttribute("viewBox", "0 0 1 1"); symbol.setAttribute("preserveAspectRatio", "none");
+      texture.setAttribute("href", brush.tipData); texture.setAttribute("width", "1"); texture.setAttribute("height", "1");
+      texture.setAttribute("preserveAspectRatio", "none"); symbol.appendChild(texture);
+      filter.append(flood, composite); defs.append(filter, symbol); group.appendChild(defs); group.setAttribute("filter", `url(#${filterId})`);
+      group.dataset.tipId = tipId;
+    }
+    renderedDabs.forEach((dab, index) => {
+      let stamp;
+      if (brush.tipData) {
+        stamp = document.createElementNS(SVGNS, "use"); stamp.setAttribute("href", `#${group.dataset.tipId}`);
+        stamp.setAttribute("x", dab.x - dab.width / 2); stamp.setAttribute("y", dab.y - dab.height / 2);
+        stamp.setAttribute("width", dab.width); stamp.setAttribute("height", dab.height);
+      } else {
+        stamp = document.createElementNS(SVGNS, "ellipse"); stamp.setAttribute("cx", dab.x); stamp.setAttribute("cy", dab.y);
+        const grain = /charcoal|chalk|dry|pastel|spray/.test(brush.texture || "") ? .58 + ((index * 37) % 43) / 100 : 1;
+        stamp.setAttribute("rx", dab.width * .5 * grain); stamp.setAttribute("ry", dab.height * .5 * grain); stamp.setAttribute("fill", color);
+      }
+      const grainOpacity = /charcoal|chalk|dry|pastel|spray/.test(brush.texture || "") ? .55 + ((index * 29) % 45) / 100 : 1;
+      stamp.setAttribute("opacity", Math.max(0, Math.min(1, dab.opacity * grainOpacity)));
+      stamp.setAttribute("transform", `rotate(${dab.angle || 0} ${dab.x} ${dab.y})`); group.appendChild(stamp);
+    });
+    return group;
+  }
+  if (brush.engine === "vector") {
+    const outline = engine.buildVectorOutline(samples, brush);
+    if (outline?.path) {
+      const path = document.createElementNS(SVGNS, "path"); path.setAttribute("d", outline.path); path.setAttribute("fill", color);
+      path.setAttribute("data-low", "brush"); path.setAttribute("data-brush-id", brush.id); return path;
+    }
+  }
+  return dzBrushRibbon(points, DZ.drawW || 6, color);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    SISTEMA DE DIBUJO — v5 (v3.17.7)
    ═══════════════════════════════════════════════════════════════════════
@@ -4534,11 +4601,15 @@ function _otDevType(e) {
 }
 
 function _otPressure(e) {
-  if ((e.pointerType === "pen" || e.pointerType === "eraser") && e.pressure != null) return e.pressure;
-  return 0.5;
+  if ((e.pointerType === "pen" || e.pointerType === "eraser") && e.pressure != null) {
+    const min = Math.max(0, Math.min(.95, DZ.pressureMin || 0));
+    const max = Math.max(min + .05, Math.min(1, DZ.pressureMax || 1));
+    return Math.max(0, Math.min(1, (e.pressure - min) / (max - min)));
+  }
+  return 1; // mouse: ancho completo; 0.5 es un valor sintético de Pointer Events
 }
 
-function _drawAddPoint(track, x, y, pr) {
+function _drawAddPoint(track, x, y, pr, meta = null) {
   const last = track.pts[track.pts.length - 1];
   if (track.stabilizer) {
     const stable = track.stabilizer.push({ x, y, pressure: pr || .03 });
@@ -4568,7 +4639,7 @@ function _drawAddPoint(track, x, y, pr) {
     }
   }
   
-  track.pts.push([x, y, smPr]);
+  track.pts.push([x, y, smPr, meta?.tiltX || 0, meta?.tiltY || 0, meta?.twist || 0, meta?.timeStamp || performance.now()]);
   if (track.mode !== "pencil") {
     const seg = document.createElementNS(SVGNS, "path");
     seg.setAttribute("d", `M ${last[0].toFixed(1)} ${last[1].toFixed(1)} L ${x.toFixed(1)} ${y.toFixed(1)}`);
@@ -4584,7 +4655,7 @@ function _drawBeginTrack(e, svg) {
   const pr = _otPressure(e);
   const dev = _otDevType(e);
   const track = {
-    pts: [[p.x, p.y, pr]], mode: DZ.tool, el: null,
+    pts: [[p.x, p.y, pr, e.tiltX || 0, e.tiltY || 0, e.twist || 0, e.timeStamp || performance.now()]], mode: DZ.tool, el: null,
     pid: e.pointerId, devType: dev,
     _pbuf: [pr, pr, pr, pr, pr],
     startX: p.x, startY: p.y,
@@ -4636,7 +4707,7 @@ function _drawFinish() {
   if (t.mode === "pencil") {
     t.el.setAttribute("d", dzSmoothPath(pts));
   } else {
-    const ribbon = dzBrushRibbon(pts, DZ.drawW || 6, DZ.drawColor || "#F0450E");
+    const ribbon = dzBrushFinalElement(pts, DZ.drawColor || "#F0450E");
     if (ribbon) {
       if (t.el.hasAttribute("opacity")) ribbon.setAttribute("opacity", t.el.getAttribute("opacity"));
       dzStyleTag(ribbon, "paint");          // el trazo terminado es una cinta RELLENA
@@ -4655,7 +4726,7 @@ function dzDrawRaw(e) {
   const pr = (e.pressure != null) ? e.pressure : _otPressure(e);
   e.preventDefault();
   const p = dzToUser(e.clientX, e.clientY);
-  _drawAddPoint(DRAW_TRACK, p.x, p.y, pr);
+  _drawAddPoint(DRAW_TRACK, p.x, p.y, pr, e);
 }
 
 function dzDrawDown(e) {
@@ -4728,7 +4799,7 @@ function dzDrawMove(e) {
   for (const ev of evs) {
     const p = dzToUser(ev.clientX, ev.clientY);
     const pr = _otPressure(ev);
-    _drawAddPoint(DRAW_TRACK, p.x, p.y, pr);
+    _drawAddPoint(DRAW_TRACK, p.x, p.y, pr, ev);
   }
 }
 
@@ -4753,11 +4824,12 @@ function dzMovingAvg(pts, win) {
   if (win < 1 || pts.length < 3) return pts;
   const out = [pts[0]];
   for (let i = 1; i < pts.length - 1; i++) {
-    let sx = 0, sy = 0, sp = 0, n = 0;
+    const sums = [0, 0, 0, 0, 0, 0, 0]; let n = 0;
     for (let j = Math.max(0, i - win); j <= Math.min(pts.length - 1, i + win); j++) {
-      sx += pts[j][0]; sy += pts[j][1]; sp += pts[j][2] || 0.5; n++;
+      for (let channel = 0; channel < sums.length; channel++) sums[channel] += pts[j][channel] || (channel === 2 ? .5 : 0);
+      n++;
     }
-    out.push([sx / n, sy / n, sp / n]);
+    out.push(sums.map(value => value / n));
   }
   out.push(pts[pts.length - 1]);
   return out;
@@ -5074,6 +5146,12 @@ function dzPrefsModal() {
       <input type="range" id="prefGamma" min="20" max="200" value="${Math.round((DZ.pressureGamma || 0.85) * 100)}">
       <span class="dz-hint" id="prefGammaLbl">${(DZ.pressureGamma || 0.85).toFixed(2)}</span>
     </div>
+    <div class="dz-style-row">
+      <span class="dz-hint">Rango útil Huion/Wacom</span>
+      <label class="dz-hint">inicio <input class="dz-win" id="prefPressureMin" type="number" min="0" max="0.95" step="0.01" value="${DZ.pressureMin || 0}"></label>
+      <label class="dz-hint">máximo <input class="dz-win" id="prefPressureMax" type="number" min="0.05" max="1" step="0.01" value="${DZ.pressureMax || 1}"></label>
+      <button class="ghost" id="prefTabletDiag">Diagnóstico</button>
+    </div>
     <div class="m-actions">
       <button class="ghost" id="prefReset">Restaurar por defecto</button>
       <button class="primary" id="mCancel">Listo</button>
@@ -5110,6 +5188,14 @@ function dzPrefsModal() {
     $("#prefGammaLbl").textContent = DZ.pressureGamma.toFixed(2);
     try { localStorage.setItem("low.dzgamma", String(DZ.pressureGamma)); } catch (err) { /* */ }
   };
+  const savePressureRange = () => {
+    DZ.pressureMin = Math.max(0, Math.min(.95, +$("#prefPressureMin").value || 0));
+    DZ.pressureMax = Math.max(DZ.pressureMin + .05, Math.min(1, +$("#prefPressureMax").value || 1));
+    $("#prefPressureMin").value = DZ.pressureMin; $("#prefPressureMax").value = DZ.pressureMax;
+    try { localStorage.setItem("low.dzpressuremin", DZ.pressureMin); localStorage.setItem("low.dzpressuremax", DZ.pressureMax); } catch (_) { /* noop */ }
+  };
+  $("#prefPressureMin").onchange = savePressureRange; $("#prefPressureMax").onchange = savePressureRange;
+  $("#prefTabletDiag").onclick = () => api.open_tablet_diag();
   $("#prefReset").onclick = () => {
     DZ.keymap = { ...DZ_KEY_DEFAULTS };
     dzKeysSave();
@@ -8022,12 +8108,30 @@ async function dzRigImportCharacter() {
     const source=parsed.documentElement, src=(source.getAttribute("viewBox")||`0 0 ${source.getAttribute("width")||vw} ${source.getAttribute("height")||vh}`).trim().split(/[ ,]+/).map(Number);
     const sx=src[2]||vw, sy=src[3]||vh, scale=Math.min(vw*.8/sx,vh*.8/sy),
       tx=vx+(vw-sx*scale)/2-src[0]*scale, ty=vy+(vh-sy*scale)/2-src[1]*scale;
+    const structural=new Set(["defs","style","metadata","title","desc"]);
+    const visible=[...source.children].filter(child=>!structural.has(child.tagName.toLowerCase()));
+    // Illustrator suele envolver todos los objetos en un único grupo "Layer 1".
+    // En ese caso importamos sus hijos como piezas independientes conservando
+    // los atributos heredados del grupo mediante un wrapper por objeto.
+    const illustratorLayer=visible.length===1&&visible[0].tagName.toLowerCase()==="g"&&
+      [...visible[0].children].filter(child=>!structural.has(child.tagName.toLowerCase())).length>1?visible[0]:null;
+    const pieces=illustratorLayer
+      ? [...illustratorLayer.children].filter(child=>!structural.has(child.tagName.toLowerCase())).map(child=>({child,parent:illustratorLayer}))
+      : visible.map(child=>({child,parent:null}));
     for(const child of [...source.children]){
       const tag=child.tagName.toLowerCase();
-      if(["defs","style","metadata","title","desc"].includes(tag)){
+      if(structural.has(tag)){
         svg.insertBefore(document.importNode(child,true),svg.firstChild); continue;
       }
-      const el=document.importNode(child,true), old=el.getAttribute("transform")||"";
+    }
+    for(const piece of pieces){
+      let el=document.importNode(piece.child,true);
+      if(piece.parent){
+        const wrapper=document.createElementNS(SVGNS,"g");
+        for(const attr of [...piece.parent.attributes])if(attr.name!=="id")wrapper.setAttribute(attr.name,attr.value);
+        wrapper.appendChild(el); if(piece.child.id)wrapper.id=piece.child.id; el=wrapper;
+      }
+      const old=el.getAttribute("transform")||"";
       el.setAttribute("transform",`translate(${tx} ${ty}) scale(${scale}) ${old}`.trim());
       if(!el.id)el.id=dzUniqueId("pieza_");
       el.setAttribute("data-rig-piece","1"); dzArtAppend(svg,el); imported.push(el);
@@ -11101,7 +11205,7 @@ function dzCompositionViewRender() {
   const root = $("#dzComposition3D"); if (!root || root.hidden || !LOW.composition?.MultiplaneView) return;
   if (!DZ_COMPOSITION_VIEW) DZ_COMPOSITION_VIEW = new LOW.composition.MultiplaneView(root, {
     autoKey: DZ.compositionAutoKey,
-    onExit: () => { root.hidden = true; $("#dzZPanel").hidden = false; dzZPanelRender(); },
+    onExit: () => { dzCompositionViewShow(false); dzSetStatus("Lienzo 2D"); },
     onAutoKey: value => {
       DZ.compositionAutoKey = value; localStorage.setItem("low.composition.autokey", value ? "1" : "0");
       const legacy = $("#dzZAutoKey"); if (legacy) legacy.checked = value;
@@ -11124,6 +11228,7 @@ function dzCompositionViewRender() {
 function dzCompositionViewShow(show) {
   const root = $("#dzComposition3D"); if (!root) return;
   root.hidden = !show; $("#dzZPanel").hidden = true;
+  $("#designView")?.classList.toggle("composition-3d", !!show);
   if (show) requestAnimationFrame(dzCompositionViewRender);
 }
 
@@ -11157,6 +11262,7 @@ function dzMenuAction(act) {
   if (act && (act.startsWith("win-") || act.startsWith("ws-"))) return dzRunAction(act);
   if (act && act.startsWith("panel-")) return dzWindowPanelToggle(act.slice(6));
   const A = {
+    storyboard: dzStoryboardToggle,
     nuevo: dzDocumentNew,
     "escena-abrir": dzSceneOpen,
     documento: dzDocModal, guardar: () => DZ.doc ? dzSceneSave(false) : dzSave(),
@@ -11262,6 +11368,8 @@ async function dzWindowPanelSet(id, show) {
     if (show) await dzRigOpen(); else node.hidden = true;
   } else if (id === "mocap") {
     if (show) await dzMocapOpen(); else node.hidden = true;
+  } else if (id === "storyboard") {
+    if (show) await dzSbMount(); else node.hidden = true;
   } else if (id === "camera") {
     if (show !== !node.hidden) dzCamToggle();
   } else if (id === "code") {
@@ -11348,7 +11456,7 @@ function dzToolOptsRender() {
     const presets = window.LOW?.drawing?.brushes?.all?.() || [];
     const presetSelect = t !== "pen" && presets.length ? `<label>Pincel <select id="toBrushPreset" class="langsel">${presets.map(p =>
       `<option value="${p.id}"${p.id === DZ.brushPreset ? " selected" : ""}>${p.name}</option>`).join("")}</select></label>` : "";
-    html += presetSelect + `<label>Trazo <input type="color" id="toColor" value="${dzHex(DZ.drawColor) || "#1a1a1a"}"></label>
+    html += presetSelect + (t !== "pen" ? `<button class="ghost" id="toBrushStudio" title="Biblioteca, preview y dinámica de pinceles">Pinceles…</button>` : "") + `<label>Trazo <input type="color" id="toColor" value="${dzHex(DZ.drawColor) || "#1a1a1a"}"></label>
       <label>Grosor <input type="number" id="toW" min="1" max="120" value="${DZ.drawW || 6}" class="dz-win"></label>` +
       (t !== "pen" ? `<label>Suavizado <input type="range" id="toSmooth" min="0" max="100" value="${sm}"><span id="toSmoothLbl">${sm}</span></label>` : "") +
       (t === "brush" ? `<span class="dz-hint">el grosor sigue la presión de la tableta</span>` : "") +
@@ -11409,6 +11517,7 @@ function dzToolOptsRender() {
     if (brush.color) DZ.drawColor = brush.color;
     dzToolOptsRender(); dzSetStatus("Pincel: " + brush.name);
   };
+  const brushStudio = $("#toBrushStudio"); if (brushStudio) brushStudio.onclick = dzBrushStudioOpen;
   const oc = $("#toColor"); if (oc) oc.oninput = e => { DZ.drawColor = e.target.value; const p = $("#dzPStroke"); if (p) p.value = e.target.value; };
   const ow = $("#toW"); if (ow) ow.oninput = e => { DZ.drawW = +e.target.value || 6; const p = $("#dzDrawW"); if (p) p.value = DZ.drawW; };
   const os = $("#toSmooth"); if (os) os.oninput = e => {
@@ -11425,6 +11534,49 @@ function dzToolOptsRender() {
   const passes = $("#toIronPasses"); if (passes) passes.oninput = e => dzVectorPrefsSet("ironPasses", Math.max(1, Math.min(5, +e.target.value || 1)));
   const radius = $("#toMagnetRadius"); if (radius) radius.oninput = e => dzVectorPrefsSet("magnetRadius", +e.target.value);
   const strength = $("#toMagnetStrength"); if (strength) strength.oninput = e => dzVectorPrefsSet("magnetStrength", +e.target.value / 100);
+}
+
+let DZ_BRUSH_STUDIO = null;
+function dzBrushSelect(brush) {
+  if (!brush) return;
+  DZ.brushPreset = brush.id; DZ.drawW = brush.size || DZ.drawW;
+  DZ.smooth = Math.round((brush.smoothing || 0) * 100);
+  if (brush.color) DZ.drawColor = brush.color;
+  dzToolOptsRender(); dzSetStatus("Pincel: " + brush.name);
+}
+function dzBrushStudioOpen() {
+  const root = $("#dzBrushStudio"), inspector = $("#dzInspector");
+  if (!root || !inspector || !LOW.drawing?.BrushStudio) return;
+  // El escenario multiplano ocupa el viewer completo y oculta el inspector.
+  // Abrir el estudio de pinceles es una intención explícita de volver a dibujo.
+  const workspaces = LOW.workspace?.workspaces;
+  if (workspaces?.activeId !== "drawing") workspaces?.activate?.("drawing", dzWsAplicar);
+  else dzCompositionViewShow(false);
+  inspector.classList.add("brush-studio-open"); root.hidden = false;
+  if (!DZ_BRUSH_STUDIO) DZ_BRUSH_STUDIO = new LOW.drawing.BrushStudio(root, {
+    library: LOW.drawing.brushes, engine: LOW.drawing.brushEngine, selected: DZ.brushPreset,
+    onSelect: dzBrushSelect, onImport: dzImportBrushes,
+    onClose: () => { root.hidden = true; inspector.classList.remove("brush-studio-open"); },
+    onError: error => sysMsg(" No pude guardar el pincel: " + error.message)
+  });
+  DZ_BRUSH_STUDIO.selected = DZ.brushPreset || DZ_BRUSH_STUDIO.selected; DZ_BRUSH_STUDIO.render();
+}
+
+async function dzImportBrushes() {
+  const result = await api.import_brush_pack();
+  if (!result || result.cancel) return;
+  if (result.error) return sysMsg(" No pude importar el pincel: " + result.error);
+  const incoming = Array.isArray(result.presets) ? result.presets : [];
+  const valid = incoming.filter(p => p && p.name && (p.tipData || p.engine === "vector"));
+  if (!valid.length) return dzSetStatus("El archivo no contiene pinceles utilizables");
+  const stamp = Date.now().toString(36);
+  try {
+    LOW.drawing.brushes.saveMany(valid.map((preset, index) => ({ ...preset,
+      id: `imported-${stamp}-${index + 1}`, imported: true })));
+  } catch (error) { return sysMsg(" No pude guardar el paquete: " + error.message); }
+  DZ.brushPreset = `imported-${stamp}-1`; DZ.drawW = valid[0].size || 36;
+  if (DZ_BRUSH_STUDIO) { DZ_BRUSH_STUDIO.selected = DZ.brushPreset; DZ_BRUSH_STUDIO.filter = "imported"; DZ_BRUSH_STUDIO.render(); }
+  dzToolOptsRender(); dzSetStatus(`${valid.length} pincel${valid.length === 1 ? "" : "es"} importado${valid.length === 1 ? "" : "s"} desde ${result.name || result.format || "archivo"}`);
 }
 /* splitter: redimensionar el inspector arrastrando (persistente) */
 function dzSplitWire() {
@@ -14366,6 +14518,161 @@ function dzPanelDockSetup() {
 /* ══ TIRA DE DIBUJOS DEL NIVEL ══════════════════════════════════════════
    Muestra el MATERIAL (qué dibujos existen), no el tiempo. Un dibujo que no
    está en ninguna celda antes era invisible aunque existiera. */
+/** STORYBOARD: monta el panel de paneles y el generador de tomas. Vive del
+ *  mismo LowDoc que todo lo demás, así que lo que se decide acá se guarda con
+ *  la escena y entra en Undo. */
+async function dzSbMount() {
+  const host = $("#dzSbBody");
+  if (!host || !LOW.storyboard?.BoardView) return false;
+  await dzDocInit();
+  if (!DZ.doc) return false;
+  if (!DZ.sbView) DZ.sbView = new LOW.storyboard.BoardView(host, DZ.doc);
+  else DZ.sbView.setDoc(DZ.doc);
+  DZ.sbView.status = (texto) => dzSetStatus(" " + texto);
+  // Elegir un panel en la lista mueve el escenario: una sola verdad, sin dos
+  // selecciones que puedan discrepar.
+  DZ.sbView.onStage = async (id) => {
+    DZ.sbView.selectedId = id;
+    if (await dzSbStageOpen()) dzSbStageSync();
+  };
+  const panel = $("#dzStoryboard");
+  if (panel) panel.hidden = false;
+  DZ.sbView.render();
+  const cerrar = $("#dzSbClose");
+  if (cerrar && !cerrar.dataset.wired) {
+    cerrar.dataset.wired = "1";
+    cerrar.onclick = () => { if (panel) panel.hidden = true; LOW.workspace.panels?.update?.("storyboard", { visible: false }); };
+  }
+  return true;
+}
+/** ESCENARIO 3D de la toma. three.js se carga recién acá: 600 KB que no tienen
+ *  por qué pesarle al arranque de quien nunca lo abre. */
+async function dzSbStageOpen() {
+  const raiz = $("#dzStoryboardStage"), host = $("#dzSbStageView");
+  if (!raiz || !host || !LOW.storyboard?.StageView) return false;
+  await dzDocInit();
+  const info = $("#sbStageInfo");
+  if (!DZ.sbStage) {
+    if (info) info.textContent = "cargando el motor 3D…";
+    DZ.sbStage = new LOW.storyboard.StageView(host, DZ.doc);
+    // Mover o enfocar una figura vuelve por comando: entra en Undo y se guarda.
+    DZ.sbStage.onCast = (cast, focoId, escribir) => {
+      const board = DZ.sbStage.board; if (!board) return;
+      const patch = { shot: { cast, focus: focoId || board.shot.focus } };
+      if (escribir) DZ.doc.updateStoryboardBoard(board.id, patch, "Mover una figura del escenario");
+      else DZ.doc.updateStoryboardBoard(board.id, { shot: { focus: focoId } }, "Enfocar una figura");
+      DZ.sbStage.board = DZ.doc.scene.board(board.id);
+      dzSbStageSync();
+    };
+  } else DZ.sbStage.setDoc?.(DZ.doc);
+  raiz.hidden = false;
+  try { await DZ.sbStage.mount(); }
+  catch (error) {
+    raiz.hidden = true;
+    return dzSetStatus(" No se pudo abrir el escenario 3D: " + (error?.message || error));
+  }
+  DZ.sbStage.status = (t) => dzSetStatus(" " + t);
+  dzSbStageWire();
+  dzSbStagePark(true);
+  dzSbStageSync();
+  return true;
+}
+/** El panel del storyboard flota centrado sobre el lienzo y, con el escenario
+ *  abierto, tapaba justo lo que hay que mirar. Se lo estaciona contra el borde
+ *  mientras dura el escenario y se le devuelve su lugar al cerrarlo. */
+function dzSbStagePark(parked) {
+  const panel = $("#dzStoryboard"); if (!panel) return;
+  if (parked) {
+    if (DZ.sbPanelHome == null) DZ.sbPanelHome = panel.getAttribute("style") || "";
+    panel.style.left = "12px";
+    panel.style.top = "56px";
+    panel.style.right = "auto";
+  } else if (DZ.sbPanelHome != null) {
+    panel.setAttribute("style", DZ.sbPanelHome);
+    DZ.sbPanelHome = null;
+  }
+}
+function dzSbStageClose() {
+  const raiz = $("#dzStoryboardStage"); if (raiz) raiz.hidden = true;
+  dzSbStagePark(false);
+}
+/** El escenario siempre muestra el panel elegido en la lista: una sola verdad. */
+function dzSbStageSync() {
+  const stage = DZ.sbStage; if (!stage || !DZ.doc) return;
+  const id = DZ.sbView?.selectedId;
+  const board = (id && DZ.doc.scene.board(id)) || DZ.doc.scene.storyboard.boards[0] || null;
+  stage.setBoard(board);
+  const info = $("#sbStageInfo"), pose = $("#sbStagePose"), alto = $("#sbStageAlto");
+  const foco = board && stage._focused && stage._focused();
+  if (pose && !pose.options.length)
+    (LOW.animation.STAGE_POSES || []).forEach(p => pose.add(new Option(p.replace("-", " "), p)));
+  if (pose) { pose.value = foco ? foco.pose : "de-pie"; pose.disabled = !foco; }
+  if (alto) { alto.value = foco ? foco.height : 170; alto.disabled = !foco; }
+  if (info) {
+    if (!board) info.textContent = "no hay paneles: creá uno en el storyboard";
+    else if (!foco) info.textContent = "escenario vacío · «+ Figura» pone a alguien delante de la cámara";
+    else {
+      const shots = LOW.storyboard.shots;
+      const tipo = shots.SHOT_TYPES.find(t => t.id === board.shot.type);
+      info.textContent = `${tipo ? tipo.name : board.shot.type} · ${board.shot.cast.length} figura(s)` +
+        (board.drawingRef?.png ? " · con referencia" : "");
+    }
+  }
+}
+function dzSbStageWire() {
+  if (DZ.sbStageWired) return;
+  DZ.sbStageWired = true;
+  const stage = () => DZ.sbStage;
+  const modo = (m) => {
+    stage().setMode(m);
+    $("#sbStageEscenario").classList.toggle("on", m === "escenario");
+    $("#sbStageCamara").classList.toggle("on", m === "camara");
+  };
+  $("#sbStageEscenario").onclick = () => modo("escenario");
+  $("#sbStageCamara").onclick = () => modo("camara");
+  $("#sbStageClose").onclick = dzSbStageClose;
+  const editarFoco = (patch, label) => {
+    const board = stage().board, foco = stage()._focused(); if (!board || !foco) return;
+    const cast = board.shot.cast.map(f => f.id === foco.id ? { ...f, ...patch } : { ...f });
+    DZ.doc.updateStoryboardBoard(board.id, { shot: { cast } }, label);
+    stage().board = DZ.doc.scene.board(board.id); dzSbStageSync();
+  };
+  $("#sbStagePose").onchange = (e) => editarFoco({ pose: e.target.value }, "Cambiar la pose");
+  $("#sbStageAlto").onchange = (e) => editarFoco({ height: +e.target.value || 170 }, "Cambiar la altura");
+  $("#sbStageAdd").onclick = () => {
+    const board = stage().board; if (!board) return dzSetStatus(" Creá un panel primero");
+    const cast = board.shot.cast.map(f => ({ ...f }));
+    const id = "fig_" + (cast.length + 1) + "_" + Math.random().toString(36).slice(2, 5);
+    cast.push({ id, x: cast.length * 70, z: 0, height: 170, pose: "de-pie" });
+    DZ.doc.updateStoryboardBoard(board.id, { shot: { cast, focus: cast.length === 1 ? id : board.shot.focus } },
+      "Agregar una figura al escenario");
+    stage().board = DZ.doc.scene.board(board.id); dzSbStageSync();
+  };
+  $("#sbStageDel").onclick = () => {
+    const board = stage().board, foco = stage()._focused(); if (!board || !foco) return;
+    const cast = board.shot.cast.filter(f => f.id !== foco.id).map(f => ({ ...f }));
+    DZ.doc.updateStoryboardBoard(board.id, { shot: { cast, focus: cast[0]?.id || null } },
+      "Quitar una figura del escenario");
+    stage().board = DZ.doc.scene.board(board.id); dzSbStageSync();
+  };
+  $("#sbStageShot").onclick = () => {
+    const board = stage().board; if (!board) return;
+    const png = stage().capture(320);
+    if (!png) return dzSetStatus(" El escenario todavía no tiene nada que fotografiar");
+    DZ.doc.updateStoryboardBoard(board.id, { drawingRef: { kind: "stage", png } },
+      "Tomar la referencia del panel");
+    stage().board = DZ.doc.scene.board(board.id);
+    dzSbStageSync(); DZ.sbView?.render();
+    dzSetStatus(" Referencia guardada en el panel · el dibujo va encima, no la reemplaza");
+  };
+}
+
+function dzStoryboardToggle() {
+  const panel = $("#dzStoryboard");
+  if (!panel) return;
+  if (panel.hidden) void dzSbMount(); else panel.hidden = true;
+}
+
 function dzLsMount() {
   const host = $("#dzLsBody");
   if (!host || !LOW.animation.LevelStrip || !DZ.doc) return;

@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=4.1.0">
-<link rel="stylesheet" href="design/studio-polish.css?v=4.1.0">
+<link rel="stylesheet" href="app.css?v=4.2.0">
+<link rel="stylesheet" href="design/studio-polish.css?v=4.2.0">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -339,6 +339,8 @@
     <div class="dz-menu" data-menu="ventana">Ventana<div class="dz-dd">
       <div class="dz-panel-menu" id="dzPanelMenu" aria-label="Paneles visibles"></div>
       <hr>
+      <span data-act="storyboard">Storyboard y generador de tomas</span>
+      <hr>
       <span data-act="win-viewer">Mesa de dibujo en otra pantalla</span>
       <hr>
       <span data-act="win-layers">Separar Capas</span>
@@ -544,6 +546,23 @@
         arrastrá las tarjetas · el parallax sale solo al mover la cámara</div>
       </div>
       <section class="cmp3" id="dzComposition3D" aria-label="Escenario multiplano 3D" hidden></section>
+      <section class="sb3" id="dzStoryboardStage" aria-label="Escenario de la toma" hidden>
+        <div class="sb3-bar">
+          <button id="sbStageEscenario" class="on" title="Ver el escenario con la cámara y su cono de visión">Escenario</button>
+          <button id="sbStageCamara" title="Mirar por la cámara: exactamente lo que entra en el cuadro">Cámara</button>
+          <span class="sb3-sep"></span>
+          <button id="sbStageAdd" title="Agregar una figura al escenario">+ Figura</button>
+          <select id="sbStagePose" title="Pose de la figura enfocada"></select>
+          <label class="sb3-alto" title="Altura de la figura enfocada, en la misma unidad que el escenario">alto
+            <input type="number" id="sbStageAlto" min="20" max="400" step="1"></label>
+          <button id="sbStageDel" title="Quitar la figura enfocada">Quitar</button>
+          <span class="sb3-sep"></span>
+          <button id="sbStageShot" class="primary" title="Guardar lo que ve la cámara como referencia del panel">Tomar referencia</button>
+          <span class="sb3-info" id="sbStageInfo"></span>
+          <span class="dz-op-x" id="sbStageClose" title="Cerrar el escenario">×</span>
+        </div>
+        <div class="sb3-view" id="dzSbStageView"></div>
+      </section>
       <!-- X-sheet: planilla de exposición vertical (flotante) -->
       <div class="dz-xsheet" id="dzXsheet" hidden>
         <div class="dz-op-head" id="dzXsHead"><svg class="ico"><use href="#i-xsheet"/></svg> X-sheet · OpenToonz
@@ -551,6 +570,11 @@
         <div class="dz-xs-rows" id="dzXsRows"></div>
       </div>
       <!-- papel cebolla: mesa de luz personalizable, acoplable y separable -->
+      <div class="dz-onionpanel sb2panel" id="dzStoryboard" hidden>
+        <div class="dz-op-head" id="dzSbHead"><svg class="ico"><use href="#i-files"/></svg> STORYBOARD
+          <span class="dz-op-x" id="dzSbClose" title="Cerrar">×</span></div>
+        <div id="dzSbBody"></div>
+      </div>
       <div class="dz-onionpanel ls2panel" id="dzLevelStrip" hidden>
         <div class="dz-op-head" id="dzLsHead"><svg class="ico"><use href="#i-level"/></svg> DIBUJOS DEL NIVEL
           <span class="dz-op-x" id="dzLsClose" title="Cerrar">×</span></div>
@@ -813,6 +837,7 @@
     </div>
     <div class="dz-split" id="dzSplit" title="Arrastrá para redimensionar el panel"></div>
     <div class="dz-inspector" id="dzInspector">
+      <section class="brush-studio" id="dzBrushStudio" aria-label="Estudio de pinceles" hidden></section>
       <!-- estilo actual (Illustrator): aplica a la selección, o a lo próximo que dibujes -->
       <div class="dz-style" id="dzStyle">
         <div class="dz-style-row dz-paint-stack" aria-label="Relleno y contorno">
@@ -978,53 +1003,57 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=4.1.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=4.2.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=4.1.0"></script>
-<script src="core/pointer-controller.js?v=4.1.0"></script>
-<script src="application/mode-machine.js?v=4.1.0"></script>
-<script src="animation/palette.js?v=4.1.0"></script>
-<script src="animation/coloring.js?v=4.1.0"></script>
-<script src="animation/scene-model.js?v=4.1.0"></script>
-<script src="animation/rig-policy.js?v=4.1.0"></script>
-<script src="rigging/binding.js?v=4.1.0"></script>
-<script src="rigging/rig-input.js?v=4.1.0"></script>
-<script src="animation/exposures.js?v=4.1.0"></script>
-<script src="animation/onion.js?v=4.1.0"></script>
-<script src="animation/mocap.js?v=4.1.0"></script>
-<script src="animation/document.js?v=4.1.0"></script>
-<script src="animation/rig-library.js?v=4.1.0"></script>
-<script src="animation/character-library.js?v=4.1.0"></script>
-<script src="animation/timeline.js?v=4.1.0"></script>
-<script src="animation/xsheet-view.js?v=4.1.0"></script>
-<script src="animation/timeline-view.js?v=4.1.0"></script>
-<script src="animation/level-strip.js?v=4.1.0"></script>
-<script src="animation/palette-view.js?v=4.1.0"></script>
-<script src="animation/audio.js?v=4.1.0"></script>
-<script src="animation/shortcuts.js?v=4.1.0"></script>
-<script src="animation/model-tests.js?v=4.1.0"></script>
-<script src="animation/xsheet.js?v=4.1.0"></script>
-<script src="animation/playback.js?v=4.1.0"></script>
-<script src="animation/camera.js?v=4.1.0"></script>
-<script src="composition/multiplane-model.js?v=4.1.0"></script>
-<script src="composition/controller.js?v=4.1.0"></script>
-<script src="composition/multiplane-view.js?v=4.1.0"></script>
-<script src="drawing/stabilization.js?v=4.1.0"></script>
-<script src="drawing/selection.js?v=4.1.0"></script>
-<script src="drawing/transforms.js?v=4.1.0"></script>
-<script src="drawing/pointer-input.js?v=4.1.0"></script>
-<script src="drawing/brushes.js?v=4.1.0"></script>
-<script src="drawing/stroke-engine.js?v=4.1.0"></script>
-<script src="drawing/brush-engine-pro.js?v=4.1.0"></script>
-<script src="collaboration/session.js?v=4.1.0"></script>
-<script src="workspace/panels.js?v=4.1.0"></script>
-<script src="workspace/workspaces.js?v=4.1.0"></script>
-<script src="workspace/windows.js?v=4.1.0"></script>
-<script src="workspace/layouts.js?v=4.1.0"></script>
-<script src="workspace/recovery.js?v=4.1.0"></script>
-<script src="ai/commands.js?v=4.1.0"></script>
-<script src="ai/task-runner.js?v=4.1.0"></script>
-<script src="ai/recovery.js?v=4.1.0"></script>
-<script src="app.js?v=4.1.0"></script>
+<script src="core/history.js?v=4.2.0"></script>
+<script src="core/pointer-controller.js?v=4.2.0"></script>
+<script src="application/mode-machine.js?v=4.2.0"></script>
+<script src="animation/palette.js?v=4.2.0"></script>
+<script src="animation/coloring.js?v=4.2.0"></script>
+<script src="animation/scene-model.js?v=4.2.0"></script>
+<script src="animation/rig-policy.js?v=4.2.0"></script>
+<script src="rigging/binding.js?v=4.2.0"></script>
+<script src="rigging/rig-input.js?v=4.2.0"></script>
+<script src="animation/exposures.js?v=4.2.0"></script>
+<script src="animation/onion.js?v=4.2.0"></script>
+<script src="animation/mocap.js?v=4.2.0"></script>
+<script src="animation/document.js?v=4.2.0"></script>
+<script src="animation/rig-library.js?v=4.2.0"></script>
+<script src="animation/character-library.js?v=4.2.0"></script>
+<script src="animation/timeline.js?v=4.2.0"></script>
+<script src="animation/xsheet-view.js?v=4.2.0"></script>
+<script src="animation/timeline-view.js?v=4.2.0"></script>
+<script src="animation/level-strip.js?v=4.2.0"></script>
+<script src="animation/palette-view.js?v=4.2.0"></script>
+<script src="animation/audio.js?v=4.2.0"></script>
+<script src="animation/shortcuts.js?v=4.2.0"></script>
+<script src="storyboard/shot-model.js?v=4.2.0"></script>
+<script src="storyboard/stage-view.js?v=4.2.0"></script>
+<script src="storyboard/board-view.js?v=4.2.0"></script>
+<script src="animation/model-tests.js?v=4.2.0"></script>
+<script src="animation/xsheet.js?v=4.2.0"></script>
+<script src="animation/playback.js?v=4.2.0"></script>
+<script src="animation/camera.js?v=4.2.0"></script>
+<script src="composition/multiplane-model.js?v=4.2.0"></script>
+<script src="composition/controller.js?v=4.2.0"></script>
+<script src="composition/multiplane-view.js?v=4.2.0"></script>
+<script src="drawing/stabilization.js?v=4.2.0"></script>
+<script src="drawing/selection.js?v=4.2.0"></script>
+<script src="drawing/transforms.js?v=4.2.0"></script>
+<script src="drawing/pointer-input.js?v=4.2.0"></script>
+<script src="drawing/brushes.js?v=4.2.0"></script>
+<script src="drawing/stroke-engine.js?v=4.2.0"></script>
+<script src="drawing/brush-engine-pro.js?v=4.2.0"></script>
+<script src="drawing/brush-studio.js?v=4.2.0"></script>
+<script src="collaboration/session.js?v=4.2.0"></script>
+<script src="workspace/panels.js?v=4.2.0"></script>
+<script src="workspace/workspaces.js?v=4.2.0"></script>
+<script src="workspace/windows.js?v=4.2.0"></script>
+<script src="workspace/layouts.js?v=4.2.0"></script>
+<script src="workspace/recovery.js?v=4.2.0"></script>
+<script src="ai/commands.js?v=4.2.0"></script>
+<script src="ai/task-runner.js?v=4.2.0"></script>
+<script src="ai/recovery.js?v=4.2.0"></script>
+<script src="app.js?v=4.2.0"></script>
 </body>
 </html>

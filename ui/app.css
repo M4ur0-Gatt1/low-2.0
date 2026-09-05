@@ -2540,6 +2540,16 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .tl2-cell.hold::before { content: ""; width: 100%; height: 1px; background: rgba(255,255,255,.25); }
 .tl2-cell:hover { outline: 1px solid var(--accent, #F0450E); outline-offset: -1px; }
 .tl2-cell.rango { background: rgba(240,69,14,.14); box-shadow: inset 0 0 0 1px rgba(240,69,14,.48); }
+/* SUSTITUCIONES: el cambio de dibujo se lee fuerte; el sostenido, tenue. Sin
+   distinguirlos no se ve cuánto dura cada dibujo, que es de lo que se trata. */
+.tl2-row.tl2-swap .tl2-name { color: #9ad1b0; }
+.tl2-cell.swap { position: relative; }
+.tl2-cell.swaphold::after { content: ""; position: absolute; left: 0; right: 0; height: 2px;
+  background: rgba(154,209,176,.35); }
+.tl2-cell.swapkey::after { content: ""; width: 7px; height: 7px; background: #6fbf92;
+  border-radius: 1px; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+.tl2-cell.swapkey:hover::after { background: #b7f0cd; }
+.tl2-row.collapsed .tl2-cell.swapkey::after { width: 5px; height: 5px; }
 .tl2-row.tl2-rig .tl2-name { color: #e7ae82; }.tl2-cell.rig { position: relative; }
 .tl2-cell.rigkey::after { content: ""; width: 6px; height: 6px; background: #e98b55; transform: rotate(45deg); border-radius: 1px; }
 .tl2-cell.rigkey:hover::after { background: #ffd29d; }
@@ -3141,3 +3151,71 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 #designView .dz-artmodes button { min-width:29px; height:23px; border-radius:7px; }
 #designView .dz-canvas { background-color:#09090a; }
 @media (prefers-reduced-motion:reduce) { * { transition:none!important; animation-duration:.001ms!important; } }
+
+/* ══ STORYBOARD ════════════════════════════════════════════════════════════
+   Lista de paneles y generador de tomas. La toma se elige por su nombre —plano
+   medio, contrapicado— y la lectura de abajo dice en números qué quedó, para
+   no tener que creerle al panel. */
+/* Ancho propio: con 226 px los nombres de plano («Primerísimo primer plano»)
+   y de ángulo quedaban recortados justo donde hay que leerlos. */
+.sb2panel { width: 320px; max-height: calc(100% - 90px); display: flex; flex-direction: column; padding: 0; }
+.sb2panel #dzSbBody { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.sb2 { display: flex; flex-direction: column; gap: 6px; padding: 6px; }
+.sb2-tools { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.sb2-tools button { height: 22px; padding: 0 7px; font-size: 10px; border-radius: 4px;
+  border: 1px solid var(--line, #2a2d35); background: var(--panel2, #1e2026);
+  color: var(--fg2, #8a93a6); cursor: pointer; }
+.sb2-tools button:hover:not(:disabled) { color: var(--fg, #fff); border-color: var(--accent, #F0450E); }
+.sb2-tools button:disabled { opacity: .4; cursor: default; }
+.sb2-tools button.primary { background: var(--accent, #F0450E); color: #fff; border-color: transparent; }
+.sb2-total { margin-left: auto; font-size: 10px; color: var(--mut, #a8a49c); }
+.sb2-empty { padding: 14px 8px; font-size: 11px; color: var(--mut, #a8a49c); line-height: 1.5; }
+.sb2-list { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow-y: auto; }
+.sb2-board { display: grid; grid-template-columns: 20px 1fr auto; gap: 7px; align-items: center;
+  padding: 5px 7px; border-radius: 4px; cursor: pointer; border: 1px solid transparent; }
+.sb2-board:hover { background: var(--panel2, #1e2026); }
+.sb2-board.sel { background: var(--panel2, #1e2026); border-color: var(--accent, #F0450E); }
+.sb2-board > b { font-size: 10px; color: var(--mut, #a8a49c); text-align: right; }
+.sb2-board-body { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
+.sb2-shot { font-size: 11px; color: var(--fg, #fff); }
+.sb2-board-body small, .sb2-time { font-size: 9px; color: var(--mut, #a8a49c);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb2-gen { display: flex; flex-direction: column; gap: 4px; padding-top: 6px;
+  border-top: 1px solid var(--line, #2a2d35); }
+.sb2-gen-title { font-size: 10px; letter-spacing: .4px; color: var(--mut, #a8a49c); text-transform: uppercase; }
+.sb2-field { display: grid; grid-template-columns: 88px 1fr; gap: 6px; align-items: center; font-size: 11px; }
+.sb2-field > span { color: var(--fg2, #8a93a6); }
+.sb2-field select, .sb2-field input { height: 22px; font-size: 11px; border-radius: 4px;
+  border: 1px solid var(--line, #2a2d35); background: var(--panel, #171921); color: var(--fg, #fff);
+  padding: 0 5px; min-width: 0; }
+.sb2-read { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 9px;
+  color: var(--mut, #a8a49c); padding-top: 3px; }
+.sb2-read b { color: var(--fg, #fff); font-weight: 600; }
+
+/* ══ ESCENARIO 3D DE LA TOMA ═══════════════════════════════════════════════
+   Ocupa el área del lienzo, como el multiplano. Dos vistas: el escenario, con
+   la cámara y su cono, y lo que la cámara ve. */
+.sb3 { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column;
+  background: #14161c; }
+.sb3[hidden] { display: none; }
+.sb3-bar { flex: none; display: flex; align-items: center; gap: 5px; padding: 5px 8px;
+  background: var(--panel2, #1e2026); border-bottom: 1px solid var(--line, #2a2d35); flex-wrap: wrap; }
+.sb3-bar button { height: 23px; padding: 0 9px; font-size: 10px; border-radius: 4px; cursor: pointer;
+  border: 1px solid var(--line, #2a2d35); background: var(--panel, #171921); color: var(--fg2, #8a93a6); }
+.sb3-bar button:hover { color: var(--fg, #fff); border-color: var(--accent, #F0450E); }
+.sb3-bar button.on { background: var(--panel2, #23262e); color: var(--fg, #fff); border-color: var(--accent, #F0450E); }
+.sb3-bar button.primary { background: var(--accent, #F0450E); color: #fff; border-color: transparent; }
+.sb3-bar select, .sb3-bar input { height: 23px; font-size: 10px; border-radius: 4px; padding: 0 4px;
+  border: 1px solid var(--line, #2a2d35); background: var(--panel, #171921); color: var(--fg, #fff); }
+.sb3-alto { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--fg2, #8a93a6); }
+.sb3-alto input { width: 58px; }
+.sb3-sep { width: 1px; height: 16px; background: var(--line, #2a2d35); margin: 0 3px; }
+.sb3-info { font-size: 10px; color: var(--mut, #a8a49c); margin-left: auto; }
+.sb3-bar .dz-op-x { margin-left: 8px; }
+.sb3-view { flex: 1 1 auto; min-height: 0; position: relative; }
+.sb3-canvas { display: block; width: 100%; height: 100%; }
+/* Miniatura de la referencia en la lista de paneles: el storyboard se dibuja
+   ENCIMA de esto, no lo reemplaza. */
+.sb2-thumb { width: 46px; height: 26px; object-fit: cover; border-radius: 3px;
+  border: 1px solid var(--line, #2a2d35); background: #0e1014; }
+.sb2-board { grid-template-columns: 20px auto 1fr auto; }

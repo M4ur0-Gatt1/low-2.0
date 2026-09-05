@@ -43,6 +43,8 @@
       allowedDocks: ["left", "right", "bottom"] },
     mocap:      { label: "Motion Capture", element: "#dzMocapPanel",
       allowedDocks: ["left", "right", "bottom"] },
+    storyboard: { label: "Storyboard", element: "#dzStoryboard", externalizable: true,
+      allowedDocks: ["left", "right", "bottom"] },
     color:      { label: "Paleta", element: "#dzPalette", owner: "layers", allowedDocks: ["left", "right"] },
     code:       { label: "Código SVG", element: ".dz-code", allowedDocks: ["left", "right"] },
   };

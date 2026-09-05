@@ -174,11 +174,44 @@ async function main() {
       sinSalto:dist(mundo(mano),antesDeFk.mano)<0.01 && dist(mundo(antebrazo),antesDeFk.codo)<0.01,
       clavesReales:!!nodo(brazo).keys[frame] && !!nodo(antebrazo).keys[frame]};
 
-    // 7. Nada de esto puede sobrevivir a un Undo a medias.
+    // 7. Ese cambio a FK tiene que entrar en el historial, y se comprueba
+    //    ENSEGUIDA: un undo medido tres gestos despues no dice nada de el.
     const antesUndo=doc.scene.rigConstraint(cid).enabled;
     dzUndo(); await espera(300);
     const undo={rehabilita:doc.scene.rigConstraint(cid)?.enabled!==antesUndo};
-    return {creada,match,pole,pin,fk,undo};
+
+    // 8. Sustituciones VISIBLES: la fila aparece sólo si hay cambios de dibujo,
+    //    distingue el cambio del sostenido y se puede borrar desde la mesa.
+    // El workspace persistido puede dejar la Timeline cerrada. La prueba debe
+    // abrir la superficie que pretende verificar, no depender del E2E que haya
+    // corrido antes en el mismo perfil de Chromium.
+    if(document.querySelector("#dzTimeline")?.hidden) dzAnimToggle();
+    dzTlMount();
+    await espera(250);
+    const slot=doc.ensureRigSlot(mano);
+    const puno=doc.addRigAttachment(slot,{name:"puño"});
+    const swap={filaAntes:!!document.querySelector("#dzTlgRows .tl2-row.tl2-swap")};
+    doc.setRigSwitchKey(slot,4,puno);
+    await espera(500);
+    const filaSwap=()=>document.querySelector("#dzTlgRows .tl2-row.tl2-swap");
+    swap.filaDespues=!!filaSwap();
+    const celda=f=>filaSwap()&&filaSwap().querySelector('.tl2-cell.swap[data-frame="'+f+'"]');
+    swap.cambioEnF4=!!celda(4)&&celda(4).classList.contains("swapkey");
+    swap.sostieneEnF6=!!celda(6)&&celda(6).classList.contains("swaphold")
+      &&!celda(6).classList.contains("swapkey");
+    swap.antesLimpio=!!celda(2)&&!celda(2).classList.contains("swapkey")
+      &&!celda(2).classList.contains("swaphold");
+    swap.tooltipDice=!!celda(4)&&(celda(4).title||"").includes("puño");
+    // Alt+clic borra la clave desde la propia pista. Si la fila no existe, el
+    // diagnóstico tiene que ser el de arriba y no un TypeError sin contexto.
+    if(celda(4)){
+      celda(4).dispatchEvent(new MouseEvent("click",{bubbles:true,cancelable:true,altKey:true}));
+      await espera(400);
+      swap.altClicBorra=!doc.scene.rigSwitch(slot);
+      swap.filaDesaparece=!filaSwap();
+    }
+
+    return {creada,match,pole,pin,fk,swap,undo};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   if (result.exceptionDetails)
@@ -187,7 +220,7 @@ async function main() {
 
   stage("verificar");
   if (value.error) throw Error("REGRESIÓN: " + value.error + " " + JSON.stringify(value.ids || []));
-  const { creada, match, pole, pin, fk, undo } = value;
+  const { creada, match, pole, pin, fk, swap, undo } = value;
   if (!creada?.existe)
     throw Error("REGRESIÓN: el botón Crear IK no dejó una cadena: " + JSON.stringify(value));
   if (!match?.objetivoEnLaPunta)
@@ -210,6 +243,14 @@ async function main() {
     throw Error("REGRESIÓN: soltar el apoyo no devuelve el comportamiento normal: " + JSON.stringify(pin));
   if (!fk?.apagada || !fk.sinSalto || !fk.clavesReales)
     throw Error("REGRESIÓN: Pasar a FK no hornea la pose o mueve el dibujo: " + JSON.stringify(fk));
+  if (swap?.filaAntes !== false || swap?.filaDespues !== true)
+    throw Error("REGRESIÓN: la pista de sustituciones no aparece con el primer cambio de dibujo: " + JSON.stringify(swap));
+  if (!swap.cambioEnF4 || !swap.sostieneEnF6 || !swap.antesLimpio)
+    throw Error("REGRESIÓN: la pista no distingue cambio, sostenido y vacío: " + JSON.stringify(swap));
+  if (!swap.tooltipDice)
+    throw Error("REGRESIÓN: la marca no dice qué dibujo entra: " + JSON.stringify(swap));
+  if (!swap.altClicBorra || !swap.filaDesaparece)
+    throw Error("REGRESIÓN: Alt+clic no borra la sustitución desde la pista: " + JSON.stringify(swap));
   if (!undo?.rehabilita)
     throw Error("REGRESIÓN: el cambio a FK no entra en el historial: " + JSON.stringify(undo));
   if (errores.length)

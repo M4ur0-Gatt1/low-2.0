@@ -15,6 +15,22 @@
 
 ## Bloque de Codex — Composición, pinceles y colaboración
 
+### Salto de calidad: Estudio de pinceles profesional
+
+- Nuevo inspector `ui/drawing/brush-studio.js`, alojado en el dock derecho y
+  sin overlays sobre el lienzo.
+- Biblioteca con búsqueda, filtros (todos/favoritos/importados), preview real,
+  duplicación y edición no destructiva de presets de fábrica.
+- Nueve controles de dinámica: tamaño, opacidad, espaciado, suavizado,
+  presión→tamaño, presión→opacidad, inclinación, dispersión y dureza.
+- Abrirlo desde Composición cambia explícitamente al workspace Dibujo; se
+  eliminó el falso positivo donde el DOM estaba abierto pero el CSS lo ocultaba.
+- Raster importado optimizado con una textura por trazo (`symbol/use`) y límite
+  de 1600 dabs. E2E extremo: 12.265 dabs de origen, 1.600 renderizados y un
+  solo asset embebido.
+- Evidencia visual: `brush-studio-quality.png` en la carpeta de visualizaciones
+  de la sesión Codex.
+
 ### Implementado
 
 - `ui/composition/multiplane-model.js`
@@ -35,10 +51,17 @@
   - Abre el viewport dedicado `#dzComposition3D`; `#dzZPanel` queda como compatibilidad.
   - Outliner, Perspectiva/Frente/Arriba, grid, órbita/pan/zoom, inspector XYZ/rotación/escala, gizmos XY/Z/R/S y Auto-key persistente.
   - Atajos de viewport `G`, `G Z`, `R`, `S`, `Esc`, numpad `1/7/5`.
+  - Layout de tres zonas sin superposición; al entrar oculta inspector y editor SVG generales para entregar todo el ancho a Composición. El E2E verifica geometría y ancho mínimo del escenario.
   - Migración progresiva desde `data-z`; `Scene` decide y el atributo queda como adaptador para render/export legacy.
   - El adaptador de cámara aplica X/Y/Z, rotación Z y escala del modelo canónico en preview/export.
 - Pinceles
   - `ui/drawing/brush-engine-pro.js`: dinámica de presión, tilt, velocidad, spacing, scatter, vector outline y raster dabs deterministas.
+  - El motor profesional ya alimenta el trazo final: outlines vectoriales, dabs procedurales y puntas raster embebidas/recoloreadas.
+  - Catálogo ampliado a 22 presets; importación PNG/JPEG/WebP, `.lowbrush`, `.brushset` y ABR con preview compatible.
+  - Calibración de rango mínimo/máximo y gamma para Huion/Wacom, coalesced events, `pointerrawupdate`, tilt/twist y diagnóstico accesible.
+- Personajes Illustrator
+  - SVG conserva vectores y separa los objetos de un único grupo de capa en piezas riggeables.
+  - AI/PDF usa Inkscape si está disponible; sin conversor pide SVG y nunca rasteriza silenciosamente.
 - Colaboración
   - `ui/collaboration/session.js`: roles, presencia, locks, Lamport, idempotencia y cola offline.
 - Diseño
@@ -52,6 +75,8 @@ node tools/run_drawing_collaboration_tests.js    8/8
 node tools/run_2d_model_tests.js               312/312
 node tools/check_multiplane_ui.js              OK
 python tools/check_multiplane_backend.py       OK
+node tools/check_brush_vector_import_ui.js     OK
+python tools/check_asset_import_backend.py     OK
 node tools/check_workspace_ui.js               OK
 ```
 
@@ -181,6 +206,103 @@ Sin commitear por pedido de Mauro (sesiones en paralelo sobre el mismo árbol). 
 están en el working tree, acotados a los archivos de la tabla. Al integrar, el bump de
 versión son **cuatro** pasos, no tres: `VERSION`, `LOW_VERSION` en `main.py`, `AppVersion`
 en `low_installer.iss` y después `python tools/stamp_version.py` (que ahora sí sella el CSS).
+
+## Después de v4.1.0 — bloque de Claude en curso
+
+**Sustituciones visibles en la Timeline** (cierra el anteúltimo punto del bloque cut-out).
+Cambiar de mano abierta a puño ya funcionaba desde el panel `#rigVars`, pero el cuadro
+exacto en que ocurre era invisible: un timing que no se ve no se corrige.
+
+- `animation.timeline.switchTrack(scene, total)` — función pura: por cuadro dice qué dibujo
+  **entra** (`labels`) y cuál viene **sostenido** (`holds`), más los slots a los que borrarle
+  la clave. Una clave que apunta a un dibujo borrado se ignora: la pista no puede pintar una
+  marca que ya no corresponde a nada.
+- Fila «Sustituciones» en la timeline: marca fuerte donde cambia, línea tenue mientras se
+  sostiene, tooltip con pieza y dibujo, clic para ir al cuadro y **Alt+clic para borrar** el
+  cambio desde la propia pista. La fila aparece sólo si hay sustituciones.
+
+Dos defectos que encontré y arreglé mientras lo verificaba en el navegador, no en la teoría:
+
+1. En un cuadro donde una pieza cambia y otra sólo continúa, el tooltip las listaba juntas y
+   decía que **cambiaron las dos**. Ahora entra y sostiene se dicen por separado.
+2. El nombre de pieza salía como `slot:human_standard_pwd3h_hand_L`. Los slots nacen con
+   nombre autogenerado y hay **dos formas** —el id del hueso o el id del slot—, así que la
+   regla anterior sólo tapaba una. Ahora sólo gana un nombre puesto a mano; si no, manda el
+   nombre visible del hueso («Mano izq.»).
+
+Pruebas: 323/323 en el modelo (`switchTrack` incluido el caso mixto y el fantasma) y el
+recorrido de sustituciones dentro de `tools/check_rig_ik_ui.js`, con Alt+clic real.
+Sin commitear: es trabajo posterior al tag v4.1.0.
+
+### Storyboard y generador de tomas (pedido de Mauro, estilo Storyboarder)
+
+Módulo nuevo `ui/storyboard/`, con runner propio (`tools/run_storyboard_tests.js`) para no
+tocar `model-tests.js`.
+
+- `shot-model.js` — **puro**. Óptica (FOV vertical desde sensor y aspecto, reusando
+  `composition.multiplane.cameraProjection` en vez de duplicar la cámara), siete tipos de
+  plano con su cobertura, tres ángulos, `classify()` y el **generador** `frameShot()`: se
+  pide «plano medio, contrapicado» y la cámara se ubica sola (distancia por cobertura,
+  altura por lo que se encuadra con aire sobre la cabeza, inclinación por el ángulo).
+  Las fronteras entre planos se derivan de las coberturas por media **geométrica**, así que
+  clasificar y generar no pueden desincronizarse: el invariante de ida y vuelta está probado
+  para los siete tipos.
+- `Scene.storyboard` — la secuencia de paneles es **documento**, no estado de panel: se
+  guarda, se reabre y cada gesto (`addStoryboardBoard`, `updateStoryboardBoard`,
+  `removeStoryboardBoard`, `moveStoryboardBoard`) es una sola entrada de Undo.
+  `boardTiming()` / `boardDuration()` son la única fuente del tiempo de la secuencia.
+- `board-view.js` + panel `#dzStoryboard` (menú **Ventana → Storyboard y generador de
+  tomas**): lista de paneles con plano, acción y rango de cuadros; generador con plano,
+  ángulo, lente, duración, acción y diálogo; y una lectura en números —distancia, altura,
+  FOV y cuánto ocupa la figura— para no tener que creerle al panel.
+
+Pruebas: `run_storyboard_tests.js` (óptica, clasificación, ida y vuelta, ángulos, paneles,
+Undo/Redo y reapertura) y `tools/check_storyboard_ui.js` (recorrido con clics reales:
+abrir desde el menú, alta con toma ya generada, pedir un plano, ángulo, tiempo acumulado,
+Undo/Redo de reordenar y persistencia).
+
+### Escenario 3D de la toma (la mitad que faltaba)
+
+`ui/storyboard/stage-view.js` + `#dzStoryboardStage`: figuras de proporciones humanas
+paradas en un piso, la cámara con su **cono de visión** dibujado hasta el sujeto, y una
+segunda vista que mira **por** la cámara con el aspecto del proyecto y barras negras en vez
+de estirar la imagen. «Tomar referencia» guarda un PNG de 320×180 (~22 KB) en el panel, que
+aparece como miniatura en la lista: el storyboard se dibuja ENCIMA de eso, no lo reemplaza.
+
+- **three.js se carga en diferido**, sólo al abrir el escenario: 600 KB que no tienen por qué
+  pesarle al arranque de quien nunca lo usa.
+- Arrastrar una figura previsualiza y **soltar** escribe: una entrada de historial por gesto.
+  Tocarla la enfoca, y el plano se mide sobre la figura enfocada.
+- Un puente de coordenadas explícito y en un solo lugar, porque son dos convenciones: el
+  modelo de tomas mide `y` hacia ABAJO desde la coronilla (como el lienzo SVG) y three.js
+  hacia arriba desde el piso.
+
+Tres defectos que aparecieron al verificar, no al escribir:
+
+1. **El panel flotante tapaba el centro del escenario.** La figura estaba renderizada y no se
+   veía. Ahora el panel se estaciona contra el borde mientras dura el escenario y recupera su
+   lugar al cerrarlo.
+2. **El encuadre de la vista de cámara mentía.** `setViewport` trabaja en píxeles lógicos y yo
+   le pasaba `domElement.width`, que está en píxeles del búfer (ya multiplicado por
+   devicePixelRatio): el recuadro salía del doble y la cámara mostraba MÁS de lo que entra.
+3. **El ángulo desencuadraba al personaje.** El picado sólo subía la cámara sin reorientarla,
+   así que a 15° la coronilla se salía del cuadro. Ahora la cámara **orbita alrededor del
+   centro de lo que se encuadra**: cambia desde dónde se mira, no si el personaje entra.
+   Lo agarró el E2E proyectando la coronilla, no la vista a ojo.
+
+Pruebas nuevas que atan el vocabulario a la geometría: cada plano tiene que cortar donde dice
+su nombre (el americano en las rodillas, el medio en la cintura, el primer plano en el pecho)
+y ninguno puede cortar la coronilla, en los tres ángulos. Ahí se descubrió que el americano
+cortaba por encima de las rodillas: se corrigió su cobertura de 1,45 a 1,28.
+
+**Higiene del arnés**: las corridas viejas dejaban pestañas abiertas en el Chromium de CDP
+—llegaron a 17— y bajo esa presión un E2E fallaba de a ratos. Todos los `check_*` cierran su
+pestaña ahora; si aparece una intermitencia, contar pestañas antes de culpar al código.
+
+**Lo que sigue faltando**: que las figuras del escenario sean el personaje riggeado real en
+vez del muñeco de referencia, y poses editables articulación por articulación. El puente
+natural es el rig 2D que ya existe; el muñeco actual sirve para medir el encuadre, no para
+actuar.
 
 ## Archivos compartidos de alto riesgo
 

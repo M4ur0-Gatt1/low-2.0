@@ -61,6 +61,48 @@
     return steps.find((step) => step >= required) || Math.ceil(required / 480) * 480;
   }
 
+  /** Resumen por cuadro de las sustituciones de dibujo del rig: dónde CAMBIA la
+      pieza y hasta dónde se sostiene ese dibujo. Sin esto, pasar de mano abierta
+      a puño es un timing invisible, y un timing invisible no se corrige.
+      Índice = cuadro; los cuadros sin nada quedan en null para no dibujar celdas
+      de más. Una clave que apunta a un dibujo borrado se ignora: la pista no
+      puede mostrar una marca que ya no corresponde a nada. */
+  function switchTrack(scene, total = 1) {
+    const rig = (scene && scene.rig) || {};
+    const switches = rig.switches || {}, attachments = rig.attachments || {}, slots = rig.slots || {};
+    const bones = rig.bones || rig.nodes || {};
+    const last = Math.max(1, Math.round(Number(total) || 1));
+    const marks = new Array(last + 1).fill(null);
+    // `labels` son los dibujos que ENTRAN en ese cuadro; `holds`, los que vienen
+    // sostenidos de antes. Mezclarlos hacía que un cuadro donde cambia la cabeza
+    // y la mano sólo continúa dijera que cambiaron las dos.
+    const marcaEn = (frame) => (marks[frame] ||= { change: false, held: false, labels: [], holds: [], slots: [] });
+    for (const [slotId, sw] of Object.entries(switches)) {
+      const keys = (sw && sw.keys) || {};
+      const frames = Object.keys(keys).map(Number)
+        .filter((f) => Number.isFinite(f) && f >= 1 && f <= last && attachments[keys[f]])
+        .sort((a, b) => a - b);
+      frames.forEach((frame, index) => {
+        const attachment = attachments[keys[frame]];
+        const dibujo = attachment.name || attachment.elementId || attachment.id;
+        // Los slots nacen con un nombre autogenerado, y hay DOS formas: el id del
+        // hueso o el id del slot (`slot:<hueso>`). Ninguna sirve para leer:
+        // mostraría «slot:human_standard_ps4bi_hand_L» en vez de «Mano izq.».
+        // Sólo un nombre puesto a mano gana; si no, manda el nombre del hueso.
+        const slot = slots[slotId], bone = slot && bones[slot.boneId];
+        const generico = !slot || !slot.name || slot.name === slot.id || slot.name === slot.boneId;
+        const pieza = (!generico && slot.name) || (bone && bone.name) || (slot && slot.name) || slotId;
+        const hasta = index + 1 < frames.length ? frames[index + 1] - 1 : last;
+        for (let f = frame; f <= hasta; f++) {
+          const mark = marcaEn(f), etiqueta = `${pieza}: ${dibujo}`;
+          if (f === frame) { mark.change = true; mark.labels.push(etiqueta); mark.slots.push(slotId); }
+          else { mark.held = true; mark.holds.push(etiqueta); }
+        }
+      });
+    }
+    return marks;
+  }
+
   function layerHasContent(layer) {
     return !!(layer && Array.isArray(layer.cells) && layer.cells.some((cell) => cell != null));
   }
@@ -132,6 +174,6 @@
     return { anchor: a, from: Math.min(a, index), to: Math.max(a, index) };
   }
   animation.timeline = { VIEW_DEFAULTS, FRAME_WIDTHS, DENSITIES, NAME_WIDTHS, normalizeViewState,
-    nearestFrameWidth, rowHeight, nameWidth, majorTickStep, layerHasContent, visibleLayers,
+    nearestFrameWidth, rowHeight, nameWidth, majorTickStep, switchTrack, layerHasContent, visibleLayers,
     extent, fitFrameWidth, rangeFor, buildPanelState, selection };
 })(window);

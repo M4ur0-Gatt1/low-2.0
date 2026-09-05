@@ -221,6 +221,77 @@
       return true;
     }
 
+    /* ── STORYBOARD ────────────────────────────────────────────────────────
+       La secuencia entera es chica, así que cada gesto guarda un antes y un
+       después completos: una sola entrada de historial por intención, sin
+       parches que puedan dejar el orden a medias. */
+    _storyboardChange(label, mutate) {
+      const before = animation.clone(this.scene.storyboard);
+      const result = mutate(this.scene.storyboard);
+      if (result === false) return false;
+      this.scene.storyboard = animation.storyboardData(this.scene.storyboard);
+      const after = animation.clone(this.scene.storyboard);
+      if (JSON.stringify(before) === JSON.stringify(after)) return result;
+      this.touch(); this.emit("storyboard"); this.emit("frame");
+      if (this.history) {
+        const doc = this;
+        this.history.push({ label, domain: "storyboard", before, after,
+          apply: (_direction, value) => {
+            doc.scene.storyboard = animation.storyboardData(value);
+            doc.touch(); doc.emit("storyboard"); doc.emit("frame");
+          } });
+      }
+      return result;
+    }
+
+    /** Agrega un panel. Sin índice va al final; con índice, se mete ANTES del
+     *  que estaba ahí, que es como se piensa «un plano más acá». */
+    addStoryboardBoard(data = {}, index = null) {
+      let id = null;
+      this._storyboardChange("Agregar panel", (storyboard) => {
+        const board = animation.storyboardBoard(data, storyboard.boards.length);
+        id = board.id;
+        const at = index == null ? storyboard.boards.length
+          : Math.max(0, Math.min(storyboard.boards.length, Math.round(index)));
+        storyboard.boards.splice(at, 0, board);
+        return id;
+      });
+      return id;
+    }
+
+    updateStoryboardBoard(id, patch = {}, label = "Editar panel") {
+      return this._storyboardChange(label, (storyboard) => {
+        const board = storyboard.boards.find((b) => b.id === id);
+        if (!board) return false;
+        // El id no se toca desde un patch: es la identidad del panel y hay
+        // referencias colgando de él.
+        const { id: _ignorado, ...resto } = patch || {};
+        Object.assign(board, resto, { shot: { ...board.shot, ...(patch.shot || {}) } });
+        return true;
+      });
+    }
+
+    removeStoryboardBoard(id) {
+      return this._storyboardChange("Quitar panel", (storyboard) => {
+        const at = storyboard.boards.findIndex((b) => b.id === id);
+        if (at < 0) return false;
+        storyboard.boards.splice(at, 1);
+        return true;
+      });
+    }
+
+    moveStoryboardBoard(id, index) {
+      return this._storyboardChange("Reordenar paneles", (storyboard) => {
+        const at = storyboard.boards.findIndex((b) => b.id === id);
+        if (at < 0) return false;
+        const destino = Math.max(0, Math.min(storyboard.boards.length - 1, Math.round(index)));
+        if (destino === at) return false;
+        const [board] = storyboard.boards.splice(at, 1);
+        storyboard.boards.splice(destino, 0, board);
+        return true;
+      });
+    }
+
     // ── edición ──────────────────────────────────────────────────────────
     /** Asegura que haya un dibujo en la celda actual y lo devuelve. Si la celda
      *  está vacía crea uno nuevo: empezar a dibujar en un frame vacío tiene que
