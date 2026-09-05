@@ -27,6 +27,10 @@ async function main() {
     ws.send(JSON.stringify({ id: callId, method, params }));
   });
   await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
+  // Chromium headless usa 800×600 por defecto. LOW es una aplicación de
+  // escritorio y la matriz mínima del viewport multiplano es 1366×768; fijar
+  // esa geometría evita certificar o rechazar el layout según el runner.
+  await send("Emulation.setDeviceMetricsOverride", { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
   await send("Network.setCacheDisabled", { cacheDisabled: true });
   stage("navegar"); await send("Page.navigate", { url: pageUrl });
   await new Promise(ok => setTimeout(ok, 2400));
