@@ -11,7 +11,7 @@ body{display:flex;flex-direction:column}.top{height:48px;flex:none;display:flex;
 .brand{font-weight:800;letter-spacing:.08em}.mode{color:var(--mut);font-size:11px;font-weight:650;letter-spacing:.06em;white-space:nowrap}.spacer{flex:1;min-width:10px}button{height:32px;min-width:32px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--mut);cursor:pointer;font-size:13px;white-space:nowrap}button:hover{background:var(--hover);color:var(--txt)}button.primary{padding:0 12px;background:rgba(223,108,72,.14);color:var(--orange)}button.on{border-color:rgba(223,108,72,.45);background:rgba(223,108,72,.16);color:#f3a086}.fps{font-size:11px;color:var(--mut);white-space:nowrap}
 .field{height:32px;display:flex;align-items:center;gap:4px;padding:0 7px;border:1px solid var(--line);border-radius:7px;color:var(--mut);font-size:11px;white-space:nowrap}.field input{width:42px;border:0;outline:0;background:transparent;color:var(--txt);font:12px/1 Consolas,monospace}.field input.range{width:35px}.sep{width:1px;height:22px;background:var(--line);margin:0 2px;flex:none}
 .commands{height:34px;flex:none;display:flex;align-items:center;gap:3px;padding:3px 6px;background:#181716;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden}.commands button{width:26px;min-width:26px;height:26px;padding:0;display:inline-grid;place-items:center;border-radius:4px}.commands .danger{color:#d88b82}.commands .group{display:flex;align-items:center;gap:1px;padding-right:4px;margin-right:1px;border-right:1px solid var(--line)}
-.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.icon-sprite{position:absolute;width:0;height:0;overflow:hidden}.short{font:700 9px/1 "Segoe UI",sans-serif;letter-spacing:-.02em}.commands button:focus-visible{outline:2px solid var(--orange);outline-offset:-2px}.commands button.on{color:var(--orange);border-color:rgba(223,108,72,.45);background:rgba(223,108,72,.16)}
+.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.ico-fill{fill:currentColor;stroke:none}.icon-sprite{position:absolute;width:0;height:0;overflow:hidden}.short{font:700 9px/1 "Segoe UI",sans-serif;letter-spacing:-.02em}.commands button:focus-visible{outline:2px solid var(--orange);outline-offset:-2px}.commands button.on{color:var(--orange);border-color:rgba(223,108,72,.45);background:rgba(223,108,72,.16)}
 .viewport{flex:1;overflow:auto;position:relative}.timeline{min-width:max-content}.head,.row{display:flex;min-height:var(--cell)}.head{position:sticky;top:0;z-index:4;background:var(--panel2)}
 .label{position:sticky;left:0;z-index:3;width:190px;flex:none;padding:6px 10px;background:var(--panel);border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.head .label{z-index:6;background:var(--panel2);font-weight:700}
 .cell{width:var(--cell);height:var(--cell);flex:none;border-right:1px solid #24242a;border-bottom:1px solid #24242a;position:relative;text-align:center;font:10px/26px Consolas,monospace;color:var(--mut);cursor:pointer}.cell:hover{background:#26262c}.cell.selected{outline:1px solid rgba(223,108,72,.72);outline-offset:-2px;background:rgba(223,108,72,.12)}.cell.current{box-shadow:inset 1px 0 var(--orange),inset -1px 0 var(--orange);background:#311911;color:#fff}.cell.start{background:var(--cyan);color:#071014}.cell.hold::after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:2px solid rgba(51,181,232,.55)}.cell.future{opacity:.42}.cell.key::before{content:"◆";color:#ffad32;font-size:7px}.cell.camera::after{content:"●";color:var(--cyan);font-size:7px;position:absolute;bottom:-7px;left:10px}
@@ -54,6 +54,25 @@ body{display:flex;flex-direction:column}.top{height:48px;flex:none;display:flex;
 </head>
 <body>
 <svg class="icon-sprite" aria-hidden="true"><defs>
+  <!-- iconos del riel de herramientas, copiados del sprite principal: sin
+       ellos el panel separado mostraba solo texto -->
+  <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3l14 8.5-6.5 1L10 20z"/></symbol>
+  <symbol id="i-cursor-open" viewBox="0 0 24 24"><path d="M5 3l14 8.5-6.5 1L10 20z" fill="none"/><path d="M8 8l5 3.2-2.4.4L9.5 14z" fill="currentColor" stroke="none" opacity=".35"/></symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 13V6a1.6 1.6 0 013.2 0v6"/><path d="M11.2 12V4.6a1.6 1.6 0 013.2 0V12"/><path d="M14.4 12V6a1.6 1.6 0 013.2 0v7.5"/><path d="M17.6 13.5c0 4.5-2.5 7.5-6.3 7.5-3 0-4.6-1.4-5.9-4L3.6 13.6a1.5 1.5 0 012.5-1.6L8 14.5"/></symbol>
+  <symbol id="i-nodes" viewBox="0 0 24 24"><path d="M5 17C8 7 16 7 19 17"/><rect x="3" y="15" width="4" height="4"/><rect x="17" y="15" width="4" height="4"/><circle cx="12" cy="9.5" r="1.6"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3l4 4L8 20l-5 1 1-5z"/><path d="M14 6l4 4"/></symbol>
+  <symbol id="i-brush" viewBox="0 0 24 24"><path d="M20 4c-4 1.2-8.6 4.8-10.8 8.4l2.4 2.4C15.2 12.6 18.8 8 20 4z"/><path d="M8.6 13.4c-2.2.2-3.8 1.7-3.8 4 0 1.4-.8 2.3-1.8 2.6 1.6 1.4 6 1.6 7.4-.8.8-1.4.6-3.2-.6-4.4z"/></symbol>
+  <symbol id="i-pennib" viewBox="0 0 24 24"><path d="M12 2v6"/><path d="M12 8l-5 4 2 8h6l2-8z"/><circle cx="12" cy="14" r="1.6"/></symbol>
+  <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M16 3l5 5L10 19H5l-2-2z"/><path d="M12.5 6.5l5 5"/><path d="M10 21h11"/></symbol>
+  <symbol id="i-dropper" viewBox="0 0 24 24"><path d="M18 3l3 3-2.5 2.5-3-3z"/><path d="M15 6L4 17v3h3L18 9"/></symbol>
+  <symbol id="i-bucket" viewBox="0 0 24 24"><path d="M11 3l8 8-8 8-8-8z"/><path d="M3 11h16"/><path d="M20.5 14.5c1 1.3 1.5 2.2 1.5 3a2 2 0 11-4 0c0-.8.5-1.7 1.5-3z"/></symbol>
+  <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 5v14h6v-2h2v2h2v-2h2v2h2v-2h2v2h3V5H3zm2 2h2v3H5V7zm4 0h2v3H9V7zm4 0h2v3h-2V7zm4 0h2v3h-2V7zM5 12h2v3H5v-3zm4 0h2v3H9v-3zm4 0h2v3h-2v-3zm4 0h2v3h-2v-3z"/></symbol>
+  <symbol id="i-inflate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M9 12h6M12 9v6"/><path d="M6 6l2.5 2.5M18 18l-2.5-2.5M6 18l2.5-2.5M18 6l-2.5 2.5"/></symbol>
+  <symbol id="i-contour" viewBox="0 0 24 24"><path d="M3 16c4-8 14-8 18 0"/><path d="M3 8c6 5 12 5 18 0" stroke-width="3"/><circle cx="12" cy="11" r="1.8"/></symbol>
+  <symbol id="i-iron" viewBox="0 0 24 24"><path d="M4 16c3-10 13-10 16 0"/><path d="M2 20h20"/><rect x="9" y="14" width="6" height="3" rx="1"/></symbol>
+  <symbol id="i-cut" viewBox="0 0 24 24"><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/><line x1="9.5" y1="9.5" x2="14.5" y2="14.5"/><path d="M10 7l8 8"/><path d="M7 10l8 8"/></symbol>
+  <symbol id="i-magnet" viewBox="0 0 24 24"><path d="M7 3v7a5 5 0 0010 0V3"/><path d="M7 3h3v7a2 2 0 004 0V3h3"/><path d="M4 19h16"/></symbol>
+  <symbol id="i-pivot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
   <symbol id="p-film" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14M3 10h5M3 14h5M16 10h5M16 14h5"/></symbol>
   <symbol id="p-xsheet" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M3 9h18M3 15h18M10 3v18"/></symbol>
   <symbol id="p-undo" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5M5 12h8a6 6 0 016 6"/></symbol>
@@ -258,7 +277,13 @@ function renderLayers(s){
 function renderTools(s){
  const root=document.createElement('div');root.className='timeline grid';
  (s.tools||[]).forEach(t=>{const b=document.createElement('button');
-  b.className='tool'+(t.active?' on':'');b.textContent=t.label;b.title=t.label;
+  b.className='tool'+(t.active?' on':'');b.title=t.label;
+  // icono cuando el simbolo existe en el sprite; el texto queda de respaldo
+  // para que una herramienta nueva nunca aparezca como un boton vacio
+  if(t.icon&&document.getElementById(t.icon))
+   b.innerHTML='<svg class="ico'+(t.fill?' ico-fill':'')+'" aria-hidden="true"><use href="#'+t.icon+'"/></svg>';
+  else b.textContent=t.label;
+  b.setAttribute('aria-label',t.label);
   b.onclick=()=>command('tool',{id:t.id});root.appendChild(b)});
  if(!(s.tools||[]).length)root.innerHTML='<div class="empty">Abrí un diseño en LOW</div>';
  return root;

@@ -29,12 +29,19 @@ async function main() {
     const second=DZ.activeDocumentTab;
     await dzDocumentTabActivate(first);
     const restored=document.querySelector('#dzCanvas > svg')?.getAttribute('data-document-proof');
-    await dzDocumentTabActivate(second);await dzDocumentTabClose(second);
+    await dzDocumentTabActivate(second);
+    // Cerrar una pestaña con cambios ya no abre un confirm() del sistema sino el
+    // modal propio: la prueba lo responde como una persona, haciendo clic. Que
+    // el boton aparezca es parte de lo que se verifica.
+    const cierre=dzDocumentTabClose(second);
+    let confirmado=false;
+    for(let i=0;i<60;i++){const b=document.querySelector('#dzCfOk');if(b){confirmado=true;b.click();break;}await new Promise(r=>setTimeout(r,25));}
+    const cerrado=await cierre;
     const menu=[...document.querySelectorAll('#dzMenubar > .dz-menu')].map(n=>n.dataset.menu);
     const tools=[...document.querySelectorAll('.dz-tools > [data-tool],.dz-tools > #dzShapePicker,.dz-tools > #dzAddText,.dz-tools > #dzAddLine')].map(n=>n.dataset.tool||n.id);
     const tabs=document.querySelector('#dzDocumentTabs'),opts=document.querySelector('#dzToolOpts'),body=document.querySelector('.dz-body');
     const tr=tabs.getBoundingClientRect(),orr=opts.getBoundingClientRect(),br=body.getBoundingClientRect();
-    return {count:DZ.documentTabs.length,active:DZ.activeDocumentTab===first,restored,
+    return {count:DZ.documentTabs.length,active:DZ.activeDocumentTab===first,restored,confirmado,cerrado,
       dirty:DZ.documentTabs[0]?.dirty,titleHidden:getComputedStyle(document.querySelector('#dzTitle')).display==='none',
       menu,tools,tabsRole:tabs.getAttribute('role'),between:tr.top>=orr.bottom-1&&tr.bottom<=br.top+1,
       tabButtons:tabs.querySelectorAll('[role="tab"]').length,errors:window.__errs||[]};
@@ -44,9 +51,12 @@ async function main() {
   const value = result.result?.value;
   const expectedMenu = ["archivo", "edicion", "capa", "animacion", "vista", "ventana", "ayuda"];
   const primaryTools = ["select", "direct", "nodes", "brush", "pencil", "eraser", "bucket", "dropper", "pen"];
+  // Las primarias van al PRINCIPIO del riel: antes se verificaban al final, que
+  // era justamente el síntoma (las flechas quedaban fuera de la vista).
   const ok = value?.count === 1 && value.active && value.restored === "A" && value.dirty && value.titleHidden &&
+    value.confirmado && value.cerrado &&
     JSON.stringify(value.menu) === JSON.stringify(expectedMenu) &&
-    JSON.stringify(value.tools.slice(-14, -5)) === JSON.stringify(primaryTools) &&
+    JSON.stringify(value.tools.slice(0, 9)) === JSON.stringify(primaryTools) &&
     value.tabsRole === "tablist" && value.between && value.tabButtons === 1 && !errors.length && !value.errors.length;
   if (!ok) throw Error("REGRESIÓN documentos/jerarquía: " + JSON.stringify({ value, errors }));
   console.log("E2E DOCUMENTOS OK", JSON.stringify(value));

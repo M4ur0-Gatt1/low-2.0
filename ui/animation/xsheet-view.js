@@ -81,8 +81,8 @@
         h.textContent = ly.name;
         h.title = "Clic: capa activa · doble clic: renombrar";
         h.onclick = () => doc.selectLayer(ly.id);
-        h.ondblclick = () => {
-          const n = prompt("Nombre de la capa:", ly.name);
+        h.ondblclick = async () => {
+          const n = await dzPromptModal("Nombre de la capa", "nombre", ly.name);
           if (n) doc.setLayerProperty(ly.id, "name", n, "Renombrar capa");
         };
         head.appendChild(h);
@@ -182,8 +182,8 @@
         doc.goTo(f);
       };
       // doble clic: escribir el número del dibujo (sustitución directa)
-      c.ondblclick = () => {
-        const n = prompt(`Dibujo en el frame ${f} (vacío = borrar la exposición):`, val == null ? "" : String(val));
+      c.ondblclick = async () => {
+        const n = await dzPromptModal(`Dibujo en el frame ${f}`, "número de dibujo (vacío = borrar la exposición)", val == null ? "" : String(val));
         if (n === null) return;
         const t = n.trim();
         doc.setCell(f, t === "" ? null : Math.max(1, parseInt(t, 10) || 1), ly.id);

@@ -1269,10 +1269,10 @@ function switchTab(id) {
   cm.focus();
 }
 
-function closeTab(id) {
+async function closeTab(id) {
   const t = S.tabs.find(x => x.id === id);
   if (!t) return;
-  if (t.modified && !confirm(`${t.name} tiene cambios sin guardar. ¿Cerrar igual?`)) return;
+  if (t.modified && !(await dzConfirmModal(`${t.name} tiene cambios sin guardar. ¿Cerrar igual?`, { ok: "Cerrar igual", danger: true }))) return;
   S.tabs = S.tabs.filter(x => x.id !== id);
   if (S.cur === id) {
     if (S.tabs.length) switchTab(S.tabs[S.tabs.length - 1].id);
@@ -2552,7 +2552,19 @@ function dzStudioHierarchyInit() {
       '#dzShapePicker','#dzAddText','#dzAddLine','[data-tool="ruler"]',
       '[data-tool="hand"]'
     ];
-    ordered.forEach(selector => { const node = tools.querySelector(selector); if (node) tools.appendChild(node); });
+    // appendChild movia cada herramienta primaria al FINAL del riel: quedaba
+    // arrancando con dos separadores y las herramientas vectoriales, y las
+    // flechas de seleccion terminaban al fondo — fuera de la vista en cuanto la
+    // ventana no era alta. Se arma la secuencia completa: primero el orden
+    // funcional, despues el resto con su agrupacion original.
+    const primarias = ordered.map(selector => tools.querySelector(selector)).filter(Boolean);
+    const resto = [...tools.children].filter(node => !primarias.includes(node));
+    [...primarias, ...resto].forEach(node => tools.appendChild(node));
+    // al mover los bloques quedan separadores pegados que no separan nada
+    [...tools.children].forEach(node => {
+      const previo = node.previousElementSibling;
+      if (node.classList.contains("hsep") && (!previo || previo.classList.contains("hsep"))) node.remove();
+    });
   }
   dzDocumentTabsRender();
 }
@@ -2663,7 +2675,7 @@ async function dzDocumentTabActivate(id) {
 async function dzDocumentTabClose(id) {
   const tab = DZ.documentTabs.find(item => item.id === id); if (!tab) return false;
   if (tab.id === DZ.activeDocumentTab) dzDocumentTabCapture();
-  if (tab.dirty && !confirm(`«${tab.name}» tiene cambios sin guardar. ¿Cerrar igualmente?`)) return false;
+  if (tab.dirty && !(await dzConfirmModal(`«${tab.name}» tiene cambios sin guardar. ¿Cerrar igualmente?`, { ok: "Cerrar igualmente", danger: true }))) return false;
   const index = DZ.documentTabs.indexOf(tab); DZ.documentTabs.splice(index, 1);
   if (tab.id !== DZ.activeDocumentTab) { dzDocumentTabsRender(); return true; }
   DZ.activeDocumentTab = null;
@@ -2757,7 +2769,9 @@ async function openDesign(path, options = {}) {
   let sourceSvg = options.sourceSvg || r.svg;
   const recovery = window.LOW?.workspace?.recovery?.get(path);
   if (recovery && recovery.content !== r.svg) {
-    if (confirm("LOW encontró cambios recuperables que no llegaron a guardarse. ¿Querés restaurarlos?")) sourceSvg = recovery.content;
+    const dzQuiereRecuperar = /[?&]mock=1/.test(location.search) ? false
+      : await dzConfirmModal("LOW encontró cambios recuperables que no llegaron a guardarse. ¿Querés restaurarlos?", { ok: "Restaurar" });
+    if (dzQuiereRecuperar) sourceSvg = recovery.content;
     else LOW.workspace.recovery.clear(path);
   } else if (recovery) LOW.workspace.recovery.clear(path);
   const tmp = document.createElement("div"); tmp.innerHTML = sourceSvg;
@@ -2781,6 +2795,7 @@ async function openDesign(path, options = {}) {
   DZ.dirty = false;             // recién cargado = limpio (no arrastrar el flag)
   DZ.multi = []; dzNodesClear();
   dzPalCssRender();             // el svg es nuevo: la paleta tiene que gobernarlo
+  dzMirrorGuideRender();        // ...y el eje de simetria se redibuja sobre el svg nuevo
   dzPaletteRender();
   $("#dzProps").hidden = true; $("#dzEmpty").hidden = false;
   $("#dzHandle").hidden = true;
@@ -3245,11 +3260,11 @@ function dzCornerDown(e) {
   };
   document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
 }
-function dzCornerExact(e) {
+async function dzCornerExact(e) {
   e.preventDefault(); e.stopPropagation();
   let el = DZ.sel; const info=dzCornerInfo(el); if (!info) return;
   const corner=e.currentTarget.dataset.corner, individual=e.altKey;
-  const value = prompt(individual?"Radio de esta esquina:":"Radio de las cuatro esquinas:", info.r[{tl:0,tr:1,br:2,bl:3}[corner]||0]);
+  const value = await dzPromptModal(individual?"Radio de esta esquina":"Radio de las cuatro esquinas", "radio en píxeles", String(info.r[{tl:0,tr:1,br:2,bl:3}[corner]||0]));
   if (value == null || !isFinite(+value)) return;
   dzSnapshot(); if(individual) el=dzCornerAsPath(el); dzCornerSet(el,+value,corner,individual); dzMarkDirty();
 }
@@ -4086,6 +4101,36 @@ function dzPromptModal(title, ph, def) {
     setTimeout(() => { const i = $("#dzPrIn"); if (i) i.focus(); }, 30);
     $("#dzPrX").onclick = () => { closeModal(); resolve(null); };
     $("#dzPrOk").onclick = () => { const v = $("#dzPrIn").value.trim(); closeModal(); resolve(v); };
+  });
+}
+
+/* ── Diálogos orgánicos (reemplazan a confirm()/alert() del navegador, que en
+   pywebview salen como chrome del SO y rompen el diseño; el confirm() nativo
+   además congela el renderer). Mismo lenguaje visual que dzPromptModal. ── */
+function dzConfirmModal(mensaje, opts = {}) {
+  const esc = s => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const ok = opts.ok || "Aceptar", cancel = opts.cancel || "Cancelar";
+  const primary = opts.danger ? "primary danger" : "primary";
+  return new Promise(resolve => {
+    openModal(`${opts.title ? `<h2>${esc(opts.title)}</h2>` : ""}
+      <p class="m-msg">${esc(mensaje)}</p>
+      <div class="m-actions"><button class="ghost" id="dzCfX">${esc(cancel)}</button>
+      <button class="${primary}" id="dzCfOk">${esc(ok)}</button></div>`);
+    setTimeout(() => { const b = $("#dzCfOk"); if (b) b.focus(); }, 30);
+    $("#dzCfX").onclick = () => { closeModal(); resolve(false); };
+    $("#dzCfOk").onclick = () => { closeModal(); resolve(true); };
+  });
+}
+
+/* Aviso simple (reemplaza alert()): un solo botón, se puede esperar. */
+function dzNotice(mensaje, title) {
+  const esc = s => String(s == null ? "" : s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  return new Promise(resolve => {
+    openModal(`${title ? `<h2>${esc(title)}</h2>` : ""}
+      <p class="m-msg">${esc(mensaje)}</p>
+      <div class="m-actions"><button class="primary" id="dzNoOk">Entendido</button></div>`);
+    setTimeout(() => { const b = $("#dzNoOk"); if (b) b.focus(); }, 30);
+    $("#dzNoOk").onclick = () => { closeModal(); resolve(); };
   });
 }
 
@@ -8247,11 +8292,11 @@ function dzCharacterLibraryRender(selectedId) {
   if (selectedId && list.some(p => p.id === selectedId)) select.value = selectedId;
   const remove = $("#rigCharacterDelete"); if (remove) remove.disabled = !list.length;
 }
-function dzCharacterSave() {
+async function dzCharacterSave() {
   if (!DZ.doc) return dzSetStatus("Abrí o creá un personaje primero");
   const current = $("#rigCharacterLibrary")?.value;
   const list = dzCharacterLibraryRead(), previous = list.find(p => p.id === current);
-  const name = prompt("Nombre para guardar este personaje:", previous?.name || DZ.doc.scene.name || "Mi personaje");
+  const name = await dzPromptModal("Guardar personaje", "nombre", previous?.name || DZ.doc.scene.name || "Mi personaje");
   if (name == null || !name.trim()) return;
   try {
     const preset = LOW.animation.characterLibrary.capture(DZ.doc, dzCanvasInner(), name,
@@ -8265,7 +8310,7 @@ async function dzCharacterLoad() {
   const id = $("#rigCharacterLibrary")?.value;
   const preset = dzCharacterLibraryRead().find(p => p.id === id);
   if (!preset) return dzSetStatus("Elegí un personaje guardado primero");
-  if ((DZ.dirty || DZ.doc?.dirty) && !confirm(`¿Reemplazar el personaje actual por una copia de «${preset.name}»?`)) return;
+  if ((DZ.dirty || DZ.doc?.dirty) && !(await dzConfirmModal(`¿Reemplazar el personaje actual por una copia de «${preset.name}»?`, { ok: "Reemplazar", danger: true }))) return;
   if (!DZ.doc) await dzDocInit();
   dzSnapshot();
   dzCanvasSet(preset.drawing); dzSyncCanvasDocument(true); DZ.doc.writeDrawing(dzCanvasInner());
@@ -8275,11 +8320,11 @@ async function dzCharacterLoad() {
   dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
   dzSetStatus(`Copia editable de «${preset.name}» cargada · la plantilla guardada no cambia`);
 }
-function dzCharacterDelete() {
+async function dzCharacterDelete() {
   const id = $("#rigCharacterLibrary")?.value;
   const list = dzCharacterLibraryRead(), preset = list.find(p => p.id === id);
   if (!preset) return dzSetStatus("Elegí una plantilla para quitar");
-  if (!confirm(`¿Quitar «${preset.name}» de tu biblioteca? El personaje abierto no se borra.`)) return;
+  if (!(await dzConfirmModal(`¿Quitar «${preset.name}» de tu biblioteca? El personaje abierto no se borra.`, { ok: "Quitar", danger: true }))) return;
   dzCharacterLibraryWrite(list.filter(p => p.id !== id)); dzCharacterLibraryRender();
   dzSetStatus(`Plantilla «${preset.name}» quitada · el personaje abierto permanece`);
 }
@@ -8358,10 +8403,10 @@ function dzRigRemoveSelected() {
     dzSetStatus(`Hueso «${node.id}» eliminado; el dibujo permanece intacto`);
   }
 }
-function dzRigClearAll() {
+async function dzRigClearAll() {
   if (!DZ.doc || !Object.keys(DZ.doc.scene.rig.nodes || {}).length)
     return dzSetStatus("No hay ningún esqueleto para eliminar");
-  if (!confirm("¿Eliminar todo el esqueleto? El dibujo queda intacto y podés deshacer con Ctrl+Z.")) return;
+  if (!(await dzConfirmModal("¿Eliminar todo el esqueleto? El dibujo queda intacto y podés deshacer con Ctrl+Z.", { ok: "Eliminar", danger: true }))) return;
   if (!DZ.doc.clearRig()) return;
   DZ.rigSelectedId = null; DZ.rigConstraintId = null; DZ.rigLivePose = null; DZ.rigIKPreview = null;
   DZ.rigSelectionSource = null;
@@ -9989,7 +10034,7 @@ function dzRigRepartirDibujo() {
   // se la pone al dia antes de mirar.
   const svg = $("#dzCanvas")?.querySelector(":scope > svg");
   const delDibujo = DZ.doc.drawing?.content || "";
-  if (svg && !svg.children.length && delDibujo) dzCanvasSet(delDibujo);
+  if (svg && !dzCompositionElements(svg).length && delDibujo) dzCanvasSet(delDibujo);
 
   const piezas = dzRigDrawableElements();
   if (!piezas.length) return dzSetStatus(delDibujo
@@ -11455,7 +11500,11 @@ function dzCompositionViewPlanes() {
     const source = document.createElementNS(SVGNS, "svg");
     source.setAttribute("viewBox", svg.getAttribute("viewBox") || "0 0 1080 1080");
     source.setAttribute("preserveAspectRatio", "xMidYMid meet"); source.appendChild(el.cloneNode(true));
-    return { id: ref.id, name: el.id || dzLayerLabel(el), node: source,
+    // "rect · #ffffff" no es el nombre de un plano: si el elemento no tiene
+    // identidad propia se numera, que es lo que el artista ve en la mesa.
+    const name = el.getAttribute("data-name") || el.id
+      || (el.getAttribute("data-low-art") ? dzLayerLabel(el) : "Plano " + (index + 1));
+    return { id: ref.id, name, node: source, effects: dzCompValues(el),
       transform: DZ.doc?.scene?.compositionTransformAt?.(ref.id, DZ.doc.frame) || {
         x: 0, y: 0, z: parseFloat(el.getAttribute("data-z")) || 0,
         rotationX: 0, rotationY: 0, rotationZ: 0, scaleX: 1, scaleY: 1 } };
@@ -11481,7 +11530,22 @@ function dzCompositionViewRender() {
       if (DZ.doc?.setCompositionTransform) DZ.doc.setCompositionTransform(id, { ...current, ...patch }, {
         frame: DZ.compositionAutoKey ? DZ.doc.frame : null, source: plane?.source || {}, label: "Transformar plano en escenario 3D" });
       dzCompositionViewRender();
-    }
+    },
+    onEffect: (id, patch) => {
+      const el = dzCompositionPlaneElement(id); if (!el) return;
+      if (DZ.sel !== el) dzSelect(el);
+      dzSnapshot(); dzCompositorApply(patch); dzCompositionViewRender();
+    },
+    onEffectReset: id => {
+      const el = dzCompositionPlaneElement(id); if (!el) return;
+      if (DZ.sel !== el) dzSelect(el);
+      dzSnapshot();
+      ["blur", "bright", "contrast", "saturate", "shadow", "sx", "sy", "sb", "sc"]
+        .forEach(k => el.removeAttribute("data-comp-" + k));
+      dzCompositorApply(false); dzCompositionViewRender();
+      dzSetStatus("Efectos quitados del plano");
+    },
+    onStagger: () => dzCompositionStagger()
   });
   DZ_COMPOSITION_VIEW.setPlanes(dzCompositionViewPlanes());
 }
@@ -11552,8 +11616,8 @@ function dzMenuAction(act) {
       if (DZ.sel.hasAttribute("data-locked")) DZ.sel.removeAttribute("data-locked");
       else { DZ.sel.setAttribute("data-locked", "1"); const el = DZ.sel; dzDeselect(); }
       dzMarkDirty(); dzBuildLayers(); },
-    renombrar: () => { if (!DZ.sel) return dzSetStatus("Seleccioná un elemento primero");
-      const name = prompt("Nombre de la capa:", DZ.sel.id || "");
+    renombrar: async () => { if (!DZ.sel) return dzSetStatus("Seleccioná un elemento primero");
+      const name = await dzPromptModal("Nombre de la capa", "nombre", DZ.sel.id || "");
       if (name === null) return;
       dzSnapshot();
       const clean = name.trim().replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]/g, "_");
@@ -12389,8 +12453,12 @@ function dzPanelSnapshot(kind) {
   if (kind === "tools") {
     // DZ.tool arranca sin definir: en todo el editor "sin definir" es "select".
     const cur = DZ.tool || "select";
+    // El panel separado mostraba una lista de TEXTO: sin el icono no es la
+    // barra de herramientas, es un menu. Viaja tambien el simbolo del sprite.
     return { schema: 2, kind, tools: [...document.querySelectorAll(".dz-toolbtn")].map(b => ({
       id: b.dataset.tool, label: (b.title || b.dataset.tool || "").split(/[·(:]/)[0].trim(),
+      icon: (b.querySelector("use")?.getAttribute("href") || "").replace("#", ""),
+      fill: !!b.querySelector("svg.ico-fill"),
       active: b.dataset.tool === cur,
     })).filter(t => t.id) };
   }
@@ -12512,8 +12580,17 @@ window.lowPanelCommand = async ({ kind, action, payload }) => {
   if (action === "dock") {
     DZ.detached.delete(kind);
     const meta = LOW.workspace.PANEL_CATALOG[kind], panel = meta && document.querySelector(meta.element);
-    if (panel) { panel.hidden = false; DZ.panelDock?.dock(panel, "right"); }
-    LOW.workspace.panels?.dock(kind, "right");
+    // Volver SIEMPRE a la derecha no es restaurar: el riel de herramientas
+    // reaparecia del otro lado de la pantalla. Se usa el muelle que el panel
+    // tenia anotado; y lo que nunca estuvo en un muelle (el riel, el viewer)
+    // se limita a reaparecer donde estaba.
+    const zona = LOW.workspace.panels?.get?.(kind)?.dock || (meta?.allowedDocks || [])[0] || "right";
+    const muelles = Object.values(DZ.panelDock?.docks || {});
+    if (panel) {
+      panel.hidden = false;
+      if (muelles.includes(panel.parentElement)) DZ.panelDock.dock(panel, zona);
+    }
+    LOW.workspace.panels?.dock(kind, zona);
     if (kind === "rig") { DZ.rigMode = true; $("#dzRigBtn")?.classList.add("active"); $("#tlRigOpen")?.classList.add("active"); dzRigPanelSync(); dzRigOverlayRender(); }
     return true;
   }
@@ -12801,7 +12878,7 @@ async function dzDeleteFrameSelection() {
     const from = sel ? Math.max(1, sel.from) : DZ.doc.frame;
     const to = sel ? Math.max(from, sel.to) : DZ.doc.frame;
     const label = from === to ? "el frame " + from : `los frames ${from}–${to}`;
-    if (!confirm(`¿Quitar ${label} de la capa activa? (los dibujos no se borran)`)) return;
+    if (!(await dzConfirmModal(`¿Quitar ${label} de la capa activa? (los dibujos no se borran)`, { ok: "Quitar", danger: true }))) return;
     dzAnimStopIf();
     DZ.doc.apply("remove", from, to);
     DZ.doc.goTo(Math.max(1, Math.min(from, DZ.doc.scene.lastFrame() || 1)));
@@ -12815,7 +12892,7 @@ async function dzDeleteFrameSelection() {
   const paths = DZ.anim.frames.slice(from, to + 1);
   if (paths.length >= DZ.anim.frames.length) return dzSetStatus("La escena debe conservar al menos un fotograma");
   const label = paths.length === 1 ? "este cuadro" : `los ${paths.length} cuadros seleccionados`;
-  if (!confirm(`¿Borrar ${label}? (no se puede deshacer)`)) return;
+  if (!(await dzConfirmModal(`¿Borrar ${label}? (no se puede deshacer)`, { ok: "Borrar", danger: true }))) return;
   dzAnimStopIf();
   let result = null;
   for (let i = paths.length - 1; i >= 0; i--) {
@@ -12836,9 +12913,33 @@ async function dzDeleteFrameSelection() {
 function dzMirrorToggle() {
   DZ.mirror = !DZ.mirror;
   const b = $("#dzMirror"); if (b) b.classList.toggle("active", DZ.mirror);
+  dzMirrorGuideRender();
   dzSetStatus(DZ.mirror ?
     "🔄 Modo espejo ACTIVADO: cada trazo se duplica reflejado (eje vertical del lienzo)" :
     "🔄 Modo espejo desactivado");
+}
+/* El eje de simetría tiene que VERSE. Sin la línea, el modo espejo era
+   adivinanza: recién al soltar el trazo se descubría dónde caía el centro y con
+   qué quedaba alineado el reflejo. La guía es UI de pantalla (clase dz-penui):
+   no entra en el documento, ni en el export, ni en la exposición del cuadro.
+   Doble trazo (claro debajo, punteado encima) para que se lea igual sobre fondo
+   blanco que sobre uno negro, y stroke sin escalar para que no engorde al zoom. */
+function dzMirrorGuideRender() {
+  const svg = $("#dzCanvas")?.querySelector(":scope > svg");
+  if (!svg) return;
+  svg.querySelector(":scope > g.dz-mirror-guide")?.remove();
+  if (!DZ.mirror) return;
+  const vb = dzVB();
+  const x = vb[0] + vb[2] / 2, y1 = vb[1], y2 = vb[1] + vb[3];
+  const g = document.createElementNS(SVGNS, "g");
+  g.setAttribute("class", "dz-penui dz-mirror-guide");
+  g.setAttribute("pointer-events", "none");
+  g.innerHTML =
+    `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="#fff" stroke-opacity=".55"` +
+    ` stroke-width="3" vector-effect="non-scaling-stroke"/>` +
+    `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="#e0553f" stroke-opacity=".95"` +
+    ` stroke-width="1" stroke-dasharray="8 6" vector-effect="non-scaling-stroke"/>`;
+  svg.appendChild(g);
 }
 function dzMirrorClone(el) {
   if (!DZ.mirror || !el || !el.parentNode) return null;
@@ -14257,9 +14358,9 @@ function dzLayerRow(el, depth) {
   lbl.className = "dz-layer-t";
   lbl.style.paddingLeft = (depth * 12) + "px";
   lbl.textContent = el.hasAttribute("data-low-art") ? dzLayerLabel(el) : (el.id ? el.id : dzLayerLabel(el));
-  lbl.ondblclick = (e) => {
+  lbl.ondblclick = async (e) => {
     e.stopPropagation();
-    const name = prompt("Nombre de la capa (para vos y para el rig):", el.id || "");
+    const name = await dzPromptModal("Nombre de la capa", "para vos y para el rig", el.id || "");
     if (name === null) return;
     dzSnapshot();
     const clean = name.trim().replace(/[^\w\-áéíóúñÁÉÍÓÚÑ]/g, "_");
@@ -14297,8 +14398,8 @@ function dzLayerRow(el, depth) {
   row.oncontextmenu = e => {
     const oculto = el.getAttribute("display") === "none", bloqueado = el.hasAttribute("data-locked");
     if (!bloqueado) dzSelect(el);
-    const renombrar = () => {
-      const nombre = prompt("Nombre de la capa:", el.id || "capa");
+    const renombrar = async () => {
+      const nombre = await dzPromptModal("Nombre de la capa", "nombre", el.id || "capa");
       if (!nombre || nombre.trim() === (el.id || "")) return;
       dzSnapshot(); el.id = dzUniqueId(nombre.trim()); dzMarkDirty(); dzBuildLayers();
     };
@@ -14434,12 +14535,16 @@ function dzCompValues(el) {
     shadow:el?.getAttribute("data-comp-shadow") === "1", sx:n("sx",8), sy:n("sy",8), sb:n("sb",8),
     sc:el?.getAttribute("data-comp-sc") || "#000000" };
 }
-function dzCompositorApply(readUi=true) {
+/** `origen`: true = leer el panel clásico · false = releer el elemento ·
+    objeto = parche sobre los valores actuales (lo usa la mesa multiplano). */
+function dzCompositorApply(origen=true) {
   const el = DZ.sel; if (!el) return;
-  const v = readUi ? { blur:+$("#dzCompBlur").value, bright:+$("#dzCompBright").value,
+  if (origen && typeof origen === "object") origen = { ...dzCompValues(el), ...origen };
+  const v = origen === true ? { blur:+$("#dzCompBlur").value, bright:+$("#dzCompBright").value,
     contrast:+$("#dzCompContrast").value, saturate:+$("#dzCompSaturate").value,
     shadow:$("#dzCompShadow").checked, sx:+$("#dzCompShadowX").value, sy:+$("#dzCompShadowY").value,
-    sb:+$("#dzCompShadowBlur").value, sc:$("#dzCompShadowColor").value } : dzCompValues(el);
+    sb:+$("#dzCompShadowBlur").value, sc:$("#dzCompShadowColor").value }
+    : origen === false ? dzCompValues(el) : origen;
   const attrs = { blur:v.blur, bright:v.bright, contrast:v.contrast, saturate:v.saturate,
     shadow:v.shadow?1:0, sx:v.sx, sy:v.sy, sb:v.sb, sc:v.sc };
   Object.entries(attrs).forEach(([k,val]) => el.setAttribute("data-comp-"+k, String(val)));
@@ -15268,7 +15373,7 @@ function dzMocapCorrectionWire() {
     const target=issues.find(frame=>frame>DZ.doc.frame)||issues[0];DZ.doc.goTo(target);dzMocapRenderSilhouette();dzSetStatus(` Revisá la silueta F${target} · pintá, borrá o confirmá con ✓`);
   };
   if(nextPoseIssue)nextPoseIssue.onclick=()=>{const track=DZ.doc?.mocap,issues=(track?.poseAnalysis?.missedFrames||[]).map(Number).filter(Number.isFinite).sort((a,b)=>a-b);if(!issues.length)return dzSetStatus(" No quedan cuadros sin pose por revisar");const target=issues.find(frame=>frame>DZ.doc.frame)||issues[0];DZ.doc.goTo(target);dzMocapRenderSilhouette();dzSetStatus(` Pose faltante en F${target} · elegí una articulación y colocala sobre la referencia`);};
-  if(applyRig)applyRig.onclick=()=>{
+  if(applyRig)applyRig.onclick=async ()=>{
     const track=DZ.doc?.mocap,rig=DZ.doc?.scene?.rig;if(!track||!rig)return;if(!Object.keys(rig.nodes||{}).length)return dzSetStatus(" Colocá o construí un esqueleto antes de transferir movimiento");
     const size={width:DZ.doc.scene.width,height:DZ.doc.scene.height},prepared=LOW.animation.mocapPoseSequence(track,track.analysisOptions?.poseInterpolation!==false),contacts=LOW.animation.mocapFootContacts(prepared),motion=track.analysisOptions?.footLock===false?prepared:LOW.animation.stabilizeMocapFootContacts(prepared,contacts),rawSequence={};
     if(track.poseAnalysis)track.poseAnalysis.contacts=contacts;
@@ -15276,7 +15381,7 @@ function dzMocapCorrectionWire() {
     const rawKeys=Object.values(rawSequence).reduce((sum,poses)=>sum+Object.keys(poses).length,0),sequence=LOW.animation.reduceRigPoseSequence(rawSequence,track.analysisOptions?.keyTolerance??2);
     const frames=Object.keys(sequence),keys=Object.values(sequence).reduce((sum,poses)=>sum+Object.keys(poses).length,0);
     if(!frames.length)return dzSetStatus(" No hay pares de articulaciones suficientes para transferir");
-    const reduction=rawKeys>keys?` (${rawKeys-keys} redundantes eliminadas)`:"";if(!confirm(`Se crearán ${keys} claves en ${frames.length} cuadros${reduction}. El rig y sus pivotes no cambiarán. ¿Aplicar?`))return;
+    const reduction=rawKeys>keys?` (${rawKeys-keys} redundantes eliminadas)`:"";if(!(await dzConfirmModal(`Se crearán ${keys} claves en ${frames.length} cuadros${reduction}. El rig y sus pivotes no cambiarán. ¿Aplicar?`, { ok: "Aplicar" })))return;
     if(DZ.doc.setRigPoseSequence(sequence,"Retargeting desde video")){dzRigApplyLive(DZ.doc.frame);dzTimelineBadges();dzSetStatus(` Movimiento aplicado: ${keys} claves${reduction} · Ctrl+Z revierte todo`);}
   };
   const apply=e=>{if(!drawing||!mode||!mask)return;const r=canvas.getBoundingClientRect(),cx=(e.clientX-r.left)/r.width*canvas.width,cy=(e.clientY-r.top)/r.height*canvas.height,rad=+(brush?.value||8);
@@ -15378,13 +15483,13 @@ async function dzMocapOpen() {
   dzSetStatus(" Motion Capture independiente: importá una actuación; Cut-out sólo interviene al aplicar el movimiento a un rig");
 }
 
-function dzDocumentMayDiscard(action) {
+async function dzDocumentMayDiscard(action) {
   const dirty = !!(DZ.doc?.dirty || DZ.dirty);
-  return !dirty || confirm(`Hay cambios sin guardar. ¿${action} sin guardarlos?`);
+  return !dirty || await dzConfirmModal(`Hay cambios sin guardar. ¿${action} sin guardarlos?`, { ok: "Descartar", danger: true });
 }
 
 async function dzDocumentNew() {
-  if (!dzDocumentMayDiscard("Crear un documento nuevo")) return false;
+  if (!(await dzDocumentMayDiscard("Crear un documento nuevo"))) return false;
   dzDocumentReset();
   const r = await api.new_design();
   if (!r?.path) return false;
@@ -15397,9 +15502,9 @@ async function dzDocumentNew() {
   return true;
 }
 
-function dzDocumentClose() {
+async function dzDocumentClose() {
   if (!DZ.path && !DZ.doc) return false;
-  if (!dzDocumentMayDiscard("Cerrar el documento")) return false;
+  if (!(await dzDocumentMayDiscard("Cerrar el documento"))) return false;
   dzDocumentReset();
   $("#designView").hidden = true;
   $("#dzTitle").textContent = "Sin documento";
@@ -15411,7 +15516,7 @@ async function dzDocumentTrash() {
   const target = DZ.doc?.path || DZ.path;
   if (!target) return sysMsg(" Este documento todavía no tiene un archivo para borrar.");
   const name = String(target).split(/[\\/]/).pop();
-  if (!confirm(`¿Mover «${name}» a la papelera del proyecto? Podrás recuperarlo desde .low-trash.`)) return false;
+  if (!(await dzConfirmModal(`¿Mover «${name}» a la papelera del proyecto? Podrás recuperarlo desde .low-trash.`, { ok: "Mover a la papelera", danger: true }))) return false;
   const r = await api.trash_design(target);
   if (!r || r.error) return sysMsg(" No pude moverlo a la papelera: " + ((r && r.error) || "error desconocido"));
   dzDocumentReset();
@@ -15452,7 +15557,7 @@ async function dzSceneOpen() {
     const r = await api.open_dialog();
     if (!r || !r.content) return false;
     const doc = LOW.animation.LowDoc.fromJSON(r.content);
-    if (!dzDocumentMayDiscard("Abrir otro documento")) return false;
+    if (!(await dzDocumentMayDiscard("Abrir otro documento"))) return false;
     dzDocumentReset();
     doc.path = r.path || null;
     dzDocUse(doc);
@@ -15780,6 +15885,35 @@ function dzCompositionElements(svg) {
     && !(node.classList && (node.classList.contains("dz-onion") || node.classList.contains("dz-penui"))));
 }
 
+/** Del id de un plano al elemento del lienzo que lo produce. */
+function dzCompositionPlaneElement(id) {
+  const kids = dzCompositionElements($("#dzCanvas")?.querySelector(":scope > svg"));
+  return kids.find((el, index) => dzCompositionPlaneRef(el, index).id === id) || null;
+}
+/** Reparte los planos en profundidad, del fondo al frente, en UNA transacción.
+    Sin esto la mesa multiplano arrancaba con todo en Z 0: tres planos
+    exactamente superpuestos se ven como una sola lámina y la mesa parece
+    decorativa. No se hace solo al abrir —mover el trabajo del artista sin que
+    lo pida no es ayudar—: es una acción explícita y reversible. */
+function dzCompositionStagger() {
+  const kids = dzCompositionElements($("#dzCanvas")?.querySelector(":scope > svg"));
+  if (kids.length < 2) return dzSetStatus("Hacen falta al menos dos planos para escalonar");
+  if (!DZ.doc?.setCompositionTransform) return dzSetStatus("Abrí una animación para componer en profundidad");
+  const paso = Math.min(80, Math.floor(DZ_Z_MAX / (kids.length - 1)));
+  DZ.doc.history?.begin("Escalonar planos en profundidad");
+  kids.forEach((el, index) => {
+    const ref = dzCompositionPlaneRef(el, index);
+    const actual = DZ.doc.scene.compositionTransformAt(ref.id, DZ.doc.frame) || {};
+    // el primer hijo del SVG es el que se pinta más atrás: le toca el Z mayor
+    DZ.doc.setCompositionTransform(ref.id, { ...actual, z: (kids.length - 1 - index) * paso }, {
+      frame: DZ.compositionAutoKey ? DZ.doc.frame : null, source: ref.source,
+      label: "Escalonar planos en profundidad" });
+  });
+  DZ.doc.history?.commit();
+  DZ.dirty = true;
+  dzCompositionViewRender();
+  dzSetStatus("Planos escalonados cada " + paso + " de profundidad · Ctrl+Z los devuelve");
+}
 function dzCompositionPlaneRef(el, index) {
   const layerId = DZ.doc?.layerId || "legacy";
   const stable = el?.getAttribute?.("data-comp-plane") || el?.id || `${layerId}:${index}`;
@@ -15813,6 +15947,7 @@ function dzCanvasSet(contenido) {
   svg.innerHTML = contenido || "";
   dzCompositionApplyToCanvas();
   dzPalCssRender();          // el innerHTML se llevo la hoja de la paleta
+  dzMirrorGuideRender();     // ...y tambien la guia del eje de simetria
   // Cambiar de Drawing sólo reemplaza el contenido interior. La raíz conserva
   // exactamente la resolución canónica de la escena.
   dzSyncCanvasDocument();
@@ -15891,8 +16026,8 @@ async function dzDocInit() {
     const rec = dzSceneRecovered();
     const tieneAlgo = rec && (rec.scene.levels || []).some(
       (l) => (l.drawings || []).some((d) => d.content && d.content.length > 40));
-    if (tieneAlgo && confirm(
-        "LOW encontró una escena de animación que no llegó a guardarse. ¿La recuperás?")) {
+    if (tieneAlgo && !/[?&]mock=1/.test(location.search) && await dzConfirmModal(
+        "LOW encontró una escena de animación que no llegó a guardarse. ¿La recuperás?", { ok: "Recuperar" })) {
       try {
         DZ.doc = A.LowDoc.fromJSON(rec);
         recoveredDocument = true;
@@ -16066,9 +16201,9 @@ function dzWsRender() {
     b.title = ws.descripcion || ws.name;
     b.onclick = () => W.activate(ws.id, dzWsAplicar);
     // doble clic: guardar el layout actual con otro nombre, como en OpenToonz
-    b.ondblclick = (e) => {
+    b.ondblclick = async (e) => {
       e.preventDefault();
-      const nombre = prompt("Nombre del espacio de trabajo:", ws.name);
+      const nombre = await dzPromptModal("Nombre del espacio de trabajo", "nombre", ws.name);
       if (!nombre) return;
       W.save(ws.id, ws.panels, nombre);
       dzWsRender();
@@ -16095,9 +16230,9 @@ function dzWsSaveCurrent() {
   W.save(id, dzWsCapture(), ws?.name || id); dzWsRender();
   dzSetStatus(" Disposición guardada en «" + (ws?.name || id) + "»");
 }
-function dzWsDuplicateCurrent() {
+async function dzWsDuplicateCurrent() {
   const W = LOW.workspace.workspaces, id = W.activeId || W.lastUsed();
-  const nombre = prompt("Nombre del nuevo espacio de trabajo:", (W.get(id)?.name || "Espacio") + " · personalizado");
+  const nombre = await dzPromptModal("Nuevo espacio de trabajo", "nombre", (W.get(id)?.name || "Espacio") + " · personalizado");
   if (!nombre) return;
   W.save(id, dzWsCapture(), W.get(id)?.name || id);
   const copy = W.duplicate(id, nombre); if (copy) W.activate(copy.id, dzWsAplicar);

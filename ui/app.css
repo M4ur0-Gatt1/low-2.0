@@ -1833,6 +1833,10 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
   padding: 9px 0; color: var(--mut); font: 500 12.5px 'Figtree', sans-serif;
 }
 .m-actions .ghost:hover { color: var(--txt); border-color: var(--mut); }
+/* Mensaje de los diálogos orgánicos (dzConfirmModal / dzNotice) */
+.m-msg { color: var(--txt); font: 400 13px 'Figtree', sans-serif; line-height: 1.5; margin: 4px 0 2px; white-space: pre-wrap; }
+.m-actions .primary.danger { background: #c0392b; }
+.m-actions .primary.danger:hover { background: #e04b39; }
 
 /* ── splash de arranque LOW: aparece y se desvanece solo (CSS puro) ── */
 #lowSplash {
@@ -3089,7 +3093,11 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 #designView .dz-menubar > .ibtn:hover { background:var(--dz-raised); border-color:var(--dz-hairline); }
 #designView .dz-toolopts { min-height:32px; padding:3px 8px; gap:8px; border-bottom-color:var(--dz-hairline); }
 #designView .dz-to-name { padding-right:8px; color:var(--txt); font-weight:650; text-transform:none; letter-spacing:0; }
-#designView .dz-tools { width:44px; padding:5px; gap:2px; border-right-color:var(--dz-hairline); }
+/* El riel no entra entero en una ventana baja: en vez de esconder dos tercios
+   de las herramientas debajo de un scroll sin aviso, se abre en una segunda
+   columna. En ventanas altas sigue midiendo 44px, igual que antes. */
+#designView .dz-tools { width:auto; min-width:44px; max-width:132px; flex-flow:column wrap;
+  padding:5px; gap:2px; border-right-color:var(--dz-hairline); }
 #designView .dz-tools .ibtn { width:34px; height:31px; border:0; border-radius:7px; }
 #designView .dz-tools .ibtn:hover { background:var(--dz-raised); }
 #designView .dz-tools .ibtn.active { background:var(--redsoft); color:var(--redh); box-shadow:inset 0 0 0 1px rgba(240,69,14,.22); }

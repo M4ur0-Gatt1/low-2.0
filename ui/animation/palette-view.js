@@ -114,7 +114,7 @@
       const st = this.activo(), usage = P.usage(doc.scene, pal), orphans = P.orphans(doc.scene, pal);
       const box = el("div", "pal2 color-studio" + (pal.locked ? " bloqueada" : ""));
       const head = el("header", "pal2-head"), title = el("div", "pal2-title"), name = el("b", "pal2-name", pal.name);
-      name.title = "Doble clic para renombrar"; name.ondblclick = () => { const n = prompt("Nombre de la paleta:", pal.name); if (n?.trim()) { pal.name = n.trim(); doc.touch(); doc.emit("palette"); } };
+      name.title = "Doble clic para renombrar"; name.ondblclick = async () => { const n = await dzPromptModal("Nombre de la paleta", "nombre", pal.name); if (n?.trim()) { pal.name = n.trim(); doc.touch(); doc.emit("palette"); } };
       title.append(name, el("small", "", "Estilos vinculados a toda la escena"));
       const actions = el("div", "pal2-actions"), adopt = el("button", "pal2-btn", "Adoptar"), add = el("button", "pal2-btn primary", "+ Estilo");
       adopt.title = "Convertir colores literales en estilos editables"; adopt.onclick = () => { const r = doc.adoptColors(); this._notice(r?.elementos ? `${r.elementos} elementos vinculados` : "La escena ya está vinculada"); };
@@ -153,7 +153,7 @@
       const grid = el("div", "pal2-grid");
       pal.styles.forEach((style) => { const count = usage[style.index] || {ink:0,paint:0,total:0}; const item = el("button", "pal2-item"+(style.index===this.current?" actual":"")+(!count.total?" sinuso":"")); item.dataset.index=style.index;
         const sw = el("i", "pal2-sw"); sw.style.background=style.color; const copy=el("span","pal2-item-copy"); copy.append(el("b","",style.name||`Estilo ${style.index}`),el("small","",`${style.meta?.group?style.meta.group+" · ":""}#${style.index} · ${style.color.toUpperCase()}`)); const use=el("span","pal2-use",count.total?`${count.total}`:"—"); use.title=`${count.ink} líneas · ${count.paint} rellenos`;item.dataset.group=style.meta?.group||"";
-        item.append(sw,copy,use); item.onclick=()=>this.setCurrent(style.index); item.ondblclick=()=>{ if(!pal.locked){const n=prompt(`Nombre del estilo ${style.index}:`,style.name);if(n?.trim())doc.renameStyle(style.index,n.trim());}}; item.oncontextmenu=(e)=>{e.preventDefault();this._menu(e,style,count,pal);}; grid.appendChild(item); });
+        item.append(sw,copy,use); item.onclick=()=>this.setCurrent(style.index); item.ondblclick=async ()=>{ if(!pal.locked){const n=await dzPromptModal(`Nombre del estilo ${style.index}`,"nombre",style.name);if(n?.trim())doc.renameStyle(style.index,n.trim());}}; item.oncontextmenu=(e)=>{e.preventDefault();this._menu(e,style,count,pal);}; grid.appendChild(item); });
       const applyFilter=()=>{const term=search.value.trim().toLowerCase(),group=groupFilter.value;grid.querySelectorAll(".pal2-item").forEach((item)=>item.hidden=(!!term&&!item.textContent.toLowerCase().includes(term))||(!!group&&item.dataset.group!==group));};search.oninput=applyFilter;groupFilter.onchange=applyFilter;
       library.appendChild(grid); box.appendChild(library);
       if (orphans.length) box.appendChild(el("div", "pal2-orphans", `Referencias sin estilo: ${orphans.join(", ")}. Reasignalas desde el menú de un estilo.`));
@@ -163,8 +163,8 @@
     _menu(e, st, usage, pal) {
       document.querySelectorAll(".ls2-menu").forEach((n)=>n.remove()); const menu=el("div","ls2-menu"); menu.style.left=e.clientX+"px"; menu.style.top=e.clientY+"px";
       const action=(label,fn,disabled=false)=>{const b=el("button","",label);b.disabled=disabled;b.onclick=()=>{menu.remove();fn();};menu.appendChild(b);}; action("Usar este estilo",()=>this.setCurrent(st.index)); action("Duplicar",()=>{let name=st.name+" copia",i=2;while(pal.styleByName(name))name=st.name+` copia ${i++}`;const h=this.doc.history,tx=!!h&&!h.transaction;if(tx)h.begin("Duplicar estilo");const n=this.doc.addStyle(st.color,name);if(n&&st.meta?.group)this.doc.setStyleGroup(n.index,st.meta.group);if(tx)h.commit();if(n)this.setCurrent(n.index);},pal.locked);
-      action(st.meta?.group?`Grupo: ${st.meta.group}…`:"Asignar a grupo…",()=>{const group=prompt("Grupo del estilo (vacío para quitar):",st.meta?.group||"");if(group!=null)this.doc.setStyleGroup(st.index,group);},pal.locked);
-      const others=pal.styles.filter((s)=>s.index!==st.index); action(`Reasignar ${usage.total||0} usos…`,()=>{const n=prompt("Número del estilo de destino:",String(others[0]?.index||""));if(n!=null)this._notice(`${this.doc.reassignStyle(st.index,parseInt(n,10))||0} elementos reasignados`);},!usage.total||!others.length||pal.locked); action("Borrar estilo",()=>this.doc.removeStyle(st.index)||this._notice("No puede borrarse mientras esté en uso"),usage.total||pal.locked);
+      action(st.meta?.group?`Grupo: ${st.meta.group}…`:"Asignar a grupo…",async ()=>{const group=await dzPromptModal("Grupo del estilo","vacío para quitar",st.meta?.group||"");if(group!=null)this.doc.setStyleGroup(st.index,group);},pal.locked);
+      const others=pal.styles.filter((s)=>s.index!==st.index); action(`Reasignar ${usage.total||0} usos…`,async ()=>{const n=await dzPromptModal("Reasignar usos","número del estilo de destino",String(others[0]?.index||""));if(n!=null)this._notice(`${this.doc.reassignStyle(st.index,parseInt(n,10))||0} elementos reasignados`);},!usage.total||!others.length||pal.locked); action("Borrar estilo",()=>this.doc.removeStyle(st.index)||this._notice("No puede borrarse mientras esté en uso"),usage.total||pal.locked);
       document.body.appendChild(menu); const close=()=>{menu.remove();document.removeEventListener("pointerdown",close);};setTimeout(()=>document.addEventListener("pointerdown",close),0);
     }
   }

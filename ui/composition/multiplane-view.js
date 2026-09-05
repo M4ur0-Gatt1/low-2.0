@@ -14,8 +14,13 @@
         <button data-a="2d" title="Volver al dibujo 2D">2D</button><i></i>
         <button data-v="perspective" class="active">Perspectiva</button><button data-v="front">Frente</button><button data-v="top">Arriba</button>
         <button data-a="grid" class="active" title="Mostrar u ocultar cuadrícula">Grid</button><button data-a="snap" class="active" title="Ajuste: XY/Z 10 · rotación 5° · escala 5% (Ctrl desactiva durante el gesto)">Snap</button><button data-a="home" title="Centrar vista">Centrar</button><i></i>
-        <button data-a="autokey" title="Crear claves de composición en el cuadro actual">Auto-key</button><strong class="cmp3-mode">Seleccionar</strong>
-      </div><div class="cmp3-stage"><div class="cmp3-world"><div class="cmp3-grid"></div><div class="cmp3-cards"></div></div></div>
+        <button data-a="autokey" title="Crear claves de composición en el cuadro actual">Auto-key</button><i></i>
+        <button data-a="stagger" title="Repartir los planos en profundidad, del fondo al frente (una sola acción, se deshace con Ctrl+Z)">Escalonar Z</button><strong class="cmp3-mode">Seleccionar</strong>
+      </div><div class="cmp3-stage"><div class="cmp3-world"><div class="cmp3-grid"></div><div class="cmp3-cards"></div></div>
+        <div class="cmp3-empty" hidden><h3>La mesa multiplano está vacía</h3>
+          <p>Cada elemento del dibujo abierto es un plano de esta mesa. Abrí o dibujá un diseño con
+             varios elementos —fondo, personaje, primer plano— y aparecerán acá para separarlos en profundidad.</p></div>
+        <div class="cmp3-flat" hidden><span>Todos los planos están en Z 0: la mesa se ve plana.</span><button data-a="stagger2">Escalonar Z</button></div></div>
       <aside class="cmp3-outliner"><header>Planos</header><div class="cmp3-list"></div></aside>
       <aside class="cmp3-inspector"><header>Transformar</header>
         <label><span>X</span><input data-p="x" type="number" step="10"></label>
@@ -23,6 +28,15 @@
         <label><span>Z</span><input data-p="z" type="number" step="10"></label>
         <label><span>Rotación</span><input data-p="rotationZ" type="number" step="1"></label>
         <label><span>Escala</span><input data-p="scaleX" type="number" step="0.05"></label>
+        <header>Efectos del plano</header>
+        <label class="cmp3-fx"><span>Desenfoque</span><input data-fx="blur" type="range" min="0" max="40" step="0.5" value="0"></label>
+        <label class="cmp3-fx"><span>Brillo</span><input data-fx="bright" type="range" min="0" max="200" value="100"></label>
+        <label class="cmp3-fx"><span>Contraste</span><input data-fx="contrast" type="range" min="0" max="200" value="100"></label>
+        <label class="cmp3-fx"><span>Saturación</span><input data-fx="saturate" type="range" min="0" max="200" value="100"></label>
+        <label class="cmp3-fx cmp3-fx-flag"><span>Sombra</span><input data-fx="shadow" type="checkbox"></label>
+        <button class="cmp3-fx-reset" data-a="fxreset">Quitar efectos del plano</button>
+        <p class="cmp3-fx-nota">Los efectos viajan con el dibujo del plano; la profundidad y la
+           transformación sí aceptan claves por cuadro con Auto-key.</p>
       </aside><div class="cmp3-axis" aria-hidden="true"><b>X</b><b>Y</b><b>Z</b></div>`;
       this.stage = this.root.querySelector(".cmp3-stage"); this.world = this.root.querySelector(".cmp3-world");
       this.root.tabIndex = 0; this.root.onkeydown = event => this.key(event);
@@ -34,7 +48,15 @@
       this.root.querySelector('[data-a="autokey"]').onclick = e => { this.autoKey = !this.autoKey; e.currentTarget.classList.toggle("active", this.autoKey); this.options.onAutoKey?.(this.autoKey); };
       this.root.querySelector('[data-a="autokey"]').classList.toggle("active", this.autoKey);
       this.root.querySelectorAll("[data-v]").forEach(button => button.onclick = () => this.setView(button.dataset.v));
-      this.root.querySelectorAll(".cmp3-inspector input").forEach(input => input.onchange = () => this.input(input));
+      this.root.querySelectorAll(".cmp3-inspector input[data-p]").forEach(input => input.onchange = () => this.input(input));
+      this.root.querySelectorAll(".cmp3-inspector input[data-fx]").forEach(input => input.onchange = () => {
+        if (!this.selected) return;
+        const value = input.type === "checkbox" ? input.checked : Number(input.value);
+        this.options.onEffect?.(this.selected, { [input.dataset.fx]: value });
+      });
+      this.root.querySelector('[data-a="fxreset"]').onclick = () => { if (this.selected) this.options.onEffectReset?.(this.selected); };
+      this.root.querySelectorAll('[data-a="stagger"],[data-a="stagger2"]').forEach(button =>
+        button.onclick = () => this.options.onStagger?.());
       this.stage.onpointerdown = event => { this.root.focus({ preventScroll: true }); this.navigate(event); };
       this.stage.onwheel = event => { event.preventDefault(); this.zoom = Math.max(.18, Math.min(2.5, this.zoom * (event.deltaY < 0 ? 1.1 : .9))); this.applyView(); };
       this.applyView();
@@ -78,7 +100,21 @@
       }
       const active = this.planes.find(p => p.id === this.selected), inspector = this.root.querySelector(".cmp3-inspector");
       inspector.classList.toggle("disabled", !active);
-      inspector.querySelectorAll("input").forEach(input => input.value = active ? (active.transform?.[input.dataset.p] ?? (input.dataset.p === "scaleX" ? 1 : 0)) : "");
+      inspector.querySelectorAll("input[data-p]").forEach(input => input.value = active ? (active.transform?.[input.dataset.p] ?? (input.dataset.p === "scaleX" ? 1 : 0)) : "");
+      this.setEffects(active ? active.effects : null);
+      // Estados explícitos: una mesa sin planos explica qué es un plano, y una
+      // mesa con todo en Z 0 avisa por qué se ve chata en vez de parecer rota.
+      const empty = !this.planes.length;
+      this.root.querySelector(".cmp3-empty").hidden = !empty;
+      this.root.querySelector(".cmp3-flat").hidden = empty || this.planes.length < 2
+        || !this.planes.every(plane => !Math.round(plane.transform?.z || 0));
+    }
+    setEffects(values) {
+      const v = { blur: 0, bright: 100, contrast: 100, saturate: 100, shadow: false, ...(values || {}) };
+      this.root.querySelectorAll(".cmp3-inspector input[data-fx]").forEach(input => {
+        if (input.type === "checkbox") input.checked = !!v[input.dataset.fx];
+        else input.value = v[input.dataset.fx];
+      });
     }
     input(input) {
       const active = this.planes.find(p => p.id === this.selected); if (!active) return;

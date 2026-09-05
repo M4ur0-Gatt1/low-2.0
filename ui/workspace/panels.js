@@ -110,6 +110,7 @@
       ...config, ...previous };
       // Las ventanas nativas no sobreviven al cierre: se restauran acopladas.
       panel.detached = false; this.panels.set(id, panel); return panel; }
+    get(id) { return this.panels.get(id) || null; }
     update(id, patch) { const p = this.panels.get(id); if (!p) return null; Object.assign(p, patch); this.emit(id); return p; }
     detach(id) { return this.update(id, { detached: true, visible: true }); }
     dock(id, dock) { return this.update(id, { detached: false, dock: dock || this.panels.get(id)?.dock || "right", visible: true }); }

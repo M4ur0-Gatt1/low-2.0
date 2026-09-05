@@ -78,7 +78,33 @@ async function main() {
     const savedOk=await dzSceneSave(true), diskDoc=saved&&LOW.animation.LowDoc.fromJSON(saved.content);
     const exportSvg=dzCuadroSvgTexto(8), cameraSvg=dzCamView(exportSvg,dzCamDefault());
     DZ.tlView?.render(); await wait(100);
-    return {changed,shortcut,layout,undone,redone,keyed,keyedRotation,reopened:reopened.compositionTransformAt(ref.id,8)?.z,
+    // Componer de verdad: los efectos por plano viven en la mesa (el panel del
+    // inspector clásico queda oculto en este workspace), escalonar reparte la
+    // profundidad en UNA transacción y los estados vacío/plano se explican.
+    const fxInput=root.querySelector('.cmp3-inspector input[data-fx="blur"]');
+    DZ_COMPOSITION_VIEW.select(dzCompositionViewPlanes()[0].id); await wait(150);
+    const hFx=DZ.history.undoStack.length;
+    fxInput.value="9"; fxInput.dispatchEvent(new Event("change",{bubbles:true})); await wait(300);
+    const planoFx=dzCompositionPlaneElement(DZ_COMPOSITION_VIEW.selected);
+    const efectos={control:!!fxInput,attr:planoFx?.getAttribute("data-comp-blur"),
+      filtro:(planoFx?.getAttribute("style")||"").includes("blur(9px)"),pasos:DZ.history.undoStack.length-hFx,estilo:planoFx?.getAttribute("style")||null};
+    dzUndo(); await wait(250);
+    efectos.trasUndo=dzCompositionPlaneElement(DZ_COMPOSITION_VIEW.selected)?.getAttribute("data-comp-blur")||null;
+    const hEsc=DZ.history.undoStack.length;
+    const zsAntes=dzCompositionViewPlanes().map(p=>p.transform.z);
+    root.querySelector('[data-a="stagger"]').click(); await wait(350);
+    const zs=dzCompositionViewPlanes().map(p=>p.transform.z);
+    const escalonar={zs,zsAntes,pasos:DZ.history.undoStack.length-hEsc,avisoOculto:root.querySelector('.cmp3-flat').hidden};
+    dzUndo(); await wait(300);
+    escalonar.trasUndo=dzCompositionViewPlanes().map(p=>p.transform.z);
+
+    const svgVacio=document.querySelector("#dzCanvas > svg"),respaldo=svgVacio.innerHTML;
+    svgVacio.innerHTML=""; dzCompositionViewRender(); await wait(250);
+    const vacio={cartel:!root.querySelector('.cmp3-empty').hidden,
+      display:getComputedStyle(root.querySelector('.cmp3-empty')).display,tarjetas:root.querySelectorAll('.cmp3-card').length};
+    svgVacio.innerHTML=respaldo; dzCompositionViewRender(); await wait(250);
+    vacio.vuelve=root.querySelector('.cmp3-empty').hidden && !!root.querySelectorAll('.cmp3-card').length;
+    return {changed,shortcut,layout,undone,redone,efectos,escalonar,vacio,keyed,keyedRotation,reopened:reopened.compositionTransformAt(ref.id,8)?.z,
       disk:{ok:savedOk,name:saved?.name,z:diskDoc?.scene.compositionTransformAt(ref.id,8)?.z},
       export:{z:/data-z=["']240["']/.test(exportSvg),rotation:/data-comp-rz=["']12["']/.test(exportSvg),wrapped:cameraSvg.includes("translate(")},
       timeline:{keys:document.querySelectorAll('.tl2-tick.compkey').length,title:[...document.querySelectorAll('.tl2-tick.compkey')].some(n=>/composición/.test(n.title))}};
@@ -107,6 +133,15 @@ async function main() {
     throw Error("REGRESIÓN: export no aplicó la transformación del frame: " + JSON.stringify(value));
   if (!value.timeline?.keys || !value.timeline?.title)
     throw Error("REGRESIÓN: Timeline no muestra claves de composición: " + JSON.stringify(value));
+  if (!value.efectos?.control || value.efectos.attr !== "9" || !value.efectos.filtro || value.efectos.trasUndo !== null)
+    throw Error("REGRESIÓN: los efectos de composición no se pueden usar desde la mesa: " + JSON.stringify(value.efectos));
+  const zs = value.escalonar?.zs || [];
+  if (zs.length < 2 || zs[0] <= zs[zs.length - 1] || value.escalonar.pasos !== 1 || !value.escalonar.avisoOculto)
+    throw Error("REGRESIÓN: escalonar no reparte la profundidad en una sola acción: " + JSON.stringify(value.escalonar));
+  if (JSON.stringify(value.escalonar.trasUndo) !== JSON.stringify(value.escalonar.zsAntes))
+    throw Error("REGRESIÓN: escalonar no se deshace entero: " + JSON.stringify(value.escalonar));
+  if (!value.vacio?.cartel || value.vacio.display === "none" || value.vacio.tarjetas || !value.vacio.vuelve)
+    throw Error("REGRESIÓN: la mesa sin planos no explica su estado vacío: " + JSON.stringify(value.vacio));
   if (errores.length) throw Error("REGRESIÓN: excepciones UI: " + errores.slice(0, 3).join(" | "));
   console.log("E2E multiplano OK", JSON.stringify(value));
   if (screenshotPath) {

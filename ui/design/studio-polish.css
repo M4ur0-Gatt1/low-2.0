@@ -133,6 +133,29 @@
 .cmp3-list button { width: 100%; display: grid; grid-template-columns: 8px 1fr auto; gap: 7px; align-items: center; min-height: 31px; padding: 0 10px; border: 0; border-radius: 0; background: transparent; color: #b9bcbb; text-align: left; }
 .cmp3-list button.active { background: var(--cyansoft); color: var(--fg); }.cmp3-list button i { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); }.cmp3-list small { color: var(--fg2); font: 9px 'JetBrains Mono',monospace; }
 .cmp3-inspector label { display: grid; grid-template-columns: 58px 1fr; align-items: center; margin: 6px 0; color: var(--fg2); font-size: 10px; }.cmp3-inspector input { width: 100%; height: var(--control-height); border: 1px solid var(--border-default); border-radius: var(--low-control-radius); background: var(--surface-raised); color: var(--fg); padding: 0 7px; font: 11px 'JetBrains Mono',monospace; }.cmp3-inspector.disabled { opacity: .45; pointer-events: none; }
+/* Estados explícitos de la mesa multiplano y efectos por plano ─────────── */
+/* un selector de clase con display: le gana a [hidden] del navegador; sin
+   esta linea los estados se quedaban pegados en pantalla */
+.cmp3-empty[hidden], .cmp3-flat[hidden] { display:none; }
+.cmp3-empty { position:absolute; inset:0; z-index:2; display:grid; align-content:center; justify-items:center;
+  gap:6px; padding:0 12%; text-align:center; pointer-events:none; }
+.cmp3-empty h3 { margin:0; color:var(--fg); font-size:13px; font-weight:600; }
+.cmp3-empty p { margin:0; max-width:44ch; color:var(--fg2); font-size:11px; line-height:1.55; }
+.cmp3-flat { position:absolute; left:50%; bottom:12px; z-index:3; display:flex; gap:9px; align-items:center;
+  transform:translateX(-50%); padding:6px 8px 6px 12px; border:1px solid var(--border-default);
+  border-radius:999px; background:rgba(20,22,24,.92); box-shadow:0 6px 20px rgba(0,0,0,.34); }
+.cmp3-flat span { color:var(--fg2); font-size:10.5px; white-space:nowrap; }
+.cmp3-flat button { min-height:24px; padding:0 10px; border:0; border-radius:999px;
+  background:var(--cyansoft); color:var(--fg); font-size:10.5px; }
+.cmp3-flat button:hover { background:var(--surface-hover); }
+.cmp3-inspector label.cmp3-fx { grid-template-columns:1fr; gap:3px; margin:8px 0 4px; }
+.cmp3-inspector label.cmp3-fx input[type="range"] { width:100%; height:16px; padding:0; border:0; background:transparent; }
+.cmp3-inspector label.cmp3-fx-flag { grid-template-columns:1fr auto; align-items:center; }
+.cmp3-inspector label.cmp3-fx-flag input { width:14px; height:14px; }
+.cmp3-fx-reset { width:100%; min-height:26px; margin-top:8px; border:1px solid var(--border-default);
+  border-radius:var(--low-control-radius); background:var(--surface-raised); color:var(--fg2); font-size:10.5px; }
+.cmp3-fx-reset:hover { color:var(--fg); background:var(--surface-hover); }
+.cmp3-fx-nota { margin:9px 0 0; color:var(--fg2); font-size:9.5px; line-height:1.5; opacity:.85; }
 .cmp3-axis { position: absolute; z-index:4; right: 206px; bottom: 12px; display: flex; gap: 7px; font: 700 10px 'JetBrains Mono',monospace; }.cmp3-axis b:nth-child(1){color:#e05b61}.cmp3-axis b:nth-child(2){color:#55b86e}.cmp3-axis b:nth-child(3){color:#45a7de}
 
 /* Composición ya trae outliner e inspector propios. Ocultar los equivalentes

@@ -174,15 +174,15 @@
         const nuevo = doc.duplicateDrawing(d.number);
         if (nuevo) doc.setCell(doc.frame, nuevo.number);
       });
-      item("Renumerar…", () => {
-        const n = prompt(`Nuevo número para el dibujo ${d.number}:`, String(d.number));
+      item("Renumerar…", async () => {
+        const n = await dzPromptModal(`Renumerar dibujo ${d.number}`, "nuevo número", String(d.number));
         if (n === null) return;
         const v = parseInt(n, 10);
         if (!v || v === d.number) return;
-        if (!doc.renumberDrawing(d.number, v)) alert("Ese número ya está usado por otro dibujo.");
+        if (!doc.renumberDrawing(d.number, v)) await dzNotice("Ese número ya está usado por otro dibujo.");
       });
-      item("Borrar el dibujo", () => {
-        if (confirm(`¿Borrar el dibujo ${d.number}? Se vacían las celdas donde estaba expuesto.`))
+      item("Borrar el dibujo", async () => {
+        if (await dzConfirmModal(`¿Borrar el dibujo ${d.number}? Se vacían las celdas donde estaba expuesto.`, { ok: "Borrar", danger: true }))
           doc.deleteDrawing(d.number);
       });
       document.body.appendChild(m);

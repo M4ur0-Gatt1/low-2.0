@@ -99,4 +99,27 @@ for name, body in (("Inflador", inflator), ("Manejador", handler), ("Plancha", i
     require("dzVectorBegin" in body and "dzVectorFinish" in body and "pointercancel" in body,
             f"{name} quedó fuera del controlador común o confirma un pointercancel")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores y tableta")
+mirror_toggle = function_body("dzMirrorToggle", "dzMirrorGuideRender")
+mirror_guide = function_body("dzMirrorGuideRender", "dzMirrorClone")
+mirror_clone = function_body("dzMirrorClone", "dzAIKeyModal")
+require("dzMirrorGuideRender()" in mirror_toggle,
+        "el modo espejo volvió a encenderse sin dibujar el eje de simetría")
+require("vb[0] + vb[2] / 2" in mirror_guide and "vb[0] + vb[2] / 2" in mirror_clone,
+        "la guía del espejo y el trazo reflejado dejaron de compartir el mismo eje")
+require("dz-penui" in mirror_guide,
+        "el eje del espejo dejó de ser UI de pantalla y puede entrar al documento")
+require("dzMirrorGuideRender();" in function_body("dzCanvasSet", "dzDocCommit"),
+        "repintar el lienzo vuelve a borrar el eje del espejo")
+
+PANEL = (ROOT / "ui" / "animation_panel.html").read_text(encoding="utf-8")
+ICONOS_RIEL = ("i-cursor", "i-cursor-open", "i-pencil", "i-brush", "i-eraser", "i-magnet")
+require(all(f'id="{name}"' in PANEL for name in ICONOS_RIEL),
+        "el panel separado perdió los iconos del riel y vuelve a mostrar solo texto")
+require("t.icon" in PANEL and "<use href=" in PANEL[PANEL.index("function renderTools"):PANEL.index("function renderColor")],
+        "el panel separado de herramientas volvió a dibujarse como una lista de texto")
+require('icon: (b.querySelector("use")' in APP,
+        "la foto del panel de herramientas dejó de viajar con su icono")
+require("panels?.get?.(kind)?.dock" in APP,
+        "acoplar un panel separado vuelve a mandarlo siempre a la derecha")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")
