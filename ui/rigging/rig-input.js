@@ -44,12 +44,27 @@
     };
   }
 
+  /** Dónde ofrecer el pole a una cadena que todavía no tiene uno: del mismo
+      lado por el que YA dobla —así aparecer no mueve la pierna— y lo bastante
+      separado para agarrarlo sin tapar la articulación. Con la cadena estirada
+      no hay lado que leer: se cae a la perpendicular del tramo. */
+  function suggestedPole({ root, joint, effector } = {}) {
+    if (!root || !joint || !effector) return null;
+    const middle = { x: (root.x + effector.x) / 2, y: (root.y + effector.y) / 2 };
+    let dx = joint.x - middle.x, dy = joint.y - middle.y;
+    if (Math.hypot(dx, dy) < 1e-3) { dx = -(effector.y - root.y); dy = effector.x - root.x; }
+    const norm = Math.hypot(dx, dy);
+    if (!norm) return { x: joint.x, y: joint.y };
+    const reach = Math.max(40, Math.hypot(effector.x - root.x, effector.y - root.y) * .6);
+    return { x: joint.x + dx / norm * reach, y: joint.y + dy / norm * reach };
+  }
+
   class GestureController extends (LOW.input?.PointerController || class {}) {
     begin(cancel) { return super.begin({ owner: "rig", cancel }); }
     isCurrent(token) { return super.current(token); }
   }
 
-  rigging.input = { pointerAction, visualMetrics, GestureController,
+  rigging.input = { pointerAction, visualMetrics, suggestedPole, GestureController,
     createGestureController: () => new GestureController(),
     sharedController: LOW.input?.pointerController || null };
 })(typeof window !== "undefined" ? window : globalThis);

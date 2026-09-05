@@ -4,14 +4,19 @@ const endpoint = process.argv[2] || "http://127.0.0.1:9223";
 const pageUrl = process.argv[3] || "http://127.0.0.1:8791/ui/index.html?mock=1";
 
 async function main() {
-  const targets = await (await fetch(endpoint + "/json")).json();
-  const target = targets.find(t => t.type === "page") || targets[0];
+  // Pestaña PROPIA: engancharse a "la primera página" tomaba la que estuviera
+  // abierta (el panel del navegador, otra corrida) y la prueba medía otra cosa.
+  const target = await (await fetch(endpoint + "/json/new?about:blank", { method: "PUT" })).json();
   if (!target?.webSocketDebuggerUrl) throw Error("Chromium no expuso una página CDP");
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; });
   let id = 0; const pending = new Map();
   ws.onmessage = event => {
     const msg = JSON.parse(event.data);
+    // El confirm() de recuperación de escena CONGELA el renderer: sin atenderlo
+    // la prueba no falla, se cuelga con «CDP sin respuesta».
+    if (msg.method === "Page.javascriptDialogOpening")
+      return ws.send(JSON.stringify({ id: ++id, method: "Page.handleJavaScriptDialog", params: { accept: false } }));
     if (!msg.id || !pending.has(msg.id)) return;
     const task = pending.get(msg.id); pending.delete(msg.id);
     msg.error ? task.fail(Error(JSON.stringify(msg.error))) : task.ok(msg.result);
@@ -22,6 +27,9 @@ async function main() {
     ws.send(JSON.stringify({ id: callId, method, params }));
   });
   await send("Page.enable"); await send("Runtime.enable");
+  // Los scripts se piden con ?v=<versión>: sin esto Chromium sirve el archivo
+  // anterior y la prueba certifica código que ya no existe.
+  await send("Network.enable"); await send("Network.setCacheDisabled", { cacheDisabled: true });
   await send("Page.navigate", { url: pageUrl });
   await new Promise(ok => setTimeout(ok, 1800));
   const expression = `(async()=>{
@@ -53,6 +61,7 @@ async function main() {
   console.log("E2E COLOR OK: zona estable, Color Art y undo atómico", JSON.stringify({
     changed: value.changed, skipped: value.skipped, undo: value.undone, redo: value.redone
   }));
+  try { await fetch(endpoint + "/json/close/" + target.id); } catch (_) {}
 }
 
 main().catch(error => { console.error(error.stack || error); process.exit(1); });

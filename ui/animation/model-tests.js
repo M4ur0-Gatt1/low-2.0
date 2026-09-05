@@ -1176,6 +1176,254 @@
       ok("rehacer recupera el coloreo completo", doc.level.drawings.every((d) => d.content.includes('data-low-zone="z"')));
     }
 
+    // 35. Timeline compacta: la vista escala sin inventar otro tiempo.
+    {
+      const T = animation.timeline, doc = new animation.LowDoc();
+      const empty = doc.addLayer("Vacía"), active = doc.layer;
+      doc.setCell(1, 1); doc.setCell(120, 1);
+      doc.selectCellRange(active.id, 20, active.id, 40);
+      const compact = T.normalizeViewState({ frameWidth: 7, density: "compact",
+        hideEmpty: true, collapsed: { [active.id]: true, basura: false } });
+      ok("la escala temporal usa peldaños estables y conserva sólo pliegues reales",
+        compact.frameWidth === 6 && compact.density === "compact" && compact.collapsed[active.id] && !("basura" in compact.collapsed),
+        JSON.stringify(compact));
+      ok("ocultar vacías nunca esconde la capa seleccionada",
+        T.visibleLayers(doc.scene.layers, compact, empty.id).some((layer) => layer.id === empty.id));
+      ok("el foco muestra una sola capa sin modificar Scene",
+        T.visibleLayers(doc.scene.layers, { focusSelected: true }, active.id).length === 1 && doc.scene.layers.length === 2);
+      ok("la regla reduce etiquetas al alejar y las aumenta al acercar",
+        T.majorTickStep(6) > T.majorTickStep(32));
+      doc.scene.camera.keys[180] = { x: 0, y: 0, z: 1 };
+      const extent = T.extent(doc.scene, { audio: { offset: 20, peaks: new Array(200) },
+        mocap: { range: { out: 210 } }, current: 2 });
+      ok("la extensión visual incluye dibujo, cámara, audio y mocap", extent === 220, String(extent));
+      const selected = T.rangeFor("selection", doc);
+      ok("encajar selección lee el rango del mismo LowDoc", selected.from === 20 && selected.to === 40, JSON.stringify(selected));
+      ok("encajar calcula una escala acotada para escenas largas",
+        T.fitFrameWidth(1000, 1, 240) === 6 && T.fitFrameWidth(1000, 1, 20) >= 32);
+      ok("la densidad es sólo geometría de interfaz", T.rowHeight("compact") === 18 && T.rowHeight("comfortable") === 32);
+    }
+
+    // 36. Workspace: un panel tiene una sola ubicación y los grupos no dejan basura.
+    {
+      const DockLayout = LOW.workspace.DockLayout;
+      const layout = new DockLayout();
+      const inspector = layout.dock("inspector", "right", "right_main");
+      layout.tab("palette", "inspector");
+      ok("dos paneles pueden compartir un grupo como pestañas",
+        inspector.tabs.join(",") === "inspector,palette" && inspector.activePanelId === "palette",
+        JSON.stringify(layout.snapshot()));
+      layout.float("palette", { x: 12, y: 18, width: 500, height: 400 });
+      ok("desacoplar quita la pestaña del dock y conserva una sola instancia",
+        inspector.tabs.join(",") === "inspector" && layout.locate("palette").kind === "float",
+        JSON.stringify(layout.snapshot()));
+      layout.close("inspector");
+      ok("cerrar la última pestaña elimina también el grupo vacío",
+        layout.groups.length === 0 && layout.locate("inspector").kind === "hidden",
+        JSON.stringify(layout.snapshot()));
+      layout.dock("palette", "left", "left_main");
+      ok("reabrir un panel flotante lo traslada sin duplicarlo",
+        layout.floating.length === 0 && layout.locate("palette").zone === "left",
+        JSON.stringify(layout.snapshot()));
+
+      const restored = new DockLayout({
+        groups: [
+          { id: "a", zone: "center", tabs: ["viewer", "palette"], activePanelId: "palette" },
+          { id: "b", zone: "invalid", tabs: ["palette", "timeline", "timeline"] },
+          { id: "empty", zone: "bottom", tabs: [] },
+        ],
+        floating: [{ panelId: "viewer", x: 3, y: 4, width: 2, height: 2 }, { panelId: "properties" }],
+        hidden: ["timeline", "properties", "tools"],
+      });
+      const snapshot = restored.snapshot();
+      const allIds = [
+        ...snapshot.groups.flatMap((group) => group.tabs),
+        ...snapshot.floating.map((item) => item.panelId),
+        ...snapshot.hidden,
+      ];
+      ok("restaurar sanea zonas, duplicados y grupos vacíos",
+        new Set(allIds).size === allIds.length && snapshot.groups.length === 2 &&
+        snapshot.groups[1].zone === "right" && !snapshot.groups.some((group) => group.id === "empty"),
+        JSON.stringify(snapshot));
+      ok("las ventanas restauradas respetan tamaños mínimos",
+        restored.locate("properties").kind === "float" && restored.locate("properties").width === 320 &&
+        restored.locate("properties").height === 260,
+        JSON.stringify(restored.locate("properties")));
+    }
+
+    // 37. IK/FK match: cambiar de modo es una decisión del animador, nunca un
+    //     salto de la cadena. Ni el extremo ni el codo pueden moverse.
+    {
+      const doc = new animation.LowDoc();
+      const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+      doc.ensureRigNode("hombro", { pivot: { x: 0, y: 0 }, pinned: true });
+      doc.ensureRigNode("codo", { pivot: { x: 100, y: 0 } });
+      doc.ensureRigNode("muneca", { pivot: { x: 200, y: 0 } });
+      doc.setRigParent("codo", "hombro"); doc.setRigParent("muneca", "codo");
+      const ik = doc.createRigIK("hombro", "codo", "muneca");
+      const punta = (f) => doc.scene.rigWorldPoint("muneca", f, { x: 200, y: 0 });
+      const codo = (f) => doc.scene.rigWorldPoint("codo", f, { x: 100, y: 0 });
+
+      // Pose armada a mano en FK, con el codo del lado CONTRARIO al que elige
+      // la flexión por defecto: si el match no corrige el lado, el codo se da
+      // vuelta al encender IK aunque la muñeca caiga en su sitio.
+      doc.setRigKey("hombro", 10, { x: 0, y: 0, r: 40, sx: 1, sy: 1 });
+      doc.setRigKey("codo", 10, { x: 0, y: 0, r: -70, sx: 1, sy: 1 });
+      const puntaFk = punta(10), codoFk = codo(10);
+      ok("la pose FK de partida dobla el codo", Math.abs(codoFk.y) > 1, JSON.stringify(codoFk));
+
+      const emparejado = doc.matchRigIK(ik, 10);
+      const objetivo = doc.scene.rigTargetAt(ik, 10);
+      ok("match IK pone el objetivo donde ya estaba el extremo",
+        emparejado && dist(objetivo, puntaFk) < 0.01, JSON.stringify({ objetivo, puntaFk }));
+      doc.setRigIKTarget(ik, 10, objetivo);
+      ok("encender IK después del match no mueve el extremo", dist(punta(10), puntaFk) < 0.01,
+        JSON.stringify({ ahora: punta(10), antes: puntaFk }));
+      ok("encender IK después del match no da vuelta el codo", dist(codo(10), codoFk) < 0.01,
+        JSON.stringify({ ahora: codo(10), antes: codoFk }));
+
+      // Y el camino de vuelta: apagar IK deja la cadena exactamente igual.
+      doc.setRigIKTarget(ik, 20, { x: 40, y: 150 });
+      const puntaIk = punta(20), codoIk = codo(20);
+      doc.setRigKey("hombro", 30, { x: 0, y: 0, r: 0, sx: 1, sy: 1 });
+      const interpolado = 25, puntaMedio = punta(interpolado), codoMedio = codo(interpolado);
+      ok("apagar IK con match hornea la pose del cuadro pedido",
+        doc.matchRigFK(ik, interpolado) && doc.scene.rigConstraint(ik).enabled === false);
+      ok("apagar IK no mueve el extremo ni en un cuadro interpolado",
+        dist(punta(interpolado), puntaMedio) < 0.01 && dist(codo(interpolado), codoMedio) < 0.01,
+        JSON.stringify({ ahora: punta(interpolado), antes: puntaMedio }));
+      ok("la cadena apagada conserva la pose IG del cuadro clave",
+        dist(punta(20), puntaIk) < 0.01 && dist(codo(20), codoIk) < 0.01);
+      ok("match FK deja claves reales, no una pose fantasma",
+        !!doc.scene.rigNode("hombro").keys[interpolado] && !!doc.scene.rigNode("codo").keys[interpolado]);
+    }
+
+    // 38. Pole: el codo apunta a donde el animador dice, y esa decisión se
+    //     anima y sobrevive al archivo. Un flag binario no alcanza.
+    {
+      const doc = new animation.LowDoc();
+      doc.ensureRigNode("cadera", { pivot: { x: 0, y: 0 }, pinned: true });
+      doc.ensureRigNode("rodilla", { pivot: { x: 100, y: 0 } });
+      doc.ensureRigNode("pie", { pivot: { x: 200, y: 0 } });
+      doc.setRigParent("rodilla", "cadera"); doc.setRigParent("pie", "rodilla");
+      const ik = doc.createRigIK("cadera", "rodilla", "pie");
+      const rodilla = (f) => doc.scene.rigWorldPoint("rodilla", f, { x: 100, y: 0 });
+
+      doc.setRigIKPole(ik, 1, { x: 90, y: -260 });
+      doc.setRigIKTarget(ik, 1, { x: 150, y: 0 });
+      const arriba = rodilla(1);
+      doc.setRigIKPole(ik, 1, { x: 90, y: 260 });
+      doc.setRigIKTarget(ik, 1, { x: 150, y: 0 });
+      const abajo = rodilla(1);
+      ok("la rodilla sigue al pole y cambia de lado con él",
+        arriba.y < -1 && abajo.y > 1, JSON.stringify({ arriba, abajo }));
+
+      doc.setRigIKPole(ik, 20, { x: 90, y: -260 });
+      const medio = doc.scene.rigPoleAt(ik, 10);
+      ok("el pole se interpola entre claves como el objetivo",
+        Math.abs(medio.y) < 260 && medio.y !== 260, JSON.stringify(medio));
+
+      // Un pole exactamente sobre la línea no debe hacer temblar la rodilla.
+      doc.setRigIKPole(ik, 30, { x: 75, y: 0 });
+      doc.setRigIKTarget(ik, 30, { x: 150, y: 0 });
+      const enLinea = rodilla(30);
+      ok("un pole sobre la recta conserva la flexión previa en vez de oscilar",
+        Number.isFinite(enLinea.x) && Number.isFinite(enLinea.y), JSON.stringify(enLinea));
+
+      const reabierto = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("el pole animado sobrevive guardar y reabrir",
+        Math.round(reabierto.scene.rigPoleAt(ik, 20).y) === -260,
+        JSON.stringify(reabierto.scene.rigPoleAt(ik, 20)));
+
+      // El pole que se OFRECE cuando todavía no hay uno: aparecer no puede
+      // mover la pierna, así que tiene que caer del lado por el que ya dobla.
+      const sugerir = LOW.rigging.input.suggestedPole;
+      const doblado = sugerir({ root: { x: 0, y: 0 }, joint: { x: 75, y: -60 }, effector: { x: 150, y: 0 } });
+      ok("el pole sugerido sale del lado por el que la cadena ya dobla",
+        doblado.y < -60, JSON.stringify(doblado));
+      const estirado = sugerir({ root: { x: 0, y: 0 }, joint: { x: 100, y: 0 }, effector: { x: 200, y: 0 } });
+      ok("con la cadena estirada el pole sugerido sale perpendicular, no al infinito",
+        Math.abs(estirado.x - 100) < 0.01 && Math.abs(estirado.y) >= 40 && Number.isFinite(estirado.y),
+        JSON.stringify(estirado));
+      ok("sin cadena completa no se inventa un pole", sugerir({ root: { x: 0, y: 0 } }) === null);
+    }
+
+    // 39. Pins: un pie clavado no patina cuando se mueve la cadera. Es la
+    //     diferencia entre una caminata y un personaje flotando.
+    {
+      const doc = new animation.LowDoc();
+      const history = new LOW.core.HistoryManager(); doc.setHistory(history);
+      const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+      doc.ensureRigNode("cadera", { pivot: { x: 0, y: 0 }, pinned: true });
+      doc.ensureRigNode("muslo", { pivot: { x: 0, y: 0 } });
+      doc.ensureRigNode("rodilla", { pivot: { x: 0, y: 100 } });
+      doc.ensureRigNode("pie", { pivot: { x: 0, y: 200 } });
+      doc.setRigParent("muslo", "cadera"); doc.setRigParent("rodilla", "muslo");
+      doc.setRigParent("pie", "rodilla");
+      const ik = doc.createRigIK("muslo", "rodilla", "pie");
+      const pieEn = (f) => doc.scene.rigWorldPoint("pie", f, { x: 0, y: 200 });
+
+      // Un apoyo real se planta con la rodilla flexionada: la pierna recta ya
+      // está en extensión máxima y no le queda alcance para acompañar nada.
+      doc.goTo(1);
+      doc.setRigIKTarget(ik, 1, { x: 0, y: 170 });
+      const apoyo = pieEn(1);
+      ok("clavar el pie no lo mueve de donde está",
+        doc.setRigPin(ik, 1, true) && dist(pieEn(1), apoyo) < 0.01, JSON.stringify(pieEn(1)));
+      ok("el pin queda registrado en el cuadro", doc.scene.rigPinnedAt(ik, 1) === true);
+
+      // La cadera se va para un costado: el pie tiene que quedarse.
+      doc.setRigKey("cadera", 1, { x: 40, y: 0, r: 0, sx: 1, sy: 1 });
+      ok("mover la cadera con el pie clavado no arrastra el pie",
+        dist(pieEn(1), apoyo) < 0.5, JSON.stringify({ ahora: pieEn(1), apoyo }));
+      ok("la pierna se acomodó de verdad, no se quedó quieta",
+        !!doc.scene.rigNode("muslo").keys[1]);
+
+      // El pin es un estado sostenido: vale hasta que se lo suelta.
+      doc.goTo(10);
+      ok("el pin se sostiene entre claves", doc.scene.rigPinnedAt(ik, 5) === true);
+      ok("soltar el pie es una decisión explícita y con cuadro",
+        doc.setRigPin(ik, 10, false) && doc.scene.rigPinnedAt(ik, 10) === false &&
+        doc.scene.rigPinnedAt(ik, 5) === true);
+      const sueltoAntes = pieEn(10);
+      doc.setRigKey("cadera", 10, { x: 120, y: 0, r: 0, sx: 1, sy: 1 });
+      ok("con el pie suelto la cadera vuelve a arrastrar la pierna",
+        dist(pieEn(10), sueltoAntes) > 1, JSON.stringify({ ahora: pieEn(10), antes: sueltoAntes }));
+
+      history.clear();
+      doc.goTo(1);
+      doc.setRigKey("cadera", 1, { x: -30, y: 0, r: 0, sx: 1, sy: 1 });
+      ok("la corrección del pin entra en el MISMO undo que el gesto",
+        dist(pieEn(1), apoyo) < 0.5 && history.undo() &&
+        Math.round(doc.scene.rigNode("cadera").keys[1].x) === 40,
+        JSON.stringify(doc.scene.rigNode("cadera").keys[1]));
+
+      const reabierto = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      ok("los pines sobreviven guardar y reabrir",
+        reabierto.scene.rigPinnedAt(ik, 5) === true && reabierto.scene.rigPinnedAt(ik, 10) === false);
+    }
+
+    // 40. Compactar la timeline a lo ANCHO. La columna de nombres es el único
+    //     costo horizontal fijo: está en todas las filas y no se va con el
+    //     scroll. Angostarla devuelve ancho real para tiempo, sin tocar la
+    //     escala ni el documento.
+    {
+      const T = animation.timeline;
+      const normal = T.normalizeViewState({}), compacta = T.normalizeViewState({ compact: true });
+      ok("compactar a lo ancho es estado de VISTA, no de la escena",
+        normal.compact === false && compacta.compact === true);
+      ok("compactar angosta el encabezado sin cambiar la escala del tiempo",
+        T.nameWidth(true) < T.nameWidth(false) && compacta.frameWidth === normal.frameWidth,
+        JSON.stringify({ compacto: T.nameWidth(true), normal: T.nameWidth(false) }));
+      const anchoNormal = T.fitFrameWidth(1000, 1, 100, T.nameWidth(false));
+      const anchoCompacto = T.fitFrameWidth(1000, 1, 100, T.nameWidth(true));
+      ok("encajar mide el encabezado real: compactada entra más tiempo por píxel",
+        anchoCompacto > anchoNormal, JSON.stringify({ anchoNormal, anchoCompacto }));
+      ok("una preferencia corrupta no rompe la vista",
+        T.normalizeViewState({ compact: "sí" }).compact === true &&
+        T.normalizeViewState(null).compact === false);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

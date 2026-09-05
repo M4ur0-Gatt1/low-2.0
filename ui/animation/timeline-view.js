@@ -17,8 +17,9 @@
   const animation = LOW.animation = LOW.animation || {};
   const icon = (id) => `<svg class="ico"><use href="#${id}"/></svg>`;
 
-  const ANCHO = 16;        // px por frame; coincide con la escala legible del tema
+  const ANCHO = 16;        // valor inicial; el usuario puede escalar la vista
   const EXTRA = 24;        // frames de más al final, para seguir armando
+  const VIEW_STORAGE_KEY = "low.timeline.view.v1";
 
   class TimelineView {
     constructor(host, doc) {
@@ -30,6 +31,8 @@
       this.openOnion = null;
       this.loadAudio = null;
       this.status = null;
+      this.view = this._loadView();
+      this._pendingScrollFrame = null;
       this._desuscribir = doc ? doc.subscribe((_d, reason) => this._docChanged(reason)) : null;
     }
     setDoc(doc) {
@@ -40,6 +43,58 @@
     }
     dispose() { if (this._desuscribir) this._desuscribir(); if (this.host) this.host.innerHTML = ""; }
     _docChanged(reason) { if (reason === "frame") this._updateCursor(); else this.render(); }
+
+    _timeline() { return animation.timeline || {}; }
+    _loadView() {
+      let saved = null;
+      try { saved = JSON.parse(global.localStorage && global.localStorage.getItem(VIEW_STORAGE_KEY)); }
+      catch (_) { /* preferencias dañadas: usar valores seguros */ }
+      const timeline = this._timeline();
+      return timeline.normalizeViewState ? timeline.normalizeViewState(saved) : {
+        frameWidth: ANCHO, density: "normal", hideEmpty: false, focusSelected: false, collapsed: {} };
+    }
+    _saveView() {
+      try { if (global.localStorage) global.localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(this.view)); }
+      catch (_) { /* la escena sigue funcionando aunque el navegador no permita storage */ }
+    }
+    _setView(patch, scrollFrame = null) {
+      const timeline = this._timeline();
+      const next = Object.assign({}, this.view, patch || {});
+      this.view = timeline.normalizeViewState ? timeline.normalizeViewState(next) : next;
+      this._pendingScrollFrame = scrollFrame;
+      this._saveView();
+      this.render();
+    }
+    _frameWidth() { return Math.max(6, Number(this.view && this.view.frameWidth) || ANCHO); }
+    _nameWidth() {
+      const timeline = this._timeline();
+      return timeline.nameWidth ? timeline.nameWidth(this.view && this.view.compact) : 128;
+    }
+    _isCollapsed(id) { return !!(this.view && this.view.collapsed && this.view.collapsed[id]); }
+    _toggleCollapsed(id) {
+      const collapsed = Object.assign({}, this.view.collapsed || {});
+      if (collapsed[id]) delete collapsed[id]; else collapsed[id] = true;
+      this._setView({ collapsed });
+    }
+    _zoom(direction) {
+      const timeline = this._timeline(), widths = timeline.FRAME_WIDTHS || [6, 8, 12, 16, 24, 32, 48];
+      let index = widths.indexOf(this._frameWidth());
+      if (index < 0) index = widths.findIndex((value) => value >= this._frameWidth());
+      const node = this.host && this.host.querySelector(".tl2");
+      const anchor = node ? Math.max(1, 1 + (node.scrollLeft +
+        Math.max(0, node.clientWidth - this._nameWidth()) / 2) / this._frameWidth()) : this.doc.frame;
+      const next = widths[Math.max(0, Math.min(widths.length - 1, index + direction))];
+      this._setView({ frameWidth: next }, anchor);
+    }
+    _fit(kind) {
+      const timeline = this._timeline();
+      if (!timeline.rangeFor || !timeline.fitFrameWidth) return;
+      const range = timeline.rangeFor(kind, this.doc, { audio: this.audio, mocap: this.doc.mocap });
+      const width = timeline.fitFrameWidth(this.host.clientWidth || 800, range.from, range.to,
+        this._nameWidth());
+      this._setView({ frameWidth: width }, range.from);
+      if (this.status) this.status(`Timeline: F${range.from}–F${range.to} encajada`);
+    }
 
     /** El tramo vive en el modelo, pero el export y el transporte leen los
      *  casilleros In/Out de la barra. Si se escribe uno solo, terminan
@@ -63,7 +118,7 @@
       const pointerId = ev.pointerId;
       const rect = pista.getBoundingClientRect();
       const aFrame = (x) => Math.max(1, Math.min(total,
-        1 + Math.floor((x - rect.left + pista.scrollLeft) / ANCHO)));
+        1 + Math.floor((x - rect.left + pista.scrollLeft) / this._frameWidth())));
       const mover = (e2) => {
         if (e2.pointerId !== pointerId) return;
         const f = aFrame(e2.clientX);
@@ -93,14 +148,19 @@
       this.host.querySelectorAll(".actual").forEach((n) => n.classList.remove("actual"));
       this.host.querySelectorAll(`[data-frame="${this.doc.frame}"]`).forEach((n) => n.classList.add("actual"));
       const label = this.host.querySelector(".tl2-rulername");
-      if (label) label.textContent = `${this.doc.frame} / ${this.doc.scene.playRange().out}`;
+      if (label) label.textContent = this.view.compact ? String(this.doc.frame)
+        : `${this.doc.frame} / ${this.doc.scene.playRange().out}`;
       const active = this.host.querySelector(`.tl2-cell[data-layer-id="${this.doc.layerId}"][data-frame="${this.doc.frame}"]`);
       if (active && active.scrollIntoView) active.scrollIntoView({ inline: "nearest", block: "nearest" });
     }
 
     _frames() {
       const doc = this.doc;
-      return Math.max((doc ? doc.scene.lastFrame() : 0) + EXTRA, 48, doc ? doc.frame + 8 : 0);
+      const timeline = this._timeline();
+      const extent = doc && timeline.extent
+        ? timeline.extent(doc.scene, { audio: this.audio, mocap: doc.mocap, current: doc.frame })
+        : (doc ? doc.scene.lastFrame() : 0);
+      return Math.max(extent + EXTRA, 48, doc ? doc.frame + 8 : 0);
     }
 
     render() {
@@ -108,8 +168,19 @@
       const doc = this.doc, sc = doc.scene;
       const total = this._frames();
       const cameraKeys = (sc.camera && sc.camera.keys) || {};
+      const compositionKeys = new Set();
+      for (const plane of Object.values((sc.composition && sc.composition.planes) || {}))
+        for (const frame of Object.keys((plane && plane.keys) || {})) compositionKeys.add(Number(frame));
+      const old = this.host.querySelector(".tl2");
+      const oldScroll = old ? { left: old.scrollLeft, top: old.scrollTop } : { left: 0, top: 0 };
       const cont = document.createElement("div");
       cont.className = "tl2";
+      cont.style.setProperty("--tl-frame-w", this._frameWidth() + "px");
+      const rowHeight = this._timeline().rowHeight ? this._timeline().rowHeight(this.view.density) : 24;
+      cont.style.setProperty("--tl-row-h", rowHeight + "px");
+      cont.style.setProperty("--tl-name-w", this._nameWidth() + "px");
+      cont.dataset.density = this.view.density;
+      cont.dataset.compact = this.view.compact ? "1" : "0";
 
       // ── herramientas de celdas ──
       const tools = document.createElement("div"); tools.className = "tl2-tools";
@@ -118,12 +189,22 @@
         const b = document.createElement("button");
         b.title = title; b.setAttribute("aria-label", title);
         b.className = (active ? "on " : "") + (badge ? "tl2-badge" : "");
+        if (active) b.setAttribute("aria-pressed", "true");
         if (icon) b.innerHTML = `<svg class="tl2-icon" aria-hidden="true"><use href="#${icon}"></use></svg>`;
         if (badge) b.innerHTML += `<span aria-hidden="true">${badge}</span>`;
         b.onclick = action; host.appendChild(b); return b;
       };
       const selected = () => doc.cellSelection || { fromLayerId: doc.layerId, toLayerId: doc.layerId,
         anchorLayerId: doc.layerId, anchorFrame: doc.frame, from: doc.frame, to: doc.frame };
+      const foldButton = (id) => {
+        const folded = this._isCollapsed(id), b = document.createElement("button");
+        b.className = "tl2-fold";
+        b.innerHTML = icon(folded ? "i-chev-r" : "i-chev-d");
+        b.title = folded ? "Expandir pista" : "Minimizar pista";
+        b.setAttribute("aria-label", b.title); b.setAttribute("aria-expanded", String(!folded));
+        b.onclick = (event) => { event.stopPropagation(); this._toggleCollapsed(id); };
+        return b;
+      };
       const edit = group();
       button(edit, "i-blank-frame", "Crear un dibujo vacío en la celda actual", () => {
         if (doc.cell == null) doc.ensureDrawing();
@@ -159,6 +240,27 @@
       button(media, "i-onion", "Activar el papel cebolla", () => { if (this.toggleOnion) this.toggleOnion(); }, this.onionEnabled);
       button(media, "i-mixer", "Abrir los faders de papel cebolla", () => { if (this.openOnion) this.openOnion(); });
       button(media, "i-audio", "Cargar una pista de audio", () => { if (this.loadAudio) this.loadAudio(); });
+      const view = group();
+      button(view, "", "Alejar el tiempo (Ctrl+rueda)", () => this._zoom(-1), false, "−");
+      button(view, "", "Acercar el tiempo (Ctrl+rueda)", () => this._zoom(1), false, "+");
+      button(view, "", "Encajar toda la escena", () => this._fit("scene"), false, "▭");
+      button(view, "", "Encajar la selección de celdas", () => this._fit("selection"), false, "⌗");
+      button(view, "", "Encajar el tramo de reproducción", () => this._fit("play"), false, "↔");
+      button(view, "i-eye-off", "Ocultar pistas sin exposiciones", () =>
+        this._setView({ hideEmpty: !this.view.hideEmpty }), this.view.hideEmpty);
+      button(view, "i-cursor", "Mostrar sólo la capa seleccionada", () =>
+        this._setView({ focusSelected: !this.view.focusSelected }), this.view.focusSelected);
+      const densitySymbol = this.view.density === "compact" ? "≡" : this.view.density === "comfortable" ? "☰" : "≣";
+      button(view, "", "Cambiar altura de las pistas", () => {
+        const values = this._timeline().DENSITIES || ["compact", "normal", "comfortable"];
+        const next = values[(values.indexOf(this.view.density) + 1) % values.length];
+        this._setView({ density: next });
+      }, false, densitySymbol);
+      // Compactar a lo ANCHO: la columna de nombres se reduce a sus controles y
+      // el nombre pasa al tooltip. Es lo único que ocupa ancho fijo en todas las
+      // filas; el tiempo que se ve lo sigue mandando el zoom.
+      button(view, "", this.view.compact ? "Ensanchar la columna de pistas" : "Compactar la columna de pistas",
+        () => this._setView({ compact: !this.view.compact }), this.view.compact, "⇤");
       cont.appendChild(tools);
 
       // ── regla de frames ──
@@ -166,7 +268,8 @@
       regla.className = "tl2-ruler";
       const nombre = document.createElement("div");
       nombre.className = "tl2-name tl2-rulername";
-      nombre.textContent = `${doc.frame} / ${sc.playRange().out}`;
+      nombre.textContent = this.view.compact ? String(doc.frame) : `${doc.frame} / ${sc.playRange().out}`;
+      nombre.title = `Cuadro ${doc.frame} de ${sc.playRange().out}`;
       regla.appendChild(nombre);
       const pista = document.createElement("div");
       pista.className = "tl2-track";
@@ -177,16 +280,21 @@
       const abierto = !(sc.range.out > 0);
       const tramo = { in: Math.max(1, sc.range.in || 1),
                       out: abierto ? ultimo : Math.max(1, sc.range.out) };
+      const majorStep = this._timeline().majorTickStep
+        ? this._timeline().majorTickStep(this._frameWidth()) : 6;
       for (let f = 1; f <= total; f++) {
         const t = document.createElement("i");
-        t.className = "tl2-tick" + (f % 6 === 1 ? " seg" : "") + (f === doc.frame ? " actual" : "")
+        const major = (f - 1) % majorStep === 0;
+        t.className = "tl2-tick" + (major ? " seg" : "") + (f === doc.frame ? " actual" : "")
           + (cameraKeys[f] ? " camkey" : "")
+          + (compositionKeys.has(f) ? " compkey" : "")
           + (f < tramo.in || f > tramo.out ? " fuera" : "")
           + (f === tramo.in ? " borde-in" : "") + (f === tramo.out ? " borde-out" : "");
-        if (cameraKeys[f]) t.title = `Clave de camara en el frame ${f}`;
+        if (cameraKeys[f] && compositionKeys.has(f)) t.title = `Claves de cámara y composición en el frame ${f}`;
+        else if (cameraKeys[f]) t.title = `Clave de cámara en el frame ${f}`;
+        else if (compositionKeys.has(f)) t.title = `Clave de profundidad/composición en el frame ${f}`;
         t.dataset.frame = String(f);
-        // el número solo cada 6: con uno por frame no se lee nada
-        if (f % 6 === 1) t.textContent = String(f);
+        if (major) t.textContent = String(f);
         // SCRUBBING: arrastrar por la regla recorre la animación con la mano.
         // Es la forma real de revisar un movimiento — el playback te muestra el
         // resultado, el scrub te deja buscar el frame exacto donde algo falla.
@@ -196,7 +304,7 @@
           if (this.playback) this.playback.stop();
           const rect = pista.getBoundingClientRect();
           const aFrame = (x) => Math.max(1, Math.min(total,
-            1 + Math.floor((x - rect.left + pista.scrollLeft) / ANCHO)));
+            1 + Math.floor((x - rect.left + pista.scrollLeft) / this._frameWidth())));
           const ir = (x) => {
             const f = aFrame(x);
             if (f !== doc.frame) { doc.goTo(f); if (this.audio) this.audio.scrub(f); }
@@ -234,14 +342,16 @@
       // ── mesa de luz rápida ──
       // Los marcadores se fijan sin mover el playhead: sirven para calcar una
       // pose lejana mientras se dibuja en el fotograma actual.
-      const luz = document.createElement("div"); luz.className = "tl2-lighttable";
+      const luz = document.createElement("div");
+      luz.className = "tl2-lighttable" + (this._isCollapsed("references") ? " collapsed" : "");
       const luzNombre = document.createElement("div"); luzNombre.className = "tl2-name";
-      luzNombre.textContent = "Referencias";
+      const luzTitulo = document.createElement("span"); luzTitulo.textContent = "Referencias";
       const limpiar = document.createElement("button"); limpiar.textContent = "Limpiar";
       limpiar.title = "Quitar todas las referencias fijas";
       limpiar.onclick = () => { doc.onionCfg = { ...(doc.onionCfg || {}), fixed: [] };
         doc.touch(); doc.emit("onion"); };
-      luzNombre.appendChild(limpiar); luz.appendChild(luzNombre);
+      luzNombre.title = "Referencias";
+      luzNombre.append(foldButton("references"), luzTitulo, limpiar); luz.appendChild(luzNombre);
       const luzTrack = document.createElement("div"); luzTrack.className = "tl2-track";
       const cfg = animation.onion.config(doc.onionCfg);
       const fixed = new Set((cfg.fixed || []).map(Number));
@@ -287,11 +397,13 @@
       // piezas sin inventar otro timeline. Doble clic clava; Alt+clic borra.
       const rigNodes = Object.values((sc.rig && sc.rig.nodes) || {});
       if (rigNodes.length) {
-        const fila = document.createElement("div"); fila.className = "tl2-row tl2-rig";
+        const fila = document.createElement("div");
+        fila.className = "tl2-row tl2-rig" + (this._isCollapsed("rig") ? " collapsed" : "");
         const cab = document.createElement("div"); cab.className = "tl2-name";
         const badge = document.createElement("span"); badge.textContent = "◇";
         const nombreRig = document.createElement("span"); nombreRig.textContent = "Esqueleto";
-        cab.append(badge, nombreRig); fila.appendChild(cab);
+        cab.title = "Esqueleto";
+        cab.append(foldButton("rig"), badge, nombreRig); fila.appendChild(cab);
         const track = document.createElement("div"); track.className = "tl2-track";
         for (let f = 1; f <= total; f++) {
           const keyed = rigNodes.some(node => node.keys && node.keys[f]);
@@ -309,9 +421,12 @@
       }
 
       // ── una fila por capa ──
-      for (const ly of sc.layers) {
+      const visibleLayers = this._timeline().visibleLayers
+        ? this._timeline().visibleLayers(sc.layers, this.view, doc.layerId) : sc.layers;
+      for (const ly of visibleLayers) {
         const fila = document.createElement("div");
-        fila.className = "tl2-row" + (ly.id === doc.layerId ? " sel" : "");
+        fila.className = "tl2-row" + (ly.id === doc.layerId ? " sel" : "")
+          + (this._isCollapsed(ly.id) ? " collapsed" : "");
 
         const cab = document.createElement("div");
         cab.className = "tl2-name";
@@ -330,7 +445,8 @@
           ly.locked ? "Desbloquear capa" : "Bloquear capa"); };
         const txt = document.createElement("span");
         txt.textContent = ly.name;
-        cab.append(ojo, lock, txt);
+        cab.title = ly.name;          // compactada, el nombre vive en el tooltip
+        cab.append(foldButton(ly.id), ojo, lock, txt);
         cab.onclick = () => doc.selectLayer(ly.id);
         fila.appendChild(cab);
 
@@ -381,7 +497,7 @@
       // ── pista de AUDIO (si hay) ──
       if (this.audio && this.audio.peaks.length) {
         const fila = document.createElement("div");
-        fila.className = "tl2-row tl2-audio";
+        fila.className = "tl2-row tl2-audio" + (this._isCollapsed("audio") ? " collapsed" : "");
         const cab = document.createElement("div");
         cab.className = "tl2-name";
         const mudo = document.createElement("button");
@@ -392,7 +508,8 @@
         const nom = document.createElement("span");
         nom.textContent = this.audio.name || "audio";
         nom.title = "Arrastrá la onda para correr el audio y calzarlo con la acción";
-        cab.append(mudo, nom);
+        cab.title = this.audio.name || "audio";
+        cab.append(foldButton("audio"), mudo, nom);
         fila.appendChild(cab);
 
         const track = document.createElement("div");
@@ -411,7 +528,7 @@
           ev.preventDefault();
           const x0 = ev.clientX, off0 = this.audio.offset;
           const mover = (e2) => {
-            this.audio.offset = off0 + Math.round((e2.clientX - x0) / ANCHO);
+            this.audio.offset = off0 + Math.round((e2.clientX - x0) / this._frameWidth());
             this.render();
           };
           const soltar = () => {
@@ -428,9 +545,23 @@
 
       this.host.innerHTML = "";
       this.host.appendChild(cont);
-      // seguir el cursor de reproducción sin marear
-      const act = cont.querySelector(".tl2-cell.actual") || cont.querySelector(".tl2-tick.actual");
-      if (act && act.scrollIntoView) act.scrollIntoView({ inline: "nearest", block: "nearest" });
+      cont.scrollTop = oldScroll.top;
+      if (this._pendingScrollFrame != null) {
+        cont.scrollLeft = Math.max(0, (this._pendingScrollFrame - 1) * this._frameWidth());
+        this._pendingScrollFrame = null;
+      } else cont.scrollLeft = oldScroll.left;
+      // Ctrl+rueda escala el tiempo, sin secuestrar el scroll normal.
+      cont.onwheel = (event) => {
+        if (!event.ctrlKey) return;
+        event.preventDefault();
+        this._zoom(event.deltaY > 0 ? -1 : 1);
+      };
+      // Sólo el primer montaje lleva el cursor a la vista. Un render por una
+      // preferencia no debe saltar de posición ni desorientar al animador.
+      if (!old) {
+        const act = cont.querySelector(".tl2-cell.actual") || cont.querySelector(".tl2-tick.actual");
+        if (act && act.scrollIntoView) act.scrollIntoView({ inline: "nearest", block: "nearest" });
+      }
     }
     _inSelection(layerId, frame) {
       const s = this.doc && this.doc.cellSelection;

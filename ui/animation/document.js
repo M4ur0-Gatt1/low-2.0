@@ -198,6 +198,29 @@
       return true;
     }
 
+    setCompositionTransform(id, transform, { frame = null, source = {}, label = "Transformar plano" } = {}) {
+      let plane = this.scene.compositionPlane(id);
+      if (!plane) plane = this.scene.ensureCompositionPlane(id, source);
+      if (!plane || plane.locked) return false;
+      const keyed = frame != null, key = keyed ? Math.max(1, Math.round(frame)) : null;
+      const before = keyed ? (plane.keys[key] ? JSON.parse(JSON.stringify(plane.keys[key])) : null)
+        : JSON.parse(JSON.stringify(plane.transform));
+      if (!this.scene.setCompositionTransform(id, transform, key)) return false;
+      const after = JSON.parse(JSON.stringify(keyed ? plane.keys[key] : plane.transform));
+      this.dirty = true; this.emit("composition"); this.emit("frame");
+      if (this.history) {
+        const doc = this;
+        this.history.push({ label, domain: "composition", before, after,
+          apply: (_direction, value) => {
+            const target = doc.scene.ensureCompositionPlane(id, source);
+            if (keyed) { if (value == null) delete target.keys[key]; else target.keys[key] = JSON.parse(JSON.stringify(value)); }
+            else target.transform = JSON.parse(JSON.stringify(value));
+            doc.touch(); doc.emit("composition"); doc.emit("frame");
+          } });
+      }
+      return true;
+    }
+
     // ── edición ──────────────────────────────────────────────────────────
     /** Asegura que haya un dibujo en la celda actual y lo devuelve. Si la celda
      *  está vacía crea uno nuevo: empezar a dibujar en un frame vacío tiene que
@@ -731,9 +754,27 @@
       });
     }
 
-    _rigChange(label, mutate) {
+    /** Después de cada gesto, las cadenas con el extremo clavado vuelven a
+     *  resolverse contra su objetivo retenido. Así mover la cadera no arrastra
+     *  el pie apoyado, y la corrección queda DENTRO del mismo gesto: una sola
+     *  entrada de Undo, como cualquier otra intención del animador.
+     *  `skip` evita que la cadena que el propio gesto está posando se pise. */
+    _enforceRigPins(rig, frame, skip = null) {
+      const f = Math.max(1, Math.round(Number(frame) || this.frame || 1));
+      for (const c of this.scene.rigPinnedConstraints(f)) {
+        if (c.id === skip) continue;
+        const target = this.scene.rigTargetAt(c.id, f);
+        if (!target) continue;
+        const solved = this.scene.rigSolveIK(c.id, f, target);
+        if (solved) this._writeRigPoses(rig, solved.poses, f);
+      }
+    }
+
+    _rigChange(label, mutate, options = {}) {
       const before = animation.rigToJSON(this.scene.rig);
       const result = mutate(this.scene.rig);
+      if (result !== false && options.pins !== false)
+        this._enforceRigPins(this.scene.rig, options.frame, options.skipPin);
       this.scene.rig.nodes = this.scene.rig.bones;
       this.scene.rig.diagnostics = animation.rigDiagnostics(this.scene.rig);
       const after = animation.rigToJSON(this.scene.rig);
@@ -884,7 +925,9 @@
         if (ease) node.keys[f].ease = animation.rigEaseData(ease);
         this._syncRigPoseChannels(rig, id, node.keys);
         return true;
-      });
+        // El cuadro va explícito: si un apoyo está clavado, la corrección
+        // tiene que caer donde se posó y no donde esté parado el playhead.
+      }, { frame: Math.max(1, Math.round(frame)) });
     }
 
     replaceRigKeys(id, keys, label = "Editar claves de rig") {
@@ -1360,6 +1403,17 @@
       });
     }
 
+    /** Convierte poses resueltas en claves reales del cuadro. Una pose que no
+     *  queda clavada no es una pose: no se reproduce ni se guarda. */
+    _writeRigPoses(rig, poses, frame) {
+      for (const [nodeId, pose] of Object.entries(poses || {})) {
+        const node = rig.nodes[nodeId]; if (!node) continue;
+        node.keys[frame] = { x: +pose.x || 0, y: +pose.y || 0, r: +pose.r || 0,
+          sx: pose.sx == null ? 1 : +pose.sx, sy: pose.sy == null ? 1 : +pose.sy };
+        this._syncRigPoseChannels(rig, nodeId, node.keys);
+      }
+    }
+
     setRigIKTarget(id, frame, target) {
       const solved = this.scene.rigSolveIK(id, frame, target);
       if (!solved) return false;
@@ -1368,12 +1422,90 @@
         const c = rig.constraints && rig.constraints[id]; if (!c) return false;
         c.targetKeys = c.targetKeys || {};
         c.targetKeys[f] = { x: solved.target.x, y: solved.target.y };
-        for (const [nodeId, pose] of Object.entries(solved.poses)) {
-          const node = rig.nodes[nodeId]; if (!node) continue;
-          node.keys[f] = { x: +pose.x || 0, y: +pose.y || 0, r: +pose.r || 0,
-            sx: pose.sx == null ? 1 : +pose.sx, sy: pose.sy == null ? 1 : +pose.sy };
-          this._syncRigPoseChannels(rig, nodeId, node.keys);
+        this._writeRigPoses(rig, solved.poses, f);
+        return true;
+      });
+    }
+
+    /** Mover el pole ES mover el codo o la rodilla: se clava el punto y se
+     *  vuelve a resolver con el mismo objetivo, todo en un solo Undo. */
+    setRigIKPole(id, frame, pole) {
+      if (!pole || !Number.isFinite(+pole.x) || !Number.isFinite(+pole.y)) return false;
+      const f = Math.max(1, Math.round(frame)), point = { x: +pole.x, y: +pole.y };
+      return this._rigChange("Mover el pole de la cadena IK", (rig) => {
+        const c = rig.constraints && rig.constraints[id];
+        if (!c || c.type !== "ik2") return false;
+        c.poleKeys = c.poleKeys || {};
+        c.poleKeys[f] = point;
+        if (!c.pole) c.pole = { ...point };
+        // Se resuelve con el rig YA modificado: el solver tiene que ver el pole
+        // nuevo, si no la rodilla se quedaría del lado viejo hasta el próximo gesto.
+        const solved = this.scene.rigSolveIK(id, f, this.scene.rigTargetAt(id, f));
+        if (solved) this._writeRigPoses(rig, solved.poses, f);
+        return true;
+      });
+    }
+
+    /** Match IK→FK: lleva objetivo y flexión adonde la cadena YA está. Encender
+     *  IK después de esto no mueve un píxel. */
+    matchRigIK(id, frame) {
+      const f = Math.max(1, Math.round(frame));
+      const match = this.scene.rigMatchIK(id, f);
+      if (!match) return false;
+      return this._rigChange("Emparejar IK con la pose actual", (rig) => {
+        const c = rig.constraints && rig.constraints[id]; if (!c) return false;
+        c.targetKeys = c.targetKeys || {};
+        c.targetKeys[f] = { x: match.target.x, y: match.target.y };
+        if (!match.ambiguous) {
+          // Si la cadena ya usa pole, el lado se conserva moviendo el pole;
+          // si no, alcanza con el flag y no se le inventan claves al animador.
+          if (c.pole || Object.keys(c.poleKeys || {}).length) {
+            c.poleKeys = c.poleKeys || {};
+            c.poleKeys[f] = { x: match.pole.x, y: match.pole.y };
+          } else c.bend = match.bend;
         }
+        return true;
+      });
+    }
+
+    /** Clavar o soltar el extremo de una cadena. Clavar NO mueve nada: primero
+     *  lleva el objetivo adonde el extremo ya está —es un match— y recién ahí
+     *  lo retiene. Soltar es igual de explícito y también deja su cuadro: un
+     *  apoyo que se pierde sin clave no se puede volver a encontrar. */
+    setRigPin(id, frame, pinned) {
+      const c = this.scene.rigConstraint(id);
+      if (!c || c.type !== "ik2") return false;
+      const f = Math.max(1, Math.round(frame));
+      const match = pinned ? this.scene.rigMatchIK(id, f) : null;
+      return this._rigChange(pinned ? "Clavar el extremo de la cadena" : "Soltar el extremo de la cadena",
+        (rig) => {
+          const con = rig.constraints && rig.constraints[id]; if (!con) return false;
+          con.pinKeys = con.pinKeys || {};
+          con.pinKeys[f] = pinned ? 1 : 0;
+          if (match) {
+            con.targetKeys = con.targetKeys || {};
+            con.targetKeys[f] = { x: match.target.x, y: match.target.y };
+          }
+          return true;
+        }, { frame: f, skipPin: id });
+    }
+
+    /** Match FK←IK: hornea la pose evaluada del cuadro como claves y apaga la
+     *  cadena. Apagar IK deja el dibujo donde estaba, también en un cuadro
+     *  interpolado. */
+    matchRigFK(id, frame) {
+      const c = this.scene.rigConstraint(id);
+      if (!c || c.type !== "ik2") return false;
+      const f = Math.max(1, Math.round(frame)), poses = {};
+      for (const nodeId of [c.rootId, c.midId]) {
+        const pose = this.scene.rigPose(nodeId, f);
+        if (pose) poses[nodeId] = pose;
+      }
+      if (!Object.keys(poses).length) return false;
+      return this._rigChange("Pasar la cadena a FK", (rig) => {
+        const con = rig.constraints && rig.constraints[id]; if (!con) return false;
+        this._writeRigPoses(rig, poses, f);
+        con.enabled = false;
         return true;
       });
     }

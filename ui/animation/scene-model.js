@@ -744,6 +744,23 @@
     }
   }
 
+  function compositionTransform(data = {}) {
+    return { x: Number(data.x) || 0, y: Number(data.y) || 0, z: Number(data.z) || 0,
+      rotationX: Number(data.rotationX) || 0, rotationY: Number(data.rotationY) || 0,
+      rotationZ: Number(data.rotationZ) || 0,
+      scaleX: data.scaleX == null ? 1 : Number(data.scaleX),
+      scaleY: data.scaleY == null ? 1 : Number(data.scaleY) };
+  }
+
+  function compositionData(data = {}) {
+    const planes = {};
+    for (const [id, plane] of Object.entries(data.planes || {})) {
+      planes[id] = { id, source: clone(plane.source || {}), transform: compositionTransform(plane.transform),
+        keys: clone(plane.keys || {}), visible: plane.visible !== false, locked: !!plane.locked };
+    }
+    return { version: 1, planes, camera: clone(data.camera || {}), settings: clone(data.settings || {}) };
+  }
+
   /** La escena: niveles (material) + capas (tiempo) + ajustes. */
   class Scene {
     constructor(data = {}) {
@@ -758,6 +775,7 @@
       this.layers = (data.layers || []).map((l) => new Layer(l));
       this.palettes = (data.palettes || []).map((p) => new Palette(p));
       this.camera = clone(data.camera || { keys: {} });
+      this.composition = compositionData(data.composition);
       this.audio = clone(data.audio || []);
       this.rig = rigData(data.rig);
       this.revision = Number(data.revision) || 0;
@@ -773,6 +791,43 @@
     }
     level(id) { return this.levels.find((l) => l.id === id) || null; }
     layer(id) { return this.layers.find((l) => l.id === id) || null; }
+
+    compositionPlane(id) { return this.composition.planes[id] || null; }
+    ensureCompositionPlane(id, source = {}) {
+      if (!id) return null;
+      if (!this.composition.planes[id]) this.composition.planes[id] = {
+        id, source: clone(source), transform: compositionTransform(), keys: {}, visible: true, locked: false };
+      return this.composition.planes[id];
+    }
+    setCompositionTransform(id, transform, frame = null) {
+      const plane = this.ensureCompositionPlane(id);
+      if (!plane || plane.locked) return false;
+      const value = compositionTransform({ ...plane.transform, ...transform });
+      if (frame == null) plane.transform = value;
+      else plane.keys[Math.max(1, Math.round(frame))] = value;
+      this.touch(); return true;
+    }
+    compositionTransformAt(id, frame = null) {
+      const plane = this.compositionPlane(id);
+      if (!plane) return null;
+      const base = compositionTransform(plane.transform), keys = plane.keys || {};
+      const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      if (frame == null || !frames.length) return base;
+      const f = Math.max(1, Number(frame) || 1);
+      if (keys[f]) return compositionTransform({ ...base, ...keys[f] });
+      if (f <= frames[0]) return compositionTransform({ ...base, ...keys[frames[0]] });
+      if (f >= frames.at(-1)) return compositionTransform({ ...base, ...keys[frames.at(-1)] });
+      let a = frames[0], b = frames.at(-1);
+      for (const key of frames) { if (key <= f) a = key; else { b = key; break; } }
+      const t = (f - a) / (b - a), A = compositionTransform({ ...base, ...keys[a] }), B = compositionTransform({ ...base, ...keys[b] });
+      const out = {}; for (const key of Object.keys(base)) out[key] = A[key] + (B[key] - A[key]) * t;
+      return compositionTransform(out);
+    }
+    removeCompositionKey(id, frame) {
+      const plane = this.compositionPlane(id), key = Math.max(1, Math.round(frame));
+      if (!plane || !Object.prototype.hasOwnProperty.call(plane.keys, key)) return false;
+      delete plane.keys[key]; this.touch(); return true;
+    }
 
     addLevel(name, type) {
       const l = new Level({ name: name || `Nivel ${this.levels.length + 1}`, type });
@@ -996,11 +1051,12 @@
 
     rigConstraint(id) { return (this.rig.constraints || {})[id] || null; }
 
-    rigTargetAt(id, frame) {
-      const c = this.rigConstraint(id), keys = c && c.targetKeys;
-      if (!c) return null;
+    /** Un punto animado de la cadena (objetivo o pole) en un cuadro. Entre
+     * claves interpola recto: son posiciones que el animador ve moverse, no
+     * ángulos, así que la línea es lo predecible. */
+    rigPointAt(keys, fallback, frame) {
       const frames = Object.keys(keys || {}).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
-      if (!frames.length) return clone(c.target || null);
+      if (!frames.length) return clone(fallback || null);
       const f = Number(frame) || 1;
       if (keys[f]) return clone(keys[f]);
       if (f <= frames[0]) return clone(keys[frames[0]]);
@@ -1011,9 +1067,72 @@
       return { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t };
     }
 
+    rigTargetAt(id, frame) {
+      const c = this.rigConstraint(id);
+      if (!c) return null;
+      return this.rigPointAt(c.targetKeys, c.target, frame);
+    }
+
+    /** Adónde apunta la articulación del medio. Es la forma profesional de
+     * decidir el codo o la rodilla: se ve, se anima y no se da vuelta sola.
+     * Sin pole definido devuelve null y manda el flag `bend`. */
+    rigPoleAt(id, frame) {
+      const c = this.rigConstraint(id);
+      if (!c) return null;
+      if (!c.pole && !Object.keys(c.poleKeys || {}).length) return null;
+      return this.rigPointAt(c.poleKeys, c.pole, frame);
+    }
+
+    /** ¿Está clavado el extremo de esta cadena en este cuadro? El pin es un
+     * ESTADO SOSTENIDO, no un valor que se interpola: un pie está apoyado o no
+     * lo está, y vale desde su clave hasta la siguiente. */
+    rigPinnedAt(id, frame) {
+      const c = this.rigConstraint(id);
+      if (!c) return false;
+      const keys = c.pinKeys || {};
+      const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!frames.length) return false;
+      const f = Number(frame) || 1;
+      if (f < frames[0]) return false;
+      let last = frames[0];
+      for (const k of frames) { if (k <= f) last = k; else break; }
+      return !!keys[last];
+    }
+
+    /** Las cadenas con el extremo clavado en un cuadro. LowDoc las vuelve a
+     * resolver después de cada gesto para que el apoyo no patine. */
+    rigPinnedConstraints(frame) {
+      return Object.values(this.rig.constraints || {})
+        .filter((c) => c && c.type === "ik2" && c.enabled !== false && this.rigPinnedAt(c.id, frame));
+    }
+
+    /** Qué necesitaría la cadena IK para reproducir EXACTAMENTE la pose que hoy
+     * tiene en FK: dónde está el extremo, dónde la articulación del medio y
+     * hacia qué lado dobla. Con esto, encender IK no mueve nada. Si la cadena
+     * está estirada el lado es ambiguo y se conserva el que ya tenía. */
+    rigMatchIK(id, frame) {
+      const c = this.rigConstraint(id);
+      if (!c || c.type !== "ik2") return null;
+      const root = this.rigNode(c.rootId), mid = this.rigNode(c.midId), end = this.rigNode(c.effectorId);
+      if (!root || !mid || !end || !root.pivot || !mid.pivot || !end.pivot) return null;
+      const parentMatrix = root.parentId ? this.rigWorldMatrix(root.parentId, frame) : matIdentity();
+      const toLocal = (p) => matPoint(matInverse(parentMatrix), p);
+      const target = this.rigWorldPoint(c.effectorId, frame, end.pivot);
+      const joint = this.rigWorldPoint(c.midId, frame, mid.pivot);
+      const rootPose = rigPoseData(this.rigPose(root.id, frame));
+      // El signo se mide en el mismo espacio que usa el solver: si el padre
+      // está espejado, hacerlo en el lienzo daría el lado contrario.
+      const a = { x: root.pivot.x + rootPose.x, y: root.pivot.y + rootPose.y };
+      const t = toLocal(target), p = toLocal(joint);
+      const cross = (t.x - a.x) * (p.y - a.y) - (t.y - a.y) * (p.x - a.x);
+      const ambiguous = Math.abs(cross) <= 1e-6;
+      return { target, pole: joint, ambiguous,
+        bend: ambiguous ? (c.bend === -1 ? -1 : 1) : (cross > 0 ? -1 : 1) };
+    }
+
     /** Solver analítico de dos huesos para una cadena root→mid→effector.
      * Devuelve poses locales; LowDoc decide cuándo convertirlas en claves. */
-    rigSolveIK(id, frame, target) {
+    rigSolveIK(id, frame, target, poleOverride = null) {
       const c = this.rigConstraint(id);
       if (!c || c.type !== "ik2" || c.enabled === false) return null;
       const root = this.rigNode(c.rootId), mid = this.rigNode(c.midId), end = this.rigNode(c.effectorId);
@@ -1035,7 +1154,20 @@
       const dx = localTarget.x - a.x, dy = localTarget.y - a.y;
       const distance = Math.max(0.001, Math.min(l1 + l2 - 0.001, Math.hypot(dx, dy)));
       const cosJoint = Math.max(-1, Math.min(1, (distance * distance - l1 * l1 - l2 * l2) / (2 * l1 * l2)));
-      const joint = Math.acos(cosJoint) * (c.bend === -1 ? -1 : 1);
+      // El pole decide de qué lado queda la articulación; el flag `bend` sólo
+      // sirve de respaldo. Si el pole cae SOBRE la recta raíz→objetivo el signo
+      // es ambiguo: ahí se conserva la flexión anterior en vez de temblar.
+      let bend = c.bend === -1 ? -1 : 1;
+      // `poleOverride` es para previsualizar el arrastre del pole sin escribirlo
+      // todavía: el codo tiene que seguir al puntero antes de soltar.
+      const pole = poleOverride || this.rigPoleAt(id, frame);
+      if (pole) {
+        const localPole = matPoint(matInverse(parentMatrix), pole);
+        const cross = (localTarget.x - a.x) * (localPole.y - a.y)
+          - (localTarget.y - a.y) * (localPole.x - a.x);
+        if (Math.abs(cross) > 1e-6) bend = cross > 0 ? -1 : 1;
+      }
+      const joint = Math.acos(cosJoint) * bend;
       const rootAngle = Math.atan2(dy, dx) - Math.atan2(l2 * Math.sin(joint), l1 + l2 * Math.cos(joint));
       const base1 = Math.atan2(b.y - root.pivot.y, b.x - root.pivot.x);
       const base2 = Math.atan2(e.y - b.y, e.x - b.x);
@@ -1064,7 +1196,8 @@
                levels: this.levels.map((l) => l.toJSON()),
                layers: this.layers.map((l) => l.toJSON()),
                palettes: this.palettes.map((p) => p.toJSON()),
-               camera: this.camera, audio: this.audio, rig: rigToJSON(this.rig), revision: this.revision };
+               camera: this.camera, composition: clone(this.composition), audio: this.audio,
+               rig: rigToJSON(this.rig), revision: this.revision };
     }
 
     /** Convierte el modelo VIEJO (`frames` = lista de archivos) al nuevo. Cada

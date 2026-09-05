@@ -20,18 +20,32 @@ def main() -> int:
     index = RAIZ / "ui" / "index.html"
     html = index.read_text(encoding="utf-8")
 
+    def propio(src: str) -> bool:
+        # vendor/ y las URLs externas quedan como están: no las versionamos
+        return not (src.startswith("vendor/") or "://" in src)
+
     def sellar(m: "re.Match[str]") -> str:
         src = m.group(1)
-        # vendor/ y las URLs externas quedan como están: no las versionamos
-        if src.startswith("vendor/") or "://" in src:
+        if not propio(src):
             return m.group(0)
         base = src.split("?")[0]
         return f'<script src="{base}?v={version}"></script>'
 
+    def sellar_css(m: "re.Match[str]") -> str:
+        antes, src, despues = m.group(1), m.group(2), m.group(3)
+        if not propio(src):
+            return m.group(0)
+        base = src.split("?")[0]
+        return f'<link {antes}href="{base}?v={version}"{despues}>'
+
     nuevo = re.sub(r'<script src="([^"]+)"></script>', sellar, html)
+    # La hoja de estilos necesita el mismo sello que los scripts. Sin esto el
+    # usuario actualiza, recibe el JS nuevo y sigue con el CSS de la versión
+    # anterior: la interfaz aparece rota o el arreglo visual no se ve.
+    nuevo = re.sub(r'<link ([^>]*?)href="([^"]+\.css[^"]*)"([^>]*?)>', sellar_css, nuevo)
     if nuevo != html:
         index.write_text(nuevo, encoding="utf-8")
-    print(f"scripts sellados con v{version}: {nuevo.count('?v=' + version)}")
+    print(f"scripts y hojas de estilo sellados con v{version}: {nuevo.count('?v=' + version)}")
     return 0
 
 

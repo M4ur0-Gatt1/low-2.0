@@ -1,4 +1,3 @@
-```
 # Batch files
 *.bat
 
@@ -36,4 +35,14 @@ build/
 # System files
 .DS_Store
 Thumbs.db
-```
+
+# Perfiles de Chromium que dejan las corridas E2E (tools/check_*_ui.js).
+# No son artefactos del proyecto: se pueden borrar sin perder nada.
+.e2e-*/
+
+# Carpetas de build por version (build-release-*, build-rig-*, build-check...).
+# Son salidas de PyInstaller de releases pasados, no fuente.
+build-*/
+
+# Datos locales de la app (config, sesiones, escenas de recuperacion).
+.low/
