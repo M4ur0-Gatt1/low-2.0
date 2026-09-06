@@ -1652,6 +1652,35 @@
         !otro.applyRemoteSnapshot({ layers: [{ id: "no-existe", cells: [1] }], levels: [] }));
     }
 
+    // ── cambiar el dibujo del cuadro donde uno esta avisa a las vistas ─────
+    {
+      const doc = new animation.LowDoc();
+      doc.setHistory(new LOW.core.HistoryManager({ limit: 20 }));
+      const ly = doc.scene.layers[0], lv = doc.scene.level(ly.levelId);
+      doc.writeDrawing("<circle r='3'/>");
+      const copia = doc.duplicateDrawing(doc.drawing.number);
+      const avisos = [];
+      doc.subscribe((_d, motivo) => avisos.push(motivo));
+
+      doc.setCell(doc.frame, copia.number, ly.id);
+      ok("cambiar la celda ACTUAL avisa que la mesa cambio", avisos.includes("frame"), avisos.join(","));
+
+      avisos.length = 0;
+      doc.setCell(doc.frame + 4, copia.number, ly.id);
+      ok("cambiar una celda lejana NO repinta la mesa al pedo",
+        !avisos.includes("frame") && avisos.includes("cells"), avisos.join(","));
+
+      avisos.length = 0;
+      doc.apply("clear", doc.frame, doc.frame);
+      ok("vaciar el cuadro actual tambien avisa", avisos.includes("frame"), avisos.join(","));
+
+      ok("y el duplicado es un dibujo APARTE, no el mismo",
+        copia.number !== 1 && lv.drawings.length >= 2);
+      const original = lv.byNumber(1);
+      copia.content = "<rect/>";
+      ok("retocar la copia no toca el original", (original.content || "").includes("circle"));
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

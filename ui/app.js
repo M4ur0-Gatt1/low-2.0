@@ -17512,6 +17512,12 @@ async function dzXsMount() {
   // atajos de animación: navegar por frames y por DIBUJOS, timing y celdas
   LOW.animation.shortcuts.wire(() => DZ.doc, () => DZ.playback, {
     getSelection: () => DZ.doc && DZ.doc.cellSelection,
+    // Copiar y pegar un DIBUJO vive en un solo lugar: acá se lo presta a los
+    // atajos, en vez de tener una segunda implementación escuchando aparte que
+    // ganaba o perdía según si la X-sheet estaba montada.
+    copiarDibujo: () => dzCuadroCopiar(),
+    pegarDibujo: () => dzCuadroPegar(),
+    hayDibujoCopiado: () => !!DZ.clipCuadro,
     deleteScene: () => dzDeleteContext(),
     status: (m) => dzSetStatus(" " + m),
     toggleOnion: () => { DZ.onionOn = !DZ.onionOn; dzOnion2Render(); dzOnionRender(); },

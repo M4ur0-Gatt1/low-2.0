@@ -16,7 +16,10 @@
      Insert         insertar un frame vacío
      Supr           vaciar la celda (el DIBUJO no se toca)
      O              papel cebolla
-     Ctrl+C/X/V     copiar / cortar / pegar celdas
+     Ctrl+C / Ctrl+V  copiar y pegar. Sin rango seleccionado copia el DIBUJO
+                      y pega una copia aparte; con un rango, copia las CELDAS
+                      (tiempo). Ctrl+Shift+V pega como REUSO del mismo dibujo.
+     Ctrl+X           cortar celdas
 
    No se activan mientras se escribe en un campo: eso arruinaba los atajos de
    una tecla en cualquier programa que lo haya intentado.
@@ -127,19 +130,47 @@
         else if (k === "o" && opts.toggleOnion) { opts.toggleOnion(); manejado = true; }
       }
 
-      // copiar / cortar / pegar CELDAS (referencias, no dibujos)
+      // ── Copiar y pegar ────────────────────────────────────────────────
+      // UNA regla, y visible: lo que manda es si hay un RANGO seleccionado.
+      //
+      //   · Sin rango (estás parado en un cuadro) → se copia el DIBUJO, y
+      //     pegar deja una copia aparte: retocarla no toca el original. Es lo
+      //     que espera cualquiera que dice «copiar este dibujo al otro cuadro».
+      //   · Con un rango seleccionado → se copian las CELDAS, que es trabajo de
+      //     tiempo: pegar vuelve a exponer los mismos dibujos, sin duplicarlos.
+      //   · Ctrl+Shift+V → pegar como REUSO: la misma celda apuntando al mismo
+      //     dibujo. Retocarlo cambia todos los cuadros donde está.
+      //
+      // Antes esto dependía de algo invisible: si la X-sheet estaba montada,
+      // sus atajos capturaban primero y pegaban una referencia; si no, otro
+      // camino en app.js pegaba una copia. El mismo Ctrl+V hacía dos cosas
+      // distintas y ninguna de las dos estaba anunciada.
       if (!manejado && ctrl && ly) {
         const k = e.key.toLowerCase();
-        const sel = (opts.getSelection && opts.getSelection()) || {
-          fromLayerId: doc.layerId, toLayerId: doc.layerId, from: doc.frame, to: doc.frame };
+        const sel = (opts.getSelection && opts.getSelection()) || null;
+        const hayRango = !!(sel && (sel.to > sel.from || sel.fromLayerId !== sel.toLayerId));
+        const rango = sel || { fromLayerId: doc.layerId, toLayerId: doc.layerId,
+          from: doc.frame, to: doc.frame };
         if (k === "c") {
-          const r = cells.copy(doc, sel); manejado = true;
-          if (opts.status && r) opts.status(cells.medida(r) + " copiadas");
+          manejado = true;
+          if (!hayRango && opts.copiarDibujo) opts.copiarDibujo();
+          else {
+            const r = cells.copy(doc, rango);
+            if (opts.status && r) opts.status(cells.medida(r) + " copiadas");
+          }
         } else if (k === "x") {
-          cells.cut(doc, sel); manejado = true;
-        } else if (k === "v" && clip.range) {
-          const r = cells.paste(doc); manejado = true;
-          if (opts.status && r) opts.status(cells.medida(r) + " pegadas");
+          cells.cut(doc, rango); manejado = true;
+        } else if (k === "v") {
+          manejado = true;
+          if (e.shiftKey && clip.range) {
+            const r = cells.paste(doc);
+            if (opts.status && r) opts.status(cells.medida(r) + " reexpuestas · es el MISMO dibujo");
+          } else if (opts.pegarDibujo && opts.hayDibujoCopiado && opts.hayDibujoCopiado()) {
+            opts.pegarDibujo();
+          } else if (clip.range) {
+            const r = cells.paste(doc);
+            if (opts.status && r) opts.status(cells.medida(r) + " pegadas");
+          } else manejado = false;
         }
       }
 

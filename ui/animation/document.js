@@ -361,6 +361,13 @@
       const ok = this.scene.expose(id, frame, drawingNumber);
       if (ok) {
         this.touch(); this.emit("cells");
+        // Si lo que cambió es la celda donde uno ESTÁ PARADO, cambió el dibujo
+        // que hay sobre la mesa: hay que avisarlo o el lienzo se queda con el
+        // anterior. Y un lienzo desactualizado no es sólo un problema visual —
+        // el volcado con retardo (dzMarkDirty) escribe el lienzo ENCIMA del
+        // dibujo del modelo, así que lo viejo se come a lo nuevo. Así se perdía
+        // lo que uno pegaba con Ctrl+V en el cuadro donde ya estaba parado.
+        if (id === this.layerId && frame === this.frame) this.emit("frame");
         if (antes) this._histCells("Exponer dibujo", id, antes);
       }
       return ok;
@@ -371,9 +378,14 @@
       const fn = animation.exposures[op];
       if (!ly || typeof fn !== "function") return false;
       const antes = ly.cells.slice();
+      const propioAntes = ly.id === this.layerId ? antes[this.frame - 1] : undefined;
       const ok = fn(ly, ...args);
       if (ok) {
         this.touch(); this.emit("cells");
+        // misma razón que en setCell: si la operación cambió el dibujo del
+        // cuadro donde uno está, la mesa tiene que volver a pintarse
+        if (ly.id === this.layerId && ly.cells[this.frame - 1] !== propioAntes)
+          this.emit("frame");
         this._histCells(ETIQUETAS[op] || "Cambiar exposición", ly.id, antes);
       }
       return ok;

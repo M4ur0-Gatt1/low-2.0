@@ -343,4 +343,14 @@ require("ahora - DZ.colabPresenciaAt < 1000" in APP,
 require("dzColabReproduciendo()" in APP and "filtro.checked && !dzColabReproduciendo()" in APP,
         "la lista de comentarios vuelve a repintarse en cada cuadro y traba la reproduccion")
 
+SHORT = (ROOT / "ui" / "animation" / "shortcuts.js").read_text(encoding="utf-8")
+require('if (id === this.layerId && frame === this.frame) this.emit("frame");' in DOCUMENT,
+        "cambiar el dibujo del cuadro actual dejo de avisar: el volcado con retardo "
+        "escribe el lienzo viejo encima y se pierde lo pegado")
+require("copiarDibujo" in SHORT and "pegarDibujo" in SHORT and "copiarDibujo: () => dzCuadroCopiar()" in APP,
+        "volvieron a existir dos copiar/pegar compitiendo segun si la X-sheet esta montada")
+require("hayRango" in SHORT and "e.shiftKey && clip.range" in SHORT,
+        "se cayo la regla de copiar/pegar: sin rango el dibujo, con rango las celdas, "
+        "Ctrl+Shift+V el reuso")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync y equipo")
