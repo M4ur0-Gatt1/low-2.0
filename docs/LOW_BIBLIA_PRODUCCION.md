@@ -455,7 +455,15 @@ No entran nuevas familias de funciones durante esta etapa.
    tiempo, conducidas por el valor de un canal (el ángulo de un hueso), que
    aportan DIFERENCIAS a la pose. Verificado por `tools/run_smart_bones_tests.js`
    (28) y `tools/check_smart_bones_ui.js`.
-5. Audio, lipsync y sustituciones consolidadas.
+5. ~~Audio, lipsync y sustituciones consolidadas.~~ **Hecho en v4.11.0 y
+   v4.12.0**: XML de FCP7 para Premiere/Resolve/Final Cut con la animación y su
+   audio calzados, y lipsync por amplitud que reparte las bocas de la pieza
+   según el volumen —silencio explícito, sostén mínimo y sólo el cambio, no una
+   clave por cuadro—. Deja claves de sustitución normales: se corrigen a mano
+   desde la X-sheet y entran en Undo como un único paso. **No lee fonemas**: es
+   la primera pasada, que es como se trabaja en producción 2D. Verificado por
+   `tools/run_lipsync_tests.js` (23), `tools/run_premiere_xml_tests.js` (29),
+   `tools/check_lipsync_ui.js` y 8 contratos estáticos.
 6. Cámara y composición verificadas.
 7. Espacios de trabajo desmontables y multimonitor.
 

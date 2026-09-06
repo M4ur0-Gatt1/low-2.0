@@ -271,4 +271,22 @@ require("audioBufferAWav" in PREMIERE and "export_premiere" in MAIN,
 require('data-x="premiere"' in APP and "dzExportPremiere" in APP,
         "el boton de exportar para Premiere no esta en el modal")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")
+LIP = (ROOT / "ui" / "animation" / "lipsync.js").read_text(encoding="utf-8")
+require("lipsyncPorAmplitud" in LIP and "lipsyncPicosDeBuffer" in LIP,
+        "el lipsync por amplitud desaparecio")
+require("if (v < umbral) return 0" in LIP,
+        "el silencio dejo de cerrar la boca: el lipsync se mueve en las pausas")
+require("f - desdeCuadro >= sosten" in LIP,
+        "se cayo el sosten minimo: la boca tiembla un cuadro por forma")
+require("if (elegido !== anterior)" in LIP,
+        "el lipsync volvio a escribir una clave por cuadro: la X-sheet se vuelve ilegible")
+require("for (let f = desde; f <= hasta; f++)" in LIP and "if (v > maximo) maximo = v" in LIP,
+        "la escala dejo de medirse contra el tramo: un grito lejano apaga toda la toma")
+require("applyLipsync" in DOCUMENT and "history.begin(label)" in DOCUMENT,
+        "el lipsync dejo de ser UNA transaccion: Undo lo saca clave por clave")
+require("clearRigSwitchRange" in DOCUMENT,
+        "sin borrado por tramo, rehacer un lipsync mezcla dos sincronizaciones")
+require('id="rigLipGen"' in INDEX and "dzLipGenerar" in APP,
+        "el panel de lipsync no esta montado")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo y lipsync")

@@ -965,6 +965,14 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   });
+  $("#rigLipGen") && ($("#rigLipGen").onclick = () => dzLipGenerar());
+  $("#rigLipClear") && ($("#rigLipClear").onclick = () => dzLipBorrar());
+  ["Umbral", "Sosten"].forEach((k) => {
+    const input = $("#rigLip" + k), out = $("#rigLip" + k + "Val");
+    if (input && out) input.oninput = () => {
+      out.textContent = k === "Umbral" ? (input.value / 100).toFixed(2) : input.value + " cuadros";
+    };
+  });
   $("#rigDialNew") && ($("#rigDialNew").onclick = () => dzDialNuevo());
   $("#rigDialRemove") && ($("#rigDialRemove").onclick = () => dzDialQuitar());
   $("#rigSmartNew") && ($("#rigSmartNew").onclick = () => dzSmartNueva());
@@ -9596,6 +9604,82 @@ function dzRigIKDrag(e, constraintId) {
   gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", preview); document.addEventListener("pointerup", finish); document.addEventListener("pointercancel", cancel);
 }
+/* ══ LIPSYNC POR AMPLITUD ═══════════════════════════════════════════════════
+   Lo que hace: reparte las bocas de la pieza según cuánta voz hay en cada
+   cuadro. Lo que NO hace: distinguir fonemas — para eso hace falta
+   reconocimiento del habla, y LOW no lo tiene. Se dice así en el panel, porque
+   prometer sincronización de fonemas y entregar amplitud es peor que no tenerlo.
+   Deja claves de sustitución comunes, corregibles desde la X-sheet.
+   ═══════════════════════════════════════════════════════════════════════ */
+function dzLipFormas() {
+  const nodo = dzRigSelectedNode(), sc = DZ.doc && DZ.doc.scene;
+  if (!nodo || !sc) return { slotId: null, variantes: [] };
+  const slotId = dzRigSlotDe(nodo);
+  return { slotId, variantes: slotId ? sc.rigVariants(slotId) : [] };
+}
+function dzLipPanelSync() {
+  const caja = $("#rigLipFormas"), estado = $("#rigLipEstado");
+  if (!caja) return;
+  const { variantes } = dzLipFormas();
+  const pista = DZ.doc && DZ.doc.audio;
+  caja.innerHTML = "";
+  variantes.forEach((v, i) => {
+    const chip = document.createElement("span");
+    chip.className = "rig2-lip-forma";
+    chip.textContent = (i + 1) + ". " + (v.name || v.elementId);
+    chip.title = i === 0 ? "La primera es la boca cerrada (silencio)"
+      : i === variantes.length - 1 ? "La última es la boca más abierta" : "";
+    caja.appendChild(chip);
+  });
+  if (!variantes.length) caja.innerHTML = '<span class="rig2-lip-vacio">Elegí la pieza de la boca: sus dibujos son las formas, de cerrada a abierta.</span>';
+  if (estado) estado.textContent = !pista ? "sin audio"
+    : variantes.length < 2 ? "faltan bocas"
+    : `${variantes.length} bocas · ${pista.name || "audio"}`;
+  const listo = !!pista && variantes.length >= 2;
+  ["rigLipGen", "rigLipClear"].forEach((k) => { const b = $("#" + k); if (b) b.disabled = !listo; });
+}
+function dzLipRango() {
+  const inEl = $("#tlIn"), outEl = $("#tlOut");
+  const desde = Math.max(1, +(inEl && inEl.value) || 1);
+  const pedido = +(outEl && outEl.value) || 0;
+  const ultimo = (DZ.doc && DZ.doc.scene.lastFrame()) || desde;
+  return { desde, hasta: pedido > 0 ? Math.max(desde, pedido) : Math.max(desde, ultimo) };
+}
+function dzLipGenerar() {
+  const { slotId, variantes } = dzLipFormas();
+  const pista = DZ.doc && DZ.doc.audio;
+  if (!slotId || variantes.length < 2) return dzSetStatus("Elegí la pieza de la boca, con dos dibujos o más");
+  if (!pista) return dzSetStatus("Cargá el audio de la toma antes de sincronizar");
+  const fps = Math.max(1, +$("#tlFps").value || DZ.doc.scene.fps || 24);
+  let picos = pista.peaks && pista.peaks.length ? pista.peaks : null;
+  if (!picos && pista.buffer) picos = LOW.animation.lipsyncPicosDeBuffer(pista.buffer, fps);
+  if (!picos || !picos.length) return dzSetStatus("El audio no tiene análisis todavía: volvé a cargarlo");
+  const { desde, hasta } = dzLipRango();
+  // el desfase del audio se respeta: si va corrido, la boca va corrida igual
+  const off = Math.round(pista.offset || 0);
+  const corridos = off ? Array.from({ length: picos.length + Math.max(0, off) },
+    (_, i) => picos[i - off] || 0) : picos;
+  const r = LOW.animation.lipsyncPorAmplitud(corridos, variantes.map((v) => v.id), {
+    umbral: (+$("#rigLipUmbral").value || 8) / 100,
+    sosten: +$("#rigLipSosten").value || 2, desde, hasta,
+  });
+  if (!r.cambios) return dzSetStatus("El audio está en silencio en ese tramo: no hay nada que sincronizar");
+  const puestas = DZ.doc.applyLipsync(slotId, r.keys, "Lipsync de la toma");
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync();
+  if (DZ.xsView) DZ.xsView.render();
+  dzSetStatus(`Lipsync: ${puestas} cambios de boca entre F${desde} y F${hasta} · ` +
+    "corregí lo que haga falta desde la X-sheet · Ctrl+Z lo saca entero");
+}
+function dzLipBorrar() {
+  const { slotId } = dzLipFormas();
+  const { desde, hasta } = dzLipRango();
+  if (!slotId || !DZ.doc || !DZ.doc.clearRigSwitchRange(slotId, desde, hasta))
+    return dzSetStatus("No había claves de boca en ese tramo");
+  dzRigApplyLive(dzRigCur()); dzRigPanelSync();
+  if (DZ.xsView) DZ.xsView.render();
+  dzSetStatus(`Claves de boca borradas entre F${desde} y F${hasta}`);
+}
+
 /* ══ CONTROLES: los diales de cara, manos y ojos (§4.3, último nivel) ═══════
    Un dial con nombre que el animador mueve y que conduce acciones. Por dentro
    es un canal más (`controls/<id>`), así que hereda claves por cuadro, curvas
@@ -10263,6 +10347,7 @@ function dzRigPanelSync() {
   dzMeshPanelSync();          // malla y pesos siguen a la pieza seleccionada
   dzSmartPanelSync();         // y las acciones, al hueso conductor
   dzDialPanelSync();          // y los diales, al cuadro actual
+  dzLipPanelSync();           // y el lipsync, a las bocas de la pieza
   const el = DZ.sel, num = dzRigCur(), nodes = DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : [], current = dzRigSelectedNode();
   $("#rigId").value = current?.id || (el && el.id) || ""; $("#rigCount").textContent = nodes.length; $("#rigFrame").textContent = "F" + num;
   const detected = dzRigDrawableElements().length;

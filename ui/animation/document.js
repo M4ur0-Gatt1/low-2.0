@@ -1326,6 +1326,35 @@
       });
     }
 
+    /** LIPSYNC: todas las claves de boca de una toma, en UNA operación.
+     *  Escribirlas de a una dejaba cien pasos de historial para algo que el
+     *  animador piensa como un solo gesto —«sincronizá esta toma»— y volvía
+     *  imposible descartarlo con un Ctrl+Z si no gustó. */
+    applyLipsync(slotId, keys, label = "Lipsync") {
+      const marcos = Object.keys(keys || {}).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!marcos.length || !this.scene.rig.slots[slotId]) return 0;
+      const enTransaccion = !!this.history && !this.history.transaction;
+      if (enTransaccion) this.history.begin(label);
+      let puestas = 0;
+      for (const f of marcos) if (this.setRigSwitchKey(slotId, f, keys[f])) puestas++;
+      if (enTransaccion) this.history.commit();
+      return puestas;
+    }
+    /** Borra las claves de boca de un tramo: rehacer un lipsync empieza por
+     *  sacar el anterior, o quedan mezcladas dos sincronizaciones distintas. */
+    clearRigSwitchRange(slotId, desde, hasta) {
+      return this._rigChange("Borrar el lipsync del tramo", (rig) => {
+        const sw = (rig.switches || {})[slotId];
+        if (!sw) return false;
+        const a = Math.max(1, Math.round(desde || 1)), b = Math.max(a, Math.round(hasta || a));
+        let algo = false;
+        for (const f of Object.keys(sw.keys).map(Number))
+          if (f >= a && f <= b) { delete sw.keys[f]; algo = true; }
+        if (!Object.keys(sw.keys).length) delete rig.switches[slotId];
+        return algo;
+      });
+    }
+
     deleteRigSwitchKey(slotId, frame) {
       return this._rigChange("Borrar el cambio de dibujo", (rig) => {
         const f = Math.max(1, Math.round(frame)), sw = (rig.switches || {})[slotId];

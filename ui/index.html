@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=4.11.0">
-<link rel="stylesheet" href="design/studio-polish.css?v=4.11.0">
+<link rel="stylesheet" href="app.css?v=4.12.0">
+<link rel="stylesheet" href="design/studio-polish.css?v=4.12.0">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -667,6 +667,19 @@
           <button id="rigToolCut" aria-label="Marcar cortes" title="Marcar cortes en los trazos para separar piezas articulables"><b aria-hidden="true">✂</b><span>Cortes</span></button>
           <button id="rigToolPivot" aria-label="Colocar pivotes" title="Colocar ejes y pivotes sobre las piezas del dibujo"><b aria-hidden="true">⊙</b><span>Pivotes</span></button>
         </div>
+        <section class="rig2-section rig2-lip" data-rig-section="build" aria-label="Lipsync">
+          <div class="rig2-title"><b>Lipsync</b><span id="rigLipEstado">sin audio</span></div>
+          <p class="rig2-hint">Reparte las bocas de la pieza seleccionada según el <b>volumen</b> del audio —de
+             cerrada a abierta, en el orden en que están sus dibujos—. No lee fonemas: es la primera pasada,
+             y después se corrige a mano desde la X-sheet.</p>
+          <div class="rig2-lip-formas" id="rigLipFormas"></div>
+          <label class="rig2-lip-ctl">Umbral<input id="rigLipUmbral" type="range" min="1" max="40" value="8"><output id="rigLipUmbralVal">0.08</output></label>
+          <label class="rig2-lip-ctl">Sostén<input id="rigLipSosten" type="range" min="1" max="8" value="2"><output id="rigLipSostenVal">2 cuadros</output></label>
+          <div class="rig2-lip-acciones">
+            <button id="rigLipGen" title="Generar las claves de boca para el rango In/Out">Generar lipsync</button>
+            <button id="rigLipClear" class="danger" title="Borrar las claves de boca del rango">Borrar</button>
+          </div>
+        </section>
         <section class="rig2-section rig2-dials" data-rig-section="build" aria-label="Controles">
           <div class="rig2-title"><b>Controles</b><span id="rigDialEstado">sin controles</span></div>
           <p class="rig2-hint">Diales con nombre —«boca abierta», «ceja izquierda», «mano cerrada»— para actuar
@@ -1053,60 +1066,61 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=4.11.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=4.12.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=4.11.0"></script>
-<script src="core/pointer-controller.js?v=4.11.0"></script>
-<script src="application/mode-machine.js?v=4.11.0"></script>
-<script src="animation/palette.js?v=4.11.0"></script>
-<script src="animation/coloring.js?v=4.11.0"></script>
-<script src="animation/scene-model.js?v=4.11.0"></script>
-<script src="animation/rig-policy.js?v=4.11.0"></script>
-<script src="rigging/binding.js?v=4.11.0"></script>
-<script src="rigging/rig-input.js?v=4.11.0"></script>
-<script src="rigging/rig-schematic.js?v=4.11.0"></script>
-<script src="animation/exposures.js?v=4.11.0"></script>
-<script src="animation/onion.js?v=4.11.0"></script>
-<script src="animation/mocap.js?v=4.11.0"></script>
-<script src="animation/document.js?v=4.11.0"></script>
-<script src="animation/rig-library.js?v=4.11.0"></script>
-<script src="animation/character-library.js?v=4.11.0"></script>
-<script src="animation/timeline.js?v=4.11.0"></script>
-<script src="animation/xsheet-view.js?v=4.11.0"></script>
-<script src="animation/timeline-view.js?v=4.11.0"></script>
-<script src="animation/level-strip.js?v=4.11.0"></script>
-<script src="animation/function-editor.js?v=4.11.0"></script>
-<script src="animation/premiere-xml.js?v=4.11.0"></script>
-<script src="animation/palette-view.js?v=4.11.0"></script>
-<script src="animation/audio.js?v=4.11.0"></script>
-<script src="animation/shortcuts.js?v=4.11.0"></script>
-<script src="storyboard/shot-model.js?v=4.11.0"></script>
-<script src="storyboard/stage-view.js?v=4.11.0"></script>
-<script src="storyboard/board-view.js?v=4.11.0"></script>
-<script src="animation/model-tests.js?v=4.11.0"></script>
-<script src="animation/xsheet.js?v=4.11.0"></script>
-<script src="animation/playback.js?v=4.11.0"></script>
-<script src="animation/camera.js?v=4.11.0"></script>
-<script src="composition/multiplane-model.js?v=4.11.0"></script>
-<script src="composition/controller.js?v=4.11.0"></script>
-<script src="composition/multiplane-view.js?v=4.11.0"></script>
-<script src="drawing/stabilization.js?v=4.11.0"></script>
-<script src="drawing/selection.js?v=4.11.0"></script>
-<script src="drawing/transforms.js?v=4.11.0"></script>
-<script src="drawing/pointer-input.js?v=4.11.0"></script>
-<script src="drawing/brushes.js?v=4.11.0"></script>
-<script src="drawing/stroke-engine.js?v=4.11.0"></script>
-<script src="drawing/brush-engine-pro.js?v=4.11.0"></script>
-<script src="drawing/brush-studio.js?v=4.11.0"></script>
-<script src="collaboration/session.js?v=4.11.0"></script>
-<script src="workspace/panels.js?v=4.11.0"></script>
-<script src="workspace/workspaces.js?v=4.11.0"></script>
-<script src="workspace/windows.js?v=4.11.0"></script>
-<script src="workspace/layouts.js?v=4.11.0"></script>
-<script src="workspace/recovery.js?v=4.11.0"></script>
-<script src="ai/commands.js?v=4.11.0"></script>
-<script src="ai/task-runner.js?v=4.11.0"></script>
-<script src="ai/recovery.js?v=4.11.0"></script>
-<script src="app.js?v=4.11.0"></script>
+<script src="core/history.js?v=4.12.0"></script>
+<script src="core/pointer-controller.js?v=4.12.0"></script>
+<script src="application/mode-machine.js?v=4.12.0"></script>
+<script src="animation/palette.js?v=4.12.0"></script>
+<script src="animation/coloring.js?v=4.12.0"></script>
+<script src="animation/scene-model.js?v=4.12.0"></script>
+<script src="animation/rig-policy.js?v=4.12.0"></script>
+<script src="rigging/binding.js?v=4.12.0"></script>
+<script src="rigging/rig-input.js?v=4.12.0"></script>
+<script src="rigging/rig-schematic.js?v=4.12.0"></script>
+<script src="animation/exposures.js?v=4.12.0"></script>
+<script src="animation/onion.js?v=4.12.0"></script>
+<script src="animation/mocap.js?v=4.12.0"></script>
+<script src="animation/document.js?v=4.12.0"></script>
+<script src="animation/rig-library.js?v=4.12.0"></script>
+<script src="animation/character-library.js?v=4.12.0"></script>
+<script src="animation/timeline.js?v=4.12.0"></script>
+<script src="animation/xsheet-view.js?v=4.12.0"></script>
+<script src="animation/timeline-view.js?v=4.12.0"></script>
+<script src="animation/level-strip.js?v=4.12.0"></script>
+<script src="animation/function-editor.js?v=4.12.0"></script>
+<script src="animation/premiere-xml.js?v=4.12.0"></script>
+<script src="animation/lipsync.js?v=4.12.0"></script>
+<script src="animation/palette-view.js?v=4.12.0"></script>
+<script src="animation/audio.js?v=4.12.0"></script>
+<script src="animation/shortcuts.js?v=4.12.0"></script>
+<script src="storyboard/shot-model.js?v=4.12.0"></script>
+<script src="storyboard/stage-view.js?v=4.12.0"></script>
+<script src="storyboard/board-view.js?v=4.12.0"></script>
+<script src="animation/model-tests.js?v=4.12.0"></script>
+<script src="animation/xsheet.js?v=4.12.0"></script>
+<script src="animation/playback.js?v=4.12.0"></script>
+<script src="animation/camera.js?v=4.12.0"></script>
+<script src="composition/multiplane-model.js?v=4.12.0"></script>
+<script src="composition/controller.js?v=4.12.0"></script>
+<script src="composition/multiplane-view.js?v=4.12.0"></script>
+<script src="drawing/stabilization.js?v=4.12.0"></script>
+<script src="drawing/selection.js?v=4.12.0"></script>
+<script src="drawing/transforms.js?v=4.12.0"></script>
+<script src="drawing/pointer-input.js?v=4.12.0"></script>
+<script src="drawing/brushes.js?v=4.12.0"></script>
+<script src="drawing/stroke-engine.js?v=4.12.0"></script>
+<script src="drawing/brush-engine-pro.js?v=4.12.0"></script>
+<script src="drawing/brush-studio.js?v=4.12.0"></script>
+<script src="collaboration/session.js?v=4.12.0"></script>
+<script src="workspace/panels.js?v=4.12.0"></script>
+<script src="workspace/workspaces.js?v=4.12.0"></script>
+<script src="workspace/windows.js?v=4.12.0"></script>
+<script src="workspace/layouts.js?v=4.12.0"></script>
+<script src="workspace/recovery.js?v=4.12.0"></script>
+<script src="ai/commands.js?v=4.12.0"></script>
+<script src="ai/task-runner.js?v=4.12.0"></script>
+<script src="ai/recovery.js?v=4.12.0"></script>
+<script src="app.js?v=4.12.0"></script>
 </body>
 </html>
