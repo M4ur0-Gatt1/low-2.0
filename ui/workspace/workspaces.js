@@ -45,6 +45,8 @@
       allowedDocks: ["left", "right", "bottom"] },
     storyboard: { label: "Storyboard", element: "#dzStoryboard", externalizable: true,
       allowedDocks: ["left", "right", "bottom"] },
+    colab:      { label: "Equipo", element: "#dzColab",
+      allowedDocks: ["left", "right", "bottom"] },
     fn:         { label: "Editor de funciones", element: "#dzFnEditor", externalizable: true,
       allowedDocks: ["bottom", "left", "right"] },
     color:      { label: "Paleta", element: "#dzPalette", owner: "layers", allowedDocks: ["left", "right"] },

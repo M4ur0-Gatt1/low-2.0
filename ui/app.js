@@ -12597,6 +12597,10 @@ async function dzWindowPanelSet(id, show) {
     if (show) await dzMocapOpen(); else node.hidden = true;
   } else if (id === "storyboard") {
     if (show) await dzSbMount(); else node.hidden = true;
+  } else if (id === "colab") {
+    if (show) dzColabInit();
+    node.hidden = !show;
+    DZ.panelDock?.update?.();
   } else if (id === "multiplane") {
     // La mesa multiplano NO es un panel que se muestra: es una superficie que
     // se monta sobre el lienzo. Sacarle `hidden` sin montarla dejaba una capa
@@ -15781,8 +15785,9 @@ function dzPanelDockSetup() {
     const panelKind = panel.id === "dzLevelStrip" ? "levelstrip"
       : panel.id === "dzOnionPanel" ? "onion"
       : panel.id === "dzRigPanel" ? "rig"
-      : panel.id === "dzMocapPanel" ? "mocap" : "xsheet";
-    if (panelKind !== "mocap") {
+      : panel.id === "dzMocapPanel" ? "mocap"
+      : panel.id === "dzColab" ? "colab" : "xsheet";
+    if (panelKind !== "mocap" && panelKind !== "colab") {
       external.onclick = e => { e.stopPropagation(); dzDetachPanel(panelKind); };
       head.insertBefore(external, head.querySelector(".dz-op-x"));
     }
@@ -15817,7 +15822,8 @@ function dzPanelDockSetup() {
     }).observe(panel);
   };
   for (const [id, headId] of [["dzLevelStrip","dzLsHead"],["dzOnionPanel","dzOpHead"],
-    ["dzXsheet","dzXsHead"],["dzRigPanel","dzRigHead"],["dzMocapPanel","dzMocapHead"]]) {
+    ["dzXsheet","dzXsHead"],["dzRigPanel","dzRigHead"],["dzMocapPanel","dzMocapHead"],
+    ["dzColab","dzColabHead"]]) {
     const panel = $("#" + id), head = $("#" + headId); if (!panel) continue;
     const cfg = saved[id];
     if (cfg && cfg.place === "float") floatPanel(panel, cfg.x || 80, cfg.y || 80, cfg.w || 260, cfg.h || 260);
@@ -16036,6 +16042,18 @@ function dzFnSetVisible(show) {
    ══════════════════════════════════════════════════════════════════════════ */
 const DZ_COLAB_CONF = "low.colab.conf";
 
+/** Huella corta de un texto (FNV-1a). Se guarda esto y no el texto entero:
+ *  comparar niveles guardando su JSON dejaba vivos cientos de kilobytes por
+ *  nivel, para siempre, sólo para saber si algo cambió. */
+function dzHuella(texto) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texto.length; i++) {
+    h ^= texto.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return texto.length + ":" + h.toString(36);
+}
+
 function dzColabPanel() { return $("#dzColab"); }
 
 function dzColabToggle() {
@@ -16044,6 +16062,7 @@ function dzColabToggle() {
   const abrir = p.hidden;
   if (abrir) dzColabInit();
   p.hidden = !abrir;
+  DZ.panelDock?.update?.();          // el muelle se reacomoda con el panel
   LOW.workspace?.panels?.update?.("colab", { visible: abrir });
   dzSetStatus(abrir ? "Panel de equipo abierto" : "Panel de equipo cerrado");
 }
@@ -16061,7 +16080,8 @@ function dzColabInit() {
   const set = (id, v) => { const el = $(id); if (el && v != null) el.value = v; };
   set("#colabUrl", c.url); set("#colabRoom", c.room);
   set("#colabNombre", c.nombre); set("#colabToken", c.token); set("#colabRol", c.rol);
-  $("#colabCerrar").onclick = () => { p.hidden = true; LOW.workspace?.panels?.update?.("colab", { visible: false }); };
+  $("#colabCerrar").onclick = () => { p.hidden = true; DZ.panelDock?.update?.();
+    LOW.workspace?.panels?.update?.("colab", { visible: false }); };
   $("#colabConectar").onclick = () => dzColabConectar();
   $("#colabDesconectar").onclick = () => dzColabDesconectar();
   $("#colabTomar").onclick = () => dzColabTomarNivel();
@@ -16165,16 +16185,21 @@ function dzColabVigilar() {
   DZ.doc.subscribe((doc, motivo) => {
     if (!DZ.colab || DZ.colab.estado !== "listo") return;
     if (motivo === "frame") {
-      dzColabPresencia();
-      // el filtro «solo este cuadro» tiene que seguir a la cabeza lectora: si
-      // sólo se repinta al comentar, uno se para en el cuadro con la nota y la
-      // lista sigue mostrando la del cuadro anterior
-      dzColabComentsRender();
+      // OJO: esto corre una vez POR CUADRO, y en reproduccion son 24 por
+      // segundo. Todo lo que se cuelgue aca se paga en la fluidez del programa
+      // entero — medido: 60 cuadros pasaban de 206 ms a 553 ms conectado.
+      dzColabPresencia();                    // va limitada a una por segundo
+      // La lista de comentarios solo depende del cuadro cuando el filtro
+      // «solo este cuadro» esta puesto. Repintarla siempre costaba 7 ms por
+      // cuadro con apenas cuarenta comentarios, y crece con cada uno nuevo.
+      const filtro = $("#colabSoloCuadro");
+      if (filtro && filtro.checked && !dzColabReproduciendo()) dzColabComentsRender();
       dzColabAvisoNivel();
       return;
     }
     if (motivo !== "content" && motivo !== "cells" && motivo !== "level") return;
     if (DZ.colabAplicando) return;           // esto vino de la red: no rebotarlo
+    if (dzColabReproduciendo()) return;      // reproducir no edita nada
     const ly = doc.layer, lv = doc.level;
     if (!ly && !lv) return;
     clearTimeout(DZ.colabEnvio);
@@ -16182,7 +16207,7 @@ function dzColabVigilar() {
   });
   if (!DZ.colabLatido) {
     // el relé da por ido al que no da señales en 20 s
-    DZ.colabLatido = setInterval(() => dzColabPresencia(), 8000);
+    DZ.colabLatido = setInterval(() => dzColabPresencia(true), 8000);
   }
   dzColabPresencia();
 }
@@ -16193,7 +16218,7 @@ function dzColabEnviarNivel(layerId, levelId) {
   if (t.rol !== "editor" && t.rol !== "owner") return false;
   const snap = DZ.doc.snapshotPara(layerId, levelId);
   if (!snap || (!snap.layers.length && !snap.levels.length)) return false;
-  const clave = String(levelId || layerId || ""), texto = JSON.stringify(snap);
+  const clave = String(levelId || layerId || ""), texto = dzHuella(JSON.stringify(snap));
   // No se manda lo que ya está allá afuera. La bandera `colabAplicando` tapa el
   // rebote inmediato, pero lo recibido vuelve a pasar por el lienzo y sale otra
   // vez un instante después: dos personas quedaban devolviéndose la misma
@@ -16207,9 +16232,22 @@ function dzColabEnviarNivel(layerId, levelId) {
   return true;
 }
 
-function dzColabPresencia() {
+/** ¿Esta corriendo la animacion? Mientras se reproduce no hay ediciones que
+ *  mandar y nadie necesita ver la cabeza lectora del otro moverse cuadro a
+ *  cuadro: es el momento en que MENOS hay que molestar al programa. */
+function dzColabReproduciendo() {
+  return !!(DZ.playback && (DZ.playback.playing || DZ.playback.isPlaying));
+}
+
+/** Donde esta uno. Va LIMITADA: una por segundo alcanza de sobra para que el
+ *  equipo sepa en que cuadro anda cada cual, y sin el limite eran veinticuatro
+ *  mensajes por segundo y por persona atravesando el rele para nada. */
+function dzColabPresencia(forzar) {
   const t = DZ.colab;
   if (!t || t.estado !== "listo" || !DZ.doc) return false;
+  const ahora = Date.now();
+  if (!forzar && DZ.colabPresenciaAt && ahora - DZ.colabPresenciaAt < 1000) return false;
+  DZ.colabPresenciaAt = ahora;
   return t.presencia({ cuadro: DZ.doc.frame || 1, herramienta: DZ.tool || "",
                        capa: (DZ.doc.layer && DZ.doc.layer.name) || "" });
 }
@@ -16221,7 +16259,7 @@ function dzColabAplicar(e) {
   if (!op || op.type !== "snapshot.level" || !DZ.doc) return;
   DZ.colabAplicando = true;                  // no reenviar lo que acabo de recibir
   DZ.colabUltimo = DZ.colabUltimo || {};
-  DZ.colabUltimo[String(op.target || "")] = JSON.stringify(op.payload);
+  DZ.colabUltimo[String(op.target || "")] = dzHuella(JSON.stringify(op.payload));
   try {
     if (DZ.doc.applyRemoteSnapshot(op.payload)) {
       const quien = (DZ.colab && (DZ.colab.actores.find((a) => a.id === op.actorId) || {}).nombre) || "alguien";

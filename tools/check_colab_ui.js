@@ -205,6 +205,24 @@ async function recorrido(puertoRele) {
     deBeto.length=0; await wait(1500);
     const seQuedoQuieto=!deBeto.some(m=>m.t==="op");
 
+    // ── 12bis. Pasar cuadros NO puede inundar el rele ni repintar la lista.
+    // Corria una vez por cuadro: en reproduccion, 24 mensajes por segundo y por
+    // persona, mas el repintado completo de los comentarios. Medido, 60 cuadros
+    // pasaban de 206 ms a 553 ms con solo conectarse.
+    document.querySelector("#colabSoloCuadro").checked=false;
+    document.querySelector("#colabSoloCuadro").dispatchEvent(new Event("change"));
+    let repintados=0;
+    const renderOriginal=window.dzColabComentsRender;
+    window.dzColabComentsRender=function(){ repintados++; return renderOriginal.apply(this,arguments); };
+    deBeto.length=0;
+    const t0=performance.now();
+    for(let f=1;f<=60;f++) DZ.doc.goTo((f%20)+1);
+    const msPasarCuadros=Math.round(performance.now()-t0);
+    await wait(700);
+    window.dzColabComentsRender=renderOriginal;
+    const barrido={presencias:deBeto.filter(m=>m.t==="presence").length,
+      repintados, msPasarCuadros};
+
     // ── 13. desconectar a mano
     document.querySelector("#colabDesconectar").click(); await wait(400);
     const desconectado={colab:!!DZ.colab,
@@ -214,7 +232,7 @@ async function recorrido(puertoRele) {
 
     return {inicial,sinDatos,conectado,conBeto,bloqueado,noPude,comentado,
       enOtroCuadro,enSuCuadro,llegoAlCuadro,comenteYo,detalleRebote,loQueMandoBeto,
-      rectSobrevive,enElDoc,seQuedoQuieto,mandeDibujo,recibiDibujo,sinRebote,desconectado,
+      rectSobrevive,enElDoc,seQuedoQuieto,barrido,mandeDibujo,recibiDibujo,sinRebote,desconectado,
       nivelNombre, errores:(window.__errs||[]).slice(0,3)};
   })()`;
 
@@ -273,6 +291,13 @@ async function recorrido(puertoRele) {
   if (!v.seQuedoQuieto)
     mal("las instantáneas quedan rebotando sin fin entre los dos", v.detalleRebote);
 
+  // El limite es 5 y no 1 porque el latido de fondo y la presencia inicial
+  // pueden caer dentro de la ventana; lo que NO puede pasar es que sean 60.
+  if (v.barrido.presencias > 5)
+    throw Error("REGRESIÓN: pasar cuadros vuelve a inundar el relé de presencia: " + JSON.stringify(v.barrido));
+  if (v.barrido.repintados !== 0)
+    throw Error("REGRESIÓN: la lista de comentarios se repinta en cada cuadro con el filtro apagado: " + JSON.stringify(v.barrido));
+
   if (v.desconectado.colab || v.desconectado.estado !== "sin conectar" || !v.desconectado.vivoOculto)
     mal("desconectar no deja el panel como al principio", v.desconectado);
   if (v.errores?.length) throw Error("REGRESIÓN: excepciones en el panel de equipo: " + v.errores.join(" | "));
@@ -281,6 +306,7 @@ async function recorrido(puertoRele) {
     conectado: v.conectado.estado, gente: v.conBeto.gente, bloqueo: v.bloqueado.aviso,
     comentarios: v.comentado.cantidad, salio: v.mandeDibujo.tipo,
     entro: v.recibiDibujo.entro, historial: v.recibiDibujo.pasosHistorial,
+    barrido: v.barrido,
   }));
   ws.close();
   try { await fetch(endpoint + "/json/close/" + target.id); } catch (_) { /* best effort */ }

@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=4.13.1">
-<link rel="stylesheet" href="design/studio-polish.css?v=4.13.1">
+<link rel="stylesheet" href="app.css?v=4.13.2">
+<link rel="stylesheet" href="design/studio-polish.css?v=4.13.2">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -988,12 +988,13 @@
   <!-- editor de funciones: las curvas del movimiento, hermano de la Timeline -->
   <section class="fn2" id="dzFnEditor" aria-label="Editor de funciones" hidden></section>
   <!-- Trabajo remoto: quien esta, que pieza tiene tomada y que comento -->
-  <section class="colab" id="dzColab" aria-label="Equipo" hidden>
-    <header class="colab-head">
-      <b>Equipo</b>
+  <section class="dz-onionpanel colab" id="dzColab" aria-label="Equipo" hidden>
+    <div class="dz-op-head" id="dzColabHead">
+      <svg class="ico"><use href="#i-share"/></svg>
+      <span class="colab-titulo">EQUIPO</span>
       <span class="colab-estado" id="colabEstado" data-estado="cortado">sin conectar</span>
-      <button class="colab-x" id="colabCerrar" title="Cerrar el panel">✕</button>
-    </header>
+      <span class="dz-op-x" id="colabCerrar" title="Cerrar">×</span>
+    </div>
     <div class="colab-conf" id="colabConf">
       <p class="colab-hint">Se conecta a <b>tu</b> servidor: el rele de
          <code>server/low_relay.py</code> corriendo en tu droplet. No pasa por nadie mas.</p>
@@ -1112,62 +1113,62 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=4.13.1"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=4.13.2"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=4.13.1"></script>
-<script src="core/pointer-controller.js?v=4.13.1"></script>
-<script src="application/mode-machine.js?v=4.13.1"></script>
-<script src="animation/palette.js?v=4.13.1"></script>
-<script src="animation/coloring.js?v=4.13.1"></script>
-<script src="animation/scene-model.js?v=4.13.1"></script>
-<script src="animation/rig-policy.js?v=4.13.1"></script>
-<script src="rigging/binding.js?v=4.13.1"></script>
-<script src="rigging/rig-input.js?v=4.13.1"></script>
-<script src="rigging/rig-schematic.js?v=4.13.1"></script>
-<script src="animation/exposures.js?v=4.13.1"></script>
-<script src="animation/onion.js?v=4.13.1"></script>
-<script src="animation/mocap.js?v=4.13.1"></script>
-<script src="animation/document.js?v=4.13.1"></script>
-<script src="animation/rig-library.js?v=4.13.1"></script>
-<script src="animation/character-library.js?v=4.13.1"></script>
-<script src="animation/timeline.js?v=4.13.1"></script>
-<script src="animation/xsheet-view.js?v=4.13.1"></script>
-<script src="animation/timeline-view.js?v=4.13.1"></script>
-<script src="animation/level-strip.js?v=4.13.1"></script>
-<script src="animation/function-editor.js?v=4.13.1"></script>
-<script src="animation/premiere-xml.js?v=4.13.1"></script>
-<script src="animation/lipsync.js?v=4.13.1"></script>
-<script src="animation/palette-view.js?v=4.13.1"></script>
-<script src="animation/audio.js?v=4.13.1"></script>
-<script src="animation/shortcuts.js?v=4.13.1"></script>
-<script src="storyboard/shot-model.js?v=4.13.1"></script>
-<script src="storyboard/stage-view.js?v=4.13.1"></script>
-<script src="storyboard/board-view.js?v=4.13.1"></script>
-<script src="animation/model-tests.js?v=4.13.1"></script>
-<script src="animation/xsheet.js?v=4.13.1"></script>
-<script src="animation/playback.js?v=4.13.1"></script>
-<script src="animation/camera.js?v=4.13.1"></script>
-<script src="composition/multiplane-model.js?v=4.13.1"></script>
-<script src="composition/controller.js?v=4.13.1"></script>
-<script src="composition/multiplane-view.js?v=4.13.1"></script>
-<script src="drawing/stabilization.js?v=4.13.1"></script>
-<script src="drawing/selection.js?v=4.13.1"></script>
-<script src="drawing/transforms.js?v=4.13.1"></script>
-<script src="drawing/pointer-input.js?v=4.13.1"></script>
-<script src="drawing/brushes.js?v=4.13.1"></script>
-<script src="drawing/stroke-engine.js?v=4.13.1"></script>
-<script src="drawing/brush-engine-pro.js?v=4.13.1"></script>
-<script src="drawing/brush-studio.js?v=4.13.1"></script>
-<script src="collaboration/session.js?v=4.13.1"></script>
-<script src="collaboration/transport.js?v=4.13.1"></script>
-<script src="workspace/panels.js?v=4.13.1"></script>
-<script src="workspace/workspaces.js?v=4.13.1"></script>
-<script src="workspace/windows.js?v=4.13.1"></script>
-<script src="workspace/layouts.js?v=4.13.1"></script>
-<script src="workspace/recovery.js?v=4.13.1"></script>
-<script src="ai/commands.js?v=4.13.1"></script>
-<script src="ai/task-runner.js?v=4.13.1"></script>
-<script src="ai/recovery.js?v=4.13.1"></script>
-<script src="app.js?v=4.13.1"></script>
+<script src="core/history.js?v=4.13.2"></script>
+<script src="core/pointer-controller.js?v=4.13.2"></script>
+<script src="application/mode-machine.js?v=4.13.2"></script>
+<script src="animation/palette.js?v=4.13.2"></script>
+<script src="animation/coloring.js?v=4.13.2"></script>
+<script src="animation/scene-model.js?v=4.13.2"></script>
+<script src="animation/rig-policy.js?v=4.13.2"></script>
+<script src="rigging/binding.js?v=4.13.2"></script>
+<script src="rigging/rig-input.js?v=4.13.2"></script>
+<script src="rigging/rig-schematic.js?v=4.13.2"></script>
+<script src="animation/exposures.js?v=4.13.2"></script>
+<script src="animation/onion.js?v=4.13.2"></script>
+<script src="animation/mocap.js?v=4.13.2"></script>
+<script src="animation/document.js?v=4.13.2"></script>
+<script src="animation/rig-library.js?v=4.13.2"></script>
+<script src="animation/character-library.js?v=4.13.2"></script>
+<script src="animation/timeline.js?v=4.13.2"></script>
+<script src="animation/xsheet-view.js?v=4.13.2"></script>
+<script src="animation/timeline-view.js?v=4.13.2"></script>
+<script src="animation/level-strip.js?v=4.13.2"></script>
+<script src="animation/function-editor.js?v=4.13.2"></script>
+<script src="animation/premiere-xml.js?v=4.13.2"></script>
+<script src="animation/lipsync.js?v=4.13.2"></script>
+<script src="animation/palette-view.js?v=4.13.2"></script>
+<script src="animation/audio.js?v=4.13.2"></script>
+<script src="animation/shortcuts.js?v=4.13.2"></script>
+<script src="storyboard/shot-model.js?v=4.13.2"></script>
+<script src="storyboard/stage-view.js?v=4.13.2"></script>
+<script src="storyboard/board-view.js?v=4.13.2"></script>
+<script src="animation/model-tests.js?v=4.13.2"></script>
+<script src="animation/xsheet.js?v=4.13.2"></script>
+<script src="animation/playback.js?v=4.13.2"></script>
+<script src="animation/camera.js?v=4.13.2"></script>
+<script src="composition/multiplane-model.js?v=4.13.2"></script>
+<script src="composition/controller.js?v=4.13.2"></script>
+<script src="composition/multiplane-view.js?v=4.13.2"></script>
+<script src="drawing/stabilization.js?v=4.13.2"></script>
+<script src="drawing/selection.js?v=4.13.2"></script>
+<script src="drawing/transforms.js?v=4.13.2"></script>
+<script src="drawing/pointer-input.js?v=4.13.2"></script>
+<script src="drawing/brushes.js?v=4.13.2"></script>
+<script src="drawing/stroke-engine.js?v=4.13.2"></script>
+<script src="drawing/brush-engine-pro.js?v=4.13.2"></script>
+<script src="drawing/brush-studio.js?v=4.13.2"></script>
+<script src="collaboration/session.js?v=4.13.2"></script>
+<script src="collaboration/transport.js?v=4.13.2"></script>
+<script src="workspace/panels.js?v=4.13.2"></script>
+<script src="workspace/workspaces.js?v=4.13.2"></script>
+<script src="workspace/windows.js?v=4.13.2"></script>
+<script src="workspace/layouts.js?v=4.13.2"></script>
+<script src="workspace/recovery.js?v=4.13.2"></script>
+<script src="ai/commands.js?v=4.13.2"></script>
+<script src="ai/task-runner.js?v=4.13.2"></script>
+<script src="ai/recovery.js?v=4.13.2"></script>
+<script src="app.js?v=4.13.2"></script>
 </body>
 </html>

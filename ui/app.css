@@ -3376,19 +3376,18 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
    Panel flotante, angosto, del lado derecho: se lo mira de reojo mientras se
    dibuja. Nada de acentos fuertes salvo el aviso de que un nivel es ajeno,
    que es lo unico que hay que ver sin buscarlo. */
-.colab{position:fixed;right:14px;top:120px;width:288px;max-height:calc(100vh - 200px);
-  display:flex;flex-direction:column;z-index:58;background:var(--panel);
-  border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 34px #0007;
-  font-size:12px;overflow:hidden}
-.colab-head{display:flex;align-items:center;gap:8px;padding:8px 10px;
-  border-bottom:1px solid var(--line);background:var(--panel2)}
-.colab-head b{flex:0 0 auto}
-.colab-estado{flex:1;font-size:11px;color:var(--dim)}
+/* El panel es ACOPLABLE como los demas: hereda .dz-onionpanel y se registra en
+   el sistema de muelles. Antes era un flotante con position:fixed clavado sobre
+   el muelle derecho — tapaba los paneles de atras y no habia forma de moverlo
+   ni de acoplarlo, solo cerrarlo. */
+.colab{width:288px;max-height:calc(100% - 72px);display:flex;flex-direction:column;
+  overflow:hidden;font-size:12px}
+.colab-titulo{flex:0 0 auto}
+.colab-estado{flex:1;font-size:10px;font-weight:400;color:var(--dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .colab-estado[data-estado="listo"]{color:#48a06c}
 .colab-estado[data-estado="reintentando"],.colab-estado[data-estado="conectando"]{color:#d99a3a}
 .colab-estado[data-estado="denegado"]{color:var(--red)}
-.colab-x{background:none;border:0;color:var(--dim);cursor:pointer;font-size:13px;padding:0 2px}
-.colab-x:hover{color:var(--fg)}
 .colab-conf,.colab-vivo{padding:10px;overflow:auto;display:flex;flex-direction:column;gap:8px}
 .colab-hint{margin:0;color:var(--dim);font-size:11px;line-height:1.45}
 .colab-hint code{font-size:10px;background:var(--panel2);padding:1px 4px;border-radius:3px}

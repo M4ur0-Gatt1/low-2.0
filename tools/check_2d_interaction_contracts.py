@@ -330,4 +330,17 @@ require('data-act="premiere"' in INDEX and "dzExportPremiereDirecto" in APP,
 require("MP4 · PNG · XML" in INDEX,
         "el menu Archivo vuelve a prometer solo GIF/PNG y esconde el XML")
 
+WS = (ROOT / "ui" / "workspace" / "workspaces.js").read_text(encoding="utf-8")
+require('["dzColab","dzColabHead"]' in APP and 'id="dzColabHead"' in INDEX,
+        "el panel de equipo dejo de ser acoplable: vuelve a taparle los paneles de atras")
+require('colab:      { label: "Equipo"' in WS,
+        "el panel de equipo no figura en el catalogo: no se puede abrir ni cerrar desde Ventana")
+_colab_css = CSS_APP.split(".colab{")[1].split("}")[0] if ".colab{" in CSS_APP else ""
+require("position:fixed" not in _colab_css and "z-index" not in _colab_css,
+        "el panel de equipo volvio a ser un flotante clavado encima del muelle")
+require("ahora - DZ.colabPresenciaAt < 1000" in APP,
+        "se cayo el limite de presencia: pasar cuadros inunda el rele, 24 mensajes por segundo")
+require("dzColabReproduciendo()" in APP and "filtro.checked && !dzColabReproduciendo()" in APP,
+        "la lista de comentarios vuelve a repintarse en cada cuadro y traba la reproduccion")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync y equipo")
