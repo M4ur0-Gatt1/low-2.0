@@ -2779,7 +2779,10 @@ function dzStudioHierarchyInit() {
     tabs = document.createElement("div");
     tabs.id = "dzDocumentTabs"; tabs.className = "dz-document-tabs";
     tabs.setAttribute("role", "tablist"); tabs.setAttribute("aria-label", "Documentos abiertos");
-    options.insertAdjacentElement("afterend", tabs);
+    // las pestañas cuelgan DEBAJO de toda la barra de opciones; insertarlas
+    // junto a #dzToolOpts las metía adentro de la fila desde que las opciones
+    // y los botones de documento comparten una sola línea.
+    (options.closest(".dz-optionsbar") || options).insertAdjacentElement("afterend", tabs);
   }
 
   // Orden funcional de uso: seleccionar, pintar, construir, navegar. La mano

@@ -40,8 +40,18 @@ async function main() {
     const menu=[...document.querySelectorAll('#dzMenubar > .dz-menu')].map(n=>n.dataset.menu);
     const tools=[...document.querySelectorAll('.dz-tools > [data-tool],.dz-tools > #dzShapePicker,.dz-tools > #dzAddText,.dz-tools > #dzAddLine')].map(n=>n.dataset.tool||n.id);
     const tabs=document.querySelector('#dzDocumentTabs'),opts=document.querySelector('#dzToolOpts'),body=document.querySelector('.dz-body');
+    // La cabecera son TRES filas, como en Photoshop: menú, barra de opciones
+    // (herramienta + documento + vista) y pestañas. Cuatro filas se comían
+    // ~40px de lienzo en todas las pantallas.
+    const barra=document.querySelector('.dz-optionsbar'), iconos=document.querySelector('.art-bar-inline');
+    const banda=(n)=>{const r=n.getBoundingClientRect();return {t:Math.round(r.top),b:Math.round(r.bottom)};};
+    const cabecera={filas:[banda(document.querySelector('.dz-menubar')),banda(barra),banda(tabs)],
+      alto:Math.round(tabs.getBoundingClientRect().bottom),
+      opcionesEnUnaFila:!!iconos&&Math.abs(banda(iconos).t-banda(opts).t)<24
+        &&banda(iconos).b<=banda(barra).b+1,
+      pestanasAfuera:!barra.contains(tabs)};
     const tr=tabs.getBoundingClientRect(),orr=opts.getBoundingClientRect(),br=body.getBoundingClientRect();
-    return {count:DZ.documentTabs.length,active:DZ.activeDocumentTab===first,restored,confirmado,cerrado,
+    return {cabecera,count:DZ.documentTabs.length,active:DZ.activeDocumentTab===first,restored,confirmado,cerrado,
       dirty:DZ.documentTabs[0]?.dirty,titleHidden:getComputedStyle(document.querySelector('#dzTitle')).display==='none',
       menu,tools,tabsRole:tabs.getAttribute('role'),between:tr.top>=orr.bottom-1&&tr.bottom<=br.top+1,
       tabButtons:tabs.querySelectorAll('[role="tab"]').length,errors:window.__errs||[]};
@@ -58,6 +68,15 @@ async function main() {
     JSON.stringify(value.menu) === JSON.stringify(expectedMenu) &&
     JSON.stringify(value.tools.slice(0, 9)) === JSON.stringify(primaryTools) &&
     value.tabsRole === "tablist" && value.between && value.tabButtons === 1 && !errors.length && !value.errors.length;
+  const c = value?.cabecera;
+  if (!c?.opcionesEnUnaFila)
+    throw Error("REGRESIÓN: la barra de iconos volvió a ocupar una fila propia: " + JSON.stringify(c));
+  if (!c.pestanasAfuera)
+    throw Error("REGRESIÓN: las pestañas quedaron adentro de la barra de opciones: " + JSON.stringify(c));
+  if (c.filas.some((f, i) => i && f.t < c.filas[i - 1].b - 1))
+    throw Error("REGRESIÓN: las filas de la cabecera se superponen: " + JSON.stringify(c.filas));
+  if (c.alto > 115)
+    throw Error("REGRESIÓN: la cabecera volvió a crecer (" + c.alto + "px sobre un tope de 115): " + JSON.stringify(c.filas));
   if (!ok) throw Error("REGRESIÓN documentos/jerarquía: " + JSON.stringify({ value, errors }));
   console.log("E2E DOCUMENTOS OK", JSON.stringify(value));
   ws.close(); try { await fetch(endpoint + "/json/close/" + target.id); } catch (_) { /* cierre best effort */ }

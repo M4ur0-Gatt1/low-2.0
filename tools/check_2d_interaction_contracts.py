@@ -216,4 +216,12 @@ require("recordRigAction" in DOCUMENT and "createRigAction" in DOCUMENT,
 require('id="rigSmartNew"' in INDEX and "dzSmartPanelSync" in APP,
         "el panel de Smart Bones no esta montado")
 
+require('class="dz-optionsbar"' in INDEX and "art-bar-inline" in INDEX,
+        "la barra de iconos volvio a ser una fila aparte de las opciones de herramienta")
+require(INDEX.count('id="dzToolOpts"') == 1 and
+        INDEX.index('id="dzToolOpts"') > INDEX.index('class="dz-optionsbar"'),
+        "las opciones de herramienta salieron de la barra unica")
+require('closest(".dz-optionsbar")' in APP,
+        "las pestanas de documento vuelven a insertarse dentro de la barra de opciones")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")

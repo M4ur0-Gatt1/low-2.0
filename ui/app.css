@@ -3213,6 +3213,32 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   border-color:var(--line2); backdrop-filter:blur(16px);
 }
 #designView .art-menubar { min-height:36px; padding-inline:12px; gap:2px; }
+/* BARRA DE OPCIONES: una sola fila para lo que antes eran dos.
+   Photoshop resuelve el mismo contenido en tres filas —menú, opciones y
+   pestañas— y acá eran cuatro: la barra de iconos vivía aparte de las opciones
+   de herramienta y se comía 48px de lienzo en todas las pantallas. */
+#designView .dz-optionsbar { flex:none; display:flex; align-items:center; gap:8px;
+  min-height:36px; padding:0 10px; background:var(--panel);
+  border-bottom:1px solid var(--line); }
+#designView .dz-optionsbar .dz-toolopts { flex:1 1 auto; min-width:0; height:auto;
+  padding:0; border:0; background:transparent; overflow:hidden; white-space:nowrap; }
+/* Lo que se recorta cuando falta ancho es el TEXTO DE AYUDA, nunca un control:
+   una barra que esconde el color o el grosor detrás de un scroll no sirve. */
+#designView .dz-optionsbar .dz-toolopts > * { flex:none; }
+#designView .dz-optionsbar .dz-toolopts .dz-hint { flex:1 1 auto; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#designView .art-bar.art-bar-inline { flex:none; min-height:0; padding:0; gap:3px;
+  border:0; background:transparent; }
+/* adentro de la fila el separador elástico no separa nada: los botones van
+   juntos, pegados a la derecha */
+#designView .art-bar.art-bar-inline > .flex1 { flex:none; width:6px; }
+#designView .art-bar.art-bar-inline .ibtn { width:28px; height:28px; }
+#designView .art-bar.art-bar-inline .vsep { margin:0 2px; }
+@media (max-width: 1180px) {
+  /* en pantallas angostas el texto de ayuda de la herramienta es lo primero
+     que sobra: los controles no se tocan */
+  #designView .dz-optionsbar .dz-toolopts .dz-hint { display:none; }
+}
 #designView .art-bar { min-height:48px; padding:7px 12px; gap:6px; }
 #designView .art-bar .ibtn,#designView .dz-tools .dz-toolbtn { border-radius:var(--r-md); border-color:transparent; }
 #designView .art-bar .ibtn:hover,#designView .dz-tools .dz-toolbtn:hover { background:var(--panel2); border-color:var(--line); transform:none; }
