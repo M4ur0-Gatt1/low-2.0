@@ -34,6 +34,11 @@
 
   const impl = {
     log_js: m => console.log("[js→py]", m),
+    export_premiere: async (path, frames, xml, wav, name) => {
+      window.__premiere = { path, frames: (frames || []).length, xml, wav: !!wav, name };
+      return { path: "C:\\mock\\export\\" + name + "_premiere", name: name + ".xml",
+        frames: (frames || []).length, audio: !!wav };
+    },
     crash_report: async (data) => {
       // el mock imita la lista blanca del puente: si el informe filtra algo
       // privado, la prueba tiene que poder verlo

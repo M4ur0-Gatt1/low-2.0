@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.10.0"
+LOW_VERSION = "4.11.0"
 
 
 def atomic_write_text(path, content, encoding="utf-8"):
@@ -1109,6 +1109,29 @@ class Api:
             f.write_text(json.dumps(sc, ensure_ascii=False, indent=1), encoding="utf-8")
         except (OSError, ValueError, TypeError) as e:
             log(f"shift_scene fallo: {e}")
+
+    def export_premiere(s, path, frames_png, xml, wav_b64=None, name="secuencia"):
+        """Escribe la carpeta que se importa en Premiere: los cuadros, el audio
+        y el XML, TODO junto. Que vivan en la misma carpeta es lo que evita el
+        cartel de «archivo perdido» pidiendo relinkear cuadro por cuadro."""
+        p = Path(path)
+        limpio = re.sub(r"[^\w.-]+", "_", str(name or "secuencia")).strip("_") or "secuencia"
+        outdir = p.parent / "export" / (limpio + "_premiere")
+        try:
+            outdir.mkdir(parents=True, exist_ok=True)
+            for i, du in enumerate(frames_png or []):
+                b64 = du.split(",", 1)[1] if "," in du else du
+                (outdir / f"{limpio}_{i + 1:04d}.png").write_bytes(base64.b64decode(b64))
+            if wav_b64:
+                cru = wav_b64.split(",", 1)[1] if "," in wav_b64 else wav_b64
+                (outdir / "audio.wav").write_bytes(base64.b64decode(cru))
+            atomic_write_text(outdir / (limpio + ".xml"), xml or "")
+        except (OSError, ValueError, TypeError) as e:
+            log(f"export_premiere: {e}")
+            return {"error": str(e)}
+        s._push("ws", {"ws": s.ws, "tree": s._tree(), "branch": s._git_branch()})
+        return {"path": str(outdir), "name": limpio + ".xml",
+                "frames": len(frames_png or []), "audio": bool(wav_b64)}
 
     def export_anim(s, path, frames_png, fps=12, kind="gif"):
         """Exporta la animación: el frontend rasteriza cada cuadro a PNG dataURL

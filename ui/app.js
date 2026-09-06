@@ -7769,6 +7769,7 @@ function dzExportModal() {
       <button class="ghost" data-x="gif">GIF animado</button>
       <button class="ghost" data-x="png">Secuencia PNG</button>
       <button class="ghost" data-x="sheet">Spritesheet</button>
+      <button class="ghost" data-x="premiere" title="Cuadros + audio + XML: se importa en Premiere, Resolve o Final Cut ya sincronizado">XML para Premiere</button>
       <button class="ghost" id="mCancel">Cancelar</button>
     </div>`);
   $("#mCancel").onclick = closeModal;
@@ -10556,6 +10557,53 @@ function dzExportCuadros() {
   return salida;
 }
 
+/* ── XML para Premiere: la animación y su audio, en sincro, del otro lado ──
+   GIF, PNG y spritesheet son para MIRAR. Cuando el trabajo sigue en montaje
+   hace falta que la animación entre a la línea de tiempo del editor con su
+   audio ya calzado, y eso es un XML de FCP7 (`xmeml`) — lo que Premiere,
+   Resolve y Final Cut importan sin plugins.
+
+   Se escribe TODO junto: cuadros, audio y XML en la misma carpeta. El audio
+   sale como WAV desde el buffer decodificado porque el navegador nunca nos dio
+   el archivo original; escribirlo al lado del XML es lo que evita que el
+   montaje arranque pidiendo relinkear. */
+async function dzExportPremiere(pngs, fps, cuadros) {
+  if (!api || !api.export_premiere)
+    return dzSetStatus("Esta versión de LOW no puede escribir el XML — reiniciá la app");
+  const escena = DZ.doc.scene;
+  const nombre = (escena.name || "secuencia").replace(/[^\w.-]+/g, "_") || "secuencia";
+  const archivos = pngs.map((_, i) => `${nombre}_${String(i + 1).padStart(4, "0")}.png`);
+  const pista = DZ.doc.audio;
+  let audio = null, wav = null;
+  if (pista && pista.buffer && LOW.animation.audioBufferAWav) {
+    const crudo = LOW.animation.audioBufferAWav(pista.buffer);
+    if (crudo) {
+      wav = dzBytesABase64(crudo);
+      audio = { file: "audio.wav", offsetFrames: pista.offset || 0,
+        durationFrames: Math.max(1, Math.round(pista.duracionFrames || pngs.length)) };
+    }
+  }
+  const xml = LOW.animation.premiereXML({
+    name: escena.name || "LOW", fps, width: escena.width, height: escena.height,
+    frames: archivos, audio,
+  });
+  dzSetStatus("Escribiendo la carpeta para Premiere…");
+  const r = await api.export_premiere(DZ.path, pngs, xml, wav, nombre);
+  if (!r || r.error) return dzSetStatus("No pude escribir el XML: " + ((r && r.error) || ""));
+  dzSetStatus(`XML listo en ${r.path} · ${r.frames} cuadros a ${fps} fps` +
+    (r.audio ? " con audio" : " sin audio (la escena no tiene ninguno cargado)") +
+    " · importalo desde Archivo → Importar de Premiere");
+  return true;
+}
+/** Bytes a base64 sin pasar por un blob: el puente recibe texto. */
+function dzBytesABase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binario = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    binario += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(binario);
+}
+
 async function dzDoExportDoc(kind) {
   dzDocCommit();
   const cuadros = dzExportCuadros();
@@ -10576,6 +10624,7 @@ async function dzDoExportDoc(kind) {
   if (!pngs.length) return dzSetStatus("No pude rasterizar ning\u00fan cuadro");
   const fps = Math.max(1, Math.min(60, +$("#tlFps").value || DZ.doc.scene.fps || 12));
   if (kind === "sheet") return dzExportSpritesheet(pngs, fps);
+  if (kind === "premiere") return dzExportPremiere(pngs, fps, cuadros);
   dzSetStatus({ mp4: "Codificando MP4 con ffmpeg\u2026", webm: "Codificando WebM\u2026",
                 gif: "Armando el GIF\u2026" }[kind] || "Guardando la secuencia\u2026");
   const r = await api.export_anim(DZ.path, pngs, fps, kind);

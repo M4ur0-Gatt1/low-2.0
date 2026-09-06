@@ -261,4 +261,14 @@ require('id="rigDialNew"' in INDEX and "dzDialPanelSync" in APP,
 require('startsWith("controls/")' in FN,
         "el filtro por seleccion vuelve a esconder los diales del editor de curvas")
 
+PREMIERE = (ROOT / "ui" / "animation" / "premiere-xml.js").read_text(encoding="utf-8")
+require("xmeml" in PREMIERE and "premiereXML" in PREMIERE,
+        "el exportador de XML para Premiere desaparecio")
+require("Math.round(f), ntsc" in PREMIERE,
+        "el timebase NTSC volvio a escribirse mal: la secuencia se desfasa")
+require("audioBufferAWav" in PREMIERE and "export_premiere" in MAIN,
+        "el audio dejo de escribirse junto al XML: el montaje arranca pidiendo relinkear")
+require('data-x="premiere"' in APP and "dzExportPremiere" in APP,
+        "el boton de exportar para Premiere no esta en el modal")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")
