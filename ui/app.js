@@ -7858,19 +7858,22 @@ async function dzPersist() {
 }
 
 async function dzGoFrame(i) {
-  if (!DZ.anim || !DZ.anim.frames[i]) return;
-  // Modelo nuevo (LowDoc): navegar es cambiar de frame EN MEMORIA, no abrir
-  // archivos. Si seguimos abriendo .svg del disco, el modelo y el lienzo se
-  // desincronizan (el viejo índice de archivo no conoce los holds).
+  // Con documento abierto, navegar es del DOCUMENTO. Antes esto exigía dos
+  // cosas del modo viejo —que existiera `DZ.anim` y que su lista de archivos
+  // tuviera el cuadro— y `DZ.anim.frames` queda vacía a propósito cuando hay
+  // documento (ver dzTimelineRefresh). Resultado: los clicks en los chips de
+  // la barra de cuadros no movían nada. La lista de archivos sólo manda en el
+  // modo viejo, sin documento.
   if (DZ.doc) {
     dzDocCommit();               // lo que esté en el lienzo, adentro
-    DZ.anim.idx = i;             // la barra vieja queda en sync visual
+    if (DZ.anim) DZ.anim.idx = i;   // la barra vieja queda en sync visual
     DZ.doc.goTo(i + 1);          // 1-based; el subscribe repinta canvas + onion
     dzTimelineReveal();
     if (DZ.rigMode) { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); }
     dzCamOverlay();
     return;
   }
+  if (!DZ.anim || !DZ.anim.frames[i]) return;
   await dzPersist();                             // el papel cebolla necesita el disco al día
   await openDesign(DZ.anim.frames[i]);
   // openDesign no conoce la animación: restaurar la barra y el estado
@@ -12461,6 +12464,7 @@ function dzMenuAction(act) {
   if (act === "informefallo") return dzCrashReportManual();
   const A = {
     storyboard: dzStoryboardToggle,
+    colab: dzColabToggle,
     nuevo: dzDocumentNew,
     "escena-abrir": dzSceneOpen,
     documento: dzDocModal, guardar: () => DZ.doc ? dzSceneSave(false) : dzSave(),
@@ -15985,6 +15989,339 @@ function dzFnSetVisible(show) {
   panel.hidden = !show;
   if (show) dzFnMount();
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   EQUIPO — trabajo remoto sobre el mismo proyecto
+
+   Conecta con el relé propio (`server/low_relay.py`). Lo que se comparte:
+
+     · QUIÉN ESTÁ y en qué cuadro y con qué herramienta.
+     · QUÉ PIEZA tiene tomada cada uno. Los bloqueos los arbitra el servidor.
+     · LO QUE SE DIBUJA, al nivel del NIVEL: cuando cambia algo, sale la
+       instantánea de la capa y su nivel. Es grueso a propósito y por eso van
+       de la mano con los bloqueos: si dos personas editan el MISMO nivel a la
+       vez, la última instantánea gana y alguien pierde trazos. Tomando el
+       nivel eso no pasa, y el panel lo dice con todas las letras.
+     · COMENTARIOS sobre el cuadro.
+
+   Lo que NO comparte: la pantalla. Eso es video en vivo entre navegadores
+   (WebRTC), otra pieza y otro problema; el relé mueve texto.
+
+   Lo remoto NO entra en el historial propio: el Ctrl+Z de uno no puede
+   deshacer el trabajo del que está al lado.
+   ══════════════════════════════════════════════════════════════════════════ */
+const DZ_COLAB_CONF = "low.colab.conf";
+
+function dzColabPanel() { return $("#dzColab"); }
+
+function dzColabToggle() {
+  const p = dzColabPanel();
+  if (!p) return;
+  const abrir = p.hidden;
+  if (abrir) dzColabInit();
+  p.hidden = !abrir;
+  LOW.workspace?.panels?.update?.("colab", { visible: abrir });
+  dzSetStatus(abrir ? "Panel de equipo abierto" : "Panel de equipo cerrado");
+}
+
+function dzColabConfGuardada() {
+  try { return JSON.parse(localStorage.getItem(DZ_COLAB_CONF) || "{}"); }
+  catch (e) { return {}; }
+}
+
+function dzColabInit() {
+  const p = dzColabPanel();
+  if (!p || p.dataset.listo) return;
+  p.dataset.listo = "1";
+  const c = dzColabConfGuardada();
+  const set = (id, v) => { const el = $(id); if (el && v != null) el.value = v; };
+  set("#colabUrl", c.url); set("#colabRoom", c.room);
+  set("#colabNombre", c.nombre); set("#colabToken", c.token); set("#colabRol", c.rol);
+  $("#colabCerrar").onclick = () => { p.hidden = true; LOW.workspace?.panels?.update?.("colab", { visible: false }); };
+  $("#colabConectar").onclick = () => dzColabConectar();
+  $("#colabDesconectar").onclick = () => dzColabDesconectar();
+  $("#colabTomar").onclick = () => dzColabTomarNivel();
+  $("#colabComentar").onclick = () => dzColabEnviarComentario();
+  $("#colabTexto").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); dzColabEnviarComentario(); }
+  });
+  $("#colabSoloCuadro").onchange = () => dzColabComentsRender();
+}
+
+function dzColabEstado(estado, detalle) {
+  const el = $("#colabEstado");
+  if (!el) return;
+  const textos = { cortado: "sin conectar", conectando: "conectando…", listo: "en línea",
+                   reintentando: "reintentando…", denegado: "rechazado" };
+  el.dataset.estado = estado;
+  el.textContent = detalle || textos[estado] || estado;
+  const conectado = estado === "listo";
+  const bd = $("#colabDesconectar"), bc = $("#colabConectar");
+  if (bd) bd.disabled = !DZ.colab;
+  if (bc) bc.disabled = !!DZ.colab;
+  const vivo = $("#colabVivo");
+  if (vivo) vivo.hidden = !conectado;
+}
+
+function dzColabConectar() {
+  if (DZ.colab) return;
+  const url = ($("#colabUrl").value || "").trim();
+  const room = ($("#colabRoom").value || "").trim();
+  const nombre = ($("#colabNombre").value || "").trim();
+  if (!url || !room || !nombre)
+    return dzSetStatus("Para conectarte hacen falta servidor, proyecto y tu nombre");
+  const token = $("#colabToken").value || "";
+  const rol = $("#colabRol").value || "editor";
+  // el id se guarda: si uno vuelve tras un corte tiene que ser el MISMO,
+  // o sus propios bloqueos le quedan tomados por «otra persona»
+  const guardada = dzColabConfGuardada();
+  const id = guardada.id || (nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" +
+             Math.random().toString(36).slice(2, 7));
+  try {
+    localStorage.setItem(DZ_COLAB_CONF, JSON.stringify({ url, room, nombre, token, rol, id }));
+  } catch (e) { /* modo privado: se conecta igual, sólo no recuerda */ }
+
+  const T = LOW.collaboration && LOW.collaboration.RelayTransport;
+  if (!T) return dzSetStatus("Falta el módulo de trabajo remoto");
+  let t;
+  try {
+    t = new T({ url, room, actor: { id, nombre, color: dzColabColor(id) }, rol, token: token || null });
+  } catch (e) { return dzSetStatus("No se pudo conectar: " + e.message); }
+  DZ.colab = t;
+
+  t.on("estado", (e) => dzColabEstado(e.estado));
+  t.on("reintento", (e) => dzColabEstado("reintentando",
+    "reintentando en " + Math.round(e.espera / 1000) + " s"));
+  t.on("denegado", (m) => {
+    dzColabEstado("denegado", m.motivo || "rechazado");
+    dzSetStatus("El servidor rechazó la conexión: " + (m.motivo || ""));
+    DZ.colab = null;
+    dzColabEstado("cortado");
+  });
+  t.on("presencia", () => dzColabGenteRender());
+  t.on("bloqueos", () => { dzColabLocksRender(); dzColabAvisoNivel(); });
+  t.on("comentarios", () => dzColabComentsRender());
+  t.on("comentario", (c) => {
+    dzColabComentsRender();
+    if (c && c.actorId !== t.actorId) dzSetStatus("Comentario de " + (c.nombre || "alguien") +
+      (c.cuadro ? " en el cuadro " + c.cuadro : ""));
+  });
+  t.on("rechazado", (m) => dzSetStatus(m.motivo || "el servidor rechazó un cambio"));
+  t.on("operacion", (e) => dzColabAplicar(e));
+  t.conectar();
+  dzColabEstado("conectando");
+  dzColabVigilar();
+}
+
+function dzColabDesconectar() {
+  if (!DZ.colab) return;
+  DZ.colab.desconectar();
+  DZ.colab = null;
+  if (DZ.colabLatido) { clearInterval(DZ.colabLatido); DZ.colabLatido = null; }
+  dzColabEstado("cortado");
+  dzColabGenteRender(); dzColabLocksRender();
+  dzSetStatus("Desconectado del equipo");
+}
+
+function dzColabColor(id) {
+  const paleta = ["#d2564e", "#d99a3a", "#48a06c", "#4a86c8", "#8d6bbf", "#3f9c9c"];
+  let n = 0;
+  for (let i = 0; i < id.length; i++) n = (n * 31 + id.charCodeAt(i)) % 997;
+  return paleta[n % paleta.length];
+}
+
+/* ── lo que sale ────────────────────────────────────────────────────────── */
+
+/** Se manda la instantánea de la capa y el nivel que se tocaron, agrupada:
+ *  un trazo produce muchos avisos seguidos y no hay por qué mandar veinte
+ *  copias del mismo nivel. */
+function dzColabVigilar() {
+  if (DZ.colabVigilando || !DZ.doc) return;
+  DZ.colabVigilando = true;
+  DZ.doc.subscribe((doc, motivo) => {
+    if (!DZ.colab || DZ.colab.estado !== "listo") return;
+    if (motivo === "frame") {
+      dzColabPresencia();
+      // el filtro «solo este cuadro» tiene que seguir a la cabeza lectora: si
+      // sólo se repinta al comentar, uno se para en el cuadro con la nota y la
+      // lista sigue mostrando la del cuadro anterior
+      dzColabComentsRender();
+      dzColabAvisoNivel();
+      return;
+    }
+    if (motivo !== "content" && motivo !== "cells" && motivo !== "level") return;
+    if (DZ.colabAplicando) return;           // esto vino de la red: no rebotarlo
+    const ly = doc.layer, lv = doc.level;
+    if (!ly && !lv) return;
+    clearTimeout(DZ.colabEnvio);
+    DZ.colabEnvio = setTimeout(() => dzColabEnviarNivel(ly && ly.id, lv && lv.id), 350);
+  });
+  if (!DZ.colabLatido) {
+    // el relé da por ido al que no da señales en 20 s
+    DZ.colabLatido = setInterval(() => dzColabPresencia(), 8000);
+  }
+  dzColabPresencia();
+}
+
+function dzColabEnviarNivel(layerId, levelId) {
+  const t = DZ.colab;
+  if (!t || t.estado !== "listo" || !DZ.doc) return false;
+  if (t.rol !== "editor" && t.rol !== "owner") return false;
+  const snap = DZ.doc.snapshotPara(layerId, levelId);
+  if (!snap || (!snap.layers.length && !snap.levels.length)) return false;
+  const clave = String(levelId || layerId || ""), texto = JSON.stringify(snap);
+  // No se manda lo que ya está allá afuera. La bandera `colabAplicando` tapa el
+  // rebote inmediato, pero lo recibido vuelve a pasar por el lienzo y sale otra
+  // vez un instante después: dos personas quedaban devolviéndose la misma
+  // instantánea sin fin. Comparar el contenido corta ese ida y vuelta de raíz.
+  DZ.colabUltimo = DZ.colabUltimo || {};
+  if (DZ.colabUltimo[clave] === texto) return false;
+  DZ.colabUltimo[clave] = texto;
+  const op = { id: t.actor.id + ":" + (DZ.colabSeq = (DZ.colabSeq || 0) + 1),
+               type: "snapshot.level", target: clave, payload: snap };
+  t.enviarOp(op);
+  return true;
+}
+
+function dzColabPresencia() {
+  const t = DZ.colab;
+  if (!t || t.estado !== "listo" || !DZ.doc) return false;
+  return t.presencia({ cuadro: DZ.doc.frame || 1, herramienta: DZ.tool || "",
+                       capa: (DZ.doc.layer && DZ.doc.layer.name) || "" });
+}
+
+/* ── lo que entra ───────────────────────────────────────────────────────── */
+
+function dzColabAplicar(e) {
+  const op = e && e.op;
+  if (!op || op.type !== "snapshot.level" || !DZ.doc) return;
+  DZ.colabAplicando = true;                  // no reenviar lo que acabo de recibir
+  DZ.colabUltimo = DZ.colabUltimo || {};
+  DZ.colabUltimo[String(op.target || "")] = JSON.stringify(op.payload);
+  try {
+    if (DZ.doc.applyRemoteSnapshot(op.payload)) {
+      const quien = (DZ.colab && (DZ.colab.actores.find((a) => a.id === op.actorId) || {}).nombre) || "alguien";
+      dzSetStatus("Cambio de " + quien);
+    }
+  } finally { setTimeout(() => { DZ.colabAplicando = false; }, 0); }
+}
+
+/* ── bloqueos ───────────────────────────────────────────────────────────── */
+
+function dzColabRecursoNivel(levelId) { return "nivel:" + levelId; }
+
+async function dzColabTomarNivel() {
+  const t = DZ.colab;
+  if (!t || t.estado !== "listo" || !DZ.doc) return;
+  const lv = DZ.doc.level;
+  if (!lv) return dzSetStatus("No hay nivel seleccionado");
+  const recurso = dzColabRecursoNivel(lv.id);
+  const mio = t.bloqueos[recurso];
+  if (mio && mio.actorId === t.actorId) { t.soltar(recurso); return dzSetStatus("Soltaste «" + lv.name + "»"); }
+  const r = await t.bloquear(recurso, 600);
+  if (r.ok) dzSetStatus("Tomaste «" + lv.name + "»: nadie más lo edita mientras tanto");
+  else if (r.sinRed) dzSetStatus("Sin conexión: no se pudo tomar el nivel");
+  else dzSetStatus("«" + lv.name + "» lo tiene " + (r.de || "otra persona"));
+}
+
+/** Aviso visible cuando uno está parado sobre un nivel que tomó otro. No se
+ *  bloquea el dibujo —eso enfurece a cualquiera que esté probando algo—, se
+ *  avisa: el que sigue igual sabe que su instantánea puede perder. */
+function dzColabAvisoNivel() {
+  const t = DZ.colab, aviso = $("#colabAvisoNivel");
+  const lv = DZ.doc && DZ.doc.level;
+  const b = t && lv ? t.bloqueadaPorOtro(dzColabRecursoNivel(lv.id)) : null;
+  document.body.classList.toggle("colab-nivel-ajeno", !!b);
+  if (aviso) aviso.textContent = b ? "«" + lv.name + "» lo está editando " + (b.nombre || "otro") : "";
+}
+
+/* ── pintado del panel ──────────────────────────────────────────────────── */
+
+function dzColabGenteRender() {
+  const ul = $("#colabGente"), t = DZ.colab;
+  if (!ul) return;
+  const gente = (t && t.actores) || [];
+  ul.innerHTML = "";
+  if (!gente.length) { ul.innerHTML = '<li class="colab-vacio">nadie más por ahora</li>'; return; }
+  gente.forEach((a) => {
+    const li = document.createElement("li");
+    const yo = t && a.id === t.actorId;
+    li.innerHTML = '<i class="colab-punto"></i><b></b><span></span>';
+    li.querySelector(".colab-punto").style.background = a.color || dzColabColor(a.id || "");
+    li.querySelector("b").textContent = (a.nombre || a.id) + (yo ? " (vos)" : "");
+    const donde = [];
+    if (a.cuadro) donde.push("cuadro " + a.cuadro);
+    if (a.herramienta) donde.push(a.herramienta);
+    if (a.rol && a.rol !== "editor") donde.push(a.rol);
+    li.querySelector("span").textContent = donde.join(" · ");
+    ul.appendChild(li);
+  });
+}
+
+function dzColabLocksRender() {
+  const ul = $("#colabLocks"), t = DZ.colab;
+  if (!ul) return;
+  const bl = (t && t.bloqueos) || {};
+  const claves = Object.keys(bl);
+  ul.innerHTML = "";
+  if (!claves.length) { ul.innerHTML = '<li class="colab-vacio">ninguna pieza tomada</li>'; return; }
+  claves.forEach((k) => {
+    const b = bl[k], mio = t && b.actorId === t.actorId;
+    const nivel = DZ.doc && DZ.doc.scene.level(k.replace(/^nivel:/, ""));
+    const li = document.createElement("li");
+    li.className = mio ? "colab-lock-mio" : "";
+    li.innerHTML = "<b></b><span></span>";
+    li.querySelector("b").textContent = nivel ? nivel.name : k;
+    li.querySelector("span").textContent = mio ? "vos" : (b.nombre || b.actorId);
+    if (mio) {
+      const x = document.createElement("button");
+      x.textContent = "soltar";
+      x.onclick = () => { t.soltar(k); };
+      li.appendChild(x);
+    }
+    ul.appendChild(li);
+  });
+}
+
+function dzColabComentsRender() {
+  const ul = $("#colabComents"), t = DZ.colab;
+  if (!ul) return;
+  const solo = $("#colabSoloCuadro") && $("#colabSoloCuadro").checked;
+  const cuadro = (DZ.doc && DZ.doc.frame) || 0;
+  let lista = (t && t.comentarios) || [];
+  if (solo) lista = lista.filter((c) => Number(c.cuadro) === cuadro);
+  ul.innerHTML = "";
+  if (!lista.length) {
+    ul.innerHTML = '<li class="colab-vacio">' + (solo ? "nada sobre este cuadro" : "sin comentarios") + "</li>";
+    return;
+  }
+  lista.slice(-60).forEach((c) => {
+    const li = document.createElement("li");
+    li.className = c.resuelto ? "colab-com-ok" : "";
+    li.innerHTML = "<header><b></b><i></i></header><p></p>";
+    li.querySelector("b").textContent = c.nombre || c.actorId || "";
+    li.querySelector("i").textContent = c.cuadro ? "cuadro " + c.cuadro : "";
+    li.querySelector("p").textContent = c.texto || "";
+    // dzGoFrame es 0-based sobre la barra de cuadros; el comentario guarda el
+    // número de cuadro tal como lo ve el animador. Sin el -1, clickear
+    // «cuadro 7» aterriza en el 8.
+    if (c.cuadro) li.querySelector("i").onclick = () => dzGoFrame(Number(c.cuadro) - 1);
+    const b = document.createElement("button");
+    b.textContent = c.resuelto ? "reabrir" : "resolver";
+    b.onclick = () => { if (t) t.resolverComentario(c.id, !c.resuelto); };
+    li.querySelector("header").appendChild(b);
+    ul.appendChild(li);
+  });
+  ul.scrollTop = ul.scrollHeight;
+}
+
+function dzColabEnviarComentario() {
+  const t = DZ.colab, campo = $("#colabTexto");
+  if (!t || !campo) return;
+  const c = t.comentar(campo.value, (DZ.doc && DZ.doc.frame) || 0);
+  if (!c) return dzSetStatus(t.estado === "listo" ? "El comentario está vacío" : "Sin conexión");
+  campo.value = "";
+}
+
 function dzFnToggle() {
   const panel = $("#dzFnEditor");
   if (!panel) return;

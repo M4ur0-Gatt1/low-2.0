@@ -466,6 +466,15 @@ No entran nuevas familias de funciones durante esta etapa.
    `tools/check_lipsync_ui.js` y 8 contratos estáticos.
 6. Cámara y composición verificadas.
 7. Espacios de trabajo desmontables y multimonitor.
+8. ~~Trabajo remoto en equipo.~~ **Hecho en v4.13.0**: relé propio
+   (`server/low_relay.py`, stdlib pura, para poner en un droplet) con presencia
+   —quién está y en qué cuadro—, **bloqueos arbitrados por el servidor**,
+   edición repartida por instantánea de nivel y comentarios sobre el cuadro.
+   Lo remoto NO entra en el historial propio. **No incluye pantalla
+   compartida**: eso es WebRTC, otra pieza. Verificado por
+   `tools/check_relay_server.py` (protocolo, con clientes WebSocket reales),
+   `tools/run_collab_transport_tests.js` (34) y `tools/check_colab_ui.js`
+   (LOW contra el servidor de verdad), más 13 contratos estáticos.
 
 #### Prioridad inmediata — video mocap y rotoscopía
 

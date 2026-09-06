@@ -123,6 +123,34 @@
         apply: (_dir, value) => restore(value) });
     }
 
+    /** La instantánea de una capa y su nivel, lista para mandar por la red.
+     *  Es la MISMA forma que usa el historial para rangos y pegado, así que no
+     *  hay un segundo formato que mantener al día. */
+    snapshotPara(layerId, levelId) {
+      return this._snapshot(layerId ? [layerId] : [], levelId ? [levelId] : []);
+    }
+
+    /** Aplica lo que hizo otro. Deliberadamente NO pasa por el historial: el
+     *  Ctrl+Z de uno no puede deshacer el trabajo del que está al lado. Cada
+     *  quien deshace lo suyo, que es lo que espera cualquiera que dibuja. */
+    applyRemoteSnapshot(snap) {
+      if (!snap) return false;
+      let algo = false;
+      for (const item of snap.layers || []) {
+        const ly = this.scene.layer(item.id);
+        if (ly && Array.isArray(item.cells)) { ly.cells = item.cells.slice(); algo = true; }
+      }
+      for (const item of snap.levels || []) {
+        const lv = this.scene.level(item.id);
+        if (!lv || !Array.isArray(item.drawings)) continue;
+        lv.drawings = item.drawings.map((d) => new animation.Drawing(d));
+        algo = true;
+      }
+      if (!algo) return false;
+      this.touch(); this.emit("cells"); this.emit("level"); this.emit("frame");
+      return true;
+    }
+
     _snapshot(layerIds, levelIds) {
       return {
         layers: [...new Set(layerIds || [])].map((id) => this.scene.layer(id)).filter(Boolean)

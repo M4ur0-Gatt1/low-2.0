@@ -1621,6 +1621,37 @@
         T.switchTrack(new animation.LowDoc().scene, 8).every((m) => !m));
     }
 
+    // ── trabajo remoto: la instantanea que viaja por la red ────────────────
+    {
+      const doc = new animation.LowDoc();
+      doc.setHistory(new LOW.core.HistoryManager({ limit: 20 }));
+      const ly = doc.scene.layers[0], lv = doc.scene.level(ly.levelId);
+      doc.writeDrawing("<circle r='5'/>");
+      const snap = doc.snapshotPara(ly.id, lv.id);
+      ok("la instantanea lleva la capa y su nivel",
+        snap.layers.length === 1 && snap.levels.length === 1);
+      ok("y viaja como datos, sin funciones adentro",
+        JSON.parse(JSON.stringify(snap)).levels[0].drawings[0].content === "<circle r='5'/>");
+
+      const otro = new animation.LowDoc();
+      otro.setHistory(new LOW.core.HistoryManager({ limit: 20 }));
+      const pasos = otro.history.undoStack.length;
+      // los ids tienen que coincidir para que la instantanea aterrice: es lo
+      // que garantiza que los dos abrieron el MISMO proyecto
+      const propio = otro.snapshotPara(otro.scene.layers[0].id,
+        otro.scene.level(otro.scene.layers[0].levelId).id);
+      const mezcla = { layers: [{ id: propio.layers[0].id, cells: snap.layers[0].cells.slice() }],
+        levels: [{ id: propio.levels[0].id, drawings: snap.levels[0].drawings }] };
+      ok("lo del otro entra en el documento", otro.applyRemoteSnapshot(mezcla));
+      ok("y el dibujo queda tal cual",
+        (otro.scene.level(otro.scene.layers[0].levelId).drawings[0] || {}).content === "<circle r='5'/>");
+      ok("SIN tocar el historial propio: mi Ctrl+Z no deshace lo del otro",
+        otro.history.undoStack.length === pasos);
+      ok("una instantanea vacia no hace nada", !otro.applyRemoteSnapshot(null));
+      ok("y una de ids desconocidos tampoco",
+        !otro.applyRemoteSnapshot({ layers: [{ id: "no-existe", cells: [1] }], levels: [] }));
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

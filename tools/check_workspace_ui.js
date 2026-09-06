@@ -151,10 +151,25 @@ async function main() {
       filasAntes,filasOcultas,filasRestauradas,seleccionadaSigue,plegadas,compacto,
       documentoIntacto:doc.dirty===sucioAntes&&((doc.history&&doc.history.length)||0)===pasosAntes};
 
+    // 4bis. Clickear un chip de la barra de cuadros mueve la cabeza lectora.
+    // Estuvo muerto: con documento abierto DZ.anim.frames queda vacio y
+    // dzGoFrame salia antes de hacer nada, asi que se veian los chips y
+    // ninguno movia el cuadro. Se navegaba solo por atajos y por la X-sheet.
+    doc.scene.expose(doc.scene.layers[0].id,8,1); await espera(250);
+    dzTlFramesRender(); await espera(250);
+    const chips=[...document.querySelectorAll("#tlFrames .tl-frame")];
+    const cuadroAntes=doc.frame;
+    if(chips[5]) chips[5].click(); await espera(500);
+    // el chip marcado se pregunta por su NUMERO, no por su posicion en una
+    // lista ya filtrada: el render los reemplaza y el indice no es identidad
+    const chipCur=document.querySelector("#tlFrames .tl-frame.cur .tl-n");
+    const navegacion={chips:chips.length, antes:cuadroAntes, despues:doc.frame,
+      marcado:chipCur?chipCur.textContent.trim():""};
+
     // 5. La preferencia sobrevive al remontaje, pero jamás entra en la escena.
     const guardada=JSON.parse(localStorage.getItem("low.timeline.view.v1")||"null");
     const enEscena=JSON.stringify(doc.scene).includes("frameWidth");
-    return {arranque,sincronia,apagado,encendido,vista,
+    return {arranque,sincronia,apagado,encendido,vista,navegacion,
       persistencia:{guardada:!!guardada&&guardada.frameWidth>0,densidad:guardada&&guardada.densidad,enEscena}};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -163,7 +178,7 @@ async function main() {
   const value = result.result?.value || {};
 
   stage("verificar");
-  const { arranque, sincronia, apagado, encendido, vista, persistencia } = value;
+  const { arranque, sincronia, apagado, encendido, vista, navegacion, persistencia } = value;
   if (!arranque || arranque.cantidad < 5 || !arranque.abierto)
     throw Error("REGRESIÓN: el menú Ventana abre sin lista de paneles: " + JSON.stringify(value));
   if (!sincronia || sincronia.timelineReal !== sincronia.timelineMenu || sincronia.paletaReal !== sincronia.paletaMenu)
@@ -172,6 +187,10 @@ async function main() {
     throw Error("REGRESIÓN: cerrar la Timeline deja una de sus superficies en pantalla: " + JSON.stringify(value));
   if (encendido.real !== true || encendido.grilla !== true || encendido.menu !== true)
     throw Error("REGRESIÓN: el menú Ventana no recupera la Timeline completa: " + JSON.stringify(value));
+  if (!navegacion || navegacion.chips < 6 || navegacion.despues !== 6)
+    throw Error("REGRESIÓN: clickear un chip de la barra de cuadros no mueve la cabeza lectora: " + JSON.stringify(navegacion));
+  if (navegacion.marcado !== "6")
+    throw Error("REGRESIÓN: el chip marcado no es el del cuadro actual: " + JSON.stringify(navegacion));
   if (!(vista.acercado > vista.anchoInicial) || !(vista.alejado < vista.acercado) || vista.trasRueda !== vista.alejado)
     throw Error("REGRESIÓN: Ctrl+rueda no escala el tiempo o la rueda sola lo escala: " + JSON.stringify(vista));
   if (!(vista.altoCambiado > 0) || vista.altoCambiado === vista.altoInicial)

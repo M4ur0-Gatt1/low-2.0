@@ -3371,3 +3371,60 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .sb2-thumb { width: 46px; height: 26px; object-fit: cover; border-radius: 3px;
   border: 1px solid var(--line, #2a2d35); background: #0e1014; }
 .sb2-board { grid-template-columns: 20px auto 1fr auto; }
+
+/* ══ EQUIPO — trabajo remoto ══════════════════════════════════════════════
+   Panel flotante, angosto, del lado derecho: se lo mira de reojo mientras se
+   dibuja. Nada de acentos fuertes salvo el aviso de que un nivel es ajeno,
+   que es lo unico que hay que ver sin buscarlo. */
+.colab{position:fixed;right:14px;top:120px;width:288px;max-height:calc(100vh - 200px);
+  display:flex;flex-direction:column;z-index:58;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 34px #0007;
+  font-size:12px;overflow:hidden}
+.colab-head{display:flex;align-items:center;gap:8px;padding:8px 10px;
+  border-bottom:1px solid var(--line);background:var(--panel2)}
+.colab-head b{flex:0 0 auto}
+.colab-estado{flex:1;font-size:11px;color:var(--dim)}
+.colab-estado[data-estado="listo"]{color:#48a06c}
+.colab-estado[data-estado="reintentando"],.colab-estado[data-estado="conectando"]{color:#d99a3a}
+.colab-estado[data-estado="denegado"]{color:var(--red)}
+.colab-x{background:none;border:0;color:var(--dim);cursor:pointer;font-size:13px;padding:0 2px}
+.colab-x:hover{color:var(--fg)}
+.colab-conf,.colab-vivo{padding:10px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.colab-hint{margin:0;color:var(--dim);font-size:11px;line-height:1.45}
+.colab-hint code{font-size:10px;background:var(--panel2);padding:1px 4px;border-radius:3px}
+.colab-conf label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--dim)}
+.colab-conf input,.colab-conf select{width:100%}
+.colab-acciones{display:flex;gap:6px;margin-top:2px}
+.colab-acciones button{flex:1}
+.colab-aviso:empty{display:none}
+.colab-aviso{margin:0;padding:6px 8px;border-radius:6px;background:#3a2422;
+  border:1px solid var(--red);color:#e9b7b3;font-size:11px;line-height:1.4}
+.colab-bloque{display:flex;flex-direction:column;gap:5px}
+.colab-sub{display:flex;align-items:center;justify-content:space-between;gap:6px;
+  font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.colab-sub button{font-size:10px;padding:2px 7px}
+.colab-solocuadro{display:flex;align-items:center;gap:4px;text-transform:none;letter-spacing:0}
+.colab-gente,.colab-locks,.colab-coments{list-style:none;margin:0;padding:0;
+  display:flex;flex-direction:column;gap:3px}
+.colab-coments{max-height:210px;overflow:auto}
+.colab-gente li,.colab-locks li{display:flex;align-items:center;gap:6px;
+  padding:4px 6px;border-radius:5px;background:var(--panel2)}
+.colab-gente li b,.colab-locks li b{flex:1;font-weight:600;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.colab-gente li span,.colab-locks li span{font-size:10px;color:var(--dim);flex:0 0 auto}
+.colab-punto{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.colab-locks li button{font-size:10px;padding:1px 6px}
+.colab-lock-mio{outline:1px solid var(--line2)}
+.colab-vacio{color:var(--dim);font-size:11px;padding:3px 6px;font-style:italic}
+.colab-coments li{padding:5px 7px;border-radius:5px;background:var(--panel2);
+  display:flex;flex-direction:column;gap:2px}
+.colab-coments li header{display:flex;align-items:center;gap:6px;font-size:10px}
+.colab-coments li header b{flex:0 0 auto}
+.colab-coments li header i{flex:1;color:var(--dim);font-style:normal;cursor:pointer}
+.colab-coments li header i:hover{color:var(--fg);text-decoration:underline}
+.colab-coments li header button{font-size:9px;padding:1px 5px}
+.colab-coments li p{margin:0;line-height:1.4}
+.colab-com-ok{opacity:.55}
+.colab-com-ok p{text-decoration:line-through}
+.colab-nuevo{display:flex;gap:5px}
+.colab-nuevo input{flex:1}

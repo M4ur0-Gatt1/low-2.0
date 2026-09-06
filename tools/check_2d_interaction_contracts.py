@@ -289,4 +289,34 @@ require("clearRigSwitchRange" in DOCUMENT,
 require('id="rigLipGen"' in INDEX and "dzLipGenerar" in APP,
         "el panel de lipsync no esta montado")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo y lipsync")
+TRANS = (ROOT / "ui" / "collaboration" / "transport.js").read_text(encoding="utf-8")
+RELE = (ROOT / "server" / "low_relay.py").read_text(encoding="utf-8")
+require("RelayTransport" in TRANS and "dzColabConectar" in APP,
+        "el transporte del trabajo remoto desaparecio")
+require("this.cola.push(op)" in TRANS,
+        "sin cola, lo que se dibuja sin red se pierde")
+require("this.vistas.add(op.id)" in TRANS,
+        "sin memoria de ids, cada trazo propio se dibuja dos veces al volver del servidor")
+require("ESPERAS = [1000, 2000, 4000, 8000, 15000, 30000]" in TRANS,
+        "se cayo la espera creciente: el cliente ataca al propio droplet")
+require("this.seq = Math.max(this.seq, Number(m.seq) || 0)" in TRANS,
+        "el cliente no toma el numero del servidor: pide la jornada entera en cada reconexion")
+require("desde: this.seq" in TRANS,
+        "sin punto de partida, reconectar se trae todo de nuevo")
+require("def tomar" in RELE and "actual[\"actorId\"] != actor" in RELE,
+        "el servidor dejo de arbitrar los bloqueos: dos personas creen que ganaron")
+require("soltar_todo" in RELE,
+        "los bloqueos del que se desconecta quedan trabados para siempre")
+require("os.replace(tmp, ruta)" in RELE,
+        "el registro de la sala se guarda sin atomicidad: un corte lo deja a medias")
+require('op["actorId"] = c.actorId' in RELE,
+        "el remitente lo pone el cliente: cualquiera puede firmar como otro")
+require("applyRemoteSnapshot" in DOCUMENT and "snapshotPara" in DOCUMENT,
+        "no hay por donde entrar ni salir el dibujo del equipo")
+require("DZ.colabAplicando" in APP and "DZ.colabUltimo[clave] === texto" in APP,
+        "sin el corte por contenido, dos LOW se devuelven la misma instantanea sin fin")
+require("if (DZ.anim) DZ.anim.idx = i;" in APP,
+        "dzGoFrame volvio a exigir la lista de archivos del modo viejo: "
+        "con documento abierto los clicks en los chips no mueven nada")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync y equipo")

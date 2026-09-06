@@ -45,10 +45,12 @@ jobs:
           node tools/run_smart_bones_tests.js
           node tools/run_premiere_xml_tests.js
           node tools/run_lipsync_tests.js
+          node tools/run_collab_transport_tests.js
       - name: Puentes de guardado e importación
         run: |
           python tools/check_multiplane_backend.py
           python tools/check_asset_import_backend.py
+          python tools/check_relay_server.py
       - name: Contratos críticos de interacción 2D
         run: python tools/check_2d_interaction_contracts.py
       - name: Recorridos reales — dibujo, rigging, composición y storyboard
@@ -93,8 +95,9 @@ jobs:
           node tools/check_rig_weights_ui.js
           node tools/check_smart_bones_ui.js
           node tools/check_lipsync_ui.js
+          node tools/check_colab_ui.js
       - name: Validar sintaxis Python
-        run: python -m compileall -q main.py animation_engine providers social tools
+        run: python -m compileall -q main.py animation_engine providers social tools server
 
   release:
     needs: quality
