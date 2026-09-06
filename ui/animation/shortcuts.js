@@ -9,7 +9,8 @@
      ← →            frame anterior / siguiente
      ↑ ↓            dibujo anterior / siguiente (saltea los holds)
      Inicio / Fin   primer / último frame del rango
-     Espacio        reproducir / parar
+     Espacio        MANO: mantener y arrastrar para panear (nunca reproduce)
+     Enter          reproducir / parar (reasignable en Preferencias)
      L              loop
      . ,            alargar / acortar la exposición actual
      Insert         insertar un frame vacío
@@ -100,7 +101,11 @@
         case "ArrowDown":  pb ? pb.stepDrawing(+1) : doc.stepDrawing(+1); break;
         case "Home":       pb ? pb.first() : doc.goTo(1); break;
         case "End":        if (pb) pb.last(); else doc.goTo(doc.scene.lastFrame() || 1); break;
-        case " ":          if (pb) pb.toggle(); break;
+        // La BARRA ESPACIADORA es la mano, siempre y en todos los modos: es el
+        // atajo que uno tiene apretado la mitad del tiempo mientras dibuja, y
+        // si además reproduce, no se puede panear con la animación abierta.
+        // Reproducir vive en el mapa de atajos configurables (Enter por
+        // omisión, reasignable desde Preferencias).
         case "Insert":     doc.apply("insert", doc.frame, 1); break;
         case "Delete": {
           // La mesa manda cuando hay arte o un hueso seleccionado. Este

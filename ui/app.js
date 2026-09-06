@@ -1245,11 +1245,15 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       return;
     }
     // atajos configurables ( Preferencias): una tecla  una acción
-    if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1) {
+    if (!e.ctrlKey && !e.altKey && !e.metaKey) {
       if (!DZ.keyrev) dzKeysLoad();
-      const k = e.key === "=" ? "+" : e.key.toLowerCase();   // = suma sin Shift
-      const act = DZ.keyrev[k];
-      if (act) { e.preventDefault(); dzRunAction(act); }
+      // Además de las teclas sueltas, el mapa admite Enter: hacía falta un
+      // atajo para reproducir que no fuera la barra espaciadora.
+      const k = e.key.length === 1 ? (e.key === "=" ? "+" : e.key.toLowerCase())
+        : (e.key === "Enter" ? "enter" : null);
+      const act = k && DZ.keyrev[k];
+      // con la pluma abierta, Enter cierra el trazado: eso manda
+      if (act && !(k === "enter" && PEN)) { e.preventDefault(); dzRunAction(act); }
     }
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "z") { e.preventDefault(); dzUndo(); }
     if (e.ctrlKey && (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))) { e.preventDefault(); dzRedo(); }
@@ -2660,8 +2664,10 @@ let DZ_TOOLS_DRAWER = null;
 let DZ_TOOLS_FIT = () => {};
 
 function dzToolsBarState() {
-  try { return JSON.parse(localStorage.getItem(DZ_TOOLBAR_KEY) || "null") || { modo: "dock", lado: "left" }; }
-  catch (_) { return { modo: "dock", lado: "left" }; }
+  try {
+    const guardado = JSON.parse(localStorage.getItem(DZ_TOOLBAR_KEY) || "null") || {};
+    return { modo: "dock", lado: "left", fijadas: [], ...guardado };
+  } catch (_) { return { modo: "dock", lado: "left", fijadas: [] }; }
 }
 function dzToolsBarSave(state) {
   try { localStorage.setItem(DZ_TOOLBAR_KEY, JSON.stringify(state)); } catch (_) { /* sin storage */ }
@@ -2675,7 +2681,7 @@ function dzToolsDock(rail, lado) {
   if (lado === "right") body.insertBefore(rail, canvas.nextSibling);
   else body.insertBefore(rail, body.firstChild);
   dzToolsDrawerHide();
-  dzToolsBarSave({ modo: "dock", lado: lado === "right" ? "right" : "left" });
+  dzToolsBarSave({ ...dzToolsBarState(), modo: "dock", lado: lado === "right" ? "right" : "left" });
   DZ_TOOLS_FIT();
 }
 function dzToolsFloat(rail, x, y) {
@@ -2685,7 +2691,7 @@ function dzToolsFloat(rail, x, y) {
   rail.classList.add("dz-tools-float");
   rail.style.left = left + "px"; rail.style.top = top + "px";
   dzToolsDrawerHide();
-  dzToolsBarSave({ modo: "float", x: left, y: top });
+  dzToolsBarSave({ ...dzToolsBarState(), modo: "float", x: left, y: top });
 }
 function dzToolsDrawerHide() {
   if (DZ_TOOLS_DRAWER) DZ_TOOLS_DRAWER.hidden = true;
@@ -2766,6 +2772,32 @@ function dzToolsBarInit(rail, primarias) {
   // mismo evento de resize devuelve el alto viejo y la barra se queda con más
   // herramientas de las que entran.
   let pendiente = 0;
+  // FIJAR: clic derecho sobre una herramienta la ancla al riel o la manda al
+  // cajón. No todos usan lo mismo —hay quien vive con la mano y quien no la
+  // toca nunca— y una lista decidida por el programa siempre le va a quedar mal
+  // a alguien. Lo fijado se respeta antes que cualquier cálculo de espacio.
+  const anclar = (node, alRiel) => {
+    const id = node.dataset.tool || node.id;
+    if (!id) return;
+    const estado = dzToolsBarState();
+    const fijadas = new Set(estado.fijadas || []), ocultas = new Set(estado.ocultas || []);
+    if (alRiel) { fijadas.add(id); ocultas.delete(id); }
+    else { ocultas.add(id); fijadas.delete(id); }
+    dzToolsBarSave({ ...estado, fijadas: [...fijadas], ocultas: [...ocultas] });
+    DZ_TOOLS_FIT();
+    dzSetStatus(alRiel ? "Herramienta fijada en la barra" : "Herramienta movida al cajón «⋯»");
+  };
+  const menuAnclar = (event) => {
+    const node = event.target.closest("[data-tool],#dzShapePicker,#dzAddText,#dzAddLine,.ibtn");
+    if (!node || node.id === "dzToolsMore") return;
+    event.preventDefault();
+    // lo que está en el cajón entra a la barra; lo que está en la barra sale
+    anclar(node, node.parentElement === drawer);
+  };
+  rail.addEventListener("contextmenu", menuAnclar);
+  drawer.addEventListener("contextmenu", menuAnclar);
+  grip.title += " · clic derecho en una herramienta para fijarla o mandarla al cajón";
+
   DZ_TOOLS_FIT = () => {
     clearTimeout(pendiente);
     pendiente = setTimeout(() => requestAnimationFrame(
@@ -2797,10 +2829,20 @@ function dzToolsBarFit(rail, primarias, secundarias, more, drawer) {
   let entran = Math.max(3, Math.floor(util / paso));
   if (entran >= primarias.length) entran = primarias.length;
   DZ_TOOLS_FITTING = true;
-  const enRiel = primarias.slice(0, entran), alCajon = primarias.slice(entran);
+  // Lo que el usuario fijó va primero y no lo saca ningún cálculo; lo que
+  // mandó al cajón no vuelve solo aunque sobre lugar.
+  const estado = dzToolsBarState();
+  const fijadas = new Set(estado.fijadas || []);
+  const idDe = (n) => n.dataset.tool || n.id || "";
+  const ocultas = new Set(estado.ocultas || []);
+  const todas = [...primarias, ...secundarias];
+  const ancladas = todas.filter((n) => fijadas.has(idDe(n)));
+  const candidatas = primarias.filter((n) => !fijadas.has(idDe(n)) && !ocultas.has(idDe(n)));
+  const cupo = Math.max(0, entran - ancladas.length);
+  const enRiel = [...ancladas, ...candidatas.slice(0, cupo)];
+  const alCajon = todas.filter((n) => !enRiel.includes(n));
   enRiel.forEach(node => rail.insertBefore(node, more));
-  // el cajón se rearma en orden: primero lo que no entró, después lo de siempre
-  alCajon.concat(secundarias).forEach(node => drawer.appendChild(node));
+  alCajon.forEach(node => drawer.appendChild(node));
   more.hidden = !drawer.children.length;
   DZ_TOOLS_FITTING = false;
 }
@@ -5673,6 +5715,9 @@ const DZ_KEY_DEFAULTS = {
   zoomin: "+", zoomout: "-", zoom100: "0", zoomfit: "f",
   rotl: "[", rotr: "]", mirror: "m",
   prevframe: ",", nextframe: ".", rigkey: "k",
+  // La barra espaciadora queda reservada para la mano. Enter reproduce, y es
+  // reasignable como cualquier otro atajo.
+  play: "enter",
 };
 const DZ_KEY_LABELS = {
   select: "Seleccionar (flecha)", hand: "Mano (navegar)", nodes: "Nodos (flecha blanca)",
@@ -5683,6 +5728,7 @@ const DZ_KEY_LABELS = {
   zoom100: "Zoom 100%", zoomfit: "Ajustar a pantalla", rotl: "Girar vista ",
   rotr: "Girar vista ", mirror: "Modo espejo", prevframe: "Cuadro anterior",
   nextframe: "Cuadro siguiente", rigkey: "Crear clave de rig",
+  play: "Reproducir / parar",
 };
 function dzKeysLoad() {
   let saved = {};
@@ -5699,6 +5745,7 @@ function dzRunAction(act) {
   const TOOLS = ["select", "direct", "hand", "nodes", "pencil", "brush", "pen", "eraser",
                  "dropper", "bucket", "pivot", "ruler", "inflator", "handler", "iron", "pliers", "magnet"];
   if (TOOLS.includes(act)) return dzSetTool(act);
+  if (act === "play") return dzPlayToggle();
   if (act === "camera") return dzCamToggle();
   if (["rect", "ellipse", "text", "line"].includes(act)) return dzAddShape(act);
   if (act === "zoomin") return dzZoom(0.15);

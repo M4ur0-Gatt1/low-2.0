@@ -239,4 +239,15 @@ require("::-webkit-slider-thumb" in POLISH,
 require("DZ_BARRA_SECUNDARIOS" in APP,
         "la barra de opciones dejo de mandar lo de menos uso al desborde")
 
+require('case " ":' not in SHORTCUTS,
+        "la barra espaciadora volvio a reproducir: es la mano, siempre")
+require('play: "enter"' in APP and '"play") return dzPlayToggle()' in APP,
+        "reproducir dejo de tener atajo propio o de ser reasignable")
+require('e.key === "Enter" ? "enter"' in APP and 'k === "enter" && PEN' in APP,
+        "Enter dejo de reproducir, o pisa el cierre del trazado de la pluma")
+require("fijadas" in APP and "ocultas" in APP and "menuAnclar" in APP,
+        "la barra de herramientas dejo de ser configurable por el usuario")
+require('node.parentElement === drawer' in APP,
+        "fijar herramientas volvio a estar invertido: lo del cajon tiene que ENTRAR al riel")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")
