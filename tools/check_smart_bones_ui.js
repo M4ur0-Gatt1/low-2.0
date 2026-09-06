@@ -105,7 +105,28 @@ async function main() {
     const persiste=!!(copia.scene.rig.actions[id]&&copia.scene.rig.actions[id].driver.path);
     lista().value=id; btn("rigSmartRemove").click(); await wait(300);
     const quitada={sinAcciones:!Object.keys(DZ.doc.scene.rig.actions).length,estado:estado()};
+    // CONTROLES (§4.3, ultimo nivel): un dial con nombre, animable, que puede
+    // conducir una accion igual que el angulo de un hueso.
+    const estadoDial=()=>document.querySelector("#rigDialEstado").textContent;
+    const dialAntes={estado:estadoDial(),filas:document.querySelectorAll("#rigDialLista .rig2-dial").length};
+    const pedido=dzDialNuevo();
+    for(let i=0;i<60;i++){const inp=document.querySelector("#dzPrIn");
+      if(inp){inp.value="boca abierta";document.querySelector("#dzPrOk").click();break;}await wait(25);}
+    await pedido; await wait(350);
+    const dialId=Object.keys(DZ.doc.scene.rig.controls||{})[0];
+    const dialCreado={estado:estadoDial(),filas:document.querySelectorAll("#rigDialLista .rig2-dial").length,id:dialId};
+    const rangoDial=document.querySelector("#rigDialLista .rig2-dial input[type=range]");
+    rangoDial.value="0.8"; rangoDial.dispatchEvent(new Event("change",{bubbles:true}));
+    await wait(350);
+    const canalDial=DZ.doc.scene.rigChannel("controls/"+dialId);
+    const dialMovido={hayCanal:!!canalDial,valor:DZ.doc.scene.rigControlValue(dialId,DZ.doc.frame),
+      claves:canalDial?Object.keys(canalDial.keys).length:0};
+    dzFnToggle(); await wait(450);
+    const nombresCanal=[...document.querySelectorAll("#dzFnEditor .fn2-lista button span")].map(n=>n.textContent);
+    const dialEnEditor=nombresCanal.some(n=>/dial/.test(n));
+    dzFnToggle(); await wait(200);
     return {vacio,creada,grabada,conduce,rango,sinHornear,persiste,quitada,
+      dialAntes,dialCreado,dialMovido,dialEnEditor,
       errores:(window.__errs||[]).slice(0,3)};
   })()`;
 
@@ -134,6 +155,14 @@ async function main() {
   if (!v.persiste) throw Error("REGRESIÓN: las acciones no sobreviven a guardar y reabrir");
   if (!v.quitada?.sinAcciones || v.quitada.estado !== "sin acciones")
     throw Error("REGRESIÓN: quitar la acción no la saca del panel: " + JSON.stringify(v.quitada));
+  if (v.dialAntes?.estado !== "sin controles" || v.dialAntes.filas)
+    throw Error("REGRESIÓN: el panel de controles no arranca vacío: " + JSON.stringify(v.dialAntes));
+  if (v.dialCreado?.filas !== 1 || v.dialCreado.id !== "boca_abierta")
+    throw Error("REGRESIÓN: crear un control desde el panel: " + JSON.stringify(v.dialCreado));
+  if (!v.dialMovido?.hayCanal || Math.abs(v.dialMovido.valor - 0.8) > 1e-6 || v.dialMovido.claves !== 1)
+    throw Error("REGRESIÓN: mover el dial no deja clave en el cuadro actual: " + JSON.stringify(v.dialMovido));
+  if (!v.dialEnEditor)
+    throw Error("REGRESIÓN: el dial dejó de aparecer como canal en el editor de curvas");
   if (v.errores?.length) throw Error("REGRESIÓN: excepciones en Smart Bones: " + v.errores.join(" | "));
   if (errors.length) throw Error("REGRESIÓN: excepciones UI: " + errors.slice(0, 3).join(" | "));
 

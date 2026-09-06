@@ -965,6 +965,8 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   });
+  $("#rigDialNew") && ($("#rigDialNew").onclick = () => dzDialNuevo());
+  $("#rigDialRemove") && ($("#rigDialRemove").onclick = () => dzDialQuitar());
   $("#rigSmartNew") && ($("#rigSmartNew").onclick = () => dzSmartNueva());
   $("#rigSmartRecord") && ($("#rigSmartRecord").onclick = () => dzSmartGrabar());
   $("#rigSmartRemove") && ($("#rigSmartRemove").onclick = () => dzSmartQuitar());
@@ -9593,6 +9595,82 @@ function dzRigIKDrag(e, constraintId) {
   gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", preview); document.addEventListener("pointerup", finish); document.addEventListener("pointercancel", cancel);
 }
+/* ══ CONTROLES: los diales de cara, manos y ojos (§4.3, último nivel) ═══════
+   Un dial con nombre que el animador mueve y que conduce acciones. Por dentro
+   es un canal más (`controls/<id>`), así que hereda claves por cuadro, curvas
+   en el Function Editor y la posibilidad de conducir un Smart Bone, sin
+   inventar un subsistema paralelo para la cara.
+   ═══════════════════════════════════════════════════════════════════════ */
+function dzDialSeleccionado() {
+  const marcado = $("#rigDialLista")?.querySelector(".rig2-dial.sel");
+  return marcado ? marcado.dataset.id : null;
+}
+async function dzDialNuevo() {
+  if (!DZ.doc) return dzSetStatus("Abrí una animación para crear controles");
+  const nombre = await dzPromptModal("Control nuevo",
+    "nombre del dial — ej. «boca abierta», «ceja izquierda»", "boca abierta");
+  if (nombre == null) return dzSetStatus("Control no creado");
+  const limpio = String(nombre).trim();
+  if (!limpio) return dzSetStatus("El control necesita un nombre");
+  const id = limpio.toLowerCase().replace(/\s+/g, "_").replace(/[^\w-]/g, "");
+  if (!id) return dzSetStatus("Ese nombre no deja un identificador utilizable");
+  if (!DZ.doc.createRigControl(id, { name: limpio, min: 0, max: 1, default: 0 }))
+    return dzSetStatus("Ya existe un control con ese nombre");
+  dzDialPanelSync(id);
+  dzSetStatus("Control «" + limpio + "» creado · movelo y deja clave en el cuadro actual");
+}
+function dzDialQuitar() {
+  const id = dzDialSeleccionado();
+  if (!id || !DZ.doc || !DZ.doc.removeRigControl(id)) return dzSetStatus("Elegí un control");
+  dzDialPanelSync();
+  dzSetStatus("Control quitado · las acciones que conducía quedaron sin conductor");
+}
+function dzDialPanelSync(seleccionar) {
+  const host = $("#rigDialLista"), estado = $("#rigDialEstado");
+  if (!host) return;
+  const controles = (DZ.doc && DZ.doc.scene.rig.controls) || {};
+  const ids = Object.keys(controles);
+  const previo = seleccionar || dzDialSeleccionado();
+  const num = dzRigCur();
+  host.innerHTML = "";
+  for (const id of ids) {
+    const c = controles[id];
+    const fila = document.createElement("div");
+    fila.className = "rig2-dial" + (id === previo ? " sel" : "");
+    fila.dataset.id = id;
+    const valor = DZ.doc.scene.rigControlValue(id, num);
+    fila.innerHTML = `<span class="rig2-dial-nombre"></span>
+      <input type="range" min="${c.min}" max="${c.max}" step="0.01" value="${valor}">
+      <output>${Math.round(valor * 100) / 100}</output>`;
+    fila.querySelector(".rig2-dial-nombre").textContent = c.name || id;
+    const rango = fila.querySelector("input");
+    // arrastrar previsualiza; al soltar queda UNA clave, no cien
+    rango.oninput = () => {
+      fila.querySelector("output").textContent = Math.round(+rango.value * 100) / 100;
+      const canal = DZ.doc.scene.rigChannel(LOW.animation.rigControlPath(id));
+      if (canal) canal.keys[Math.max(1, Math.round(num))] = +rango.value;
+      dzRigApplyLive(num);
+    };
+    rango.onchange = () => {
+      DZ.doc.setRigControlValue(id, num, +rango.value);
+      dzRigApplyLive(num); dzRigOverlayRender();
+      dzSetStatus("Clave del control «" + (c.name || id) + "» en el cuadro " + num);
+    };
+    fila.onpointerdown = (e) => {
+      if (e.target.tagName === "INPUT") return;
+      host.querySelectorAll(".rig2-dial").forEach((n) => n.classList.remove("sel"));
+      fila.classList.add("sel");
+    };
+    host.appendChild(fila);
+  }
+  if (estado) estado.textContent = !ids.length ? "sin controles"
+    : `${ids.length} ${ids.length === 1 ? "control" : "controles"}`;
+  const quitar = $("#rigDialRemove");
+  if (quitar) quitar.disabled = !dzDialSeleccionado();
+  const nuevo = $("#rigDialNew");
+  if (nuevo) nuevo.disabled = !DZ.doc;
+}
+
 /* ══ SMART BONES: acciones conducidas por ángulo (§4.3, nivel avanzado) ══════
    El artista dobla el codo, acomoda el brazo UNA vez y lo graba. A partir de
    ahí la corrección se aplica sola, dosificada por el ángulo real del codo, en
@@ -10183,6 +10261,7 @@ function dzRigPanelSync() {
   if ($("#dzRigPanel").hidden) return;
   dzMeshPanelSync();          // malla y pesos siguen a la pieza seleccionada
   dzSmartPanelSync();         // y las acciones, al hueso conductor
+  dzDialPanelSync();          // y los diales, al cuadro actual
   const el = DZ.sel, num = dzRigCur(), nodes = DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : [], current = dzRigSelectedNode();
   $("#rigId").value = current?.id || (el && el.id) || ""; $("#rigCount").textContent = nodes.length; $("#rigFrame").textContent = "F" + num;
   const detected = dzRigDrawableElements().length;

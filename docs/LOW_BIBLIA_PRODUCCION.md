@@ -178,7 +178,7 @@ Antes, durante y después de un gesto deben verse:
 | Pesos | Pesos de vértices editables | **Hecho en v4.6.0** — pincel de pesos con fuerza y radio, normalizado y reversible |
 | Malla | Deformación de imagen/vector | **Hecho en v4.6.0** — rejilla por pieza, deformada por los huesos y corregible a mano |
 | Smart Bones | Acciones conducidas por ángulo | **Hecho en v4.7.0** — acción grabada desde la pose, dosificada por el ángulo del conductor |
-| Controles | Cara, manos, ojos, boca, accesorios | Profesional avanzado |
+| Controles | Cara, manos, ojos, boca, accesorios | **Hecho en v4.10.0** — diales con nombre, animables, que conducen acciones |
 
 El panel nunca debe mostrar controles de niveles que aún no tengan recorrido
 completo y pruebas de aceptación.

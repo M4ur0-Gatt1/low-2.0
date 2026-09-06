@@ -148,5 +148,58 @@ function armar() {
     "sin acciones, rigPose devuelve exactamente la pose base");
 }
 
+// 8. CONTROLES: los diales de cara y manos (§4.3, último nivel)
+{
+  const doc = armar();
+  ok(!doc.createRigControl("", {}), "un control sin nombre no se crea");
+  ok(!doc.createRigControl("nulo", { min: 1, max: 1 }), "un dial sin recorrido no se crea");
+  ok(doc.createRigControl("boca_abierta", { name: "boca abierta", min: 0, max: 1 }),
+    "createRigControl con recorrido");
+  ok(!doc.createRigControl("boca_abierta", {}), "no se duplica un control existente");
+  const c = doc.scene.rigControl("boca_abierta");
+  ok(c && c.name === "boca abierta" && c.min === 0 && c.max === 1, "guarda nombre y recorrido", c);
+
+  // sin claves vale su reposo: un dial recien creado no mueve nada
+  ok(doc.scene.rigControlValue("boca_abierta", 1) === 0, "sin claves vale su reposo");
+
+  // se anima por cuadro, como cualquier canal
+  ok(doc.setRigControlValue("boca_abierta", 1, 0), "clave en el cuadro 1");
+  ok(doc.setRigControlValue("boca_abierta", 10, 1), "clave en el cuadro 10");
+  const medio = doc.scene.rigControlValue("boca_abierta", 5.5);
+  ok(medio > 0.4 && medio < 0.6, "y se interpola entre claves", medio);
+  ok(doc.scene.rigControlValue("boca_abierta", 99) === 1, "fuera de rango sostiene el ultimo valor");
+  ok(doc.setRigControlValue("boca_abierta", 12, 5) && doc.scene.rigControlValue("boca_abierta", 12) === 1,
+    "un valor fuera del recorrido se acota, no rompe el dial");
+
+  // aparece como canal: el Function Editor lo ve sin codigo nuevo
+  ok(!!doc.scene.rigChannel("controls/boca_abierta"),
+    "el dial es un canal, asi que entra al editor de curvas");
+
+  // conduce una accion, igual que el angulo de un hueso
+  ok(doc.createRigAction("abrir", { driverControl: "boca_abierta", min: 0, max: 1, length: 2 }),
+    "una accion puede tomar el dial de conductor");
+  ok(doc.scene.rig.actions.abrir.driver.path === "controls/boca_abierta",
+    "y el conductor apunta al canal del dial", doc.scene.rig.actions.abrir.driver);
+  doc.setRigActionKey("abrir", "bones/brazo/pose/y", 1, 0);
+  doc.setRigActionKey("abrir", "bones/brazo/pose/y", 2, 30);
+  ok(Math.abs(doc.scene.rigPose("brazo", 1).y - 0) < 1e-6, "con el dial en 0 no aporta");
+  ok(Math.abs(doc.scene.rigPose("brazo", 10).y - 30) < 1e-6, "con el dial en 1 aporta el total",
+    doc.scene.rigPose("brazo", 10).y);
+
+  // recorrido corregible y persistencia
+  ok(doc.setRigControlRange("boca_abierta", 0, 2), "el recorrido se puede corregir");
+  ok(doc.scene.rigControl("boca_abierta").max === 2, "y queda guardado");
+  const copia = A.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+  ok(!!copia.scene.rigControl("boca_abierta") && copia.scene.rigControlValue("boca_abierta", 10) === 1,
+    "al reabrir vuelven el dial y sus claves");
+
+  // quitarlo se lleva su canal y deja sin conductor a lo que conducia
+  ok(doc.removeRigControl("boca_abierta"), "quitar el control");
+  ok(!doc.scene.rigChannel("controls/boca_abierta"), "y se lleva su canal");
+  ok(doc.scene.rig.actions.abrir.driver === null,
+    "la accion que conducia queda sin conductor, no aportando a ciegas");
+  ok(Math.abs(doc.scene.rigPose("brazo", 10).y) < 1e-6, "y deja de aportar");
+}
+
 console.log(`smart-bones: ${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);

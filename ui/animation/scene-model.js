@@ -393,6 +393,34 @@
     return out;
   };
 
+  /** CONTROLES (§4.3, último nivel: cara, manos, ojos, boca).
+   *
+   *  Un control es un DIAL con nombre: «boca abierta», «ceja izquierda»,
+   *  «mano cerrada». No es un hueso ni una pieza; es un número entre dos
+   *  extremos que el animador mueve y que conduce acciones.
+   *
+   *  La decisión que lo hace barato: un control es un CANAL más, con la ruta
+   *  `controls/<id>`. Con eso hereda todo lo que ya existe sin código nuevo —
+   *  se le ponen claves por cuadro, se interpola, aparece en el Function Editor
+   *  con sus curvas y tangentes, y cualquier Smart Bone puede tomarlo como
+   *  conductor igual que toma el ángulo de un hueso. Un dial de cara animable
+   *  sale, así, de piezas que ya estaban probadas. */
+  const rigControlPath = (id) => `controls/${encodeURIComponent(id)}`;
+  const rigControlsData = (source = {}) => {
+    const out = {};
+    for (const [id, raw] of Object.entries(source || {})) {
+      if (!id || !raw) continue;
+      const min = Number.isFinite(+raw.min) ? +raw.min : 0;
+      const max = Number.isFinite(+raw.max) ? +raw.max : 1;
+      if (Math.abs(max - min) < 1e-9) continue;      // un dial sin recorrido no es un dial
+      const inicial = Number.isFinite(+raw.default) ? +raw.default : min;
+      out[id] = { id, name: raw.name || id, min, max,
+        default: Math.max(Math.min(min, max), Math.min(Math.max(min, max), inicial)),
+        group: raw.group || "" };
+    }
+    return out;
+  };
+
   /** ACCIONES Y SMART BONES (§4.3, nivel «Acciones conducidas por ángulo»).
    *
    *  Una ACCIÓN es una mini línea de tiempo con nombre: guarda claves de
@@ -679,7 +707,7 @@
       bones, slots, attachments, bindings, meshes: rigMeshesData(source.meshes),
       deformers: rigDeformersData(source.deformers), constraints,
       constraintOrder: [...requestedOrder, ...remainder], controllers: clone(source.controllers || {}),
-      actions: rigActionsData(source.actions), channels, switches: rigSwitchesData(source.switches, attachments),
+      actions: rigActionsData(source.actions), controls: rigControlsData(source.controls), channels, switches: rigSwitchesData(source.switches, attachments),
       physics: clone(source.physics || {}), diagnostics: { valid: true, errors: [], warnings: [] } };
     // `nodes` es sólo el nombre de compatibilidad usado por la UI v3. Comparte
     // la misma referencia que `bones`; el JSON canónico nunca serializa ambos.
@@ -1274,6 +1302,17 @@
       return rigOrderedConstraintIds(this.rig).map((id) => this.rig.constraints[id]).filter(Boolean);
     }
     rigChannel(path) { return this.rig.channels[path] || null; }
+    rigControl(id) { return (this.rig.controls || {})[id] || null; }
+    /** El valor de un dial en un cuadro, acotado a su recorrido. Sin claves
+     *  devuelve su valor de reposo, para que un control recién creado no mueva
+     *  nada hasta que alguien lo toque. */
+    rigControlValue(id, frame) {
+      const control = this.rigControl(id);
+      if (!control) return 0;
+      const crudo = this.rigChannelValue(rigControlPath(id), frame, control.default);
+      const lo = Math.min(control.min, control.max), hi = Math.max(control.min, control.max);
+      return Math.max(lo, Math.min(hi, +crudo || 0));
+    }
     rigChannelValue(path, frame, fallback = 0) {
       return rigChannelValueDe(this.rigChannel(path), frame, fallback);
     }
@@ -1302,7 +1341,12 @@
       let x = 0, y = 0, r = 0, sx = 0, sy = 0, hay = false;
       for (const accion of Object.values(acciones)) {
         if (!accion || accion.enabled === false || !accion.driver) continue;
-        const valor = this.rigChannelValue(accion.driver.path, frame, 0);
+        // Un dial sin claves vale su reposo, no cero: si no, una cara recién
+        // armada arrancaría con todas sus correcciones al mínimo del recorrido.
+        const control = /^controls\/(.+)$/.exec(accion.driver.path);
+        const valor = control
+          ? this.rigControlValue(decodeURIComponent(control[1]), frame)
+          : this.rigChannelValue(accion.driver.path, frame, 0);
         const t = rigActionPhase(accion, valor);
         const af = 1 + t * (accion.length - 1);
         for (const property of ["x", "y", "r", "sx", "sy"]) {
@@ -1579,6 +1623,8 @@
   animation.rigMeshesData = rigMeshesData;
   animation.rigAutoWeights = rigAutoWeights;
   animation.rigActionsData = rigActionsData;
+  animation.rigControlsData = rigControlsData;
+  animation.rigControlPath = rigControlPath;
   animation.rigActionPhase = rigActionPhase;
   animation.rigChannelValueDe = rigChannelValueDe;
   animation.rigNormalizeWeights = rigNormalizeWeights;

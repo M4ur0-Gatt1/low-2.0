@@ -1410,6 +1410,60 @@
       });
     }
 
+    /* ── CONTROLES: los diales de cara, manos y ojos (§4.3) ──────────────
+       Un control es un canal con nombre y recorrido. Al ser un canal, se le
+       ponen claves por cuadro, aparece en el Function Editor con sus curvas y
+       cualquier Smart Bone puede tomarlo como conductor. */
+    createRigControl(id, data = {}) {
+      const clave = String(id || "").trim();
+      if (!clave) return false;
+      const min = Number.isFinite(+data.min) ? +data.min : 0;
+      const max = Number.isFinite(+data.max) ? +data.max : 1;
+      if (Math.abs(max - min) < 1e-9) return false;
+      return this._rigChange("Crear control", (rig) => {
+        rig.controls = rig.controls || {};
+        if (rig.controls[clave]) return false;
+        rig.controls[clave] = { id: clave, name: data.name || clave, min, max,
+          default: Number.isFinite(+data.default) ? +data.default : min,
+          group: data.group || "" };
+        return true;
+      });
+    }
+    removeRigControl(id) {
+      return this._rigChange("Quitar el control", (rig) => {
+        if (!rig.controls || !rig.controls[id]) return false;
+        delete rig.controls[id];
+        // el canal del dial se va con él, y las acciones que lo conducían
+        // quedan sin conductor en vez de seguir aportando a ciegas
+        delete rig.channels[animation.rigControlPath(id)];
+        for (const accion of Object.values(rig.actions || {}))
+          if (accion.driver && accion.driver.path === animation.rigControlPath(id)) accion.driver = null;
+        return true;
+      });
+    }
+    /** Mover un dial DEJA CLAVE en el cuadro actual: un control que no se
+     *  anima no sirve para actuar, sirve para mirar. */
+    setRigControlValue(id, frame, value) {
+      const control = this.scene.rigControl(id);
+      if (!control) return false;
+      const lo = Math.min(control.min, control.max), hi = Math.max(control.min, control.max);
+      const v = Math.max(lo, Math.min(hi, +value || 0));
+      return this.setRigChannelKey(animation.rigControlPath(id), frame, v,
+        { label: "Mover el control «" + (control.name || id) + "»" });
+    }
+    setRigControlRange(id, min, max) {
+      return this._rigChange("Cambiar el recorrido del control", (rig) => {
+        const control = rig.controls && rig.controls[id];
+        if (!control) return false;
+        const lo = Number.isFinite(+min) ? +min : control.min;
+        const hi = Number.isFinite(+max) ? +max : control.max;
+        if (Math.abs(hi - lo) < 1e-9) return false;
+        control.min = lo; control.max = hi;
+        control.default = Math.max(Math.min(lo, hi), Math.min(Math.max(lo, hi), control.default));
+        return true;
+      });
+    }
+
     /* ── SMART BONES: acciones conducidas por ángulo ──────────────────────
        Una acción guarda la CORRECCIÓN (cómo debería verse el codo doblado) y
        el driver la dosifica según el ángulo real. El artista la graba una vez
@@ -1421,6 +1475,7 @@
       const clave = String(id || "").trim();
       if (!clave) return false;
       const driverPath = data.driverPath ||
+        (data.driverControl ? animation.rigControlPath(data.driverControl) : null) ||
         (data.driverBone ? animation.rigChannelPath(data.driverBone, data.driverProperty || "r") : null);
       if (!driverPath) return false;
       return this._rigChange("Crear acción de Smart Bone", (rig) => {

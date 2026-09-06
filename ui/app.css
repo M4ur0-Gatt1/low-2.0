@@ -3101,6 +3101,21 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
    herramientas de uso diario, el resto detrás de ..., y movible. Ensanchar el
    riel para que entrara todo costaba lienzo en cada ventana; esconder lo que
    casi no se usa cuesta un clic y sólo cuando hace falta. */
+/* Controles: los diales de cara y manos */
+.rig2-dial-lista { display:grid; gap:3px; margin:5px 0; max-height:150px; overflow:auto; }
+.rig2-dial { display:grid; grid-template-columns:78px 1fr 34px; gap:6px; align-items:center;
+  padding:2px 4px; border-radius:var(--r-md,7px); color:var(--fg2); font-size:10px; }
+.rig2-dial:hover { background:var(--dz-raised); }
+.rig2-dial.sel { background:var(--redsoft); color:var(--fg); }
+.rig2-dial-nombre { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rig2-dial output { font:9.5px 'JetBrains Mono',monospace; text-align:right; }
+.rig2-dial-acciones { display:grid; grid-template-columns:1fr auto; gap:4px; }
+.rig2-dial-acciones button { min-height:26px; padding:0 8px; border:1px solid var(--line2);
+  border-radius:var(--r-md,7px); background:var(--panel2); color:var(--fg); font-size:10.5px; }
+.rig2-dial-acciones button:hover:not(:disabled) { background:var(--dz-raised); }
+.rig2-dial-acciones button:disabled { opacity:.4; }
+.rig2-dial-acciones button.danger:hover:not(:disabled) { color:#ff8a70; }
+
 /* Smart Bones: acciones conducidas por angulo */
 .rig2-smart select { width:100%; margin:4px 0; padding:3px; border:1px solid var(--line2);
   border-radius:var(--r-md,7px); background:var(--panel2); color:var(--fg); font-size:10.5px; }

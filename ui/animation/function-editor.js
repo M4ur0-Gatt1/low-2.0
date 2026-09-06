@@ -50,6 +50,8 @@
   };
   /** Nombre legible de un canal: "bones/brazo_L/pose/r" → "brazo L · giro". */
   function etiqueta(path) {
+    const control = /^controls\/(.+)$/.exec(path || "");
+    if (control) return "dial · " + decodeURIComponent(control[1]).replace(/_/g, " ");
     const m = /^bones\/([^/]+)\/pose\/(x|y|r|sx|sy)$/.exec(path || "");
     if (!m) return String(path || "");
     const propiedad = { x: "X", y: "Y", r: "giro", sx: "escala X", sy: "escala Y" }[m[2]] || m[2];
@@ -137,7 +139,11 @@
       if (!sel) return todos;
       const prefijo = "bones/" + encodeURIComponent(sel) + "/";
       const propios = todos.filter((p) => p.startsWith(prefijo));
-      return propios.length ? propios : todos;
+      // Los diales no son de un hueso: son del personaje. Filtrarlos junto con
+      // las propiedades de la pieza los volvía invisibles justo cuando uno está
+      // animando la cara con una pieza seleccionada.
+      const diales = todos.filter((p) => p.startsWith("controls/"));
+      return propios.length ? [...propios, ...diales] : todos;
     }
 
     /** Ventana de tiempo y de valor que se dibuja. */

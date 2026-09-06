@@ -250,4 +250,15 @@ require("fijadas" in APP and "ocultas" in APP and "menuAnclar" in APP,
 require('node.parentElement === drawer' in APP,
         "fijar herramientas volvio a estar invertido: lo del cajon tiene que ENTRAR al riel")
 
+require("rigControlsData" in SCENE_MODEL and "rigControlValue" in SCENE_MODEL,
+        "los controles de cara y manos desaparecieron del modelo")
+require("rigControlPath" in SCENE_MODEL and "controls/" in SCENE_MODEL,
+        "un control dejo de ser un canal: pierde claves, curvas y conductor")
+require("createRigControl" in DOCUMENT and "setRigControlValue" in DOCUMENT,
+        "faltan los comandos de control")
+require('id="rigDialNew"' in INDEX and "dzDialPanelSync" in APP,
+        "el panel de controles no esta montado")
+require('startsWith("controls/")' in FN,
+        "el filtro por seleccion vuelve a esconder los diales del editor de curvas")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")
