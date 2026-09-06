@@ -25,9 +25,13 @@ body {
   --bg:#0B0B0C; --panel:#131315; --panel2:#19191C;
   --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.05);
   --txt:#F4F4F2; --mut:#98988F; --faint:#5C5C57;
-  /* paleta LOW: acento = naranja del rayo; cyan = 2º acento (nodos/selección fina) */
+  /* paleta LOW: UN solo acento —el naranja del rayo— y un gris para todo lo
+     demás. El celeste que hacía de segundo acento competía con el naranja en
+     cada panel: dos colores fuertes gritando a la vez convierten el editor en
+     un tablero de luces en vez de un espacio de trabajo. Las variables siguen
+     llamándose `cyan` para no tocar 66 reglas; lo que cambió es su valor. */
   --red:#F0450E; --redh:#FF5A22; --redsoft:rgba(240,69,14,.14);
-  --cyan:#33B5E8; --cyanh:#5AC6EF; --cyansoft:rgba(51,181,232,.14);
+  --cyan:#9AA2A9; --cyanh:#C2C8CD; --cyansoft:rgba(255,255,255,.08);
   --orange:#F0A030; --orangesoft:rgba(240,160,48,.14);
   --green:#4E8C5F; --greensoft:rgba(78,140,95,.15);
   --r-sm:7px; --r-md:10px; --r-lg:14px;
@@ -53,7 +57,7 @@ body.light {
   --line:rgba(0,0,0,.09); --line2:rgba(0,0,0,.05);
   --txt:#171716; --mut:#6E6E67; --faint:#A5A59D;
   --red:#E0400C; --redh:#C2360A; --redsoft:rgba(224,64,12,.10);
-  --cyan:#1E93C6; --cyanh:#1877A0; --cyansoft:rgba(30,147,198,.12);
+  --cyan:#6B7278; --cyanh:#4C5257; --cyansoft:rgba(0,0,0,.07);
   --orange:#D89020; --orangesoft:rgba(216,144,32,.12);
   --green:#3E7A4F; --greensoft:rgba(62,122,79,.12);
   --code-kw:#C03530; --code-str:#2F7A47; --code-com:#9A9A92;
@@ -3213,6 +3217,9 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   border-color:var(--line2); backdrop-filter:blur(16px);
 }
 #designView .art-menubar { min-height:36px; padding-inline:12px; gap:2px; }
+.dz-barra-drawer { grid-template-columns:repeat(5,30px); }
+.dz-barra-drawer .ibtn { width:30px; height:28px; }
+.dz-barra-drawer .dz-zoom { grid-column:1/-1; text-align:center; color:var(--mut); font-size:10px; }
 /* BARRA DE OPCIONES: una sola fila para lo que antes eran dos.
    Photoshop resuelve el mismo contenido en tres filas —menú, opciones y
    pestañas— y acá eran cuatro: la barra de iconos vivía aparte de las opciones
@@ -3221,7 +3228,11 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   min-height:36px; padding:0 10px; background:var(--panel);
   border-bottom:1px solid var(--line); }
 #designView .dz-optionsbar .dz-toolopts { flex:1 1 auto; min-width:0; height:auto;
-  padding:0; border:0; background:transparent; overflow:hidden; white-space:nowrap; }
+  padding:0; border:0; background:transparent; white-space:nowrap;
+  overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -ms-overflow-style:none; }
+/* Se puede desplazar con la rueda, pero SIN barra a la vista: una barrita gris
+   cruzando la cabecera es justo el tipo de ruido que se quiso sacar. */
+#designView .dz-optionsbar .dz-toolopts::-webkit-scrollbar { width:0; height:0; }
 /* Lo que se recorta cuando falta ancho es el TEXTO DE AYUDA, nunca un control:
    una barra que esconde el color o el grosor detrás de un scroll no sirve. */
 #designView .dz-optionsbar .dz-toolopts > * { flex:none; }

@@ -21,6 +21,8 @@ def function_body(name: str, next_name: str) -> str:
 
 
 DOCUMENT = (ROOT / "ui" / "animation" / "document.js").read_text(encoding="utf-8")
+CSS_APP = (ROOT / "ui" / "app.css").read_text(encoding="utf-8")
+POLISH = (ROOT / "ui" / "design" / "studio-polish.css").read_text(encoding="utf-8")
 MAIN = (ROOT / "main.py").read_text(encoding="utf-8")
 
 
@@ -223,5 +225,18 @@ require(INDEX.count('id="dzToolOpts"') == 1 and
         "las opciones de herramienta salieron de la barra unica")
 require('closest(".dz-optionsbar")' in APP,
         "las pestanas de documento vuelven a insertarse dentro de la barra de opciones")
+
+require('id === "multiplane"' in APP and "dzCompositionViewShow(show)" in APP,
+        "abrir el multiplano desde el menu Ventana vuelve a mostrar una capa vacia sobre todo")
+require("visiblesDe(dock)" in APP and "visiblesDe(d).length" in APP,
+        "los muelles y sus divisiones vuelven a contar paneles ocultos")
+require("--cyan:#9AA2A9" in CSS_APP,
+        "volvio el segundo acento celeste compitiendo con el naranja")
+require("box-shadow: inset 0 2px var(--accent)" not in POLISH,
+        "la solapa activa volvio a llevar una barra de acento cruzandola")
+require("::-webkit-slider-thumb" in POLISH,
+        "los controles deslizantes volvieron al widget por omision del navegador")
+require("DZ_BARRA_SECUNDARIOS" in APP,
+        "la barra de opciones dejo de mandar lo de menos uso al desborde")
 
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")

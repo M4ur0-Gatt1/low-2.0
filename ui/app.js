@@ -2611,6 +2611,50 @@ const DZ = { path: null, sel: null, zoom: 1, rigTool: "select", rigAutoKey: true
    Las herramientas del cajón siguen existiendo en el DOM: atajos, el panel
    separado y la sincronización de herramienta activa las siguen encontrando.
    ═══════════════════════════════════════════════════════════════════════ */
+/* La barra de opciones tiene el mismo problema que el riel: en un monitor
+   normal no entran las opciones de la herramienta MÁS los diecisiete botones de
+   documento y vista. Se aplica la misma regla —lo de uso diario a la vista, lo
+   demás detrás de "⋯"— para que un control de la herramienta nunca quede fuera
+   de pantalla por culpa de un botón que se usa una vez por sesión. */
+const DZ_BARRA_SECUNDARIOS = ["dzVar", "dzAnim", "dzDoc", "dzRotL", "dzRotLbl", "dzRotR",
+  "dzDiscBtn", "dzRulersBtn", "dzGridBtn", "dzGuidesBtn", "dzZen", "dzPrefs",
+  "dzCodeBtn", "dzExt"];
+function dzBarraOverflowInit() {
+  const barra = $(".art-bar-inline");
+  if (!barra || barra.dataset.overflow) return;
+  barra.dataset.overflow = "1";
+  const cajon = document.createElement("div");
+  cajon.className = "dz-tools-drawer dz-barra-drawer"; cajon.id = "dzBarraDrawer"; cajon.hidden = true;
+  document.body.appendChild(cajon);
+  const mas = document.createElement("button");
+  mas.className = "ibtn dz-tools-more"; mas.id = "dzBarraMore"; mas.textContent = "⋯";
+  mas.title = "Más: variaciones, animación, documento, giro de vista, reglas, guías, preferencias, código y ventana";
+  DZ_BARRA_SECUNDARIOS.forEach((id) => { const el = $("#" + id); if (el) cajon.appendChild(el); });
+  // los separadores que quedaron sueltos ya no separan nada
+  [...barra.children].forEach((n) => {
+    const previo = n.previousElementSibling;
+    if (n.classList.contains("vsep") && (!previo || previo.classList.contains("vsep"))) n.remove();
+  });
+  while (barra.lastElementChild && barra.lastElementChild.classList.contains("vsep"))
+    barra.lastElementChild.remove();
+  barra.insertBefore(mas, $("#dzSave") || null);
+  const cerrar = () => { cajon.hidden = true; mas.classList.remove("active"); };
+  mas.onclick = (e) => {
+    e.stopPropagation();
+    if (!cajon.hidden) return cerrar();
+    cajon.hidden = false;
+    const r = mas.getBoundingClientRect(), caja = cajon.getBoundingClientRect();
+    cajon.style.left = Math.max(6, Math.min(innerWidth - caja.width - 6, r.right - caja.width)) + "px";
+    cajon.style.top = Math.min(innerHeight - caja.height - 8, r.bottom + 6) + "px";
+    mas.classList.add("active");
+  };
+  cajon.addEventListener("click", (e) => { if (e.target.closest("button")) cerrar(); });
+  document.addEventListener("pointerdown", (e) => {
+    if (cajon.hidden || e.target.closest("#dzBarraDrawer,#dzBarraMore")) return;
+    cerrar();
+  });
+}
+
 const DZ_TOOLBAR_KEY = "low.toolbar.v1";
 let DZ_TOOLS_DRAWER = null;
 let DZ_TOOLS_FIT = () => {};
@@ -2811,6 +2855,7 @@ function dzStudioHierarchyInit() {
       if (node.classList.contains("hsep") && (!previo || previo.classList.contains("hsep"))) node.remove();
     });
     dzToolsBarInit(tools, primarias);
+    dzBarraOverflowInit();
   }
   dzDocumentTabsRender();
 }
@@ -12263,6 +12308,13 @@ async function dzWindowPanelSet(id, show) {
     if (show) await dzMocapOpen(); else node.hidden = true;
   } else if (id === "storyboard") {
     if (show) await dzSbMount(); else node.hidden = true;
+  } else if (id === "multiplane") {
+    // La mesa multiplano NO es un panel que se muestra: es una superficie que
+    // se monta sobre el lienzo. Sacarle `hidden` sin montarla dejaba una capa
+    // vacía a pantalla completa tapando todo el editor.
+    dzCompositionViewShow(show);
+  } else if (id === "fn") {
+    dzFnSetVisible(show);
   } else if (id === "camera") {
     if (show !== !node.hidden) dzCamToggle();
   } else if (id === "code") {
@@ -15336,16 +15388,24 @@ function dzPanelDockSetup() {
     localStorage.setItem("low.2d.panelLayout", JSON.stringify(saved));
   };
   const panelSizes = (() => { try { return JSON.parse(localStorage.getItem("low.2d.panelSizes") || "{}"); } catch (_) { return {}; } })();
+  /* Un panel OCULTO no ocupa lugar, así que tampoco tiene borde que arrastrar.
+     Contarlos dejaba tiradas por la pantalla líneas de redimensionado con su
+     cartelito —"Arrastrá para cambiar la altura del panel"— sobre un panel que
+     no estaba, y mantenía abiertos muelles vacíos ocupando ancho de lienzo. */
+  const panelesDe = dock => Array.from(dock.children)
+    .filter(el => !el.matches(".dz-dock-resizer,.dz-panel-splitter"));
+  const visiblesDe = dock => panelesDe(dock)
+    .filter(el => !el.hidden && getComputedStyle(el).display !== "none");
   const refreshPanelSplitters = dock => {
     dock.querySelectorAll(":scope > .dz-panel-splitter").forEach(el => el.remove());
-    const panels = Array.from(dock.children).filter(el => !el.matches(".dz-dock-resizer,.dz-panel-splitter"));
+    const panels = panelesDe(dock);
     if (dock.dataset.zone === "bottom") panels.forEach(panel => {
       if (panelSizes[panel.id]?.w) panel.style.width = panelSizes[panel.id].w + "px";
     });
     else panels.forEach(panel => {
       if (panelSizes[panel.id]?.h) panel.style.height = panel.style.flexBasis = panelSizes[panel.id].h + "px";
     });
-    panels.slice(0, -1).forEach(panel => {
+    visiblesDe(dock).slice(0, -1).forEach(panel => {
       const split = document.createElement("div");
       split.className = "dz-panel-splitter"; split.setAttribute("role", "separator");
       split.title = dock.dataset.zone === "bottom" ? "Arrastrá para cambiar el ancho del panel" : "Arrastrá para cambiar la altura del panel";
@@ -15372,9 +15432,28 @@ function dzPanelDockSetup() {
     });
   };
   const updateDocks = () => Object.values(docks).forEach(d => {
-    const panels = Array.from(d.children).filter(el => !el.matches(".dz-dock-resizer,.dz-panel-splitter"));
-    d.hidden = !panels.length || !DZ.anim;
+    d.hidden = !visiblesDe(d).length || !DZ.anim;
   });
+  /* Los paneles se muestran y se ocultan desde muchos lados (workspaces, menú
+     Ventana, botones propios). En vez de acordarse de avisar en cada uno, se
+     mira el atributo `hidden` de los hijos del muelle: si cambia, se rehacen
+     las divisiones. El guardia evita el bucle, porque rehacerlas también
+     modifica los hijos. */
+  let recalculando = false;
+  const recalcularMuelles = () => {
+    if (recalculando) return;
+    recalculando = true;
+    requestAnimationFrame(() => {
+      Object.values(docks).forEach(refreshPanelSplitters);
+      updateDocks();
+      recalculando = false;
+    });
+  };
+  if (typeof MutationObserver === "function") {
+    const vigia = new MutationObserver(recalcularMuelles);
+    Object.values(docks).forEach(d => vigia.observe(d,
+      { attributes: true, attributeFilter: ["hidden"], childList: true, subtree: true }));
+  }
   const dockPanel = (panel, zone) => {
     panel.classList.remove("dz-panel-floating");
     panel.style.left = panel.style.top = panel.style.right = panel.style.bottom = panel.style.width = panel.style.height = "";

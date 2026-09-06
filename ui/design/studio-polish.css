@@ -35,7 +35,11 @@
 .dz-document-tabs[hidden] { display: none !important; }
 .dz-document-tab { position: relative; flex: 0 1 230px; min-width: 112px; max-width: 230px; height: 28px; display: grid; grid-template-columns: 9px minmax(0,1fr) 20px; align-items: center; gap: 6px; padding: 0 5px 0 11px; border: 1px solid transparent; border-bottom: 0; border-radius: 7px 7px 0 0; background: transparent; color: var(--fg2); font-size: 10.5px; text-align: left; }
 .dz-document-tab:hover { background: var(--surface-hover); color: var(--fg); }
-.dz-document-tab.active { z-index: 1; border-color: var(--border-default); background: var(--surface-raised); color: var(--fg); box-shadow: inset 0 2px var(--accent); }
+/* La solapa activa se reconoce por su superficie y su borde, como en cualquier
+   editor: la barra de acento cruzándola de lado a lado era lo primero que veía
+   el ojo cada vez que se miraba el dibujo. El acento queda para el punto de
+   «sin guardar», que sí es información que hay que ver. */
+.dz-document-tab.active { z-index: 1; border-color: var(--border-default); background: var(--surface-raised); color: var(--fg); box-shadow: inset 0 1px rgba(255,255,255,.06); }
 .dz-document-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dz-document-dirty { color: var(--accent); font-size: 8px; }
 .dz-document-close { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--fg2); font-size: 15px; line-height: 1; }
@@ -115,7 +119,7 @@
 .cmp3-card { position: absolute; left: -320px; top: -180px; width: 640px; height: 360px; transform-style: preserve-3d; cursor: pointer; }
 .cmp3-surface { width: 100%; height: 100%; overflow: hidden; background: rgba(255,255,255,.025); outline: 1px solid rgba(255,255,255,.15); box-shadow: 0 12px 38px rgba(0,0,0,.22); }
 .cmp3-surface > svg { width: 100%; height: 100%; display: block; background: transparent !important; box-shadow: none !important; }
-.cmp3-card.selected .cmp3-surface { outline: 2px solid var(--cyan); box-shadow: 0 0 0 5px var(--cyansoft); }
+.cmp3-card.selected .cmp3-surface { outline: 2px solid var(--accent); box-shadow: 0 0 0 5px var(--redsoft, rgba(240,69,14,.14)); }
 .cmp3-card > span { position: absolute; left: 0; top: -25px; padding: 3px 8px; border-radius: 5px; background: rgba(20,22,24,.9); color: #c7c9c7; font: 600 10px 'JetBrains Mono',monospace; white-space: nowrap; }
 .cmp3-gizmo { position:absolute; left:50%; top:50%; display:flex; gap:5px; transform:translate(-50%,-50%); filter:drop-shadow(0 2px 4px #0008); }
 .cmp3-gizmo button { width:30px; height:30px; padding:0; border:1px solid #ffffff45; border-radius:50%; color:#fff; font:700 9px 'JetBrains Mono',monospace; cursor:move; }
@@ -131,8 +135,46 @@
 .cmp3-outliner { grid-column: 1; grid-row: 2; border-width: 0 1px 0 0; }.cmp3-inspector { grid-column: 3; grid-row: 2; border-width: 0 0 0 1px; padding: 0 10px 12px; }
 .cmp3-outliner header,.cmp3-inspector header { padding: 14px 12px 9px; color: #888d90; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .cmp3-list button { width: 100%; display: grid; grid-template-columns: 8px 1fr auto; gap: 7px; align-items: center; min-height: 31px; padding: 0 10px; border: 0; border-radius: 0; background: transparent; color: #b9bcbb; text-align: left; }
-.cmp3-list button.active { background: var(--cyansoft); color: var(--fg); }.cmp3-list button i { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); }.cmp3-list small { color: var(--fg2); font: 9px 'JetBrains Mono',monospace; }
+.cmp3-list button.active { background: var(--redsoft, rgba(240,69,14,.14)); color: var(--fg); }.cmp3-list button i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }.cmp3-list small { color: var(--fg2); font: 9px 'JetBrains Mono',monospace; }
 .cmp3-inspector label { display: grid; grid-template-columns: 58px 1fr; align-items: center; margin: 6px 0; color: var(--fg2); font-size: 10px; }.cmp3-inspector input { width: 100%; height: var(--control-height); border: 1px solid var(--border-default); border-radius: var(--low-control-radius); background: var(--surface-raised); color: var(--fg); padding: 0 7px; font: 11px 'JetBrains Mono',monospace; }.cmp3-inspector.disabled { opacity: .45; pointer-events: none; }
+/* CONTROLES DESLIZANTES: finos, planos, sin relleno de color — el tipo de
+   control que uno espera en una mesa de trabajo, no el widget redondo y grueso
+   que pone el navegador por omisión. La posición del pulgar dice el valor; el
+   color queda reservado para lo que de verdad está activo. */
+#designView input[type=range], .dz-panel-floating input[type=range],
+.cmp3 input[type=range], .fn2 input[type=range] {
+  -webkit-appearance:none; appearance:none; accent-color:auto;
+  height:14px; background:transparent; cursor:pointer; }
+#designView input[type=range]::-webkit-slider-runnable-track,
+.dz-panel-floating input[type=range]::-webkit-slider-runnable-track,
+.cmp3 input[type=range]::-webkit-slider-runnable-track,
+.fn2 input[type=range]::-webkit-slider-runnable-track {
+  height:3px; border-radius:2px; background:var(--line2, rgba(255,255,255,.16)); }
+#designView input[type=range]::-webkit-slider-thumb,
+.dz-panel-floating input[type=range]::-webkit-slider-thumb,
+.cmp3 input[type=range]::-webkit-slider-thumb,
+.fn2 input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; appearance:none; width:11px; height:11px; margin-top:-4px;
+  border:0; border-radius:50%; background:var(--fg2, #9aa2a9);
+  box-shadow:0 1px 2px rgba(0,0,0,.45); transition:background .12s, transform .12s; }
+#designView input[type=range]:hover::-webkit-slider-thumb,
+.dz-panel-floating input[type=range]:hover::-webkit-slider-thumb,
+.cmp3 input[type=range]:hover::-webkit-slider-thumb,
+.fn2 input[type=range]:hover::-webkit-slider-thumb { background:var(--fg, #e6e8ea); }
+#designView input[type=range]:active::-webkit-slider-thumb,
+.dz-panel-floating input[type=range]:active::-webkit-slider-thumb,
+.cmp3 input[type=range]:active::-webkit-slider-thumb,
+.fn2 input[type=range]:active::-webkit-slider-thumb {
+  background:var(--accent); transform:scale(1.15); }
+#designView input[type=range]:focus-visible, .dz-panel-floating input[type=range]:focus-visible {
+  outline:none; }
+#designView input[type=range]:focus-visible::-webkit-slider-thumb,
+.dz-panel-floating input[type=range]:focus-visible::-webkit-slider-thumb {
+  box-shadow:0 0 0 3px var(--redsoft, rgba(240,69,14,.2)); }
+/* los verticales (papel cebolla, Procreate) conservan su orientación */
+#designView .onion2-channel input[type=range], #designView .dz-procreate-sliders input[type=range] {
+  height:auto; }
+
 /* Function Editor: canales a la izquierda, curvas al centro ──────────────── */
 .fn2 { display:grid; grid-template-columns:174px minmax(240px,1fr); grid-template-rows:36px minmax(0,1fr);
   min-height:150px; overflow:hidden; background:var(--surface-panel); color:var(--fg);
