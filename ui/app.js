@@ -7763,6 +7763,29 @@ function dzSvgToPng(svgText, maxPx) {
     img.src = url;
   });
 }
+/** Atajo directo al XML para Premiere, desde el menú Animación y al lado del
+ *  audio, que es donde lo busca el que quiere sincronizar. Estaba sólo dentro
+ *  del modal de exportar y no lo encontraba nadie: ni el menú ni el botón de la
+ *  timeline lo nombraban. */
+async function dzExportPremiereDirecto() {
+  if (!DZ.doc) return dzSetStatus("Abrí una animación para exportar el XML");
+  const cuadros = dzExportCuadros();
+  if (!cuadros.length) return dzSetStatus("No hay cuadros para exportar");
+  const pista = DZ.doc.audio;
+  // Se puede exportar sin audio —queda una secuencia lista para montar— pero
+  // hay que decirlo ANTES, no después: el que viene a «sincronizar» y no cargó
+  // el audio se lleva un XML mudo sin enterarse.
+  if (!pista || !pista.buffer) {
+    const sigue = await dzConfirmModal(
+      "La escena no tiene audio cargado, así que el XML va a salir sólo con los cuadros. " +
+      "Para que Premiere lo reciba ya sincronizado, cargá el audio primero desde " +
+      "Animación → Cargar audio.",
+      { title: "Exportar sin audio", ok: "Exportar igual", cancel: "Cancelar" });
+    if (!sigue) return;
+  }
+  return dzDoExport("premiere");
+}
+
 function dzExportModal() {
   // El modelo nuevo no llena DZ.anim.frames: preguntarle a la escena.
   const cuadros = DZ.doc ? dzExportCuadros() : null;
@@ -7771,7 +7794,8 @@ function dzExportModal() {
   const tramo = cuadros && cuadros.length
     ? ` (F${cuadros[0]} a F${cuadros.at(-1)})` : "";
   openModal(`<h2> Exportar animación</h2>
-    <div class="sub">${cuantos} cuadros${tramo} a ${$("#tlFps").value || 12} fps  carpeta export/ del proyecto.</div>
+    <div class="sub">${cuantos} ${cuantos === 1 ? "cuadro" : "cuadros"}${tramo} a ${$("#tlFps").value || 12} fps  carpeta export/ del proyecto.<br>
+      ${DZ.doc && DZ.doc.audio ? "Audio: <b>" + (DZ.doc.audio.name || "cargado") + "</b>  el XML sale sincronizado." : "Sin audio cargado: el XML saldrá solo con los cuadros."}</div>
     <div class="m-actions" style="flex-wrap:wrap">
       <button class="primary" data-x="mp4">Video MP4</button>
       <button class="ghost" data-x="gif">GIF animado</button>
@@ -12473,6 +12497,7 @@ function dzMenuAction(act) {
     "borrar-documento": dzDocumentTrash,
     importar: dzImportImage,
     exportar: dzExportModal, exportanim: dzExportModal,
+    premiere: dzExportPremiereDirecto,
     navegador: () => { if (DZ.path) api.preview_html(DZ.path, $("#dzCanvas").innerHTML); },
     cerrar: () => closeDesign(),
     deshacer: dzUndo, rehacer: dzRedo, duplicar: dzDuplicate, borrar: dzDeleteSelected,

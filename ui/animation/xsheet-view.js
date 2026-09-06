@@ -374,9 +374,9 @@
         x.className = "xs2-op"; x.textContent = txt; x.title = title;
         x.onclick = fn; b.appendChild(x); return x;
       };
-      btn("1s", "Un frame por dibujo (saca los holds)", () => { const [a, z] = rango(); doc.apply("step", a, z, 1); });
-      btn("2s", "Cada dibujo dura 2 frames", () => { const [a, z] = rango(); doc.apply("step", a, z, 2); });
-      btn("3s", "Cada dibujo dura 3 frames", () => { const [a, z] = rango(); doc.apply("step", a, z, 3); });
+      btn("1F", "Un fotograma por dibujo: saca los sostenidos", () => { const [a, z] = rango(); doc.apply("step", a, z, 1); });
+      btn("2F", "Cada dibujo dura 2 fotogramas", () => { const [a, z] = rango(); doc.apply("step", a, z, 2); });
+      btn("3F", "Cada dibujo dura 3 fotogramas", () => { const [a, z] = rango(); doc.apply("step", a, z, 3); });
       btn("+", "Alargar la exposición del frame actual", () => doc.apply("stepChange", doc.frame, +1));
       btn("−", "Acortar la exposición del frame actual", () => doc.apply("stepChange", doc.frame, -1));
       btn("⤒", "Insertar un frame vacío acá", () => doc.apply("insert", doc.frame, 1));

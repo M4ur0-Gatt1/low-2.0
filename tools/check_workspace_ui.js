@@ -166,10 +166,19 @@ async function main() {
     const navegacion={chips:chips.length, antes:cuadroAntes, despues:doc.frame,
       marcado:chipCur?chipCur.textContent.trim():""};
 
+    // 4ter. Los botones de exposicion se rotulan en FOTOGRAMAS. Decian «1s»
+    // —de «on ones» en ingles— y en castellano eso se lee como segundos, que es
+    // justo lo contrario de lo que hacen.
+    const badges=[...document.querySelectorAll("button.tl2-badge span")].map(b=>b.textContent);
+    await dzXsMount(); await espera(700);
+    const opsXs=[...document.querySelectorAll(".xs2-op")].map(b=>b.textContent);
+    const exposicion={timeline:badges.slice(0,3), xsheet:opsXs.slice(0,3),
+      enSegundos:[...badges,...opsXs].filter(t=>/^[0-9]s$/.test(t))};
+
     // 5. La preferencia sobrevive al remontaje, pero jamás entra en la escena.
     const guardada=JSON.parse(localStorage.getItem("low.timeline.view.v1")||"null");
     const enEscena=JSON.stringify(doc.scene).includes("frameWidth");
-    return {arranque,sincronia,apagado,encendido,vista,navegacion,
+    return {arranque,sincronia,apagado,encendido,vista,navegacion,exposicion,
       persistencia:{guardada:!!guardada&&guardada.frameWidth>0,densidad:guardada&&guardada.densidad,enEscena}};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -178,7 +187,7 @@ async function main() {
   const value = result.result?.value || {};
 
   stage("verificar");
-  const { arranque, sincronia, apagado, encendido, vista, navegacion, persistencia } = value;
+  const { arranque, sincronia, apagado, encendido, vista, navegacion, exposicion, persistencia } = value;
   if (!arranque || arranque.cantidad < 5 || !arranque.abierto)
     throw Error("REGRESIÓN: el menú Ventana abre sin lista de paneles: " + JSON.stringify(value));
   if (!sincronia || sincronia.timelineReal !== sincronia.timelineMenu || sincronia.paletaReal !== sincronia.paletaMenu)
@@ -191,6 +200,10 @@ async function main() {
     throw Error("REGRESIÓN: clickear un chip de la barra de cuadros no mueve la cabeza lectora: " + JSON.stringify(navegacion));
   if (navegacion.marcado !== "6")
     throw Error("REGRESIÓN: el chip marcado no es el del cuadro actual: " + JSON.stringify(navegacion));
+  if (!exposicion || exposicion.timeline.join("") !== "1F2F3F" || exposicion.xsheet.join("") !== "1F2F3F")
+    throw Error("REGRESIÓN: los botones de exposición no dicen fotogramas: " + JSON.stringify(exposicion));
+  if (exposicion.enSegundos.length)
+    throw Error("REGRESIÓN: quedó un botón de exposición rotulado en segundos: " + JSON.stringify(exposicion));
   if (!(vista.acercado > vista.anchoInicial) || !(vista.alejado < vista.acercado) || vista.trasRueda !== vista.alejado)
     throw Error("REGRESIÓN: Ctrl+rueda no escala el tiempo o la rueda sola lo escala: " + JSON.stringify(vista));
   if (!(vista.altoCambiado > 0) || vista.altoCambiado === vista.altoInicial)

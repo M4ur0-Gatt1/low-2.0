@@ -319,4 +319,15 @@ require("if (DZ.anim) DZ.anim.idx = i;" in APP,
         "dzGoFrame volvio a exigir la lista de archivos del modo viejo: "
         "con documento abierto los clicks en los chips no mueven nada")
 
+TLVIEW = (ROOT / "ui" / "animation" / "timeline-view.js").read_text(encoding="utf-8")
+XSVIEW = (ROOT / "ui" / "animation" / "xsheet-view.js").read_text(encoding="utf-8")
+require('"1F"' in TLVIEW and '"1F"' in XSVIEW,
+        "los botones de exposicion volvieron a decir 1s: en castellano se leen como segundos")
+require('"1s"' not in TLVIEW and '"1s"' not in XSVIEW,
+        "quedo un boton de exposicion rotulado en segundos")
+require('data-act="premiere"' in INDEX and "dzExportPremiereDirecto" in APP,
+        "el XML para Premiere volvio a estar solo dentro del modal: no lo encuentra nadie")
+require("MP4 · PNG · XML" in INDEX,
+        "el menu Archivo vuelve a prometer solo GIF/PNG y esconde el XML")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync y equipo")
