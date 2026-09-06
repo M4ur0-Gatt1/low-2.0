@@ -531,7 +531,7 @@ function bind() {
   $("#ctabRight").onclick = () => { $("#chatTabs").scrollBy({ left: 160, behavior: "smooth" }); setTimeout(updateChatNav, 260); };
   $("#chatTabs").addEventListener("scroll", updateChatNav);
   window.addEventListener("resize", updateChatNav);
-  window.addEventListener("resize", () => { if (DZ.rigMode) dzRigOverlayRender(); });
+  window.addEventListener("resize", () => { if (DZ.rigMode) dzRigOverlayRender(); if (DZ.meshPaint) dzMeshOverlayRender(); });
   $("#abSearch").onclick = () => $("#q").focus();
   $("#abGit").onclick = () => {
     const b = $("#branch").textContent;
@@ -964,6 +964,14 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     };
     const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+  });
+  $("#rigMeshCreate") && ($("#rigMeshCreate").onclick = () => dzMeshCrear());
+  $("#rigMeshAuto") && ($("#rigMeshAuto").onclick = () => dzMeshAuto());
+  $("#rigMeshPaint") && ($("#rigMeshPaint").onclick = () => dzMeshPaintToggle());
+  $("#rigMeshRemove") && ($("#rigMeshRemove").onclick = () => dzMeshQuitar());
+  ["Force", "Radius"].forEach((k) => {
+    const input = $("#rigMesh" + k), out = $("#rigMesh" + k + "Val");
+    if (input && out) input.oninput = () => { out.textContent = input.value + (k === "Force" ? "%" : " px"); };
   });
   $("#rigModeBuild").onclick = () => dzRigSetMode("build");
   $("#rigModeTest").onclick = dzRigEnterTest;
@@ -2992,7 +3000,7 @@ async function openDesign(path, options = {}) {
   // rompía todo el editor ("Cannot set properties of null"). Solo cambiar el svg.
   // Solo el svg del DISEÑO, que es hijo directo; los overlays del editor se conservan.
   [...cv.children]
-    .filter(n => n.tagName.toLowerCase() === "svg" && !["dzRigOverlay","dzMocapSheet"].includes(n.id))
+    .filter(n => n.tagName.toLowerCase() === "svg" && !["dzRigOverlay","dzMocapSheet","dzMeshOverlay"].includes(n.id))
     .forEach(n => n.remove());
   let sourceSvg = options.sourceSvg || r.svg;
   const recovery = window.LOW?.workspace?.recovery?.get(path);
@@ -3092,6 +3100,7 @@ function dzApplyZoom() {
   if (DZ.rulers || DZ.grid || (DZ.guides && DZ.guides.length)) dzRulersRender();
   dzPivotMark();
   if (DZ.rigMode) dzRigOverlayRender();
+  if (DZ.meshPaint) dzMeshOverlayRender();   // la rejilla de pesos sigue al zoom y al paneo
   dzMocapRenderCanvasGuide();
 }
 /* modo dibujo (Tab): oculta menús, paneles, timeline y dock — solo lienzo +
@@ -3605,7 +3614,7 @@ function dzPivotClick(e) {
   if (DZ.doc && targetId) { DZ.doc.ensureRigNode(targetId); DZ.doc.setRigPivot(targetId, p); }
   const live = targetId && $("#dzCanvas").querySelector(":scope > svg")?.querySelector("#" + CSS.escape(targetId));
   dzSelect(live || target); dzMarkDirty();
-  if (DZ.rigMode) { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); }
+  if (DZ.rigMode) { dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzMeshOverlayRender(); }
   dzSetStatus(" Pivote fijado — rotá con la manija  y gira desde acá (hombro, codo, cadera…). Alt+clic lo quita.");
 }
 function dzPivotMark() {
@@ -9482,6 +9491,156 @@ function dzRigIKDrag(e, constraintId) {
   gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", preview); document.addEventListener("pointerup", finish); document.addEventListener("pointercancel", cancel);
 }
+/* ══ MALLA Y PESOS: los niveles 2 y 3 de la tabla de deformación (§4.3) ══════
+   Rígido ya estaba: una pieza sigue a un hueso entera. Estos dos niveles son
+   los que permiten que una pieza se DOBLE:
+
+     flexi-binding  cada vértice sigue a los huesos que tiene cerca (por
+                    distancia al segmento del hueso, no a su origen)
+     pesos          esa influencia se corrige a mano, vértice por vértice
+
+   El overlay es propio y no toca el del esqueleto: aquel es un renderer
+   cacheado del que dependen varios recorridos, y meterle un modo más era
+   arriesgar el armado del rig para agregar una herramienta de pintura.
+   ═══════════════════════════════════════════════════════════════════════ */
+function dzMeshBoneId() { return DZ.rigSelectedId || (DZ.sel && DZ.sel.id) || null; }
+function dzMeshActual() {
+  const id = dzMeshBoneId();
+  return id && DZ.doc?.scene?.rigMesh ? DZ.doc.scene.rigMesh(id) : null;
+}
+/** La caja del arte vinculado al hueso: es donde tiene sentido la rejilla. */
+function dzMeshCajaDe(boneId) {
+  const el = boneId && document.getElementById(boneId);
+  if (!el || !el.getBBox) return null;
+  try {
+    const b = el.getBBox();
+    if (!(b.width > 0) || !(b.height > 0)) return null;
+    const margen = Math.max(b.width, b.height) * .06;
+    return { x: b.x - margen, y: b.y - margen, width: b.width + margen * 2, height: b.height + margen * 2 };
+  } catch (e) { return null; }
+}
+function dzMeshCrear() {
+  const id = dzMeshBoneId();
+  if (!id || !DZ.doc) return dzSetStatus("Elegí una pieza del esqueleto para ponerle malla");
+  if (DZ.doc.scene.rigMesh(id)) return dzSetStatus("Esa pieza ya tiene malla");
+  const caja = dzMeshCajaDe(id);
+  if (!caja) return dzSetStatus("No encuentro el dibujo de esa pieza para medir la malla");
+  if (!DZ.doc.createRigMesh(id, { cols: 4, rows: 4, box: caja }))
+    return dzSetStatus("No pude crear la malla");
+  dzMeshPanelSync(); dzMeshOverlayRender();
+  dzSetStatus("Malla 4×4 creada · «Pesos automáticos» la ata a los huesos");
+}
+function dzMeshAuto() {
+  const id = dzMeshBoneId();
+  if (!id || !DZ.doc || !DZ.doc.scene.rigMesh(id)) return dzSetStatus("Creá la malla primero");
+  if (!DZ.doc.autoRigMeshWeights(id)) return dzSetStatus("Hacen falta huesos con largo para repartir pesos");
+  dzMeshPanelSync(); dzMeshOverlayRender();
+  dzSetStatus("Pesos repartidos por distancia · pintá encima para corregir");
+}
+function dzMeshQuitar() {
+  const id = dzMeshBoneId();
+  if (!id || !DZ.doc || !DZ.doc.removeRigMesh(id)) return dzSetStatus("Esa pieza no tiene malla");
+  DZ.meshPaint = false;
+  dzMeshPanelSync(); dzMeshOverlayRender();
+  dzSetStatus("Malla quitada · la pieza vuelve a deformación rígida");
+}
+function dzMeshPaintToggle() {
+  if (!dzMeshActual()) return dzSetStatus("Creá la malla antes de pintar pesos");
+  DZ.meshPaint = !DZ.meshPaint;
+  dzMeshPanelSync(); dzMeshOverlayRender();
+  dzSetStatus(DZ.meshPaint
+    ? "Pintando pesos del hueso seleccionado · Shift resta · Esc sale"
+    : "Pincel de pesos apagado");
+}
+function dzMeshPanelSync() {
+  const malla = dzMeshActual(), estado = $("#rigMeshEstado");
+  if (estado) estado.textContent = !dzMeshBoneId() ? "elegí una pieza"
+    : !malla ? "sin malla"
+    : (malla.weights && malla.weights.length ? `${malla.cols}×${malla.rows} · con pesos` : `${malla.cols}×${malla.rows} · sin pesos`);
+  const on = (sel, cond) => { const b = $(sel); if (b) b.disabled = !cond; };
+  on("#rigMeshCreate", !!dzMeshBoneId() && !malla);
+  on("#rigMeshAuto", !!malla);
+  on("#rigMeshPaint", !!malla);
+  on("#rigMeshRemove", !!malla);
+  $("#rigMeshPaint")?.classList.toggle("active", !!DZ.meshPaint && !!malla);
+}
+/** Dibuja la rejilla y colorea cada vértice según cuánto pesa al hueso
+    seleccionado: negro = nada, naranja pleno = lo sigue entero. Sin eso los
+    pesos son un número invisible y no hay forma de corregirlos con criterio. */
+function dzMeshOverlayRender() {
+  const overlay = $("#dzMeshOverlay"), doc = DZ.doc, id = dzMeshBoneId();
+  const malla = dzMeshActual();
+  if (!overlay) return;
+  if (!DZ.rigMode || !doc || !malla || !DZ.meshPaint) {
+    overlay.setAttribute("hidden", ""); overlay.innerHTML = ""; overlay.onpointerdown = null;
+    return;
+  }
+  const cv = $("#dzCanvas").getBoundingClientRect();
+  overlay.removeAttribute("hidden");
+  overlay.setAttribute("viewBox", `0 0 ${Math.max(1, cv.width)} ${Math.max(1, cv.height)}`);
+  const num = dzRigCur();
+  const puntos = doc.scene.rigMeshSkinnedAt(id, num) || malla.rest;
+  const pantalla = puntos.map((p) => {
+    const s = dzFromUser(p.x, p.y);
+    return s ? { x: s.x - cv.left, y: s.y - cv.top } : { x: 0, y: 0 };
+  });
+  const nx = malla.cols, ny = malla.rows, ns = SVGNS;
+  const frag = document.createDocumentFragment();
+  const linea = (a, b) => {
+    const l = document.createElementNS(ns, "line");
+    l.setAttribute("x1", a.x.toFixed(1)); l.setAttribute("y1", a.y.toFixed(1));
+    l.setAttribute("x2", b.x.toFixed(1)); l.setAttribute("y2", b.y.toFixed(1));
+    l.setAttribute("class", "dz-mesh-hilo"); frag.appendChild(l);
+  };
+  for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) {
+    if (c + 1 < nx) linea(pantalla[r * nx + c], pantalla[r * nx + c + 1]);
+    if (r + 1 < ny) linea(pantalla[r * nx + c], pantalla[(r + 1) * nx + c]);
+  }
+  pantalla.forEach((p, i) => {
+    const w = (malla.weights && malla.weights[i] && malla.weights[i][id]) || 0;
+    const punto = document.createElementNS(ns, "circle");
+    punto.setAttribute("cx", p.x.toFixed(1)); punto.setAttribute("cy", p.y.toFixed(1));
+    punto.setAttribute("r", 5);
+    punto.setAttribute("class", "dz-mesh-vertice");
+    punto.setAttribute("data-i", i);
+    punto.setAttribute("data-w", w.toFixed(3));
+    punto.setAttribute("fill", `rgb(${Math.round(40 + 200 * w)},${Math.round(30 + 60 * w)},${Math.round(30 + 20 * w)})`);
+    frag.appendChild(punto);
+  });
+  overlay.innerHTML = "";
+  overlay.appendChild(frag);
+  overlay.onpointerdown = (e) => dzMeshPincel(e, pantalla);
+}
+/** Un trazo del pincel = UNA operación de historial, aunque toque cien veces
+    los mismos vértices: pintar es un gesto, no cincuenta pasos de Undo. */
+function dzMeshPincel(e, pantalla) {
+  const doc = DZ.doc, id = dzMeshBoneId();
+  if (!doc || !id) return;
+  e.preventDefault();
+  const radio = Math.max(8, +($("#rigMeshRadius")?.value) || 48);
+  const fuerza = Math.max(.05, (+($("#rigMeshForce")?.value) || 35) / 100);
+  const resta = e.shiftKey;
+  const cv = $("#dzCanvas").getBoundingClientRect();
+  const tocados = new Set();
+  const pintar = (ev) => {
+    const x = ev.clientX - cv.left, y = ev.clientY - cv.top;
+    pantalla.forEach((p, i) => { if (Math.hypot(p.x - x, p.y - y) <= radio) tocados.add(i); });
+  };
+  pintar(e);
+  const mover = (ev) => pintar(ev);
+  const soltar = () => {
+    window.removeEventListener("pointermove", mover);
+    window.removeEventListener("pointerup", soltar);
+    if (!tocados.size) return;
+    doc.paintRigMeshWeight(id, [...tocados], id, resta ? -fuerza : fuerza,
+      resta ? "Restar peso" : "Pintar peso");
+    dzMeshPanelSync(); dzMeshOverlayRender(); dzRigApplyLive(dzRigCur());
+    dzSetStatus(`${tocados.size} vértices ${resta ? "restados" : "pintados"} · Ctrl+Z lo deshace`);
+  };
+  window.addEventListener("pointermove", mover);
+  window.addEventListener("pointerup", soltar);
+}
+
 function dzRigOverlayRender() {
   const overlay = $("#dzRigOverlay"), doc = DZ.doc;
   const empty = !overlay || !DZ.rigMode || !doc ||
@@ -9841,6 +10000,7 @@ function dzRigSchematicRender(nodes, current) {
 
 function dzRigPanelSync() {
   if ($("#dzRigPanel").hidden) return;
+  dzMeshPanelSync();          // malla y pesos siguen a la pieza seleccionada
   const el = DZ.sel, num = dzRigCur(), nodes = DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : [], current = dzRigSelectedNode();
   $("#rigId").value = current?.id || (el && el.id) || ""; $("#rigCount").textContent = nodes.length; $("#rigFrame").textContent = "F" + num;
   const detected = dzRigDrawableElements().length;

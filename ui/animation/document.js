@@ -1410,6 +1410,66 @@
       });
     }
 
+    /** FLEXI-BINDING: reparte los pesos de la malla por distancia a los huesos.
+     *  Es el punto de partida, no el resultado final: deja una deformación
+     *  razonable en un clic y después se corrige a mano lo que importa. */
+    autoRigMeshWeights(boneId, opciones = {}) {
+      const malla = this.scene.rigMesh(boneId);
+      if (!malla) return false;
+      const huesos = Object.values(this.scene.rig.nodes || {})
+        .filter((n) => n && n.head && n.tail);
+      if (!huesos.length) return false;
+      const pesos = animation.rigAutoWeights(huesos, malla.rest, opciones);
+      if (!pesos.length) return false;
+      return this._rigChange("Pesos automáticos por distancia", (rig) => {
+        const m = rig.meshes && rig.meshes[boneId];
+        if (!m) return false;
+        m.weights = pesos.map((w) => ({ ...w }));
+        return true;
+      });
+    }
+    /** Escribe los pesos enteros de una malla (lo usa importar y deshacer). */
+    setRigMeshWeights(boneId, pesos, label = "Editar pesos de la malla") {
+      if (!Array.isArray(pesos)) return false;
+      return this._rigChange(label, (rig) => {
+        const m = rig.meshes && rig.meshes[boneId];
+        if (!m || pesos.length !== m.rest.length) return false;
+        m.weights = pesos.map((w) => animation.rigNormalizeWeights(w));
+        return true;
+      });
+    }
+    /** PINCEL DE PESOS: suma (o resta) influencia de UN hueso en los vértices
+     *  indicados y renormaliza. Todo el trazo entra como una sola operación:
+     *  pintar es un gesto, no cincuenta pasos de historial. */
+    paintRigMeshWeight(boneId, indices, huesoDestino, delta, label = "Pintar pesos") {
+      const malla = this.scene.rigMesh(boneId);
+      if (!malla || !huesoDestino || !this.scene.rigNode(huesoDestino)) return false;
+      const puntos = [...new Set((indices || []).map((i) => i | 0))]
+        .filter((i) => i >= 0 && i < malla.rest.length);
+      if (!puntos.length) return false;
+      const cantidad = Math.max(-1, Math.min(1, +delta || 0));
+      if (!cantidad) return false;
+      return this._rigChange(label, (rig) => {
+        const m = rig.meshes && rig.meshes[boneId];
+        if (!m) return false;
+        if (!Array.isArray(m.weights) || m.weights.length !== m.rest.length)
+          m.weights = m.rest.map(() => ({}));
+        for (const i of puntos) {
+          const actual = { ...(m.weights[i] || {}) };
+          const previo = actual[huesoDestino] || 0;
+          const nuevo = Math.max(0, Math.min(1, previo + cantidad));
+          if (nuevo <= 1e-6) delete actual[huesoDestino];
+          else actual[huesoDestino] = nuevo;
+          // si el pincel deja el vértice sin ningún hueso, vuelve a seguir al
+          // suyo: un vértice sin pesos se quedaría clavado mientras el resto
+          // de la pieza se mueve, que es peor que cualquier peso mal puesto
+          if (!Object.keys(actual).length) actual[boneId] = 1;
+          m.weights[i] = animation.rigNormalizeWeights(actual);
+        }
+        return true;
+      });
+    }
+
     removeRigMesh(boneId) {
       return this._rigChange("Quitar la malla", (rig) => {
         if (!rig.meshes || !rig.meshes[boneId]) return false;

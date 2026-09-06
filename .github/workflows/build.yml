@@ -74,6 +74,7 @@ jobs:
           node tools/check_document_tabs_ui.js
           node tools/check_save_recovery_ui.js
           node tools/check_function_editor_ui.js
+          node tools/check_rig_weights_ui.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools
 

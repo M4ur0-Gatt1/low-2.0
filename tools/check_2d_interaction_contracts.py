@@ -187,4 +187,20 @@ require("onFrame" in FN and "fn2-cabeza" in FN,
 require('id="dzFnEditor"' in INDEX and "function-editor.js" in INDEX,
         "el panel del editor de funciones no esta montado")
 
+SCENE_WEIGHTS = SCENE_MODEL[SCENE_MODEL.index("const rigWeightsData"):SCENE_MODEL.index("const rigMeshesData")]
+require("rigNormalizeWeights" in SCENE_WEIGHTS and "rigAutoWeights" in SCENE_MODEL,
+        "el flexi-binding por distancia desaparecio del modelo")
+require("total ? w / total" in SCENE_WEIGHTS or "w / total" in SCENE_WEIGHTS,
+        "los pesos de vertice dejaron de normalizarse: la pieza se encoge sola al posar")
+require("rigMeshSkinnedAt" in SCENE_MODEL and "rigBindMatrix" in SCENE_MODEL,
+        "la malla dejo de deformarse con los huesos")
+require("rigMeshSkinnedAt(boneId, frame)" in SCENE_MODEL[SCENE_MODEL.index("rigMallaAt("):SCENE_MODEL.index("rigMallaAt(") + 900],
+        "rigMallaAt volvio a ignorar el skinning")
+require("paintRigMeshWeight" in DOCUMENT and "actual[boneId] = 1" in DOCUMENT,
+        "un vertice puede volver a quedarse sin ningun hueso al restar peso")
+require('"dzMeshOverlay"' in APP and 'id="dzMeshOverlay"' in INDEX,
+        "el overlay de pesos no sobrevive a abrir un documento")
+require('id="rigMeshCreate"' in INDEX and "dzMeshPanelSync" in APP,
+        "el panel de malla y pesos no esta montado")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")

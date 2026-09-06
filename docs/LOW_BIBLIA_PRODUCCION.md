@@ -173,10 +173,10 @@ Antes, durante y después de un gesto deben verse:
 
 | Nivel | Alcance | Estado objetivo |
 |---|---|---|
-| Rígido | Una pieza sigue un hueso | Obligatorio y estable primero |
-| Flexi-binding | Influencia por distancia | Segundo nivel |
-| Pesos | Pesos de vértices editables | Profesional |
-| Malla | Deformación de imagen/vector | Profesional |
+| Rígido | Una pieza sigue un hueso | **Hecho** |
+| Flexi-binding | Influencia por distancia | **Hecho en v4.6.0** — `Pesos automáticos` reparte por distancia al segmento del hueso |
+| Pesos | Pesos de vértices editables | **Hecho en v4.6.0** — pincel de pesos con fuerza y radio, normalizado y reversible |
+| Malla | Deformación de imagen/vector | **Hecho en v4.6.0** — rejilla por pieza, deformada por los huesos y corregible a mano |
 | Smart Bones | Acciones conducidas por ángulo | Profesional avanzado |
 | Controles | Cara, manos, ojos, boca, accesorios | Profesional avanzado |
 
@@ -447,7 +447,10 @@ No entran nuevas familias de funciones durante esta etapa.
    numérica, regiones de tiempo, copiar y pegar sólo el timing, filtro por lo
    seleccionado y una única cabeza lectora con Timeline y X-sheet. Verificado
    por `tools/check_function_editor_ui.js`.
-3. Pesos, flexi-binding y mallas.
+3. ~~Pesos, flexi-binding y mallas.~~ **Hecho en v4.6.0**: rejilla por pieza,
+   pesos automáticos por distancia, pincel de pesos y skinning real
+   (`Σ w · Mundo(f) · Bind⁻¹`). Verificado por `tools/check_rig_weights_ui.js`
+   y 34 pruebas de modelo.
 4. Smart Bones y acciones.
 5. Audio, lipsync y sustituciones consolidadas.
 6. Cámara y composición verificadas.

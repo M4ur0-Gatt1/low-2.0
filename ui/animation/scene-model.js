@@ -322,6 +322,57 @@
 
   /** Mallas por pieza. Se descarta la que no tenga cols*rows puntos de reposo;
       una clave con otra cantidad de puntos no se puede mezclar con el reposo. */
+  /** PESOS DE VÉRTICE. Cada punto de la malla guarda a qué huesos sigue y
+   *  cuánto: `{ hueso: 0..1 }`, disperso y normalizado a 1. Disperso porque un
+   *  vértice de un muñeco cut-out sigue a dos o tres huesos, no a los veinte:
+   *  guardar veinte números por punto engorda el archivo y no cambia el dibujo.
+   *  Normalizado porque si la suma no da 1 la pieza se encoge o se estira sola
+   *  al posar, que es el defecto clásico del skinning hecho a ojo. */
+  const rigWeightsData = (source, cantidad) => {
+    if (!Array.isArray(source) || !cantidad) return [];
+    const out = [];
+    for (let i = 0; i < cantidad; i++) out.push(rigNormalizeWeights(source[i]));
+    return out.some((w) => Object.keys(w).length) ? out : [];
+  };
+  const rigNormalizeWeights = (raw, maximo = 4) => {
+    const pares = Object.entries(raw || {})
+      .map(([id, w]) => [String(id), Math.max(0, +w || 0)])
+      .filter(([, w]) => w > 1e-6)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, Math.max(1, maximo | 0));
+    const total = pares.reduce((n, [, w]) => n + w, 0);
+    if (!total) return {};
+    const out = {};
+    for (const [id, w] of pares) out[id] = w / total;
+    return out;
+  };
+  /** Distancia de un punto al SEGMENTO del hueso (no a su origen): un hueso
+   *  largo tiene que influir parejo a lo largo de todo su cuerpo. */
+  const rigDistanciaAlHueso = (p, head, tail) => {
+    const ax = +head.x || 0, ay = +head.y || 0, bx = +tail.x || 0, by = +tail.y || 0;
+    const dx = bx - ax, dy = by - ay, largo2 = dx * dx + dy * dy;
+    const t = largo2 ? Math.max(0, Math.min(1, ((p.x - ax) * dx + (p.y - ay) * dy) / largo2)) : 0;
+    return Math.hypot(p.x - (ax + dx * t), p.y - (ay + dy * t));
+  };
+  /** FLEXI-BINDING: pesos automáticos por distancia. Es el segundo nivel de la
+   *  tabla de deformación: sin pintar nada, cada vértice sigue a los huesos que
+   *  tiene cerca, con caída suave. Sirve como punto de partida honesto para
+   *  después corregir a mano los pesos que importan. */
+  function rigAutoWeights(huesos, puntos, opciones = {}) {
+    const caida = Math.max(1, +opciones.falloff || 2.5);
+    const maximo = Math.max(1, Math.min(4, (opciones.max | 0) || 3));
+    const utiles = (huesos || []).filter((b) => b && b.id && b.head && b.tail);
+    if (!utiles.length) return [];
+    return (puntos || []).map((p) => {
+      const crudos = {};
+      for (const b of utiles) {
+        const d = rigDistanciaAlHueso(p, b.head, b.tail);
+        crudos[b.id] = 1 / (Math.pow(d, caida) + 1e-6);
+      }
+      return rigNormalizeWeights(crudos, maximo);
+    });
+  }
+
   const rigMeshesData = (source = {}) => {
     const punto = (q) => ({ x: +q.x || 0, y: +q.y || 0 });
     const lista = (arr) => Array.isArray(arr) ? arr.filter((q) => q && Number.isFinite(+q.x) && Number.isFinite(+q.y)).map(punto) : [];
@@ -336,7 +387,8 @@
         if (Number.isFinite(f) && grid.length === nx * ny) keys[f] = grid;
       }
       out[boneId] = { id: (m && m.id) || `mesh:${boneId}`, boneId, type: "mesh",
-        enabled: !(m && m.enabled === false), cols: nx, rows: ny, rest, keys };
+        enabled: !(m && m.enabled === false), cols: nx, rows: ny, rest, keys,
+        weights: rigWeightsData(m && m.weights, rest.length) };
     }
     return out;
   };
@@ -1080,13 +1132,65 @@
       return rigInterpGrid(m.rest, m.keys || {}, frame);
     }
 
+    /** La matriz del hueso en REPOSO. Sin ella no hay skinning: para saber
+     *  cuánto se movió un hueso hay que compararlo con dónde estaba cuando se
+     *  ató la malla, no con la identidad. */
+    rigBindMatrix(id, seen = new Set()) {
+      const node = this.rigNode(id);
+      if (!node || seen.has(id)) return matIdentity();
+      seen.add(id);
+      const local = matPose(node.rest || rigPoseData(), node.pivot);
+      if (!node.parentId) return local;
+      return matMul(this.rigBindMatrix(node.parentId, seen), local);
+    }
+
+    /** La rejilla de una malla POSADA POR LOS HUESOS en un cuadro.
+     *
+     *  Cada vértice se mueve con la mezcla de las matrices de los huesos que lo
+     *  pesan: `Σ w · (Mundo(f) · Bind⁻¹) · p`. Encima se suman los retoques
+     *  manuales de las claves —guardados como diferencia contra el reposo—, así
+     *  que pintar pesos y corregir a mano no se pelean: el hueso pone el
+     *  movimiento y la mano pone la corrección.
+     *
+     *  Sin pesos devuelve exactamente la rejilla de siempre, para que una malla
+     *  hecha a mano siga comportándose igual que antes. */
+    rigMeshSkinnedAt(boneId, frame) {
+      const m = this.rigMesh(boneId);
+      if (!m || !Array.isArray(m.rest) || m.rest.length < 4) return null;
+      const manual = rigInterpGrid(m.rest, m.keys || {}, frame);
+      if (!Array.isArray(m.weights) || !m.weights.length) return manual;
+      const cache = new Map();
+      const delta = (id) => {
+        if (cache.has(id)) return cache.get(id);
+        const mundo = this.rigWorldMatrix(id, frame);
+        const bind = matInverse(this.rigBindMatrix(id));
+        const d = bind ? matMul(mundo, bind) : matIdentity();
+        cache.set(id, d);
+        return d;
+      };
+      return m.rest.map((p, i) => {
+        const pesos = m.weights[i] || {};
+        const ids = Object.keys(pesos);
+        let x = 0, y = 0, total = 0;
+        for (const id of ids) {
+          const w = pesos[id];
+          if (!(w > 0) || !this.rigNode(id)) continue;
+          const q = matPoint(delta(id), p);
+          x += q.x * w; y += q.y * w; total += w;
+        }
+        const base = total > 1e-6 ? { x: x / total, y: y / total } : { x: p.x, y: p.y };
+        const corregido = manual[i] || p;
+        return { x: base.x + (corregido.x - p.x), y: base.y + (corregido.y - p.y) };
+      });
+    }
+
     /** El mapeador de la malla listo para deformar el dibujo en un cuadro, o
      *  null si no hay malla o está en reposo (así el dibujo no se reescribe al
      *  pedo). Devuelve { punto(p) } — mismo contrato que rigDeformadorAt. */
     rigMallaAt(boneId, frame) {
       const m = this.rigMesh(boneId);
       if (!m || m.enabled === false) return null;
-      const posado = this.rigMeshAt(boneId, frame);
+      const posado = this.rigMeshSkinnedAt(boneId, frame);
       if (!posado) return null;
       const quieto = m.rest.every((pt, i) =>
         Math.abs(pt.x - posado[i].x) < 1e-6 && Math.abs(pt.y - posado[i].y) < 1e-6);
@@ -1390,6 +1494,9 @@
   animation.rigDeformador = rigDeformador;
   animation.rigMalla = rigMalla;
   animation.rigMeshesData = rigMeshesData;
+  animation.rigAutoWeights = rigAutoWeights;
+  animation.rigNormalizeWeights = rigNormalizeWeights;
+  animation.rigDistanciaAlHueso = rigDistanciaAlHueso;
   animation.rigEaseT = rigEaseT;
   animation.rigChannelData = rigChannelData;
   animation.rigChannelSegment = rigChannelSegment;

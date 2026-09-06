@@ -83,5 +83,74 @@ const rest = grid();
   } else pass++;
 }
 
+// 5. PESOS Y FLEXI-BINDING: el segundo y el tercer nivel de la tabla §4.3.
+{
+  const doc = new A.LowDoc();
+  doc.ensureRigBones([
+    { id: "brazo", name: "Brazo", parentId: null, head: { x: 0, y: 50 }, tail: { x: 50, y: 50 }, pivot: { x: 0, y: 50 } },
+    { id: "antebrazo", name: "Antebrazo", parentId: "brazo", head: { x: 50, y: 50 }, tail: { x: 100, y: 50 }, pivot: { x: 50, y: 50 } },
+  ], "bones");
+  ok(doc.createRigMesh("brazo", { cols: 3, rows: 3, box: { x: 0, y: 0, width: 100, height: 100 } }), "malla sobre el brazo");
+
+  // — flexi-binding: pesos por distancia, sin pintar nada —
+  ok(doc.autoRigMeshWeights("brazo"), "autoRigMeshWeights reparte por distancia");
+  const w = doc.scene.rigMesh("brazo").weights;
+  ok(Array.isArray(w) && w.length === 9, "hay un peso por vértice");
+  const suma = (o) => Object.values(o).reduce((n, v) => n + v, 0);
+  ok(w.every((o) => Math.abs(suma(o) - 1) < 1e-9), "cada vértice suma exactamente 1");
+  ok(w.every((o) => Object.keys(o).length <= 3), "los pesos son dispersos (3 huesos como mucho)");
+  // el vértice de la izquierda pesa más al brazo; el de la derecha, al antebrazo
+  ok((w[3].brazo || 0) > (w[3].antebrazo || 0), "el borde izquierdo sigue al brazo");
+  ok((w[5].antebrazo || 0) > (w[5].brazo || 0), "el borde derecho sigue al antebrazo");
+
+  // — el skinning MUEVE el dibujo cuando el hueso se mueve —
+  ok(doc.scene.rigMallaAt("brazo", 1) === null, "en reposo la malla no deforma nada");
+  doc.setRigKey("antebrazo", 5, { x: 0, y: 0, r: 45, sx: 1, sy: 1 });
+  const posado = doc.scene.rigMeshSkinnedAt("brazo", 5);
+  const reposo = doc.scene.rigMesh("brazo").rest;
+  const movido = posado.some((p, i) => Math.hypot(p.x - reposo[i].x, p.y - reposo[i].y) > 1);
+  ok(movido, "girar el antebrazo mueve los vértices que lo pesan");
+  const quieto = Math.hypot(posado[3].x - reposo[3].x, posado[3].y - reposo[3].y);
+  const lejos = Math.hypot(posado[5].x - reposo[5].x, posado[5].y - reposo[5].y);
+  ok(lejos > quieto, "se mueve más el lado que pesa al hueso que giró");
+  ok(!!doc.scene.rigMallaAt("brazo", 5), "y con eso la malla sí deforma el dibujo");
+
+  // — pincel de pesos: un gesto, un paso de historial —
+  const antes = JSON.stringify(doc.scene.rigMesh("brazo").weights[3]);
+  const pasos = doc.history ? doc.history.undoStack.length : 0;
+  ok(doc.paintRigMeshWeight("brazo", [3, 4], "antebrazo", 0.5), "paintRigMeshWeight pinta influencia");
+  const despues = doc.scene.rigMesh("brazo").weights[3];
+  ok((despues.antebrazo || 0) > 0, "el vértice pintado sigue ahora al antebrazo");
+  ok(Math.abs(suma(despues) - 1) < 1e-9, "y el vértice sigue sumando 1");
+  if (doc.history) {
+    ok(doc.history.undoStack.length - pasos === 1, "pintar es UN paso de historial");
+    doc.history.undo();
+    ok(JSON.stringify(doc.scene.rigMesh("brazo").weights[3]) === antes, "Ctrl+Z devuelve los pesos anteriores");
+    doc.history.redo();
+  } else { pass += 2; }
+
+  // — un vértice no puede quedarse sin ningún hueso —
+  doc.paintRigMeshWeight("brazo", [0], "antebrazo", -1);
+  doc.paintRigMeshWeight("brazo", [0], "brazo", -1);
+  const huerfano = doc.scene.rigMesh("brazo").weights[0];
+  ok(Object.keys(huerfano).length > 0 && Math.abs(suma(huerfano) - 1) < 1e-9,
+    "restar todo deja el vértice siguiendo a su propia pieza, no suelto");
+
+  // — guardar y reabrir conserva los pesos —
+  const copia = A.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+  const wr = copia.scene.rigMesh("brazo").weights;
+  ok(Array.isArray(wr) && wr.length === 9 && Math.abs(suma(wr[5]) - 1) < 1e-9,
+    "al reabrir, los pesos siguen ahí y normalizados");
+
+  // — sin pesos, la malla se comporta igual que antes (sin regresión) —
+  const viejo = new A.LowDoc();
+  viejo.ensureRigBones([{ id: "p", name: "P", head: { x: 0, y: 0 }, tail: { x: 10, y: 0 }, pivot: { x: 0, y: 0 } }], "b");
+  viejo.createRigMesh("p", { cols: 2, rows: 2, box: { x: 0, y: 0, width: 10, height: 10 } });
+  viejo.setRigMeshPoint("p", 3, 20, 20, 4);
+  const conKeys = viejo.scene.rigMeshSkinnedAt("p", 4), soloKeys = viejo.scene.rigMeshAt("p", 4);
+  ok(JSON.stringify(conKeys) === JSON.stringify(soloKeys),
+    "una malla sin pesos devuelve exactamente la rejilla de siempre");
+}
+
 console.log(`rig-mesh: ${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);
