@@ -1410,6 +1410,106 @@
       });
     }
 
+    /* ── SMART BONES: acciones conducidas por ángulo ──────────────────────
+       Una acción guarda la CORRECCIÓN (cómo debería verse el codo doblado) y
+       el driver la dosifica según el ángulo real. El artista la graba una vez
+       y vale para toda la animación. */
+
+    /** Crea una acción y la ata a un canal conductor. Por defecto el ángulo del
+     *  hueso indicado, de 0° a 90°: el recorrido típico de una articulación. */
+    createRigAction(id, data = {}) {
+      const clave = String(id || "").trim();
+      if (!clave) return false;
+      const driverPath = data.driverPath ||
+        (data.driverBone ? animation.rigChannelPath(data.driverBone, data.driverProperty || "r") : null);
+      if (!driverPath) return false;
+      return this._rigChange("Crear acción de Smart Bone", (rig) => {
+        rig.actions = rig.actions || {};
+        if (rig.actions[clave]) return false;
+        rig.actions[clave] = {
+          id: clave, name: data.name || clave, enabled: true,
+          length: Math.max(2, Math.round(+data.length || 2)),
+          driver: { path: driverPath,
+            min: Number.isFinite(+data.min) ? +data.min : 0,
+            max: Number.isFinite(+data.max) ? +data.max : 90 },
+          channels: {},
+        };
+        return true;
+      });
+    }
+    removeRigAction(id) {
+      return this._rigChange("Quitar la acción", (rig) => {
+        if (!rig.actions || !rig.actions[id]) return false;
+        delete rig.actions[id];
+        return true;
+      });
+    }
+    setRigActionDriver(id, driver = {}) {
+      return this._rigChange("Cambiar el conductor de la acción", (rig) => {
+        const accion = rig.actions && rig.actions[id];
+        if (!accion) return false;
+        const path = driver.path || accion.driver?.path;
+        if (!path) return false;
+        const min = Number.isFinite(+driver.min) ? +driver.min : accion.driver?.min ?? 0;
+        const max = Number.isFinite(+driver.max) ? +driver.max : accion.driver?.max ?? 90;
+        if (Math.abs(max - min) < 1e-9) return false;   // un rango de cero no conduce nada
+        accion.driver = { path, min, max };
+        return true;
+      });
+    }
+    /** Una clave DENTRO de la acción: su tiempo es el de la acción, no el de la
+     *  escena. El cuadro 1 es el estado en el extremo `min` del driver. */
+    setRigActionKey(id, path, frame, value) {
+      if (!id || !path) return false;
+      return this._rigChange("Clave de la acción", (rig) => {
+        const accion = rig.actions && rig.actions[id];
+        if (!accion) return false;
+        const f = Math.max(1, Math.round(frame));
+        accion.channels[path] = accion.channels[path] || animation.rigChannelData(path, {});
+        accion.channels[path].keys[f] = +value || 0;
+        if (f > accion.length) accion.length = f;
+        return true;
+      });
+    }
+    /** GRABAR: toma la pose actual de las piezas y la guarda como el estado de
+     *  la acción en uno de sus extremos. Es la forma honesta de crear un Smart
+     *  Bone: se dobla el codo, se acomoda el dibujo y se graba lo acomodado.
+     *  Guarda DIFERENCIAS contra el cuadro 1 de la acción, que es lo que la
+     *  acción aporta después. */
+    recordRigAction(id, boneIds, extremo = "max", frameEscena = null) {
+      const accion = this.scene.rig.actions && this.scene.rig.actions[id];
+      if (!accion) return false;
+      const ids = (boneIds && boneIds.length ? boneIds : Object.keys(this.scene.rig.nodes || {}))
+        .filter((b) => this.scene.rigNode(b));
+      if (!ids.length) return false;
+      const f = frameEscena == null ? this.frame : frameEscena;
+      const destino = extremo === "min" ? 1 : accion.length;
+      const enTransaccion = !!this.history && !this.history.transaction;
+      if (enTransaccion) this.history.begin("Grabar la acción");
+      let algo = false;
+      for (const bone of ids) {
+        const pose = this.scene.rigPoseBase(bone, f);
+        if (!pose) continue;
+        for (const property of ["x", "y", "r", "sx", "sy"]) {
+          const valor = property === "sx" || property === "sy"
+            ? (pose[property] == null ? 1 : pose[property]) : (pose[property] || 0);
+          const neutro = property === "sx" || property === "sy" ? 1 : 0;
+          const path = animation.rigChannelPath(bone, property);
+          const canal = accion.channels[path];
+          const yaEnUno = canal && canal.keys[1] != null;
+          // el otro extremo tiene que existir, o la acción no tendría contra
+          // qué comparar y aportaría el valor absoluto de la pose
+          if (destino !== 1 && !yaEnUno) this.setRigActionKey(id, path, 1, neutro);
+          if (destino === 1 || Math.abs(valor - neutro) > 1e-9 || yaEnUno) {
+            this.setRigActionKey(id, path, destino, valor);
+            algo = true;
+          }
+        }
+      }
+      if (enTransaccion) this.history.commit();
+      return algo;
+    }
+
     /** FLEXI-BINDING: reparte los pesos de la malla por distancia a los huesos.
      *  Es el punto de partida, no el resultado final: deja una deformación
      *  razonable en un clic y después se corrige a mano lo que importa. */
@@ -1542,7 +1642,8 @@
         rig.channels[path].keys[f] = animation.clone(value);
         if (match) {
           const id = decodeURIComponent(match[1]), property = match[2];
-          node.keys[f] ||= animation.clone(this.scene.rigPose(id, f));
+          // la clave guarda la pose BASE: el aporte de las acciones no se hornea
+          node.keys[f] ||= animation.clone(this.scene.rigPoseBase(id, f));
           node.keys[f][property] = +value || 0;
         }
         return true;
@@ -1728,11 +1829,21 @@
 
     /** Convierte poses resueltas en claves reales del cuadro. Una pose que no
      *  queda clavada no es una pose: no se reproduce ni se guarda. */
+    /** Escribe poses como CLAVES. Todo lo que llega acá se midió sobre lo que se
+     *  ve, y lo que se ve incluye el aporte de las acciones (Smart Bones). Si se
+     *  guardara tal cual, ese aporte quedaría horneado en la clave y volvería a
+     *  sumarse encima: el brazo se iría al doble en cuanto el codo se doblara.
+     *  Por eso se descuenta el aporte antes de guardar: la clave es siempre
+     *  pose BASE, y la acción sigue siendo lo único que pone la corrección. */
     _writeRigPoses(rig, poses, frame) {
       for (const [nodeId, pose] of Object.entries(poses || {})) {
         const node = rig.nodes[nodeId]; if (!node) continue;
-        node.keys[frame] = { x: +pose.x || 0, y: +pose.y || 0, r: +pose.r || 0,
-          sx: pose.sx == null ? 1 : +pose.sx, sy: pose.sy == null ? 1 : +pose.sy };
+        const extra = this.scene.rigActionDelta ? this.scene.rigActionDelta(nodeId, frame) : null;
+        const sin = (valor, campo, neutro) => (+valor || neutro) - (extra ? extra[campo] : 0);
+        node.keys[frame] = {
+          x: sin(pose.x, "x", 0), y: sin(pose.y, "y", 0), r: sin(pose.r, "r", 0),
+          sx: (pose.sx == null ? 1 : +pose.sx) - (extra ? extra.sx : 0),
+          sy: (pose.sy == null ? 1 : +pose.sy) - (extra ? extra.sy : 0) };
         this._syncRigPoseChannels(rig, nodeId, node.keys);
       }
     }

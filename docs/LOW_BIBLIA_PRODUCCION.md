@@ -177,7 +177,7 @@ Antes, durante y después de un gesto deben verse:
 | Flexi-binding | Influencia por distancia | **Hecho en v4.6.0** — `Pesos automáticos` reparte por distancia al segmento del hueso |
 | Pesos | Pesos de vértices editables | **Hecho en v4.6.0** — pincel de pesos con fuerza y radio, normalizado y reversible |
 | Malla | Deformación de imagen/vector | **Hecho en v4.6.0** — rejilla por pieza, deformada por los huesos y corregible a mano |
-| Smart Bones | Acciones conducidas por ángulo | Profesional avanzado |
+| Smart Bones | Acciones conducidas por ángulo | **Hecho en v4.7.0** — acción grabada desde la pose, dosificada por el ángulo del conductor |
 | Controles | Cara, manos, ojos, boca, accesorios | Profesional avanzado |
 
 El panel nunca debe mostrar controles de niveles que aún no tengan recorrido
@@ -451,7 +451,10 @@ No entran nuevas familias de funciones durante esta etapa.
    pesos automáticos por distancia, pincel de pesos y skinning real
    (`Σ w · Mundo(f) · Bind⁻¹`). Verificado por `tools/check_rig_weights_ui.js`
    y 34 pruebas de modelo.
-4. Smart Bones y acciones.
+4. ~~Smart Bones y acciones.~~ **Hecho en v4.7.0**: acciones con su propio
+   tiempo, conducidas por el valor de un canal (el ángulo de un hueso), que
+   aportan DIFERENCIAS a la pose. Verificado por `tools/run_smart_bones_tests.js`
+   (28) y `tools/check_smart_bones_ui.js`.
 5. Audio, lipsync y sustituciones consolidadas.
 6. Cámara y composición verificadas.
 7. Espacios de trabajo desmontables y multimonitor.

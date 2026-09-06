@@ -3097,6 +3097,23 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
    herramientas de uso diario, el resto detrás de ..., y movible. Ensanchar el
    riel para que entrara todo costaba lienzo en cada ventana; esconder lo que
    casi no se usa cuesta un clic y sólo cuando hace falta. */
+/* Smart Bones: acciones conducidas por angulo */
+.rig2-smart select { width:100%; margin:4px 0; padding:3px; border:1px solid var(--line2);
+  border-radius:var(--r-md,7px); background:var(--panel2); color:var(--fg); font-size:10.5px; }
+.rig2-smart-acciones { display:grid; grid-template-columns:1fr 1fr auto; gap:4px; margin:4px 0; }
+.rig2-smart-acciones button { min-height:26px; padding:0 8px; border:1px solid var(--line2);
+  border-radius:var(--r-md,7px); background:var(--panel2); color:var(--fg); font-size:10.5px; }
+.rig2-smart-acciones button:hover:not(:disabled) { background:var(--dz-raised); }
+.rig2-smart-acciones button:disabled { opacity:.4; }
+.rig2-smart-acciones button.danger:hover:not(:disabled) { color:#ff8a70; }
+.rig2-smart-rango { display:grid; grid-template-columns:1fr 1fr; gap:6px; align-items:center; }
+.rig2-smart-rango label { display:grid; grid-template-columns:40px 1fr; gap:5px; align-items:center;
+  color:var(--fg2); font-size:10px; }
+.rig2-smart-rango input { width:100%; height:22px; padding:0 5px; border:1px solid var(--line2);
+  border-radius:var(--r-md,7px); background:var(--panel2); color:var(--fg);
+  font:10.5px 'JetBrains Mono',monospace; }
+.rig2-smart-driver { grid-column:1/3; color:var(--fg2); font:9.5px 'JetBrains Mono',monospace; }
+
 /* Malla y pesos: overlay propio sobre el lienzo (no toca el del esqueleto) */
 .dz-mesh-overlay { position:absolute; inset:0; width:100%; height:100%; z-index:7; touch-action:none; cursor:crosshair; }
 .dz-mesh-overlay[hidden] { display:none; }

@@ -965,6 +965,13 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
     document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
   });
+  $("#rigSmartNew") && ($("#rigSmartNew").onclick = () => dzSmartNueva());
+  $("#rigSmartRecord") && ($("#rigSmartRecord").onclick = () => dzSmartGrabar());
+  $("#rigSmartRemove") && ($("#rigSmartRemove").onclick = () => dzSmartQuitar());
+  $("#rigSmartList") && ($("#rigSmartList").onchange = () => dzSmartPanelSync());
+  ["rigSmartMin", "rigSmartMax"].forEach((k) => {
+    const el = $("#" + k); if (el) el.onchange = () => dzSmartRango();
+  });
   $("#rigMeshCreate") && ($("#rigMeshCreate").onclick = () => dzMeshCrear());
   $("#rigMeshAuto") && ($("#rigMeshAuto").onclick = () => dzMeshAuto());
   $("#rigMeshPaint") && ($("#rigMeshPaint").onclick = () => dzMeshPaintToggle());
@@ -9491,6 +9498,85 @@ function dzRigIKDrag(e, constraintId) {
   gestureToken = dzRigTrackGesture(cancel);
   document.addEventListener("pointermove", preview); document.addEventListener("pointerup", finish); document.addEventListener("pointercancel", cancel);
 }
+/* ══ SMART BONES: acciones conducidas por ángulo (§4.3, nivel avanzado) ══════
+   El artista dobla el codo, acomoda el brazo UNA vez y lo graba. A partir de
+   ahí la corrección se aplica sola, dosificada por el ángulo real del codo, en
+   toda la animación. Sin esto hay que arreglar lo mismo cuadro por cuadro.
+   ═══════════════════════════════════════════════════════════════════════ */
+function dzSmartSeleccionada() {
+  const sel = $("#rigSmartList");
+  return sel && sel.value ? sel.value : null;
+}
+function dzSmartNueva() {
+  const hueso = DZ.rigSelectedId || (DZ.sel && DZ.sel.id);
+  if (!hueso || !DZ.doc) return dzSetStatus("Elegí el hueso que va a conducir la acción");
+  const base = hueso + "_flex";
+  let id = base, n = 2;
+  while (DZ.doc.scene.rig.actions && DZ.doc.scene.rig.actions[id]) id = base + "_" + n++;
+  if (!DZ.doc.createRigAction(id, { name: id, driverBone: hueso, min: 0, max: 90, length: 2 }))
+    return dzSetStatus("No pude crear la acción");
+  dzSmartPanelSync(id);
+  dzSetStatus("Acción creada: doblá el hueso, acomodá las piezas y tocá «Grabar pose»");
+}
+function dzSmartGrabar() {
+  const id = dzSmartSeleccionada();
+  if (!id || !DZ.doc) return dzSetStatus("Elegí una acción");
+  // se graban las piezas seleccionadas; si no hay, todas menos el conductor
+  const accion = DZ.doc.scene.rig.actions[id];
+  const conductor = (accion.driver.path.match(/^bones\/([^/]+)\//) || [])[1];
+  const elegidas = DZ.rigSelectedId && DZ.rigSelectedId !== decodeURIComponent(conductor || "")
+    ? [DZ.rigSelectedId] : null;
+  if (!DZ.doc.recordRigAction(id, elegidas, "max"))
+    return dzSetStatus("No había nada distinto del reposo para grabar");
+  dzSmartPanelSync(id);
+  dzSetStatus("Pose grabada en el extremo del rango · movéle el ángulo al conductor para verla entrar");
+}
+function dzSmartQuitar() {
+  const id = dzSmartSeleccionada();
+  if (!id || !DZ.doc || !DZ.doc.removeRigAction(id)) return dzSetStatus("Elegí una acción");
+  dzSmartPanelSync();
+  dzSetStatus("Acción quitada");
+}
+function dzSmartRango() {
+  const id = dzSmartSeleccionada();
+  if (!id || !DZ.doc) return;
+  const min = +$("#rigSmartMin").value, max = +$("#rigSmartMax").value;
+  if (!DZ.doc.setRigActionDriver(id, { min, max }))
+    return dzSetStatus("El rango tiene que ir de un ángulo a otro distinto");
+  dzSmartPanelSync(id);
+  dzRigApplyLive(dzRigCur());
+}
+function dzSmartPanelSync(seleccionar) {
+  const lista = $("#rigSmartList"), estado = $("#rigSmartEstado");
+  if (!lista) return;
+  const acciones = (DZ.doc && DZ.doc.scene.rig.actions) || {};
+  const ids = Object.keys(acciones);
+  const previa = seleccionar || lista.value;
+  lista.innerHTML = "";
+  for (const id of ids) {
+    const o = document.createElement("option");
+    o.value = id; o.textContent = acciones[id].name || id;
+    lista.appendChild(o);
+  }
+  if (ids.includes(previa)) lista.value = previa;
+  const actual = acciones[lista.value];
+  if (estado) estado.textContent = !ids.length ? "sin acciones"
+    : `${ids.length} ${ids.length === 1 ? "acción" : "acciones"}`;
+  const driver = $("#rigSmartDriver");
+  if (driver) driver.textContent = actual
+    ? (LOW.animation.functionEditorLabel ? LOW.animation.functionEditorLabel(actual.driver.path) : actual.driver.path)
+    : "—";
+  if (actual) {
+    $("#rigSmartMin").value = actual.driver.min;
+    $("#rigSmartMax").value = actual.driver.max;
+  }
+  ["rigSmartRecord", "rigSmartRemove", "rigSmartMin", "rigSmartMax"].forEach((k) => {
+    const el = $("#" + k); if (el) el.disabled = !actual;
+  });
+  const nuevo = $("#rigSmartNew");
+  if (nuevo) nuevo.disabled = !(DZ.rigSelectedId || (DZ.sel && DZ.sel.id));
+}
+
 /* ══ MALLA Y PESOS: los niveles 2 y 3 de la tabla de deformación (§4.3) ══════
    Rígido ya estaba: una pieza sigue a un hueso entera. Estos dos niveles son
    los que permiten que una pieza se DOBLE:
@@ -10001,6 +10087,7 @@ function dzRigSchematicRender(nodes, current) {
 function dzRigPanelSync() {
   if ($("#dzRigPanel").hidden) return;
   dzMeshPanelSync();          // malla y pesos siguen a la pieza seleccionada
+  dzSmartPanelSync();         // y las acciones, al hueso conductor
   const el = DZ.sel, num = dzRigCur(), nodes = DZ.doc ? Object.values(DZ.doc.scene.rig.nodes) : [], current = dzRigSelectedNode();
   $("#rigId").value = current?.id || (el && el.id) || ""; $("#rigCount").textContent = nodes.length; $("#rigFrame").textContent = "F" + num;
   const detected = dzRigDrawableElements().length;

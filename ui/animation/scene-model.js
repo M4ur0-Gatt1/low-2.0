@@ -393,9 +393,68 @@
     return out;
   };
 
+  /** ACCIONES Y SMART BONES (§4.3, nivel «Acciones conducidas por ángulo»).
+   *
+   *  Una ACCIÓN es una mini línea de tiempo con nombre: guarda claves de
+   *  canales igual que la escena, pero su tiempo no es el de la escena.
+   *  Un SMART BONE es esa acción CONDUCIDA por el valor de otro canal —casi
+   *  siempre el ángulo de un hueso—: el driver dice `de tal ángulo a tal otro`
+   *  y la acción se recorre en ese trayecto.
+   *
+   *  Para qué: un codo que al doblarse deforma el brazo, un hombro que al subir
+   *  corrige la clavícula. Sin esto hay que arreglar a mano, cuadro por cuadro,
+   *  la misma corrección cada vez que el personaje dobla el brazo.
+   *
+   *  La acción aporta DIFERENCIAS contra su propio cuadro 1, no valores
+   *  absolutos: así una acción en reposo no cambia nada y varias acciones se
+   *  suman sin pelearse por quién manda. */
+  const rigActionsData = (source = {}) => {
+    const out = {};
+    for (const [id, raw] of Object.entries(source || {})) {
+      if (!id || !raw) continue;
+      const channels = {};
+      for (const [path, ch] of Object.entries(raw.channels || {}))
+        channels[path] = rigChannelData(path, ch);
+      const driver = raw.driver && raw.driver.path ? {
+        path: String(raw.driver.path),
+        min: Number.isFinite(+raw.driver.min) ? +raw.driver.min : 0,
+        max: Number.isFinite(+raw.driver.max) ? +raw.driver.max : 90,
+      } : null;
+      out[id] = { id, name: raw.name || id, enabled: raw.enabled !== false,
+        length: Math.max(2, Math.round(+raw.length || 2)), driver, channels };
+    }
+    return out;
+  };
+  /** Cuánto recorrió la acción para el valor actual de su driver: 0..1. */
+  const rigActionPhase = (accion, valor) => {
+    if (!accion || !accion.driver) return 0;
+    const { min, max } = accion.driver;
+    if (Math.abs(max - min) < 1e-9) return 0;
+    return Math.max(0, Math.min(1, (valor - min) / (max - min)));
+  };
+
   const rigChannelData = (path, raw = {}) => ({ path,
     valueType: raw.valueType || "number", interpolation: raw.interpolation || "linear",
     keys: clone(raw.keys || {}), ease: clone(raw.ease || {}) });
+
+  /** Evalúa UN canal suelto en un cuadro. Vive fuera de la escena porque las
+   *  acciones tienen sus propios canales, con su propio tiempo, y necesitan la
+   *  misma matemática sin pasar por `scene.rig.channels`. */
+  function rigChannelValueDe(channel, frame, fallback = 0) {
+    const keys = (channel && channel.keys) || {};
+    const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!frames.length) return fallback;
+    const f = Number(frame) || 1;
+    if (keys[f] != null) return clone(keys[f]);
+    if (f <= frames[0]) return clone(keys[frames[0]]);
+    if (f >= frames.at(-1)) return clone(keys[frames.at(-1)]);
+    let a = frames[0], b = frames.at(-1);
+    for (const k of frames) { if (k <= f) a = k; else { b = k; break; } }
+    if (channel.interpolation === "step" || typeof keys[a] !== "number" || typeof keys[b] !== "number")
+      return clone(keys[a]);
+    const ease = channel.ease || {};
+    return keys[a] + (keys[b] - keys[a]) * rigEaseT((f - a) / (b - a), ease[a], ease[b]);
+  }
 
   /** Devuelve el tramo de un canal que contiene un cuadro. Mantener esta
    *  decisión en el modelo evita que Timeline, X-sheet y Function Editor
@@ -620,7 +679,7 @@
       bones, slots, attachments, bindings, meshes: rigMeshesData(source.meshes),
       deformers: rigDeformersData(source.deformers), constraints,
       constraintOrder: [...requestedOrder, ...remainder], controllers: clone(source.controllers || {}),
-      actions: clone(source.actions || {}), channels, switches: rigSwitchesData(source.switches, attachments),
+      actions: rigActionsData(source.actions), channels, switches: rigSwitchesData(source.switches, attachments),
       physics: clone(source.physics || {}), diagnostics: { valid: true, errors: [], warnings: [] } };
     // `nodes` es sólo el nombre de compatibilidad usado por la UI v3. Comparte
     // la misma referencia que `bones`; el JSON canónico nunca serializa ambos.
@@ -1216,27 +1275,51 @@
     }
     rigChannel(path) { return this.rig.channels[path] || null; }
     rigChannelValue(path, frame, fallback = 0) {
-      const channel = this.rigChannel(path), keys = channel?.keys || {};
-      const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
-      if (!frames.length) return fallback;
-      const f = Number(frame) || 1;
-      if (keys[f] != null) return clone(keys[f]);
-      if (f <= frames[0]) return clone(keys[frames[0]]);
-      if (f >= frames.at(-1)) return clone(keys[frames.at(-1)]);
-      let a = frames[0], b = frames.at(-1);
-      for (const k of frames) { if (k <= f) a = k; else { b = k; break; } }
-      if (channel.interpolation === "step" || typeof keys[a] !== "number" || typeof keys[b] !== "number")
-        return clone(keys[a]);
-      // El canal pisa a la pose interpolada, asi que la curva tiene que
-      // aplicarse TAMBIEN aca o no se notaria nada.
-      const ease = channel.ease || {};
-      return keys[a] + (keys[b] - keys[a]) * rigEaseT((f - a) / (b - a), ease[a], ease[b]);
+      return rigChannelValueDe(this.rigChannel(path), frame, fallback);
     }
     validateRig() {
       this.rig.diagnostics = rigDiagnostics(this.rig);
       return clone(this.rig.diagnostics);
     }
+    /** La pose de una pieza: la suya, más lo que le sumen las acciones activas.
+     *  El driver se lee del canal CRUDO (`rigChannelValue`, que no consulta
+     *  acciones), así que no hay realimentación posible: una acción no puede
+     *  conducirse a sí misma. */
     rigPose(id, frame) {
+      const base = this.rigPoseBase(id, frame);
+      if (!base) return base;
+      const extra = this.rigActionDelta(id, frame);
+      if (!extra) return base;
+      return { ...base,
+        x: base.x + extra.x, y: base.y + extra.y, r: base.r + extra.r,
+        sx: (base.sx == null ? 1 : base.sx) + extra.sx,
+        sy: (base.sy == null ? 1 : base.sy) + extra.sy };
+    }
+    /** Lo que las acciones le suman a una pieza en un cuadro, o null si nada. */
+    rigActionDelta(id, frame) {
+      const acciones = this.rig.actions;
+      if (!acciones) return null;
+      let x = 0, y = 0, r = 0, sx = 0, sy = 0, hay = false;
+      for (const accion of Object.values(acciones)) {
+        if (!accion || accion.enabled === false || !accion.driver) continue;
+        const valor = this.rigChannelValue(accion.driver.path, frame, 0);
+        const t = rigActionPhase(accion, valor);
+        const af = 1 + t * (accion.length - 1);
+        for (const property of ["x", "y", "r", "sx", "sy"]) {
+          const canal = accion.channels[rigChannelPath(id, property)];
+          if (!canal || !Object.keys(canal.keys || {}).length) continue;
+          const inicio = rigChannelValueDe(canal, 1, property === "sx" || property === "sy" ? 1 : 0);
+          const ahora = rigChannelValueDe(canal, af, inicio);
+          const d = ahora - inicio;
+          if (Math.abs(d) < 1e-9) continue;
+          hay = true;
+          if (property === "x") x += d; else if (property === "y") y += d;
+          else if (property === "r") r += d; else if (property === "sx") sx += d; else sy += d;
+        }
+      }
+      return hay ? { x, y, r, sx, sy } : null;
+    }
+    rigPoseBase(id, frame) {
       const node = this.rigNode(id), keys = node && node.keys;
       if (!node) return null;
       const frames = Object.keys(keys).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
@@ -1495,6 +1578,9 @@
   animation.rigMalla = rigMalla;
   animation.rigMeshesData = rigMeshesData;
   animation.rigAutoWeights = rigAutoWeights;
+  animation.rigActionsData = rigActionsData;
+  animation.rigActionPhase = rigActionPhase;
+  animation.rigChannelValueDe = rigChannelValueDe;
   animation.rigNormalizeWeights = rigNormalizeWeights;
   animation.rigDistanciaAlHueso = rigDistanciaAlHueso;
   animation.rigEaseT = rigEaseT;

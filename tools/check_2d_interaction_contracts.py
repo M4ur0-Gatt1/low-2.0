@@ -203,4 +203,17 @@ require('"dzMeshOverlay"' in APP and 'id="dzMeshOverlay"' in INDEX,
 require('id="rigMeshCreate"' in INDEX and "dzMeshPanelSync" in APP,
         "el panel de malla y pesos no esta montado")
 
+require("rigActionsData" in SCENE_MODEL and "rigActionPhase" in SCENE_MODEL,
+        "el esquema de acciones de Smart Bone desaparecio")
+require("rigPoseBase" in SCENE_MODEL and "rigActionDelta" in SCENE_MODEL,
+        "la pose base y el aporte de las acciones volvieron a ser la misma cosa")
+require("rigPoseBase(id, f)" in DOCUMENT,
+        "escribir una clave vuelve a capturar la pose CON el aporte de la accion")
+require("rigActionDelta(nodeId, frame)" in DOCUMENT,
+        "_writeRigPoses dejo de descontar el aporte: la correccion se hornea y se aplica dos veces")
+require("recordRigAction" in DOCUMENT and "createRigAction" in DOCUMENT,
+        "faltan los comandos de Smart Bone")
+require('id="rigSmartNew"' in INDEX and "dzSmartPanelSync" in APP,
+        "el panel de Smart Bones no esta montado")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta y espejo")
