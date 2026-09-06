@@ -54,17 +54,30 @@ jobs:
           python -m http.server 8791 --bind 127.0.0.1 >/tmp/low-http.log 2>&1 &
           CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium)"
           test -n "$CHROME"
-          "$CHROME" --headless=new --disable-gpu --no-sandbox --window-size=1366,768 \
-            --remote-debugging-port=9223 --user-data-dir=/tmp/low-e2e about:blank \
-            >/tmp/low-chrome.log 2>&1 &
-          for attempt in $(seq 1 20); do
-            curl --silent --fail http://127.0.0.1:9223/json >/dev/null && break
-            sleep 1
+          # El navegador a veces no levanta en el runner y la puerta moría muda:
+          # veinte segundos de espera y un log con ruido de dbus, sin decir que
+          # el que no arrancó fue Chromium. Se reintenta con perfil limpio y se
+          # deja dicho qué pasó, para no confundir un runner flojo con una
+          # regresión del producto.
+          "$CHROME" --version || true
+          arrancado=""
+          for intento in 1 2 3; do
+            rm -rf /tmp/low-e2e
+            "$CHROME" --headless=new --disable-gpu --no-sandbox --window-size=1366,768 \
+              --remote-debugging-port=9223 --user-data-dir=/tmp/low-e2e about:blank \
+              >>/tmp/low-chrome.log 2>&1 &
+            for attempt in $(seq 1 20); do
+              curl --silent --fail http://127.0.0.1:9223/json >/dev/null && { arrancado="si"; break; }
+              sleep 1
+            done
+            [ -n "$arrancado" ] && break
+            echo "Chromium no respondió en :9223 (intento $intento de 3); reintento con perfil limpio"
           done
-          curl --silent --fail http://127.0.0.1:9223/json >/dev/null || {
+          if [ -z "$arrancado" ]; then
+            echo "::error::Chromium no arrancó en el runner: los recorridos E2E no llegaron a ejecutarse"
             cat /tmp/low-chrome.log
             exit 1
-          }
+          fi
           node tools/check_rig_skeleton_ui.js
           node tools/check_rig_ik_ui.js
           node tools/check_coloring_ui.js
