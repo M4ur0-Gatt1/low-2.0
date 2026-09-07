@@ -100,7 +100,7 @@
   }
 
   class PanelManager {
-    constructor(storage = global.localStorage) { this.panels = new Map(); this.listeners = new Set(); this.storage = storage; this.key = "low.panels.v1"; this.layout = new DockLayout(); }
+    constructor(storage = (global.LOW?.safeMode?.preferenceStorage || global.localStorage)) { this.panels = new Map(); this.listeners = new Set(); this.storage = storage; this.key = "low.panels.v1"; this.layout = new DockLayout(); }
     saved() { try { return JSON.parse(this.storage?.getItem(this.key) || "{}"); } catch (_) { return {}; } }
     register(id, config = {}) { const previous = this.saved()[id] || {}; const panel = { id, label: config.label || id,
       dock: config.dock || "right", visible: config.visible !== false,

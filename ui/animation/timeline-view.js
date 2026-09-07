@@ -47,14 +47,16 @@
     _timeline() { return animation.timeline || {}; }
     _loadView() {
       let saved = null;
-      try { saved = JSON.parse(global.localStorage && global.localStorage.getItem(VIEW_STORAGE_KEY)); }
+      const storage = global.LOW?.safeMode?.preferenceStorage || global.localStorage;
+      try { saved = JSON.parse(storage && storage.getItem(VIEW_STORAGE_KEY)); }
       catch (_) { /* preferencias dañadas: usar valores seguros */ }
       const timeline = this._timeline();
       return timeline.normalizeViewState ? timeline.normalizeViewState(saved) : {
         frameWidth: ANCHO, density: "normal", hideEmpty: false, focusSelected: false, collapsed: {} };
     }
     _saveView() {
-      try { if (global.localStorage) global.localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(this.view)); }
+      const storage = global.LOW?.safeMode?.preferenceStorage || global.localStorage;
+      try { if (storage) storage.setItem(VIEW_STORAGE_KEY, JSON.stringify(this.view)); }
       catch (_) { /* la escena sigue funcionando aunque el navegador no permita storage */ }
     }
     _setView(patch, scrollFrame = null) {

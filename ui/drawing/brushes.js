@@ -26,7 +26,7 @@
     ,["calligraphy", "Caligrafía", { size: 18, opacity: 1, pressureSize: .45, tiltSize: .5, roundness: .22, angle: -35, smoothing: .38 }]
   ];
   class BrushLibrary {
-    constructor(storage = global.localStorage) { this.storage = storage; this.presets = new Map(defaults.map(([id, name, settings]) => [id, { id, name, ...settings }])); this.load(); }
+    constructor(storage = (global.LOW?.safeMode?.preferenceStorage || global.localStorage)) { this.storage = storage; this.presets = new Map(defaults.map(([id, name, settings]) => [id, { id, name, ...settings }])); this.load(); }
     get(id) { return this.presets.get(id); }
     isBuiltin(id) { return defaults.some(item => item[0] === id); }
     all() { return [...this.presets.values()]; }

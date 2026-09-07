@@ -47,8 +47,8 @@ tener una comprobación proporcional al riesgo.
 | --- | --- | --- |
 | BRUSH-01 | Crear, renombrar, agrupar, buscar y compartir un BrushPreset real. | P2 |
 | BRUSH-02 | Cada parámetro visible produce una diferencia medible en el trazo. | P1/P2 |
-| SAFE-01 | Inicio seguro usa workspace, shortcuts y brushes por defecto; no carga plugins ni proyecto previo. | P1 |
-| SAFE-02 | Reset UI/Shortcuts/Brushes/2D actúa por dominio y permite cancelar. | P1 |
+| SAFE-01 | Inicio seguro usa workspace, shortcuts y brushes por defecto; no carga plugins ni proyecto previo. | P1 — automatizado en modelo, host y Chromium (`--safe-mode`) |
+| SAFE-02 | Reset UI/Shortcuts/Brushes/2D actúa por dominio y permite cancelar. | P1 — automatizado; preserva escenas y recuperación |
 | RIG-01 | Un modo contextual explica por qué un Level no admite mesh/bones y cómo prepararlo. | P3 |
 | MOCAP-01 | Cancelar el análisis conserva íntegramente las siluetas anteriores y el estado del video. | P1 — automatizado en modelo/contrato |
 | MOCAP-02 | Un punto sólo se completa entre dos observaciones confirmadas; nunca se extrapola fuera de ellas. | P1 — automatizado |

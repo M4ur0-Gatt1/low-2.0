@@ -9,7 +9,7 @@
     threeD: { name: "3D", panels: ["3d-tools", "3d-stage", "surfaces", "layers"] }
   };
   class LayoutStore {
-    constructor(storage = global.localStorage) { this.storage = storage; }
+    constructor(storage = (global.LOW?.safeMode?.preferenceStorage || global.localStorage)) { this.storage = storage; }
     save(name, panels) { const all = this.read(); all[name] = { name, panels, savedAt: Date.now() };
       this.storage?.setItem("low.layouts.v1", JSON.stringify(all)); return all[name]; }
     read() { try { return JSON.parse(this.storage?.getItem("low.layouts.v1") || "{}"); } catch (_) { return {}; } }

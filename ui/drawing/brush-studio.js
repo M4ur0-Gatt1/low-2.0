@@ -7,7 +7,8 @@
     constructor(root, options = {}) {
       this.root = root; this.library = options.library; this.engine = options.engine; this.options = options;
       this.query = ""; this.filter = "all"; this.selected = options.selected || this.library?.all?.()[0]?.id || null;
-      try { this.favorites = new Set(JSON.parse(localStorage.getItem("low.brush.favorites") || "[]")); } catch (_) { this.favorites = new Set(); }
+      this.storage = global.LOW?.safeMode?.preferenceStorage || global.localStorage;
+      try { this.favorites = new Set(JSON.parse(this.storage?.getItem("low.brush.favorites") || "[]")); } catch (_) { this.favorites = new Set(); }
       this.render();
     }
     brushes() {
@@ -56,7 +57,7 @@
     }
     toggleFavorite(id) {
       if (!id) return; this.favorites.has(id) ? this.favorites.delete(id) : this.favorites.add(id);
-      try { localStorage.setItem("low.brush.favorites", JSON.stringify([...this.favorites])); }
+      try { this.storage?.setItem("low.brush.favorites", JSON.stringify([...this.favorites])); }
       catch (error) { this.options.onError?.(new Error("No hay espacio para guardar favoritos.")); }
       this.render();
     }

@@ -13,7 +13,8 @@
       this.target = opts.target === "paint" ? "paint" : "ink";
       this.currents = { ink: opts.currents?.ink || this.current, paint: opts.currents?.paint || null };
       this._editing = false; this._before = null; this._opacityBefore = null;
-      try { this.recent = JSON.parse(localStorage.getItem("low.color.recent.v1") || "[]"); } catch (_) { this.recent = []; }
+      this.storage = global.LOW?.safeMode?.preferenceStorage || global.localStorage;
+      try { this.recent = JSON.parse(this.storage?.getItem("low.color.recent.v1") || "[]"); } catch (_) { this.recent = []; }
       this._sub(doc);
     }
     _sub(doc) {
@@ -73,7 +74,7 @@
       const value = animation.palette.normColor(color);
       if (!/^#[0-9a-f]{6}$/i.test(value)) return;
       this.recent = [value, ...(this.recent || []).filter((c) => c !== value)].slice(0, 8);
-      try { localStorage.setItem("low.color.recent.v1", JSON.stringify(this.recent)); } catch (_) { /* opcional */ }
+      try { this.storage?.setItem("low.color.recent.v1", JSON.stringify(this.recent)); } catch (_) { /* opcional */ }
     }
     async _importFile(file) {
       if (!file || this.doc?.palette?.locked) return 0;

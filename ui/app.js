@@ -308,18 +308,18 @@ async function init() {
   const st = await api.get_state();
   applyState(st);
   newTab();
-  await loadChatTabs().catch(() => {});
+  if (!S.safeMode) await loadChatTabs().catch(() => {});
   // retomar SOLA la última conversación: al reabrir LOW seguís donde quedaste,
   // con el agente recordando el hilo (antes arrancaba con memoria vacía y decía
   // "no tengo contexto de una sesión previa")
   try {
-    const last = (S.chats || []).find(c => c.n > 0);
+    const last = !S.safeMode && (S.chats || []).find(c => c.n > 0);
     if (last) await resume(last.id);
   } catch (e) { /* sin historial: charla nueva */ }
   bind();
   restorePanelSizes();
   initSplitters();
-  sysMsg("LOW v" + (S.version || "?") + " — listo.\n" +
+  sysMsg((S.safeMode ? "Modo seguro activo: proyecto anterior, disposiciones, atajos y pinceles personalizados no se cargaron. Tus datos siguen guardados.\n" : "") + "LOW v" + (S.version || "?") + " — listo.\n" +
          " API keys ·  proyecto · 🔍 junto al modelo: buscador entre todos los modelos de la API.\n" +
          "barra izquierda: 🖋 Diseño (editor de vectores SVG), 🧊 Artefactos (vista previa en vivo), " +
          " Rutinas,  Herramientas, 🕸 Servidores SSH,  Historial, ▦ Ranking.\n" +
@@ -409,9 +409,9 @@ function applyState(st) {
   S.agent = st.agent || {};
   S.sshHosts = st.ssh_hosts || [];
   if (st.session_id) S.chatId = st.session_id;
-  S.version = st.version || "";
+  S.version = st.version || ""; S.safeMode = !!st.safe_mode || !!window.LOW?.safeMode?.active; document.body.classList.toggle("low-safe-mode", S.safeMode);
   S.chain = st.chain || [];
-  if (st.version) $("#ver").textContent = "LOW v" + st.version;
+  if (st.version) $("#ver").textContent = "LOW v" + st.version + (S.safeMode ? " · MODO SEGURO" : "");
   applyZoom(st.zoom || 1.0, true);
   document.body.classList.toggle("light", st.theme === "light");
   $("#btnTheme").innerHTML = icoUse(st.theme === "dark" ? "i-sun" : "i-moon");
@@ -640,17 +640,17 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   dzPaletteRender();
   // preferencias del estudio: atajos configurables + suavizado persistente
   dzKeysLoad();
-  DZ.smooth = +(localStorage.getItem("low.dzsmooth") || 40);
+  DZ.smooth = +(dzPrefsStorage().getItem("low.dzsmooth") || 40);
   $("#dzSmooth").value = DZ.smooth; $("#dzSmoothLbl").textContent = DZ.smooth;
   $("#dzSmooth").oninput = e => {
     DZ.smooth = +e.target.value;
     $("#dzSmoothLbl").textContent = e.target.value;
-    try { localStorage.setItem("low.dzsmooth", String(DZ.smooth)); } catch (err) { /* */ }
+    try { dzPrefsStorage().setItem("low.dzsmooth", String(DZ.smooth)); } catch (err) { /* */ }
   };
   // gamma de presión (OpenToonz V_BrushPressureSensitivity): <1 más sensible al inicio
-  DZ.pressureGamma = +(localStorage.getItem("low.dzgamma") || 0.85);
-  DZ.pressureMin = +(localStorage.getItem("low.dzpressuremin") || 0);
-  DZ.pressureMax = +(localStorage.getItem("low.dzpressuremax") || 1);
+  DZ.pressureGamma = +(dzPrefsStorage().getItem("low.dzgamma") || 0.85);
+  DZ.pressureMin = +(dzPrefsStorage().getItem("low.dzpressuremin") || 0);
+  DZ.pressureMax = +(dzPrefsStorage().getItem("low.dzpressuremax") || 1);
   $("#dzPrefs").onclick = dzPrefsModal;
   $("#dzRotate").addEventListener("pointerdown", dzRotateDown);
   $("#dzGroup").onclick = (e) => dzGroupSel(e.shiftKey);
@@ -797,7 +797,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
     max: window.innerHeight <= 820 ? window.innerHeight * .30 : window.innerHeight * .42
   });
   const defaultTlHeight = Math.round(Math.min(180, window.innerHeight * .18));
-  const savedTlHeight = +(localStorage.getItem("low.timeline.height") || defaultTlHeight);
+  const savedTlHeight = +(dzPrefsStorage().getItem("low.timeline.height") || defaultTlHeight);
   const syncTimelineSeparator = () => {
     if (!tlGrid || !tlResize) return;
     const limits = timelineLimits();
@@ -826,7 +826,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", up);
       document.removeEventListener("pointercancel", up);
-      try { localStorage.setItem("low.timeline.height", String(Math.round(tlGrid.getBoundingClientRect().height))); } catch (err) { /* */ }
+      try { dzPrefsStorage().setItem("low.timeline.height", String(Math.round(tlGrid.getBoundingClientRect().height))); } catch (err) { /* */ }
     };
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", up);
@@ -843,7 +843,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       tlGrid.style.height = Math.max(limits.min, Math.min(limits.max, previous)) + "px";
     }
     syncTimelineSeparator();
-    try { localStorage.setItem("low.timeline.height", String(Math.round(tlGrid.getBoundingClientRect().height))); } catch (err) { /* */ }
+    try { dzPrefsStorage().setItem("low.timeline.height", String(Math.round(tlGrid.getBoundingClientRect().height))); } catch (err) { /* */ }
   });
   if (tlResize) tlResize.addEventListener("keydown", (e) => {
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) return;
@@ -853,7 +853,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
       : current + (e.key === "ArrowUp" ? 12 : -12);
     tlGrid.style.height = Math.max(limits.min, Math.min(limits.max, next)) + "px";
     syncTimelineSeparator();
-    try { localStorage.setItem("low.timeline.height", String(Math.round(tlGrid.getBoundingClientRect().height))); } catch (err) { /* */ }
+    try { dzPrefsStorage().setItem("low.timeline.height", String(Math.round(tlGrid.getBoundingClientRect().height))); } catch (err) { /* */ }
   });
   $("#dzXsClose").onclick = () => dzAnimSetView("timeline");
   $("#dzXsHead").addEventListener("mousedown", (e) => {
@@ -2686,12 +2686,12 @@ let DZ_TOOLS_FIT = () => {};
 
 function dzToolsBarState() {
   try {
-    const guardado = JSON.parse(localStorage.getItem(DZ_TOOLBAR_KEY) || "null") || {};
+    const guardado = JSON.parse(dzPrefsStorage().getItem(DZ_TOOLBAR_KEY) || "null") || {};
     return { modo: "dock", lado: "left", fijadas: [], ...guardado };
   } catch (_) { return { modo: "dock", lado: "left", fijadas: [] }; }
 }
 function dzToolsBarSave(state) {
-  try { localStorage.setItem(DZ_TOOLBAR_KEY, JSON.stringify(state)); } catch (_) { /* sin storage */ }
+  try { dzPrefsStorage().setItem(DZ_TOOLBAR_KEY, JSON.stringify(state)); } catch (_) { /* sin storage */ }
 }
 /** Devuelve la barra a la fila: a la izquierda del lienzo o a su derecha. */
 function dzToolsDock(rail, lado) {
@@ -4822,11 +4822,11 @@ function dzStyleSync(el) {
 }
 function dzPaletteKey() { return "low.palette." + (S.ws || "global"); }
 function dzPaletteLoad() {
-  try { return JSON.parse(localStorage.getItem(dzPaletteKey()) || "[]"); }
+  try { return JSON.parse(dzPrefsStorage().getItem(dzPaletteKey()) || "[]"); }
   catch (e) { return []; }
 }
 function dzPaletteSave(p) {
-  try { localStorage.setItem(dzPaletteKey(), JSON.stringify(p.slice(0, 24))); } catch (e) { /* */ }
+  try { dzPrefsStorage().setItem(dzPaletteKey(), JSON.stringify(p.slice(0, 24))); } catch (e) { /* */ }
 }
 function dzPaletteRender() {
   const box = $("#dzPalette");
@@ -5750,13 +5750,13 @@ const DZ_KEY_LABELS = {
 };
 function dzKeysLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem("low.dzkeys") || "{}"); } catch (e) { /* */ }
+  try { saved = JSON.parse(dzPrefsStorage().getItem("low.dzkeys") || "{}"); } catch (e) { /* */ }
   DZ.keymap = { ...DZ_KEY_DEFAULTS, ...saved };
   DZ.keyrev = {};
   for (const [act, k] of Object.entries(DZ.keymap)) if (k) DZ.keyrev[k] = act;
 }
 function dzKeysSave() {
-  try { localStorage.setItem("low.dzkeys", JSON.stringify(DZ.keymap)); } catch (e) { /* */ }
+  try { dzPrefsStorage().setItem("low.dzkeys", JSON.stringify(DZ.keymap)); } catch (e) { /* */ }
   dzKeysLoad();
 }
 function dzRunAction(act) {
@@ -5854,18 +5854,18 @@ function dzPrefsModal() {
     DZ.smooth = +e.target.value;
     $("#prefSmoothLbl").textContent = e.target.value;
     const s = $("#dzSmooth"); if (s) { s.value = e.target.value; $("#dzSmoothLbl").textContent = e.target.value; }
-    try { localStorage.setItem("low.dzsmooth", String(DZ.smooth)); } catch (err) { /* */ }
+    try { dzPrefsStorage().setItem("low.dzsmooth", String(DZ.smooth)); } catch (err) { /* */ }
   };
   $("#prefGamma").oninput = (e) => {
     DZ.pressureGamma = +e.target.value / 100;
     $("#prefGammaLbl").textContent = DZ.pressureGamma.toFixed(2);
-    try { localStorage.setItem("low.dzgamma", String(DZ.pressureGamma)); } catch (err) { /* */ }
+    try { dzPrefsStorage().setItem("low.dzgamma", String(DZ.pressureGamma)); } catch (err) { /* */ }
   };
   const savePressureRange = () => {
     DZ.pressureMin = Math.max(0, Math.min(.95, +$("#prefPressureMin").value || 0));
     DZ.pressureMax = Math.max(DZ.pressureMin + .05, Math.min(1, +$("#prefPressureMax").value || 1));
     $("#prefPressureMin").value = DZ.pressureMin; $("#prefPressureMax").value = DZ.pressureMax;
-    try { localStorage.setItem("low.dzpressuremin", DZ.pressureMin); localStorage.setItem("low.dzpressuremax", DZ.pressureMax); } catch (_) { /* noop */ }
+    try { dzPrefsStorage().setItem("low.dzpressuremin", DZ.pressureMin); dzPrefsStorage().setItem("low.dzpressuremax", DZ.pressureMax); } catch (_) { /* noop */ }
   };
   $("#prefPressureMin").onchange = savePressureRange; $("#prefPressureMax").onchange = savePressureRange;
   $("#prefTabletDiag").onclick = () => api.open_tablet_diag();
@@ -6245,14 +6245,14 @@ function dzPaletteRemember(color) {
 function dzColoringPrefs() {
   if (!DZ.coloringPrefs) {
     let saved = {};
-    try { saved = JSON.parse(localStorage.getItem("low.coloring.v1") || "{}"); } catch (_) { /* */ }
+    try { saved = JSON.parse(dzPrefsStorage().getItem("low.coloring.v1") || "{}"); } catch (_) { /* */ }
     DZ.coloringPrefs = LOW.animation.coloring.normalizeSettings(saved);
   }
   return DZ.coloringPrefs;
 }
 function dzColoringPrefsSet(key, value) {
   DZ.coloringPrefs = LOW.animation.coloring.normalizeSettings({ ...dzColoringPrefs(), [key]: value });
-  try { localStorage.setItem("low.coloring.v1", JSON.stringify(DZ.coloringPrefs)); } catch (_) { /* */ }
+  try { dzPrefsStorage().setItem("low.coloring.v1", JSON.stringify(DZ.coloringPrefs)); } catch (_) { /* */ }
   return DZ.coloringPrefs;
 }
 function dzFillZoneAtPoint(e, svg) {
@@ -6903,7 +6903,7 @@ let HANDLER = null;   // { el, startW }
 function dzVectorPrefs() {
   if (DZ.vectorPrefs) return DZ.vectorPrefs;
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem("low.2d.vectorTools") || "{}"); } catch (_) { /* valores seguros */ }
+  try { saved = JSON.parse(dzPrefsStorage().getItem("low.2d.vectorTools") || "{}"); } catch (_) { /* valores seguros */ }
   DZ.vectorPrefs = {
     pumpSensitivity: Math.max(1, Math.min(12, +saved.pumpSensitivity || 4)),
     magnetRadius: Math.max(10, Math.min(240, +saved.magnetRadius || 60)),
@@ -6914,7 +6914,7 @@ function dzVectorPrefs() {
 }
 function dzVectorPrefsSet(key, value) {
   const prefs = dzVectorPrefs(); prefs[key] = value;
-  try { localStorage.setItem("low.2d.vectorTools", JSON.stringify(prefs)); } catch (_) { /* sesión privada */ }
+  try { dzPrefsStorage().setItem("low.2d.vectorTools", JSON.stringify(prefs)); } catch (_) { /* sesión privada */ }
 }
 
 /* Elige la LÍNEA (elemento con trazo) más cercana al cursor, no el relleno de
@@ -8005,14 +8005,14 @@ function dzOnionGhost(svgText, tintId, rgb, opacity) {
 function dzOnionCfg() {
   if (!DZ.onionCfg) {
     let saved = {};
-    try { saved = JSON.parse(localStorage.getItem("fidel.dzonion") || "{}"); } catch (e) { /* */ }
+    try { saved = JSON.parse(dzPrefsStorage().getItem("fidel.dzonion") || "{}"); } catch (e) { /* */ }
     DZ.onionCfg = { before: 2, after: 1, alpha: 38,
                     colorB: "#8c0000", colorA: "#00731a", ...saved };
   }
   return DZ.onionCfg;
 }
 function dzOnionCfgSave() {
-  try { localStorage.setItem("fidel.dzonion", JSON.stringify(DZ.onionCfg)); } catch (e) { /* */ }
+  try { dzPrefsStorage().setItem("fidel.dzonion", JSON.stringify(DZ.onionCfg)); } catch (e) { /* */ }
 }
 function dzHexToRgbF(hex) {
   const n = parseInt((dzHex(hex) || "#888888").slice(1), 16);
@@ -11009,7 +11009,7 @@ function dzRigRepartirDibujo() {
 function dzAnchoFijoToggle() {
   DZ.anchoFijo = !DZ.anchoFijo;
   $("#dzAnchoFijo")?.classList.toggle("on", DZ.anchoFijo);
-  try { localStorage.setItem("low.anchoFijo", DZ.anchoFijo ? "1" : "0"); } catch (_) { /* sin storage */ }
+  try { dzPrefsStorage().setItem("low.anchoFijo", DZ.anchoFijo ? "1" : "0"); } catch (_) { /* sin storage */ }
   dzSetStatus(DZ.anchoFijo
     ? "Pincel de ancho fijo: el trazo sale parejo, sin seguir la presi\u00f3n"
     : "Pincel sensible a la presi\u00f3n: el trazo engorda y adelgaza con el l\u00e1piz");
@@ -12428,7 +12428,7 @@ function dzMenuAction(act) {
     cerrar: () => closeDesign(),
     deshacer: dzUndo, rehacer: dzRedo, duplicar: dzDuplicate, borrar: dzDeleteSelected,
     agrupar: () => dzGroupSel(false), desagrupar: () => dzGroupSel(true),
-    preferencias: dzPrefsModal, atajos: dzPrefsModal, pendebug: dzPenDebugToggle,
+    preferencias: dzPrefsModal, atajos: dzPrefsModal, "config-reset": dzConfigResetModal, "safe-mode": dzEnterSafeMode, pendebug: dzPenDebugToggle,
     zoomin: () => dzZoom(0.15), zoomout: () => dzZoom(-0.15),
     zoom100: () => dzRunAction("zoom100"), fit: dzFitView,
     rotl: () => dzRotView(-15), rotr: () => dzRotView(15),
@@ -12688,7 +12688,7 @@ function dzToolOptsRender() {
   const os = $("#toSmooth"); if (os) os.oninput = e => {
     DZ.smooth = +e.target.value; $("#toSmoothLbl").textContent = e.target.value;
     const p = $("#dzSmooth"); if (p) { p.value = e.target.value; $("#dzSmoothLbl").textContent = e.target.value; }
-    try { localStorage.setItem("fidel.dzsmooth", String(DZ.smooth)); } catch (err) { /* */ }
+    try { dzPrefsStorage().setItem("fidel.dzsmooth", String(DZ.smooth)); } catch (err) { /* */ }
   };
   const of2 = $("#toFill"); if (of2) of2.oninput = e => { DZ.fillColor = e.target.value; const p = $("#dzPFill"); if (p) p.value = e.target.value; };
   const fillMode = $("#toFillMode"); if (fillMode) fillMode.onchange = e => dzColoringPrefsSet("mode", e.target.value);
@@ -12747,7 +12747,7 @@ async function dzImportBrushes() {
 function dzSplitWire() {
   const sp = $("#dzSplit"), insp = document.querySelector(".dz-inspector");
   if (!sp || !insp) return;
-  const saved = +localStorage.getItem("fidel.dzinsw");
+  const saved = +dzPrefsStorage().getItem("fidel.dzinsw");
   if (saved >= 200 && saved <= 520) insp.style.width = saved + "px";
   sp.addEventListener("mousedown", (e) => {
     e.preventDefault();
@@ -12758,7 +12758,7 @@ function dzSplitWire() {
     const up = () => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
-      try { localStorage.setItem("fidel.dzinsw", parseInt(insp.style.width) || 260); } catch (err) { /* */ }
+      try { dzPrefsStorage().setItem("fidel.dzinsw", parseInt(insp.style.width) || 260); } catch (err) { /* */ }
       dzPositionHandle();
     };
     document.addEventListener("mousemove", move);
@@ -13670,7 +13670,7 @@ window.lowAnimationPanelCommand = async ({ action, payload }) => {
     const frame = Math.max(1, Math.round(+(payload && payload.frame) || 1));
     dzOnionCfgSet(LOW.animation.onion.toggleFixed(dzOnionCfgActual(), frame));
     DZ.onionOn = true;
-  try { DZ.anchoFijo = localStorage.getItem("low.anchoFijo") === "1"; } catch (_) { /* sin storage */ }
+  try { DZ.anchoFijo = dzPrefsStorage().getItem("low.anchoFijo") === "1"; } catch (_) { /* sin storage */ }
   $("#dzAnchoFijo")?.classList.toggle("on", !!DZ.anchoFijo); if (DZ.anim) DZ.anim.onion = true;
   }
   else if (action === "undo") dzUndo();
@@ -15562,7 +15562,7 @@ function dzPanelDockSetup() {
   const left = makeDock("left", canvas, body);
   const bottom = makeDock("bottom", timeline, view);
   const docks = { left, right, bottom };
-  const dockSizes = (() => { try { return JSON.parse(localStorage.getItem("low.2d.dockSizes") || "{}"); } catch (_) { return {}; } })();
+  const dockSizes = (() => { try { return JSON.parse(dzPrefsStorage().getItem("low.2d.dockSizes") || "{}"); } catch (_) { return {}; } })();
   const sizeDock = (dock, value) => {
     const zone = dock.dataset.zone;
     if (zone === "bottom") {
@@ -15574,7 +15574,7 @@ function dzPanelDockSetup() {
       dock.style.width = dock.style.flexBasis = px + "px";
       dockSizes[zone] = px;
     }
-    localStorage.setItem("low.2d.dockSizes", JSON.stringify(dockSizes));
+    dzPrefsStorage().setItem("low.2d.dockSizes", JSON.stringify(dockSizes));
   };
   const wireDockResize = dock => {
     const zone = dock.dataset.zone;
@@ -15602,12 +15602,12 @@ function dzPanelDockSetup() {
     });
   };
   Object.values(docks).forEach(wireDockResize);
-  const saved = (() => { try { return JSON.parse(localStorage.getItem("low.2d.panelLayout") || "{}"); } catch (_) { return {}; } })();
+  const saved = (() => { try { return JSON.parse(dzPrefsStorage().getItem("low.2d.panelLayout") || "{}"); } catch (_) { return {}; } })();
   const save = (panel, place, rect) => {
     saved[panel.id] = { place, ...(rect || {}) };
-    localStorage.setItem("low.2d.panelLayout", JSON.stringify(saved));
+    dzPrefsStorage().setItem("low.2d.panelLayout", JSON.stringify(saved));
   };
-  const panelSizes = (() => { try { return JSON.parse(localStorage.getItem("low.2d.panelSizes") || "{}"); } catch (_) { return {}; } })();
+  const panelSizes = (() => { try { return JSON.parse(dzPrefsStorage().getItem("low.2d.panelSizes") || "{}"); } catch (_) { return {}; } })();
   /* Un panel OCULTO no ocupa lugar, así que tampoco tiene borde que arrastrar.
      Contarlos dejaba tiradas por la pantalla líneas de redimensionado con su
      cartelito —"Arrastrá para cambiar la altura del panel"— sobre un panel que
@@ -15645,7 +15645,7 @@ function dzPanelDockSetup() {
         const up = () => {
           document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
           panelSizes[panel.id] = horizontal ? { w: panel.offsetWidth } : { h: panel.offsetHeight };
-          localStorage.setItem("low.2d.panelSizes", JSON.stringify(panelSizes));
+          dzPrefsStorage().setItem("low.2d.panelSizes", JSON.stringify(panelSizes));
         };
         document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
       });
@@ -16620,7 +16620,7 @@ function dzOnionCfgSet(patch, options=null) {
   const cfg = { ...dzOnionCfgActual(), ...patch };
   if (DZ.doc) { DZ.doc.onionCfg = cfg; DZ.doc.touch(); DZ.doc.emit("onion"); }
   else DZ.onionCfg2 = cfg;
-  try { localStorage.setItem("low.onion.v2", JSON.stringify(cfg)); } catch (_) { /* noop */ }
+  try { dzPrefsStorage().setItem("low.onion.v2", JSON.stringify(cfg)); } catch (_) { /* noop */ }
   if (!options || !options.live) dzOnion2Render();
   if (!DZ.doc) dzOnionRender();
 }
@@ -16719,7 +16719,7 @@ async function dzOnionPanelToggle() {
 }
 function dzOnion2Wire() {
   try {
-    const guardado = JSON.parse(localStorage.getItem("low.onion.v2") || "{}");
+    const guardado = JSON.parse(dzPrefsStorage().getItem("low.onion.v2") || "{}");
     DZ.onionCfg2 = { ...LOW.animation.onion.DEFAULTS, ...guardado };
   } catch (_) { DZ.onionCfg2 = { ...LOW.animation.onion.DEFAULTS }; }
   const on = (id, ev, fn) => { const e = $(id); if (e) e[ev] = fn; };
@@ -17176,7 +17176,7 @@ async function dzWsDuplicateCurrent() {
 }
 function dzWsSetLocked(value) {
   DZ.workspaceLocked = !!value;
-  localStorage.setItem("low.workspace.locked", DZ.workspaceLocked ? "1" : "0");
+  dzPrefsStorage().setItem("low.workspace.locked", DZ.workspaceLocked ? "1" : "0");
   $("#designView")?.classList.toggle("workspace-locked", DZ.workspaceLocked);
   dzSetStatus(DZ.workspaceLocked ? " Disposición bloqueada" : " Disposición desbloqueada");
 }
@@ -17189,7 +17189,7 @@ function dzWsInit() {
   if (!window.LOW || !LOW.workspace || !LOW.workspace.workspaces) return;
   dzDragOutAll();
   dzPanelDockSetup();
-  dzWsSetLocked(localStorage.getItem("low.workspace.locked") === "1");
+  dzWsSetLocked(dzPrefsStorage().getItem("low.workspace.locked") === "1");
   dzWsRender();
   LOW.workspace.workspaces.activate(LOW.workspace.workspaces.lastUsed(), dzWsAplicar);
 }

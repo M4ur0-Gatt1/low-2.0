@@ -143,7 +143,7 @@
   const KEY_ACTIVE = "low.workspace.active";
 
   class Workspaces {
-    constructor(storage = global.localStorage) {
+    constructor(storage = (global.LOW?.safeMode?.preferenceStorage || global.localStorage)) {
       this.storage = storage;
       this.listeners = new Set();
       this.activeId = null;
