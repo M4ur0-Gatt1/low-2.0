@@ -545,6 +545,35 @@ La nota de un área es la menor de sus cuatro evidencias. Una interfaz bonita no
 compensa un motor roto; un modelo correcto no compensa una herramienta imposible
 de usar.
 
+### Marcador vigente — v4.14.0
+
+Medido en `docs/LOW_BALANCE_2026-09.md`. Cada nota es la MENOR de las cuatro
+evidencias del área, y al lado va la que la frena.
+
+| Área | Nota | La evidencia que frena |
+|---|---|---|
+| Rigging | 8 | Producción: falta un corto real terminado con personaje rigueado. |
+| Dibujo | 7 | Automatización: el presupuesto de 16 ms por trazo nunca se midió. |
+| Cuadro a cuadro | 7 | Validación humana: copiar y pegar borraba trabajo hasta v4.13.3. |
+| Timeline | 7 | Producción: falta una escena larga que use curvas y arcos en serio. |
+| Confiabilidad | 7 | Validación humana: apareció una pérdida de datos real en producción. |
+| Vector | 6 | Automatización: nodos y contornos casi sin pruebas propias. |
+| X-sheet | 6 | Implementación: falta la columna de notas. |
+| Cámara y composición | 6 | Validación humana: el flujo de composición hubo que rehacerlo. |
+| IA | 6 | Producción: falta el caso difícil de mocap (MOCAP-05). |
+| Interfaz | 6 | Validación humana: dos funciones que el artista no pudo encontrar. |
+| Distribución | 5 | Producción: los binarios de macOS y Linux nunca se abrieron. |
+| Rendimiento | 4 | Automatización: cero medición contra los presupuestos de §10. |
+| 3D | 4 | Implementación: hay multiplano, no un módulo 3D autónomo. |
+
+**Producto: 6 — beta avanzada.** No sube a 7 mientras la confianza del artista
+siga siendo lo último que descubre los defectos: en la tanda v4.13 aparecieron
+dos que le comían trabajo.
+
+Ningún área puede pasar de 8 hasta que se corra la prueba maestra de §15: sin
+una persona ajena al desarrollo, la evidencia «validación humana» no existe en
+el sentido que pide esta biblia.
+
 ---
 
 ## 14. Definición de terminado
