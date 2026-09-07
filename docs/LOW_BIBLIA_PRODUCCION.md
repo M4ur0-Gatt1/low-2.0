@@ -442,6 +442,11 @@ No entran nuevas familias de funciones durante esta etapa.
 
 1. **Video mocap y rotoscopía asistida**: importar actuación, sincronizarla,
    extraer silueta y pose, corregir resultados y retargetearlos sin destruir el rig.
+   **Aceptado en parte (v4.14.0)**: probado con un video real de un sujeto —67
+   siluetas y nivel de calco creado— y validado por el artista. Queda por probar
+   el caso difícil de MOCAP-05: oclusiones, paneo y dos sujetos. Límite medido y
+   escrito en la matriz: la silueta se analiza a **192 px de ancho como máximo**,
+   por lo que el calco se ve a manchones en una escena de 1920.
 2. ~~Editor de curvas.~~ **Hecho en v4.5.0**: canales por propiedad, curvas
    Bezier editables con manijas, tangentes Suave/Lineal/Escalón, edición
    numérica, regiones de tiempo, copiar y pegar sólo el timing, filtro por lo

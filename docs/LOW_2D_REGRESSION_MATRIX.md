@@ -55,14 +55,24 @@ tener una comprobación proporcional al riesgo.
 | MOCAP-03 | Reducir claves conserva extremos y cambios que superan la tolerancia elegida. | P1 — automatizado |
 | MOCAP-07 | Una máscara válida produce geometría SVG visible; una máscara vacía no crea un cuadro blanco. | P0 — automatizado en modelo y Chromium |
 | MOCAP-04 | Aplicar una toma al rig forma una sola transacción y no cambia pivotes ni jerarquía. | P1 — automatizado |
-| MOCAP-05 | Un video real con oclusiones, paneo y dos sujetos produce diagnóstico comprensible y corrección manual. | P1 — aceptación humana pendiente |
+| MOCAP-05 | Un video real con oclusiones, paneo y dos sujetos produce diagnóstico comprensible y corrección manual. | P1 — **parcial**: validado con video real de UN sujeto sin oclusiones ni paneo. Faltan los tres casos difíciles |
 | MOCAP-06 | El filtro elimina ruido aislado, mantiene continuidad de identidad y marca ausencia del sujeto como oclusión. | P1 — automatizado |
-| MOCAP-07 | Fondo elegido, validación y navegación por problemas persisten y son reversibles con Ctrl+Z. | P1 — modelo/UI automatizados |
+| MOCAP-13 | Fondo elegido, validación y navegación por problemas persisten y son reversibles con Ctrl+Z. | P1 — modelo/UI automatizados |
 | MOCAP-08 | Los 33 hitos MediaPipe se traducen a 13 articulaciones LOW respetando región, confianza y lados. | P0 — automatizado |
 | MOCAP-09 | Reanalizar reemplaza detecciones automáticas pero conserva cuadros corregidos manualmente. | P0 — automatizado |
 | MOCAP-10 | Pose Landmarker ejecuta inferencia en un worker local y el hilo visual conserva un fallback seguro. | P1 — E2E Chromium |
 | MOCAP-11 | Los apoyos se agrupan por pie e intervalo; Pies firmes estabiliza el contacto sin deformar la pose relativa. | P1 — modelo/UI automatizados |
-| MOCAP-12 | La máscara semántica se proyecta desde la región del sujeto al cuadro completo sin borrar correcciones manuales. | P1 — modelo automatizado; aceptación humana pendiente |
+| MOCAP-12 | La máscara semántica se proyecta desde la región del sujeto al cuadro completo sin borrar correcciones manuales. | P1 — **aceptado** (v4.14.0, video real: 67 siluetas y nivel de calco creado) |
+
+## Límites conocidos y medidos
+
+- **Resolución de la silueta: 192 px de ancho como máximo** (`localSilhouetteEngine`,
+  `width = min(192, …)`). En una escena de 1920 cada píxel de máscara se agranda diez
+  veces, y por eso el nivel de calco se ve a manchones. Es un techo elegido para que el
+  análisis de decenas de cuadros no congele la interfaz, no un defecto del filtro.
+- Con **line art** como entrada, la diferencia contra el fondo sólo se dispara donde hay
+  tinta: el resultado son los trazos, no una silueta rellena. Es lo correcto para calcar,
+  pero conviene no esperar una mancha sólida como con video de acción real.
 
 ## Regla para nuevos tests
 
