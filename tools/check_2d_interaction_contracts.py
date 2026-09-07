@@ -9,6 +9,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "ui" / "app.js").read_text(encoding="utf-8")
+# Extraidos de app.js en v4.16.0 (§12 AHORA·7). Los contratos apuntan a donde
+# vive el codigo, no a donde vivia: cuando el panel de equipo y los arcos se
+# movieron, esta prueba lo noto — que es exactamente para lo que esta.
+COLABP = (ROOT / "ui" / "panels" / "colab-panel.js").read_text(encoding="utf-8")
+ARCOSV = (ROOT / "ui" / "panels" / "arcs-view.js").read_text(encoding="utf-8")
 INDEX = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 SHORTCUTS = (ROOT / "ui" / "animation" / "shortcuts.js").read_text(encoding="utf-8")
 SCENE_MODEL = (ROOT / "ui" / "animation" / "scene-model.js").read_text(encoding="utf-8")
@@ -291,7 +296,7 @@ require('id="rigLipGen"' in INDEX and "dzLipGenerar" in APP,
 
 TRANS = (ROOT / "ui" / "collaboration" / "transport.js").read_text(encoding="utf-8")
 RELE = (ROOT / "server" / "low_relay.py").read_text(encoding="utf-8")
-require("RelayTransport" in TRANS and "dzColabConectar" in APP,
+require("RelayTransport" in TRANS and "dzColabConectar" in COLABP,
         "el transporte del trabajo remoto desaparecio")
 require("this.cola.push(op)" in TRANS,
         "sin cola, lo que se dibuja sin red se pierde")
@@ -313,7 +318,7 @@ require('op["actorId"] = c.actorId' in RELE,
         "el remitente lo pone el cliente: cualquiera puede firmar como otro")
 require("applyRemoteSnapshot" in DOCUMENT and "snapshotPara" in DOCUMENT,
         "no hay por donde entrar ni salir el dibujo del equipo")
-require("DZ.colabAplicando" in APP and "DZ.colabUltimo[clave] === texto" in APP,
+require("DZ.colabAplicando" in COLABP and "DZ.colabUltimo[clave] === texto" in COLABP,
         "sin el corte por contenido, dos LOW se devuelven la misma instantanea sin fin")
 require("if (DZ.anim) DZ.anim.idx = i;" in APP,
         "dzGoFrame volvio a exigir la lista de archivos del modo viejo: "
@@ -338,9 +343,9 @@ require('colab:      { label: "Equipo"' in WS,
 _colab_css = CSS_APP.split(".colab{")[1].split("}")[0] if ".colab{" in CSS_APP else ""
 require("position:fixed" not in _colab_css and "z-index" not in _colab_css,
         "el panel de equipo volvio a ser un flotante clavado encima del muelle")
-require("ahora - DZ.colabPresenciaAt < 1000" in APP,
+require("ahora - DZ.colabPresenciaAt < 1000" in COLABP,
         "se cayo el limite de presencia: pasar cuadros inunda el rele, 24 mensajes por segundo")
-require("dzColabReproduciendo()" in APP and "filtro.checked && !dzColabReproduciendo()" in APP,
+require("dzColabReproduciendo()" in COLABP and "filtro.checked && !dzColabReproduciendo()" in COLABP,
         "la lista de comentarios vuelve a repintarse en cada cuadro y traba la reproduccion")
 
 SHORT = (ROOT / "ui" / "animation" / "shortcuts.js").read_text(encoding="utf-8")
@@ -356,18 +361,27 @@ require("hayRango" in SHORT and "e.shiftKey && clip.range" in SHORT,
 ARCOS = (ROOT / "ui" / "animation" / "arcs.js").read_text(encoding="utf-8")
 require("analizarArco" in ARCOS and "arcoDesfase" in ARCOS,
         "el modulo de arcos y espaciado desaparecio")
-require('id="tlArco"' in INDEX and "dzArcoToggle" in APP,
+require('id="tlArco"' in INDEX and "dzArcoToggle" in ARCOSV,
         "el boton de arcos no esta en la barra de la timeline")
-require("dz-penui dz-arco" in APP,
+require("dz-penui dz-arco" in ARCOSV,
         "el arco dejo de ser solo-pantalla: se guardaria dentro del dibujo")
-require("if (previo === dw.number) continue;" in APP,
+require("if (previo === dw.number) continue;" in ARCOSV,
         "el arco vuelve a poner un punto por cuadro dentro de un sostenido: "
         "se lee «lento» donde en realidad el dibujo no cambia")
-require("dzArcoMuestras(ultimo).length" in APP,
+require("dzArcoMuestras(ultimo).length" in ARCOSV,
         "el arco vuelve a depender del nodo del DOM: al mover la cabeza lectora "
         "se pierde la seleccion y el arco desaparece justo cuando uno lo mira")
 require("mejor.error > 0.34" in ARCOS,
         "el desfase deja de callarse cuando dos movimientos no se parecen: "
         "inventa un numero de overlapping")
+
+require("window.dzColabToggle = dzColabToggle" in COLABP
+        and "window.dzArcoToggle = dzArcoToggle" in ARCOSV,
+        "un panel extraido dejo de exponer sus nombres globales: los manejadores "
+        "de la interfaz y los recorridos E2E los llaman por nombre")
+require('src="panels/colab-panel.js' in INDEX and 'src="panels/arcs-view.js' in INDEX,
+        "los paneles extraidos no se cargan: la interfaz queda sin equipo ni arcos")
+require(INDEX.index('src="app.js') < INDEX.index('src="panels/'),
+        "los paneles extraidos se cargan ANTES de app.js: usan DZ y $ de ahi")
 
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo y arcos")

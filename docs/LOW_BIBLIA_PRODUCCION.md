@@ -436,7 +436,14 @@ La IA es colaboradora, no propietaria del documento.
 4. Flujo de rigging completo, rígido y verificable.
 5. Pruebas de interacción y recorrido.
 6. Pipeline que pruebe antes de publicar.
-7. Extracción progresiva de `app.js`.
+7. Extracción progresiva de `app.js`. **Con regla y puerta desde v4.16.0**:
+   `app.js` **no puede crecer**. El techo vive en `docs/APP_JS_BUDGET`, lo hace
+   cumplir `tools/check_app_js_budget.py` en CI, y cuando baja se ajusta solo —
+   así el terreno ganado no se puede volver a perder en silencio. Cada trabajo
+   se lleva un pedazo afuera al salir. Primeras extracciones: el panel de equipo
+   (`ui/panels/colab-panel.js`, 370 líneas) y los arcos
+   (`ui/panels/arcs-view.js`, 230), verificadas por sus propios recorridos E2E.
+   De 18.650 a **18.050** líneas; concentra el 32,7 % del frontend.
 
 **Avance verificable:** la política de habilitación, el contrato de binding
 rígido y la decisión de gestos del rig ya viven en módulos puros. Vincular,
