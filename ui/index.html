@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=4.13.3">
-<link rel="stylesheet" href="design/studio-polish.css?v=4.13.3">
+<link rel="stylesheet" href="app.css?v=4.14.0">
+<link rel="stylesheet" href="design/studio-polish.css?v=4.14.0">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -383,6 +383,7 @@
       <hr><span data-act="clave">Marcar fotograma clave</span>
       <span data-act="intercalar">Intercalar…</span>
       <span data-act="interpolar">Interpolación de movimiento</span>
+      <span data-act="arcos">Arcos y espaciado <kbd>acelera · frena · overlapping</kbd></span>
       <span data-act="grabar">Grabación en vivo</span>
       <span data-act="claveia">Fotograma clave con IA…</span>
       <hr><span data-act="esqueleto">Esqueleto / Cut-out… <kbd>FK · IK</kbd></span>
@@ -1056,6 +1057,7 @@
     <button class="ibtn" id="tlIns" title="Insertar copia de este cuadro JUSTO DESPUÉS (renumera los siguientes) · Shift: cuadro en blanco"><svg class="ico"><use href="#i-insert"/></svg></button>
     <button class="ibtn" id="tlTween" title="Intercalar entre este cuadro y el siguiente: elegís cuántos intermedios y con qué curva (ease)"><svg class="ico"><use href="#i-wand"/></svg></button>
     <button class="ibtn" id="tlMove" title="Interpolación de movimiento: 1er clic fija el INICIO del elemento seleccionado, movelo a la posición final y 2do clic genera los cuadros del recorrido"><svg class="ico"><use href="#i-motion"/></svg></button>
+    <button class="ibtn" id="tlArco" title="Arcos: la trayectoria de lo seleccionado, con un punto por cuadro — juntos es lento, separados es rápido. Shift+clic fija el arco para comparar dos (overlapping)"><svg class="ico"><use href="#i-swing"/></svg></button>
     <button class="ibtn" id="tlRec" title="Grabación en vivo: armá la grabación y arrastrá un elemento — el recorrido REAL de tu mano se convierte en cuadros"><svg class="ico"><use href="#i-rec"/></svg></button>
     <button class="ibtn" id="tlPuppet" title="Titiritero: grabá EN VIVO manipulando el muñeco. Apretás REC, movés cabeza/brazos/piezas como una marioneta y LOW captura cada instante como cuadros hasta que parás."><svg class="ico"><use href="#i-hand"/></svg></button>
     <button class="ibtn" id="tlWalk" title="Ciclo de caminata: generá un ciclo automático de pasos (el elemento seleccionado sube/baja y se inclina rítmicamente)"><svg class="ico"><use href="#i-motion"/></svg>🚶</button>
@@ -1113,62 +1115,63 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=4.13.3"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=4.14.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=4.13.3"></script>
-<script src="core/pointer-controller.js?v=4.13.3"></script>
-<script src="application/mode-machine.js?v=4.13.3"></script>
-<script src="animation/palette.js?v=4.13.3"></script>
-<script src="animation/coloring.js?v=4.13.3"></script>
-<script src="animation/scene-model.js?v=4.13.3"></script>
-<script src="animation/rig-policy.js?v=4.13.3"></script>
-<script src="rigging/binding.js?v=4.13.3"></script>
-<script src="rigging/rig-input.js?v=4.13.3"></script>
-<script src="rigging/rig-schematic.js?v=4.13.3"></script>
-<script src="animation/exposures.js?v=4.13.3"></script>
-<script src="animation/onion.js?v=4.13.3"></script>
-<script src="animation/mocap.js?v=4.13.3"></script>
-<script src="animation/document.js?v=4.13.3"></script>
-<script src="animation/rig-library.js?v=4.13.3"></script>
-<script src="animation/character-library.js?v=4.13.3"></script>
-<script src="animation/timeline.js?v=4.13.3"></script>
-<script src="animation/xsheet-view.js?v=4.13.3"></script>
-<script src="animation/timeline-view.js?v=4.13.3"></script>
-<script src="animation/level-strip.js?v=4.13.3"></script>
-<script src="animation/function-editor.js?v=4.13.3"></script>
-<script src="animation/premiere-xml.js?v=4.13.3"></script>
-<script src="animation/lipsync.js?v=4.13.3"></script>
-<script src="animation/palette-view.js?v=4.13.3"></script>
-<script src="animation/audio.js?v=4.13.3"></script>
-<script src="animation/shortcuts.js?v=4.13.3"></script>
-<script src="storyboard/shot-model.js?v=4.13.3"></script>
-<script src="storyboard/stage-view.js?v=4.13.3"></script>
-<script src="storyboard/board-view.js?v=4.13.3"></script>
-<script src="animation/model-tests.js?v=4.13.3"></script>
-<script src="animation/xsheet.js?v=4.13.3"></script>
-<script src="animation/playback.js?v=4.13.3"></script>
-<script src="animation/camera.js?v=4.13.3"></script>
-<script src="composition/multiplane-model.js?v=4.13.3"></script>
-<script src="composition/controller.js?v=4.13.3"></script>
-<script src="composition/multiplane-view.js?v=4.13.3"></script>
-<script src="drawing/stabilization.js?v=4.13.3"></script>
-<script src="drawing/selection.js?v=4.13.3"></script>
-<script src="drawing/transforms.js?v=4.13.3"></script>
-<script src="drawing/pointer-input.js?v=4.13.3"></script>
-<script src="drawing/brushes.js?v=4.13.3"></script>
-<script src="drawing/stroke-engine.js?v=4.13.3"></script>
-<script src="drawing/brush-engine-pro.js?v=4.13.3"></script>
-<script src="drawing/brush-studio.js?v=4.13.3"></script>
-<script src="collaboration/session.js?v=4.13.3"></script>
-<script src="collaboration/transport.js?v=4.13.3"></script>
-<script src="workspace/panels.js?v=4.13.3"></script>
-<script src="workspace/workspaces.js?v=4.13.3"></script>
-<script src="workspace/windows.js?v=4.13.3"></script>
-<script src="workspace/layouts.js?v=4.13.3"></script>
-<script src="workspace/recovery.js?v=4.13.3"></script>
-<script src="ai/commands.js?v=4.13.3"></script>
-<script src="ai/task-runner.js?v=4.13.3"></script>
-<script src="ai/recovery.js?v=4.13.3"></script>
-<script src="app.js?v=4.13.3"></script>
+<script src="core/history.js?v=4.14.0"></script>
+<script src="core/pointer-controller.js?v=4.14.0"></script>
+<script src="application/mode-machine.js?v=4.14.0"></script>
+<script src="animation/palette.js?v=4.14.0"></script>
+<script src="animation/coloring.js?v=4.14.0"></script>
+<script src="animation/scene-model.js?v=4.14.0"></script>
+<script src="animation/rig-policy.js?v=4.14.0"></script>
+<script src="rigging/binding.js?v=4.14.0"></script>
+<script src="rigging/rig-input.js?v=4.14.0"></script>
+<script src="rigging/rig-schematic.js?v=4.14.0"></script>
+<script src="animation/exposures.js?v=4.14.0"></script>
+<script src="animation/onion.js?v=4.14.0"></script>
+<script src="animation/mocap.js?v=4.14.0"></script>
+<script src="animation/document.js?v=4.14.0"></script>
+<script src="animation/rig-library.js?v=4.14.0"></script>
+<script src="animation/character-library.js?v=4.14.0"></script>
+<script src="animation/timeline.js?v=4.14.0"></script>
+<script src="animation/xsheet-view.js?v=4.14.0"></script>
+<script src="animation/timeline-view.js?v=4.14.0"></script>
+<script src="animation/level-strip.js?v=4.14.0"></script>
+<script src="animation/function-editor.js?v=4.14.0"></script>
+<script src="animation/premiere-xml.js?v=4.14.0"></script>
+<script src="animation/lipsync.js?v=4.14.0"></script>
+<script src="animation/arcs.js?v=4.14.0"></script>
+<script src="animation/palette-view.js?v=4.14.0"></script>
+<script src="animation/audio.js?v=4.14.0"></script>
+<script src="animation/shortcuts.js?v=4.14.0"></script>
+<script src="storyboard/shot-model.js?v=4.14.0"></script>
+<script src="storyboard/stage-view.js?v=4.14.0"></script>
+<script src="storyboard/board-view.js?v=4.14.0"></script>
+<script src="animation/model-tests.js?v=4.14.0"></script>
+<script src="animation/xsheet.js?v=4.14.0"></script>
+<script src="animation/playback.js?v=4.14.0"></script>
+<script src="animation/camera.js?v=4.14.0"></script>
+<script src="composition/multiplane-model.js?v=4.14.0"></script>
+<script src="composition/controller.js?v=4.14.0"></script>
+<script src="composition/multiplane-view.js?v=4.14.0"></script>
+<script src="drawing/stabilization.js?v=4.14.0"></script>
+<script src="drawing/selection.js?v=4.14.0"></script>
+<script src="drawing/transforms.js?v=4.14.0"></script>
+<script src="drawing/pointer-input.js?v=4.14.0"></script>
+<script src="drawing/brushes.js?v=4.14.0"></script>
+<script src="drawing/stroke-engine.js?v=4.14.0"></script>
+<script src="drawing/brush-engine-pro.js?v=4.14.0"></script>
+<script src="drawing/brush-studio.js?v=4.14.0"></script>
+<script src="collaboration/session.js?v=4.14.0"></script>
+<script src="collaboration/transport.js?v=4.14.0"></script>
+<script src="workspace/panels.js?v=4.14.0"></script>
+<script src="workspace/workspaces.js?v=4.14.0"></script>
+<script src="workspace/windows.js?v=4.14.0"></script>
+<script src="workspace/layouts.js?v=4.14.0"></script>
+<script src="workspace/recovery.js?v=4.14.0"></script>
+<script src="ai/commands.js?v=4.14.0"></script>
+<script src="ai/task-runner.js?v=4.14.0"></script>
+<script src="ai/recovery.js?v=4.14.0"></script>
+<script src="app.js?v=4.14.0"></script>
 </body>
 </html>

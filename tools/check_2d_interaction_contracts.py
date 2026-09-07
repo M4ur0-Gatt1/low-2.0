@@ -353,4 +353,21 @@ require("hayRango" in SHORT and "e.shiftKey && clip.range" in SHORT,
         "se cayo la regla de copiar/pegar: sin rango el dibujo, con rango las celdas, "
         "Ctrl+Shift+V el reuso")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync y equipo")
+ARCOS = (ROOT / "ui" / "animation" / "arcs.js").read_text(encoding="utf-8")
+require("analizarArco" in ARCOS and "arcoDesfase" in ARCOS,
+        "el modulo de arcos y espaciado desaparecio")
+require('id="tlArco"' in INDEX and "dzArcoToggle" in APP,
+        "el boton de arcos no esta en la barra de la timeline")
+require("dz-penui dz-arco" in APP,
+        "el arco dejo de ser solo-pantalla: se guardaria dentro del dibujo")
+require("if (previo === dw.number) continue;" in APP,
+        "el arco vuelve a poner un punto por cuadro dentro de un sostenido: "
+        "se lee «lento» donde en realidad el dibujo no cambia")
+require("dzArcoMuestras(ultimo).length" in APP,
+        "el arco vuelve a depender del nodo del DOM: al mover la cabeza lectora "
+        "se pierde la seleccion y el arco desaparece justo cuando uno lo mira")
+require("mejor.error > 0.34" in ARCOS,
+        "el desfase deja de callarse cuando dos movimientos no se parecen: "
+        "inventa un numero de overlapping")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo y arcos")

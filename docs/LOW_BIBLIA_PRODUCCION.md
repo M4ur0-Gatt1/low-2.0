@@ -155,8 +155,8 @@ Antes, durante y después de un gesto deben verse:
 7. **Probar.** Pose temporal sin claves ni modificación de la geometría neutra.
 8. **Animar.** Autokey explícito, claves visibles en X-sheet/Timeline y reproducción.
 9. **Reutilizar.** Guardar arte y rig como personaje de biblioteca; cada apertura crea una copia editable independiente.
-9. **Guardar y reabrir.** Mismo arte, jerarquía, bindings, poses, controles y timing.
-10. **Exportar.** Resultado visual igual a la previsualización aprobada.
+10. **Guardar y reabrir.** Mismo arte, jerarquía, bindings, poses, controles y timing.
+11. **Exportar.** Resultado visual igual a la previsualización aprobada.
 
 ### 4.2 Semántica de los huesos
 
@@ -475,6 +475,13 @@ No entran nuevas familias de funciones durante esta etapa.
    `tools/check_relay_server.py` (protocolo, con clientes WebSocket reales),
    `tools/run_collab_transport_tests.js` (34) y `tools/check_colab_ui.js`
    (LOW contra el servidor de verdad), más 13 contratos estáticos.
+9. ~~Arcos y espaciado.~~ **Hecho en v4.14.0**: la trayectoria de cualquier
+   cosa que se mueva —pieza de rig o elemento dibujado— con un punto por cuadro
+   (juntos lento, separados rápido), la lectura en palabras de si **acelera** o
+   **desacelera** y dónde cambia, y varios arcos fijados a la vez para medir el
+   **overlapping** entre dos partes. El desfase se calla cuando los dos
+   movimientos no se parecen, en vez de inventar un número. Verificado por
+   `tools/run_arcs_tests.js` (26), `tools/check_arcs_ui.js` y 6 contratos.
 
 #### Prioridad inmediata — video mocap y rotoscopía
 
