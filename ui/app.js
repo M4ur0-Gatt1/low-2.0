@@ -3040,8 +3040,6 @@ async function dzDocumentTabActivate(id) {
     if (DZ.history) { DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack; }
     if (DZ.doc && DZ.history) DZ.doc.setHistory(DZ.history);
     if (DZ.doc) {
-      const drawing = DZ.doc.drawing;
-      if (isScene) dzCanvasSet(drawing ? drawing.content : target.content || "");
       dzSyncCanvasDocument(true); dzSyncTransportFromDoc(); dzOnionRender(); dzOnion2Render();
       if (!$("#dzTimeline")?.hidden) await dzTlMount();
       if (!$("#dzXs")?.hidden) await dzXsMount();
@@ -3049,6 +3047,9 @@ async function dzDocumentTabActivate(id) {
       if (DZ.colab) dzColabVigilar();
     }
     dzApplyZoom(); dzBuildLayers(); dzPaletteRender();
+    // Montar Timeline/X-sheet y reconstruir capas puede sincronizar su frame
+    // inicial. La escena manda: al final se proyecta exactamente su Drawing.
+    if (isScene && DZ.doc) { dzCanvasSet(DZ.doc.drawing ? DZ.doc.drawing.content : target.content || ""); dzOnionRender(); }
   }
   DZ.activeDocumentTab = id; dzDocumentTabsRender();
   return true;
