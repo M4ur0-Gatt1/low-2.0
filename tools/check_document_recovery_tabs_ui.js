@@ -44,19 +44,37 @@ async function main() {
       api.save_file=async(path,content,name)=>({path:path||paths.a,name:name||String(path).split(/[/\\\\]/).pop(),bytes:String(content).length,atomic:true});
       api.make_frame=async path=>({path}); api.scene_get=async()=>({scene:{}});
       try {
+        // Higiene que todos los demas recorridos tienen y este no tenia: sin
+        // esto una corrida hereda pestañas y preferencias de la anterior, y en
+        // rafaga (CI corre diecisiete seguidos en el mismo navegador) el estado
+        // heredado cambia lo que se esta midiendo.
+        try{ localStorage.clear(); }catch(_){ }
         LOW.workspace.sceneRecovery.list().forEach(r=>LOW.workspace.sceneRecovery.clear(r.identity));
         LOW.workspace.recovery.clear(paths.s1); LOW.workspace.recovery.clear(paths.s2);
         await dzSceneOpen(); const tabA=DZ.activeDocumentTab,docA=DZ.doc;
         docA.writeDrawing('<path id="A-vivo" d="M2 2L20 20"/>'); dzCanvasSet(docA.drawing.content);
         await dzSceneOpen(); const tabB=DZ.activeDocumentTab,docB=DZ.doc;
         docB.writeDrawing('<path id="B-vivo" d="M3 3L30 30"/>'); dzCanvasSet(docB.drawing.content);
+        // Activar una pestaña repinta el lienzo, y leerlo en el mismo tirón
+        // sincrónico devuelve lo anterior. Acá pasaba en CI y no en la máquina
+        // de trabajo: la aserción fallaba por lentitud, no por regresión. Se
+        // espera por CONDICIÓN —que el lienzo muestre la marca de esa escena—
+        // con tope, así sigue fallando de verdad si nunca se sincroniza.
+        const dormir=ms=>new Promise(r=>setTimeout(r,ms));
+        const lienzoCon=async(marca)=>{
+          for(let i=0;i<60;i++){ if(dzCanvasInner().includes(marca)) return true; await dormir(50); }
+          return false;
+        };
         await dzDocumentTabActivate(tabA);
+        await lienzoCon("A-vivo");
         const recBefore=LOW.workspace.sceneRecovery.list();
         const backA={same:DZ.doc===docA,mark:DZ.doc.drawing.content,canvas:dzCanvasInner()};
         DZ.doc.writeDrawing('<path id="A-aislado" d="M4 4L40 40"/>'); dzCanvasSet(DZ.doc.drawing.content);
         await dzDocumentTabActivate(tabB);
+        await lienzoCon("B-vivo");
         const backB={same:DZ.doc===docB,mark:DZ.doc.drawing.content,canvas:dzCanvasInner()};
         await dzDocumentTabActivate(tabA);
+        await lienzoCon("A-aislado");
         const idA=dzSceneRecoveryIdentity(DZ.doc,dzDocumentTabCurrent());
         const tabBState=DZ.documentTabs.find(t=>t.id===tabB);
         const idB=dzSceneRecoveryIdentity(tabBState.runtime.doc,tabBState);
@@ -80,7 +98,14 @@ async function main() {
         await dzSave();
         const svgRecovery={aHad:!!ra,bHad:!!rb,separate:!!ra&&!!rb&&/rapido-A/.test(ra.content)&&!/rapido-B/.test(ra.content)&&/rapido-B/.test(rb.content),
           aGone:!LOW.workspace.recovery.get(paths.s1),bAlive:!!LOW.workspace.recovery.get(paths.s2)};
-        return {tabs:DZ.documentTabs.length,lowSceneImageRequests,backA,backB,afterNew,sceneRecovery,svgRecovery};
+        // Contexto para cuando esto falle en una maquina que no es esta: sin
+        // saber cuantas pestañas habia ni si el lienzo llego a sincronizarse, un
+        // fallo intermitente no se puede diagnosticar desde el log.
+        const contexto={pestanas:DZ.documentTabs.length,
+          activa:DZ.activeDocumentTab===tabA?"A":(DZ.activeDocumentTab===tabB?"B":"otra"),
+          clavesGuardadas:(()=>{ try{ return Object.keys(localStorage).length }catch(_){ return -1 } })(),
+          sincronizoA:dzCanvasInner().includes("A-aislado")||dzCanvasInner().includes("A-vivo")};
+        return {tabs:DZ.documentTabs.length,lowSceneImageRequests,backA,backB,afterNew,sceneRecovery,svgRecovery,contexto};
       } finally {api.open_dialog=original.open;api.image_data=original.image;api.save_file=original.save;api.new_design=original.create;
         api.make_frame=original.make;api.scene_get=original.sceneGet;}
     })()`;
@@ -89,7 +114,8 @@ async function main() {
     const v = result.result?.value;
     if (v?.lowSceneImageRequests !== 0) throw Error("REGRESIÓN: una .lowscene pasó por image_data: " + JSON.stringify(v));
     if (!v?.backA?.same || !/A-vivo/.test(v.backA.mark) || !/A-vivo/.test(v.backA.canvas) || /B-vivo/.test(v.backA.canvas))
-      throw Error("REGRESIÓN: la escena A perdió o mezcló su LowDoc: " + JSON.stringify(v?.backA));
+      throw Error("REGRESIÓN: la escena A perdió o mezcló su LowDoc: " + JSON.stringify(v?.backA) +
+        " · contexto: " + JSON.stringify(v?.contexto));
     if (!v?.backB?.same || !/B-vivo/.test(v.backB.mark) || !/B-vivo/.test(v.backB.canvas) || /A-aislado/.test(v.backB.canvas))
       throw Error("REGRESIÓN: la escena B perdió o mezcló su LowDoc: " + JSON.stringify(v?.backB));
     if (!v?.afterNew?.same || !/A-antes-nuevo/.test(v.afterNew.mark) || !v.afterNew.newTab)
