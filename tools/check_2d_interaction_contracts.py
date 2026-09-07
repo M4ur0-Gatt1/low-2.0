@@ -537,4 +537,23 @@ require("INERTES" in STUDIO and "pressureOpacity" in STUDIO and "hardness" in ST
 require("inerte" in (ROOT / "ui" / "design" / "studio-polish.css").read_text(encoding="utf-8"),
         "falta el estilo del deslizador apagado: se veria igual que uno vivo")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria y pincel")
+# -- Edicion vectorial: nodos --------------------------------------------
+NODOS = (ROOT / "ui" / "vector" / "node-editor.js").read_text(encoding="utf-8")
+require('src="vector/node-editor.js' in INDEX,
+        "el editor de nodos no se carga: la herramienta de puntos queda muerta")
+require("function dzPathParse" not in APP and "function dzNodesShow" not in APP,
+        "el editor de nodos volvio a app.js")
+require("dzNodesHistoria()" in NODOS and "dzNodesCerrarPaso()" in NODOS,
+        "el gesto de nodos dejo de agruparse en una transaccion: volveria a "
+        "dejar dos pasos de historial y el primer Ctrl+Z no se veria")
+require("clearTimeout(DZ_DOC_TIMER)" in NODOS and "dzDocCommit()" in NODOS,
+        "el volcado al documento ya no se fuerza dentro del gesto: caeria 260 ms "
+        "despues, fuera de la transaccion, como un paso aparte")
+require("DZ.history?.cancel?.()" in NODOS,
+        "un gesto de nodos cancelado deja la transaccion abierta: el proximo "
+        "cambio entraria en ella")
+require('cmds.filter(s => s.c !== "Z").length <= 2' in NODOS,
+        "se saco el piso del trazado: borrando puntos se podria dejar un trazado "
+        "degenerado que no dibuja nada")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel y nodos")

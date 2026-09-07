@@ -1,6 +1,6 @@
 # Balance de LOW — septiembre de 2026
 
-> **Al día en v4.21.0.** Lo que sigue del encabezado es el estado de hoy. El
+> **Al día en v4.22.0.** Lo que sigue del encabezado es el estado de hoy. El
 > cuerpo del documento, más abajo, es el balance tal como se midió en la
 > **v4.14.0** y se deja sin retocar: sirve para ver qué se movió y qué no.
 
@@ -13,7 +13,7 @@ y **una va en camino y ya no retrocede** —la 4—:
 |---|---|
 | 2 · Rendimiento sin medir (§10) | **cerrada.** `check_perf_budgets.js` en la puerta de CI, con escena patrón de 3 capas × 24 cuadros × 30 trazos (~914 KB). Los cuatro presupuestos de tiempo pasan sin margen. |
 | 3 · Humo del binario en macOS y Linux (§9·4) | **cerrada.** Los tres sistemas arrancan el ejecutable empaquetado en CI. |
-| 4 · Partir `app.js` (§12) | **en camino, y ya no va para atrás.** Puerta de CI que falla si `app.js` crece, con techo que baja solo. De 18.564 líneas a **17.753**. |
+| 4 · Partir `app.js` (§12) | **en camino, y ya no va para atrás.** Puerta de CI que falla si `app.js` crece, con techo que baja solo. De 18.564 líneas a **17.596**. |
 | 6 · SAFE-01 / SAFE-02 | **cerradas** en v4.18.0: inicio seguro y reset por dominio, automatizados en modelo, puente y Chromium. |
 | 6 · BRUSH-02 | **cerrada** en v4.21.0. Ver abajo. |
 
@@ -33,7 +33,7 @@ Quedan **dos**, y son las que de verdad pesan:
 |---|---|---|---|
 | **Rendimiento** | 4 | **6** | De cero medición a cuatro presupuestos medidos en cada commit. No sube más porque los presupuestos son de §10 y todavía no hay una escena de producción larga que los estire. |
 | **Distribución** | 5 | **6** | Los tres binarios arrancan; la firma está cableada y espera certificado. No sube más porque **sólo el de Windows lo usó alguien de verdad**. |
-| **Vector** | 6 | **7** | BRUSH-02 cerrado y con guardia. Sigue frenada por la edición de nodos y contornos, que casi no tiene pruebas propias. |
+| **Vector** | 6 | **7** | BRUSH-02 cerrado y con guardia, y la edición de nodos —que era lo que la frenaba— pasó de cero pruebas a un recorrido propio, con un defecto de historial encontrado y arreglado en el camino. No sube a 8 porque falta producción: un dibujo entintado de verdad con estas herramientas. |
 | **Cámara y composición** | 6 | **7** | Composición pasó de diorama a herramienta: arrastrar mueve, hay vista de cámara con el cuadro real, y el inspector responde. Frenada por producción: falta una escena larga hecha con eso. |
 | Las demás | | **igual** | Nada cambió su evidencia más débil. |
 
@@ -50,8 +50,9 @@ se cierra escribiendo código.
 1. **La prueba maestra de §15.** Es lo único que puede mover la nota del
    producto. Las tres cosas que la bloqueaban ya están hechas, así que la
    persona ajena ya no va a chocar contra defectos que conocíamos.
-2. **Pruebas propias de la edición vectorial** (nodos y contornos), que es lo
-   que hoy frena a Vector.
+2. ~~Pruebas propias de la edición vectorial~~ — **hecho en v4.22.0**, y de
+   paso apareció y se arregló un defecto del historial: mover un punto dejaba
+   dos pasos y el primer Ctrl+Z no se veía.
 3. **La columna de notas del X-sheet**, que es lo único que le falta de
    implementación a una hoja profesional.
 4. **MOCAP-05** cuando haya material.
@@ -107,8 +108,8 @@ ganó, no la que quisiéramos.
 
 ## Qué se ganó (cifras, no adjetivos)
 
-*Cifras de la v4.14.0. Hoy, en v4.21.0: 12 suites de modelo, **22** recorridos
-E2E en Chromium, 6 comprobaciones del puente Python y **177** contratos
+*Cifras de la v4.14.0. Hoy, en v4.22.0: 12 suites de modelo, **23** recorridos
+E2E en Chromium, 6 comprobaciones del puente Python y **183** contratos
 estáticos.*
 
 | | |

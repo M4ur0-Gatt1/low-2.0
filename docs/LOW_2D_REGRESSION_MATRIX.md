@@ -49,6 +49,7 @@ tener una comprobación proporcional al riesgo.
 | BRUSH-02 | Cada parámetro visible produce una diferencia medible en el trazo. | P1 — **cerrado en v4.21.0**; automatizado (`check_brush_params_ui`). En raster los nueve cambian el trazo; en vectorial siete, y los dos que no —Presión → opacidad y Dureza— están **apagados con su motivo**, porque una cinta rellena no puede variar opacidad a lo largo ni difuminar el borde. |
 | SAFE-01 | Inicio seguro usa workspace, shortcuts y brushes por defecto; no carga plugins ni proyecto previo. | P1 — automatizado en modelo, host y Chromium (`--safe-mode`) |
 | SAFE-02 | Reset UI/Shortcuts/Brushes/2D actúa por dominio y permite cancelar. | P1 — automatizado; preserva escenas y recuperación |
+| NODE-01 | Editar puntos de un trazado, polígono o línea: mover, borrar, y un solo paso de historial por gesto. | P1 — **automatizado en v4.22.0** (`check_vector_nodes_ui`): formato del trazado (relativo, H/V, L implícita), mover sin deformar el resto, piso contra trazados degenerados, el arranque no se pierde, y **un gesto = un Ctrl+Z**. |
 | RIG-01 | Un modo contextual explica por qué un Level no admite mesh/bones y cómo prepararlo. | P3 |
 | MOCAP-01 | Cancelar el análisis conserva íntegramente las siluetas anteriores y el estado del video. | P1 — automatizado en modelo/contrato |
 | MOCAP-02 | Un punto sólo se completa entre dos observaciones confirmadas; nunca se extrapola fuera de ellas. | P1 — automatizado |
