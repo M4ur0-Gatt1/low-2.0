@@ -1,6 +1,6 @@
 # Memoria persistente del proyecto LOW
 
-Última actualización: 2026-08-20.
+Última actualización: 2026-09-07.
 
 ## Reglas de trabajo acordadas
 
@@ -40,13 +40,18 @@
 
 ## Prioridad activa
 
-Continuar el contrato v4 descrito en `docs/ADR_2D_PRO_RIG_ARCHITECTURE.md`.
-El fundamento ya está implementado: bones separados del arte,
-slots/attachments, canales por propiedad, constraints ordenadas con detección
-de ciclos y migración desde rig v3. El próximo bloque es cut-out profesional:
-herramienta gráfica de huesos, IK/FK match, pole, pins, sustituciones visibles y
-Schematic básico. Después siguen malla/pesos, controladores/acciones y rigs 360
-por vistas. No llamar “rig completo” a controles que sólo modifican el DOM.
+El contrato rig v4 ya cubre armado gráfico, FK/IK, pole, apoyos, sustituciones,
+Schematic, malla/pesos, Smart Bones y controles. La prioridad abierta deja de
+ser “agregar rig” y pasa a validar producción difícil: MOCAP-05 (oclusiones,
+paneo y dos sujetos), BRUSH-02 (cada parámetro con diferencia medible), prueba
+maestra humana de `docs/LOW_BIBLIA_PRODUCCION.md` §15 y división gradual de
+`ui/app.js`. No llamar completa una función sólo porque tenga panel.
+
+Desde v4.16.0 el arranque seguro se invoca con `LOW --safe-mode` o Ayuda →
+Reiniciar interfaz en modo seguro. Aísla proyecto anterior, layouts, atajos y
+pinceles personalizados sin borrarlos. Edición → Restablecer configuración 2D
+limpia por dominio; nunca incluye escenas, recuperación ni archivos del
+proyecto. Los cambios coordinados se anuncian antes en `tools/bus.js`.
 
 ## Últimos bloques 2D confirmados
 
