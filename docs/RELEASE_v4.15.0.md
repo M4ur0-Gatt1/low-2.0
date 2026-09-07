@@ -116,3 +116,27 @@ defecto del producto.
 
 Estable previa: `v4.14.0`. Nada de esta versión toca el producto: son
 mediciones, comprobaciones y el sellado de la versión.
+
+---
+
+## Nota de v4.15.1
+
+La puerta de v4.15.0 falló en `check_document_recovery_tabs_ui.js` —un recorrido
+de multi-documento que ya estaba en el árbol— con «la escena A perdió o mezcló
+su LowDoc». **No reproduje la falla**: pasa limpio en la máquina de trabajo, con
+la CPU estrangulada a 1/6, y corriendo en secuencia detrás del recorrido de
+pestañas, que es el orden de CI.
+
+Lo que se hizo es endurecimiento, no un arreglo de la causa, y corresponde
+decirlo así: leía el lienzo en el mismo tirón sincrónico en que activaba la
+pestaña —ahora espera por condición, con tope—, no limpiaba `localStorage` como
+sí hacen los demás recorridos, y ahora informa cuántas pestañas había, cuál
+estaba activa y si el lienzo llegó a sincronizar. Si vuelve a fallar, el log va a
+decir por qué.
+
+También se sacó del repositorio un perfil de Chromium de las pruebas que un
+`git add -A` mío metió en el commit de v4.15.0 —133 archivos, incluido un
+volcado de fallo— y quedó en `.gitignore`. Se verificó antes de alarmar: las
+bases de Cookies, Login Data e History estaban **vacías**, sólo con su tabla de
+metadatos. Los archivos siguen alcanzables en el commit `c1144dc`; purgarlos de
+la historia exige reescribirla y esa decisión no es mía.
