@@ -46,3 +46,11 @@ build-*/
 
 # Datos locales de la app (config, sesiones, escenas de recuperacion).
 .low/
+
+# Perfiles de navegador de las pruebas E2E. Se colaron 133 archivos —incluido un
+# volcado de fallo de 1,4 MB— en un `git add -A`, a un repositorio publico. Las
+# bases estaban vacias (solo la tabla meta), pero no puede volver a pasar.
+.tmp-chrome*/
+.chrome-profile*/
+cdp-profile*/
+low-e2e*/
