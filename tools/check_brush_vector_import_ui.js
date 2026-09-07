@@ -22,7 +22,16 @@ async function main() {
   await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
   await send("Emulation.setDeviceMetricsOverride", { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
   await send("Network.setCacheDisabled", { cacheDisabled: true });
-  await send("Page.navigate", { url: pageUrl }); await new Promise(resolve => setTimeout(resolve, 2200));
+  await send("Page.navigate", { url: pageUrl });
+  // Por CONDICION, no por reloj: 2,2 s alcanzan acá y se quedan cortos en un
+  // runner cargado, y entonces openDesign corre sin puente y falla con «api es
+  // null». Ver check_coloring_ui.js para el mismo cambio y el mismo motivo.
+  for (let intento = 0; intento < 80; intento++) {
+    const listo = await send("Runtime.evaluate", { returnByValue: true,
+      expression: 'typeof openDesign === "function" && !!api' });
+    if (listo.result?.value === true) break;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
   const expression = `(async()=>{
     const wait=ms=>new Promise(r=>setTimeout(r,ms));
     await openDesign("C:\\mock\\imports.svg"); await dzDocInit(); await wait(250);

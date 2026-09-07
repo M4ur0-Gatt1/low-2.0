@@ -80,3 +80,29 @@ arrancaba. Lo encontró el recorrido capturando la excepción.
 
 Estable previa: `v4.16.0`. El texto sigue colocándose con un clic; lo único que
 cambia de comportamiento son las formas y la línea.
+
+---
+
+## Nota de v4.17.1 — el arnés esperaba por reloj
+
+La puerta de v4.17.0 falló con `Cannot read properties of null (reading
+'image_data')`: `openDesign` corriendo **antes de que el puente exista**.
+
+La causa es de esta misma versión y es mía. Los recorridos esperaban a que
+existiera una **función de `app.js`**, que está lista antes que el puente; al
+agregar `panels/shape-tool.js` después de `app.js`, la ventana entre «las
+funciones existen» y «el puente está listo» se ensanchó, y en un runner cargado
+—no en esta máquina— el arranque se metió por el medio.
+
+Corregido en los **dieciocho** recorridos, y de dos maneras según cómo esperaba
+cada uno:
+
+- Los que esperaban por condición ahora incluyen `!!api`, que es la condición
+  real.
+- Cuatro esperaban con un **sleep fijo** de 600 a 2400 ms —la trampa clásica—:
+  `check_coloring_ui`, `check_multiplane_ui`, `check_rig_skeleton_ui` y
+  `check_brush_vector_import_ui`. Ahora esperan por condición, con tope.
+
+Un sleep fijo alcanza en la máquina de trabajo y se queda corto en el runner: la
+prueba falla por lentitud y uno pierde la tarde buscando una regresión que no
+existe.

@@ -31,7 +31,17 @@ async function main() {
   // anterior y la prueba certifica código que ya no existe.
   await send("Network.enable"); await send("Network.setCacheDisabled", { cacheDisabled: true });
   await send("Page.navigate", { url: pageUrl });
-  await new Promise(ok => setTimeout(ok, 1800));
+  // Esperar por CONDICION y no por reloj: un sleep fijo alcanza en la maquina de
+  // trabajo y se queda corto en un runner cargado, y entonces openDesign corre
+  // antes de que el puente exista y falla con «api es null». Pasó de verdad al
+  // agregar un script despues de app.js, que ensancho la ventana entre «las
+  // funciones existen» y «el puente esta listo».
+  for (let intento = 0; intento < 80; intento++) {
+    const listo = await send("Runtime.evaluate", { returnByValue: true,
+      expression: 'typeof openDesign === "function" && !!api' });
+    if (listo.result?.value === true) break;
+    await new Promise(ok => setTimeout(ok, 250));
+  }
   const expression = `(async()=>{
     await openDesign("C:\\\\mock\\\\color-test.svg");
     await dzDocInit();

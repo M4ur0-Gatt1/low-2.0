@@ -19,7 +19,7 @@ async function main() {
   });
   await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
   await send("Network.setCacheDisabled", { cacheDisabled: true }); await send("Page.navigate", { url: pageUrl });
-  for (let i = 0; i < 60; i++) { const ready = await send("Runtime.evaluate", { expression: 'typeof dzDocumentTabActivate==="function"', returnByValue: true });
+  for (let i = 0; i < 60; i++) { const ready = await send("Runtime.evaluate", { expression: 'typeof dzDocumentTabActivate==="function" && !!api', returnByValue: true });
     if (ready.result?.value) break; await new Promise(resolve => setTimeout(resolve, 250)); }
   const expression = `(async()=>{
     await openDesign("C:\\mock\\personaje-a.svg");

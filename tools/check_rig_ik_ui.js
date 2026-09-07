@@ -45,7 +45,8 @@ async function main() {
     for (let intento = 0; intento < 60; intento++) {
       const r = await send("Runtime.evaluate", { returnByValue: true, expression:
         `typeof openDesign === "function" && typeof dzDocInit === "function"
-         && !!document.querySelector("#dzMenubar .dz-menu[data-menu='ventana']")` });
+         && !!document.querySelector("#dzMenubar .dz-menu[data-menu='ventana']")
+         && !!api` });
       if (r.result?.value === true) return true;
       await new Promise(ok => setTimeout(ok, 250));
     }
