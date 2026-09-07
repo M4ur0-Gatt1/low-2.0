@@ -15,7 +15,7 @@
         <button data-v="perspective" class="active">Perspectiva</button><button data-v="front">Frente</button><button data-v="top">Arriba</button>
         <button data-a="grid" class="active" title="Mostrar u ocultar cuadrícula">Grid</button><button data-a="snap" class="active" title="Ajuste: XY/Z 10 · rotación 5° · escala 5% (Ctrl desactiva durante el gesto)">Snap</button><button data-a="home" title="Centrar vista">Centrar</button><i></i>
         <button data-a="autokey" title="Crear claves de composición en el cuadro actual">Auto-key</button><i></i>
-        <button data-a="stagger" title="Repartir los planos en profundidad, del fondo al frente (una sola acción, se deshace con Ctrl+Z)">Escalonar Z</button><strong class="cmp3-mode">Seleccionar</strong>
+        <button data-a="stagger" title="Repartir los planos en profundidad, del fondo al frente (una sola acción, se deshace con Ctrl+Z)">Escalonar Z</button><strong class="cmp3-mode">Arrastrá un plano para moverlo · Z profundidad · R rotar · S escalar</strong>
       </div><div class="cmp3-stage"><div class="cmp3-world"><div class="cmp3-grid"></div><div class="cmp3-cards"></div></div>
         <div class="cmp3-empty" hidden><h3>La mesa multiplano está vacía</h3>
           <p>Cada elemento del dibujo abierto es un plano de esta mesa. Abrí o dibujá un diseño con
@@ -47,6 +47,7 @@
       this.root.querySelector('[data-a="home"]').onclick = () => { this.rx = -18; this.ry = 28; this.zoom = .72; this.panX = 0; this.panY = 25; this.applyView(); };
       this.root.querySelector('[data-a="autokey"]').onclick = e => { this.autoKey = !this.autoKey; e.currentTarget.classList.toggle("active", this.autoKey); this.options.onAutoKey?.(this.autoKey); };
       this.root.querySelector('[data-a="autokey"]').classList.toggle("active", this.autoKey);
+      this.setTool(null);   // deja el rotulo explicando el gesto desde el arranque
       this.root.querySelectorAll("[data-v]").forEach(button => button.onclick = () => this.setView(button.dataset.v));
       this.root.querySelectorAll(".cmp3-inspector input[data-p]").forEach(input => input.onchange = () => this.input(input));
       this.root.querySelectorAll(".cmp3-inspector input[data-fx]").forEach(input => input.onchange = () => {
@@ -62,9 +63,20 @@
       this.applyView();
     }
     setView(name) {
+      // La vista CÁMARA no es otro ángulo del diorama: es mirar por la cámara
+      // de la escena, y lo que pinta es el cuadro que se exporta. Se marca en
+      // la raíz para que el CSS tape el escenario 3D y muestre el recuadro.
+      this.view = name;
+      const camara = name === "camera";
+      this.root.classList.toggle("cmp3-en-camara", camara);
       const views = { perspective: [-18, 28], front: [0, 0], top: [-89.9, 0] };
+      this.root.querySelectorAll("[data-v]").forEach(b => b.classList.toggle("active", b.dataset.v === name));
+      if (camara) {
+        if (typeof window.dzCmpCamRender === "function") window.dzCmpCamRender();
+        return;
+      }
       [this.rx, this.ry] = views[name] || views.perspective;
-      this.root.querySelectorAll("[data-v]").forEach(b => b.classList.toggle("active", b.dataset.v === name)); this.applyView();
+      this.applyView();
     }
     applyView() { this.world.style.transform = `translate3d(${this.panX}px,${this.panY}px,0) scale(${this.zoom}) rotateX(${this.rx}deg) rotateY(${this.ry}deg)`; }
     navigate(event) {
@@ -93,7 +105,22 @@
           gizmo.querySelectorAll("button").forEach(handle => handle.onpointerdown = e => this.manipulate(e, plane, handle.dataset.axis));
           card.appendChild(gizmo);
         }
-        card.onpointerdown = e => { this.root.focus({ preventScroll: true }); if (this.pendingTool) this.manipulate(e, plane, this.pendingTool); };
+        // Agarrar el plano LO MUEVE. Antes esto solo hacia algo si antes habias
+        // apretado G, R o S —interfaz modal estilo Blender— y por omision
+        // `pendingTool` es null: uno agarraba un plano y no pasaba NADA. Fue el
+        // reporte «las herramientas no hacen nada, no puedo cambiar las
+        // posiciones de los planos», y era exacto. Las teclas siguen mandando
+        // cuando estan puestas; sin ellas, arrastrar mueve en X/Y, que es lo que
+        // hace cualquier programa.
+        card.onpointerdown = e => {
+          this.root.focus({ preventScroll: true });
+          if (e.button !== 0) return;
+          // Seleccionar en el POINTERDOWN y no en el click: el click llega
+          // despues del arrastre, asi que agarrar un plano no elegido movia el
+          // anterior. Ahora el mismo gesto elige y mueve, como se espera.
+          if (plane.id !== this.selected) this.select(plane.id);
+          this.manipulate(e, plane, this.pendingTool || "xy");
+        };
         card.onclick = e => { e.stopPropagation(); this.select(plane.id); }; this.cards.appendChild(card);
         const row = document.createElement("button"); row.className = plane.id === this.selected ? "active" : "";
         row.innerHTML = `<i></i><span></span><small>Z ${Math.round(t.z || 0)}</small>`; row.querySelector("span").textContent = plane.name; row.onclick = () => this.select(plane.id); this.list.appendChild(row);
@@ -122,10 +149,28 @@
       if (input.dataset.p === "scaleX") patch.scaleY = patch.scaleX;
       this.options.onTransform?.(active.id, patch); 
     }
+    /** Aplica la transformacion de UN plano sobre su tarjeta ya existente.
+     *  Es la version barata de render() para usar durante un arrastre. */
+    pintarTarjeta(plane) {
+      const t = plane.transform || {};
+      const card = this.cards.querySelector('[data-id="' + (window.CSS && CSS.escape ? CSS.escape(plane.id) : plane.id) + '"]');
+      if (!card) return this.render();
+      card.style.transform = `translate3d(${t.x || 0}px,${t.y || 0}px,${-(t.z || 0)}px)` +
+        ` rotateX(${t.rotationX || 0}deg) rotateY(${t.rotationY || 0}deg)` +
+        ` rotateZ(${t.rotationZ || 0}deg) scale(${t.scaleX ?? 1},${t.scaleY ?? 1})`;
+      const tag = card.querySelector("span");
+      if (tag) tag.textContent = `${plane.name} · Z ${Math.round(t.z || 0)}`;
+      const fila = [...this.list.children].find((b) => b.querySelector("span")?.textContent === plane.name);
+      const small = fila && fila.querySelector("small");
+      if (small) small.textContent = `Z ${Math.round(t.z || 0)}`;
+    }
     setTool(tool) {
       this.pendingTool = tool;
       const names = { xy: "Mover XY", z: "Mover Z", r: "Rotar", s: "Escalar" };
-      this.root.querySelector(".cmp3-mode").textContent = names[tool] || "Seleccionar";
+      // Sin herramienta puesta el rotulo explica el gesto, en vez de decir
+      // «Seleccionar» y dejar que uno adivine que hay teclas.
+      this.root.querySelector(".cmp3-mode").textContent = names[tool] ||
+        "Arrastrá un plano para moverlo · Z profundidad · R rotar · S escalar";
     }
     key(event) {
       if (event.target.matches?.("input")) return;
@@ -149,7 +194,13 @@
           : axis === "r" ? { rotationZ: q((start.rotationZ || 0) + dx * .4, 5) }
           : axis === "s" ? { scaleX: Math.max(.05, q((start.scaleX ?? 1) + dx / 300, .05)), scaleY: Math.max(.05, q((start.scaleY ?? 1) + dx / 300, .05)) }
           : { x: q((start.x || 0) + dx, 10), y: q((start.y || 0) + (e.clientY - startY) / Math.max(.18, this.zoom), 10) };
-        plane.transform = { ...start, ...patch }; this.render();
+        plane.transform = { ...start, ...patch };
+        // Mover la tarjeta arrastrada, no reconstruir el escenario entero:
+        // render() vacia .cmp3-cards y CLONA el dibujo de cada plano, y esto
+        // corre en cada pointermove. Con una escena real eso es clonar el
+        // dibujo completo sesenta veces por segundo, y ademas destruia y
+        // recreaba la tarjeta que uno tiene agarrada.
+        this.pintarTarjeta(plane);
       };
       const up = e => {
         global.removeEventListener("pointermove", move); global.removeEventListener("pointerup", up);
@@ -159,6 +210,11 @@
           : { x: plane.transform.x || 0, y: plane.transform.y || 0 };
         this.options.onTransform?.(plane.id, patch);
         this.setTool(null);
+        this.render();
+        // Si se está mirando por la cámara, lo que se acaba de mover tiene que
+        // verse ahí mismo: es el sentido de tener la cámara en esta pantalla.
+        if (this.view === "camera" && typeof window.dzCmpCamRender === "function")
+          window.dzCmpCamRender();
       };
       global.addEventListener("pointermove", move); global.addEventListener("pointerup", up);
     }

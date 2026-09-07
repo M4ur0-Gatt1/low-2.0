@@ -15,6 +15,9 @@ APP = (ROOT / "ui" / "app.js").read_text(encoding="utf-8")
 COLABP = (ROOT / "ui" / "panels" / "colab-panel.js").read_text(encoding="utf-8")
 ARCOSV = (ROOT / "ui" / "panels" / "arcs-view.js").read_text(encoding="utf-8")
 FORMAS = (ROOT / "ui" / "panels" / "shape-tool.js").read_text(encoding="utf-8")
+MPVIEW = (ROOT / "ui" / "composition" / "multiplane-view.js").read_text(encoding="utf-8")
+CMPCAM = (ROOT / "ui" / "panels" / "composition-camera.js").read_text(encoding="utf-8")
+CMPPAN = (ROOT / "ui" / "panels" / "composition-panel.js").read_text(encoding="utf-8")
 INDEX = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 SHORTCUTS = (ROOT / "ui" / "animation" / "shortcuts.js").read_text(encoding="utf-8")
 SCENE_MODEL = (ROOT / "ui" / "animation" / "scene-model.js").read_text(encoding="utf-8")
@@ -405,5 +408,36 @@ require("g.ancla" in FORMAS and "vb[0] + vb[2] / 2" not in FORMAS.split("if (!g.
         "paneada eso cae fuera de la pantalla y la herramienta parece rota")
 require('src="panels/shape-tool.js' in INDEX,
         "el modulo de formas no se carga")
+
+require('this.manipulate(e, plane, this.pendingTool || "xy")' in MPVIEW,
+        "agarrar un plano volvio a no hacer nada sin apretar antes una tecla: "
+        "es el reporte «no puedo cambiar las posiciones de los planos»")
+require("if (plane.id !== this.selected) this.select(plane.id);" in MPVIEW,
+        "agarrar un plano no elegido no lo elige: el click llega DESPUES del "
+        "arrastre y se movia el plano anterior")
+require("this.pintarTarjeta(plane);" in MPVIEW,
+        "el arrastre volvio a reconstruir el escenario entero: render() clona el "
+        "dibujo de cada plano y esto corre en cada pointermove")
+require('"Arrastrá un plano para moverlo' in MPVIEW,
+        "la pantalla de composicion dejo de explicar el gesto")
+require("dzCmpCamRender" in CMPCAM and 'boton.dataset.v = "camera"' in CMPCAM,
+        "se cayo la vista de camara de Composicion: sin ella se ordena profundidad "
+        "sin poder ver el resultado, que es lo que la hacia sentir de juguete")
+require("dzCamView(texto, cam)" in CMPCAM,
+        "la vista de camara dejo de pintar el cuadro REAL: si no pasa por dzCamView "
+        "muestra una aproximacion y miente sobre lo que se va a exportar")
+require("DZ.compositionAutoKey) dzCmpCamClave" in CMPCAM,
+        "mover la camara para mirar volvio a dejar claves sin Auto-key, o dejo de "
+        "dejarlas con Auto-key puesto")
+require('src="panels/composition-panel.js' in INDEX
+        and INDEX.index('src="panels/composition-panel.js') < INDEX.index('src="panels/composition-camera.js'),
+        "el puente de composicion se carga despues de la camara, que lo usa")
+# app.js SIGUE llamando estas funciones y debe hacerlo: lo que no puede es
+# volver a DEFINIRLAS.
+require("function dzCompositionViewShow" in CMPPAN
+        and "function dzCompositionViewShow" not in APP,
+        "el puente de composicion volvio a definirse dentro de app.js")
+require('src="panels/composition-camera.js' in INDEX,
+        "el modulo de camara de composicion no se carga")
 
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo y arcos")
