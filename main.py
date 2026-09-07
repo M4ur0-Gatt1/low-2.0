@@ -191,6 +191,7 @@ class Api:
         s.safe_mode = bool(safe_mode)
         s._window = None
         s._ui_base = None
+        s._abrir_al_inicio = None   # .low con el que se abrio LOW (doble clic)
         s._aux_windows = {}
         s._panel_states = {}
         s._dock_armed = set()   # paneles que ya salieron de la ventana principal
@@ -877,7 +878,13 @@ class Api:
             "skills": len(s._load_skills()),
             # cadena de failover: para que la UI muestre el orden y el modelo de respaldo
             "chain": [{"provider": p, "model": m} for p, m in s._chain()],
+            # Archivo con el que se abrió LOW: doble clic en un .low, o
+            # "Abrir con". Se entrega UNA sola vez —después se limpia— para que
+            # un refresco de la interfaz no lo vuelva a abrir encima de lo que
+            # el usuario ya tenga en pantalla.
+            "open_file": s._abrir_al_inicio,
         }
+        s._abrir_al_inicio = None
         st.update(s._apis_state())
         return st
 
@@ -5438,6 +5445,25 @@ class Api:
             return msgs(f" {e}")
 
 
+EXT_LOW = (".low", ".lowscene")
+
+
+def archivo_de_argv(argv):
+    """El archivo con el que Windows abre LOW al hacer doble clic en un .low.
+
+    Se aceptan .low y .lowscene: la extensión cambió en la v4.19.0 y los
+    archivos viejos tienen que seguir abriéndose (§14). Se ignoran las banderas
+    y cualquier cosa que no exista en el disco — un argumento raro no puede
+    impedir que el programa arranque.
+    """
+    for a in argv[1:]:
+        if a.startswith("-"):
+            continue
+        if a.lower().endswith(EXT_LOW) and os.path.isfile(a):
+            return os.path.abspath(a)
+    return None
+
+
 def smoke(base):
     """Autochequeo del EJECUTABLE EMPAQUETADO (biblia §9·4).
 
@@ -5529,6 +5555,9 @@ def main():
         sys.exit(smoke(base))
     safe_mode = "--safe-mode" in sys.argv
     api = Api(safe_mode=safe_mode)
+    api._abrir_al_inicio = archivo_de_argv(sys.argv)
+    if api._abrir_al_inicio:
+        log("abrir al inicio: " + api._abrir_al_inicio)
     ui = os.path.join(base, "ui", "index.html")
     if safe_mode:
         ui = Path(ui).resolve().as_uri() + "?safe=1"

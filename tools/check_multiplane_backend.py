@@ -1,4 +1,4 @@
-"""Smoke del puente real: .lowscene atómico y secuencia PNG en un temporal."""
+"""Smoke del puente real: .low atomico y secuencia PNG en un temporal."""
 import base64
 import json
 import sys
@@ -36,7 +36,7 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="low-multiplane-") as folder:
         root = Path(folder)
-        target = root / "multiplane.lowscene"
+        target = root / "multiplane.low"
         saved = bridge.save_file(str(target), json.dumps(scene, ensure_ascii=False))
         assert saved.get("atomic") is True and target.exists(), saved
         reopened = json.loads(target.read_text(encoding="utf-8"))

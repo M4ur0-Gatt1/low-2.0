@@ -33,6 +33,8 @@ DOCUMENT = (ROOT / "ui" / "animation" / "document.js").read_text(encoding="utf-8
 CSS_APP = (ROOT / "ui" / "app.css").read_text(encoding="utf-8")
 POLISH = (ROOT / "ui" / "design" / "studio-polish.css").read_text(encoding="utf-8")
 MAIN = (ROOT / "main.py").read_text(encoding="utf-8")
+ISS = (ROOT / "low_installer.iss").read_text(encoding="utf-8", errors="replace")
+CI = (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
 
 
 def function_body_doc(name: str, next_name: str) -> str:
@@ -439,5 +441,39 @@ require("function dzCompositionViewShow" in CMPPAN
         "el puente de composicion volvio a definirse dentro de app.js")
 require('src="panels/composition-camera.js' in INDEX,
         "el modulo de camara de composicion no se carga")
+
+# ── Identidad, archivos .low y firma ──────────────────────────────────────
+require('+ ".low";' in APP,
+        "las escenas volvieron a ofrecerse con otra extension: la de LOW es .low")
+require("(low|lowscene)$" in APP,
+        "se dejo de reconocer .lowscene: los archivos guardados antes de la "
+        "v4.19.0 tienen que seguir abriendose (§14)")
+require("archivo_de_argv" in MAIN and '"open_file": s._abrir_al_inicio' in MAIN,
+        "el doble clic en un .low no llega a la aplicacion: la asociacion queda "
+        "decorativa")
+require("s._abrir_al_inicio = None" in MAIN.split('"open_file"')[1][:200],
+        "el archivo de arranque no se limpia: un refresco de la interfaz lo "
+        "volveria a abrir encima de lo que el usuario tenga en pantalla")
+require("dzSceneOpen(ruta)" in APP or "dzSceneOpen(ruta)" in APP,
+        "el doble clic dejo de usar el mismo camino que Abrir escena: dos caminos "
+        "que abren escenas se desincronizan")
+require("ChangesAssociations=yes" in ISS and 'AppExt ".low"' in ISS
+        and "low_doc.ico" in ISS,
+        "el instalador dejo de asociar .low o de instalar su icono")
+require("Root: HKCU" in ISS and "Root: HKLM" not in ISS,
+        "la asociacion paso a HKLM: el instalador corre sin permisos de "
+        "administrador y fallaria")
+require((ROOT / "low_doc.ico").exists(),
+        "falta low_doc.ico: los archivos .low quedarian con el icono generico")
+require("LOW_PFX_BASE64" in CI and "timestamp.digicert.com" in CI,
+        "se cayo la firma del ejecutable, o se firma sin sellado de tiempo — sin "
+        "sello la firma muere cuando vence el certificado y los instaladores ya "
+        "publicados empiezan a dar aviso")
+require(CI.count("LOW_PFX_BASE64") >= 4,
+        "se firma el exe pero no el instalador: lo primero que ejecuta el usuario "
+        "es el setup y es eso lo que Windows mira")
+require("33B5E8" in INDEX,
+        "se saco el celeste del rayo del splash: es el rayo de Aladdin Sane y es "
+        "identidad, no un resto del celeste que se quito de la interfaz")
 
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo y arcos")

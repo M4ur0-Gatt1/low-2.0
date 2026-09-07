@@ -149,12 +149,62 @@ jobs:
           # que no entro al bundle o una ruta que funciona desde el repo y no
           # desde el exe. Las pruebas del repo no ven nada de eso.
           ./dist/LOW.exe --smoke
+      - name: Firmar el ejecutable (si hay certificado)
+        shell: pwsh
+        env:
+          LOW_PFX_BASE64: ${{ secrets.LOW_PFX_BASE64 }}
+          LOW_PFX_PASSWORD: ${{ secrets.LOW_PFX_PASSWORD }}
+        run: |
+          # LA FIRMA NECESITA UN CERTIFICADO DE VERDAD. Windows saca el aviso de
+          # SmartScreen SOLO con un certificado de firma de codigo emitido por
+          # una autoridad reconocida. Uno autofirmado NO sirve para eso: lo
+          # unico que logra es que el aviso diga otra cosa. Mientras no haya
+          # secreto cargado esto se saltea y el release sale sin firma, en vez
+          # de fallar y dejar sin instaladores. Ver docs/LOW_FIRMA_DIGITAL.md
+          if (-not $env:LOW_PFX_BASE64) {
+            Write-Host "::notice::Sin certificado (secreto LOW_PFX_BASE64): el exe sale SIN FIRMAR y Windows va a avisar al instalarlo."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "low.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:LOW_PFX_BASE64))
+          $kits = Join-Path ${env:ProgramFiles(x86)} "Windows Kits"
+          $signtool = Get-ChildItem $kits -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { Write-Host "::error::no encontre signtool.exe en el runner"; exit 1 }
+          # /fd sha256 y SELLADO DE TIEMPO: sin el sello, la firma deja de valer
+          # el dia que vence el certificado y los instaladores ya publicados
+          # empiezan a dar aviso de la nada.
+          & $signtool sign /f $pfx /p $env:LOW_PFX_PASSWORD /fd sha256 `
+            /tr http://timestamp.digicert.com /td sha256 `
+            /d "LOW" /du "https://github.com/M4ur0-Gatt1/low-2.0" (Join-Path "dist" "LOW.exe")
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & $signtool verify /pa /v (Join-Path "dist" "LOW.exe")
       - name: Instalador (Inno Setup)
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
           $ver = "$env:RELEASE_TAG" -replace '^v',''
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$ver" low_installer.iss
+      - name: Firmar el instalador (si hay certificado)
+        shell: pwsh
+        env:
+          LOW_PFX_BASE64: ${{ secrets.LOW_PFX_BASE64 }}
+          LOW_PFX_PASSWORD: ${{ secrets.LOW_PFX_PASSWORD }}
+        run: |
+          # El instalador se firma DESPUES de compilarlo. Firmar solo el exe deja
+          # el aviso igual: lo primero que el usuario ejecuta es el setup, y es
+          # eso lo que Windows mira.
+          if (-not $env:LOW_PFX_BASE64) { Write-Host "::notice::instalador SIN FIRMAR"; exit 0 }
+          $pfx = Join-Path $env:RUNNER_TEMP "low.pfx"
+          $kits = Join-Path ${env:ProgramFiles(x86)} "Windows Kits"
+          $signtool = Get-ChildItem $kits -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { Write-Host "::error::no encontre signtool.exe en el runner"; exit 1 }
+          Get-ChildItem (Join-Path "Output" "*.exe") | ForEach-Object {
+            & $signtool sign /f $pfx /p $env:LOW_PFX_PASSWORD /fd sha256 `
+              /tr http://timestamp.digicert.com /td sha256 /d "LOW" $_.FullName
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
       - name: Subir al release
         shell: bash
         run: gh release upload "$RELEASE_TAG" Output/*.exe dist/LOW.exe --clobber

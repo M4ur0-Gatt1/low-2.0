@@ -85,3 +85,92 @@ y la cámara. `app.js` pasa de 18.008 a **17.863** líneas.
 
 Estable previa: `v4.17.1`. El motor de composición no cambió: cambia cómo se lo
 maneja y que ahora se puede ver el resultado.
+
+---
+
+# Además en v4.19.0 — identidad, archivos `.low` y firma
+
+## Los archivos son `.low` y tienen su propio ícono
+
+Las escenas se guardan como **`.low`**. Las `.lowscene` de antes **se siguen
+abriendo** — §14 dice que una versión nueva no rompe documentos anteriores — y
+el marcador de formato *dentro* del JSON sigue siendo `lowscene`: eso no es la
+extensión, es el contenido, y lo lee también el punto de recuperación.
+
+El instalador registra la extensión **por usuario** (`HKCU`), porque LOW se
+instala sin permisos de administrador. Y registra un **ícono de documento
+propio**, `low_doc.ico`: una hoja con el rayo, distinta del ícono del programa,
+que es la convención de Windows para que en una carpeta se distinga un archivo
+de una aplicación de un vistazo.
+
+El ícono trae nueve tamaños y **los chicos están dibujados aparte, píxel por
+píxel**. Bajar un dibujo de 256 px a 16 con un filtro deja el borde de la hoja
+lavado y el rayo convertido en una mancha gris; a 16 px el rayo va macizo del
+acento, porque lo que se lee a ese tamaño es la silueta.
+
+**Y el doble clic abre el archivo.** Sin eso la asociación es decorativa:
+Windows abriría LOW y el archivo quedaría en el aire. El puente entrega la ruta
+**una sola vez** —después la limpia, así un refresco de la interfaz no la reabre
+encima de lo que tengas en pantalla— y usa **el mismo camino** que *Abrir
+escena*, no una segunda implementación.
+
+## El logo del arranque
+
+El rayo partido naranja/celeste **es el de Aladdin Sane y es identidad**: el
+mismo rayo está en el logotipo de la barra superior, y el código lo dice. Así
+que no lo toqué, aunque el celeste sea el que se quitó de la interfaz en la
+v4.8.0 — una cosa es un acento de interfaz y otra es la marca. Si lo querés
+monocromo, es una línea y lo cambio.
+
+Lo que sí cambió es la ejecución: el rayo estaba **colgando 24 px por debajo de
+la línea de base** de las letras y ahora apoya donde apoyan la L y la W; el
+corte entre los dos colores es vertical y limpio como en el logotipo; hay un
+reflejo que le da volumen sin agregar un tercer color; y entra una sola vez, con
+las letras apareciendo y el rayo bajando de escala. Con «reducir movimiento»
+puesto no hay animación.
+
+Sigue sin interceptar clics, que es lo que antes lo hacía tapar el lienzo y
+parecer que «no andaba ningún botón».
+
+## Firma digital: lo que está y lo que no puedo hacer yo
+
+**No puedo conseguir el certificado.** La firma que saca el aviso de Windows
+necesita un certificado de firma de código emitido por una autoridad reconocida,
+y se compra con verificación de identidad. Un certificado autofirmado **no
+sirve**: firma el archivo, Windows no lo reconoce, y el aviso sigue —a veces
+peor—.
+
+Lo que **sí** está hecho: la compilación **firma sola en cuanto haya
+certificado**. Los dos pasos están cableados, en el orden que importa — el
+ejecutable después de compilarlo, y **el instalador después de armarlo**, porque
+lo primero que ejecuta el usuario es el setup y es eso lo que Windows mira.
+Ambos con `sha256` y **sellado de tiempo**: sin el sello, la firma muere el día
+que vence el certificado y los instaladores ya publicados empiezan a avisar de
+la nada.
+
+Mientras no haya certificado, los pasos **se saltean solos** con un aviso en el
+log: el release sale sin firma en vez de fallar y dejarte sin instaladores.
+
+Para encenderlo: dos secretos en el repositorio, `LOW_PFX_BASE64` y
+`LOW_PFX_PASSWORD`. En **`docs/LOW_FIRMA_DIGITAL.md`** está el cómo, la tabla de
+tipos de certificado con precios, y dos cosas que suelen sorprender: que desde
+2023 los OV/EV **no se entregan como archivo** (la clave va en token o HSM, y
+entonces el camino del `.pfx` no sirve), y que con **OV** el aviso puede seguir
+un tiempo hasta juntar reputación mientras con **EV** desaparece desde la
+primera descarga.
+
+Para el caso de LOW, la opción sensata es **Azure Trusted Signing**: unos 10
+dólares por mes, firma de verdad, sin token físico. Si vas por ahí o por un
+token, decime y cambio el cableado a ese camino.
+
+## Pruebas
+
+- 12 contratos estáticos nuevos: que se ofrezca `.low`, que se sigan abriendo
+  las `.lowscene`, que el doble clic llegue a la aplicación y limpie la ruta,
+  que la asociación sea `HKCU` y no `HKLM`, que exista `low_doc.ico`, que se
+  firme **con** sellado de tiempo y que se firmen **los dos** archivos, y que el
+  celeste del rayo **no** se vaya (es identidad).
+- Verificado en el navegador: guarda `Escena.low`, abre un `.low` por ruta, avisa
+  si no existe, y **abre una `.lowscene` vieja**.
+- `check_multiplane_ui` y el humo del puente exigían `.lowscene` en el nombre
+  del archivo guardado; ahora exigen `.low`.

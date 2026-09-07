@@ -57,8 +57,18 @@
       window.lowPanelCommand && window.lowPanelCommand({ kind, action, payload }); return { ok: true }; },
     open_panel: async kind => { (window.__opened = window.__opened || []).push(kind); return { ok: true, mock: true }; },
     panel_closed: async () => ({ ok: true }),
-    get_state: async () => new URLSearchParams(location.search).has("safe")
-      ? { ...STATE, safe_mode: true, ws: null, branch: "", tree: [] } : STATE,
+    get_state: async () => {
+      const seguro = new URLSearchParams(location.search).has("safe");
+      const base = seguro ? { ...STATE, safe_mode: true, ws: null, branch: "", tree: [] } : { ...STATE };
+      // Doble clic en un .low: el puente real entrega el archivo UNA sola vez y
+      // despues lo limpia, para que un refresco no lo reabra encima del trabajo.
+      base.open_file = STATE.__abrir || null;
+      STATE.__abrir = null;
+      return base;
+    },
+    // Mismo contrato que el puente: {path, name, content} o {error}
+    open_file: async (path) => (window.__lowFiles || {})[path]
+      || { error: "no existe " + path },
     enter_safe_mode: async () => ({ ok: true }),
     history: async () => [],
     ollama_models: async () => [],

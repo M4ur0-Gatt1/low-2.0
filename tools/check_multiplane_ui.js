@@ -137,7 +137,9 @@ async function main() {
     throw Error("REGRESIÓN: Undo/Redo no sincronizó modelo y vista: " + JSON.stringify(value));
   if (value.keyed !== 240 || value.keyedRotation !== 12 || value.reopened !== 240)
     throw Error("REGRESIÓN: Auto-key o reapertura perdió Z: " + JSON.stringify(value));
-  if (!value.disk?.ok || value.disk.z !== 240 || !/\.lowscene$/i.test(value.disk.name || ""))
+  // La extension de LOW es .low desde la v4.19.0. Se exige la nueva porque es
+  // con la que se OFRECE guardar; abrir las .lowscene viejas se prueba aparte.
+  if (!value.disk?.ok || value.disk.z !== 240 || !/\.low$/i.test(value.disk.name || ""))
     throw Error("REGRESIÓN: guardado físico/reapertura perdió la composición: " + JSON.stringify(value));
   if (!value.export?.z || !value.export?.rotation || !value.export?.wrapped)
     throw Error("REGRESIÓN: export no aplicó la transformación del frame: " + JSON.stringify(value));

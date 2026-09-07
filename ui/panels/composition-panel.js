@@ -164,6 +164,59 @@ function dzCompositionApplyToCanvas() {
 }
 /** Pinta un dibujo del modelo en el lienzo. */
 
+
+/* ── EFECTOS DE PLANO (el compositor) ──────────────────────────────────────
+   Desenfoque, brillo, contraste, saturación y sombra de una pieza. Vive acá y
+   no en app.js porque es composición: son los efectos que el inspector de la
+   mesa multiplano edita, y se escriben como un `filter:` real en el elemento —
+   así el efecto sale también en la exportación, no sólo en pantalla. */
+
+function dzCompValues(el) {
+  const n = (key, fallback) => el && el.hasAttribute("data-comp-" + key) ? +el.getAttribute("data-comp-" + key) : fallback;
+  return { blur:n("blur",0), bright:n("bright",100), contrast:n("contrast",100), saturate:n("saturate",100),
+    shadow:el?.getAttribute("data-comp-shadow") === "1", sx:n("sx",8), sy:n("sy",8), sb:n("sb",8),
+    sc:el?.getAttribute("data-comp-sc") || "#000000" };
+}
+/** `origen`: true = leer el panel clásico · false = releer el elemento ·
+    objeto = parche sobre los valores actuales (lo usa la mesa multiplano). */
+function dzCompositorApply(origen=true) {
+  const el = DZ.sel; if (!el) return;
+  if (origen && typeof origen === "object") origen = { ...dzCompValues(el), ...origen };
+  const v = origen === true ? { blur:+$("#dzCompBlur").value, bright:+$("#dzCompBright").value,
+    contrast:+$("#dzCompContrast").value, saturate:+$("#dzCompSaturate").value,
+    shadow:$("#dzCompShadow").checked, sx:+$("#dzCompShadowX").value, sy:+$("#dzCompShadowY").value,
+    sb:+$("#dzCompShadowBlur").value, sc:$("#dzCompShadowColor").value }
+    : origen === false ? dzCompValues(el) : origen;
+  const attrs = { blur:v.blur, bright:v.bright, contrast:v.contrast, saturate:v.saturate,
+    shadow:v.shadow?1:0, sx:v.sx, sy:v.sy, sb:v.sb, sc:v.sc };
+  Object.entries(attrs).forEach(([k,val]) => el.setAttribute("data-comp-"+k, String(val)));
+  const filters = [];
+  if (v.blur) filters.push(`blur(${v.blur}px)`);
+  if (v.bright !== 100) filters.push(`brightness(${v.bright}%)`);
+  if (v.contrast !== 100) filters.push(`contrast(${v.contrast}%)`);
+  if (v.saturate !== 100) filters.push(`saturate(${v.saturate}%)`);
+  if (v.shadow) filters.push(`drop-shadow(${v.sx}px ${v.sy}px ${v.sb}px ${v.sc})`);
+  const st = (el.getAttribute("style") || "").replace(/filter\s*:[^;]+;?/g, "").trim();
+  el.setAttribute("style", (st ? st.replace(/;?$/, ";") : "") + (filters.length ? `filter:${filters.join(" ")};` : ""));
+  if (!el.getAttribute("style")) el.removeAttribute("style");
+  dzMarkDirty(); dzCompositorSync(el);
+}
+function dzCompositorSync(el) {
+  if (!el || !$("#dzCompBlur")) return;
+  const v=dzCompValues(el), set=(id,val)=>{$("#"+id).value=val;};
+  set("dzCompBlur",v.blur); set("dzCompBright",v.bright); set("dzCompContrast",v.contrast); set("dzCompSaturate",v.saturate);
+  $("#dzCompShadow").checked=v.shadow; set("dzCompShadowX",v.sx); set("dzCompShadowY",v.sy); set("dzCompShadowBlur",v.sb); set("dzCompShadowColor",v.sc);
+  $("#dzCompBlurVal").textContent=v.blur+" px"; $("#dzCompBrightVal").textContent=v.bright+"%";
+  $("#dzCompContrastVal").textContent=v.contrast+"%"; $("#dzCompSaturateVal").textContent=v.saturate+"%";
+}
+function dzCompositorWire() {
+  const ids=["dzCompBlur","dzCompBright","dzCompContrast","dzCompSaturate","dzCompShadow","dzCompShadowX","dzCompShadowY","dzCompShadowBlur","dzCompShadowColor"];
+  ids.forEach(id=>{const e=$("#"+id);if(e)e.onchange=()=>{if(!DZ.sel)return dzSetStatus("Seleccioná una capa para componer");dzSnapshot();dzCompositorApply();};});
+  $("#dzCompReset").onclick=()=>{if(!DZ.sel)return;dzSnapshot();["blur","bright","contrast","saturate","shadow","sx","sy","sb","sc"].forEach(k=>DZ.sel.removeAttribute("data-comp-"+k));dzCompositorApply(false);};
+}
+
+/* F7: mostrar/ocultar el panel de capas y superposiciones (el inspector) */
+
 /* Nombres que la interfaz y los recorridos usan por nombre global. */
 window.DZ_Z_MIN = DZ_Z_MIN; window.DZ_Z_MAX = DZ_Z_MAX;
 Object.defineProperty(window, "DZ_COMPOSITION_VIEW", {
@@ -178,3 +231,7 @@ window.dzCompositionPlaneElement = dzCompositionPlaneElement;
 window.dzCompositionStagger = dzCompositionStagger;
 window.dzCompositionPlaneRef = dzCompositionPlaneRef;
 window.dzCompositionApplyToCanvas = dzCompositionApplyToCanvas;
+window.dzCompValues = dzCompValues;
+window.dzCompositorApply = dzCompositorApply;
+window.dzCompositorSync = dzCompositorSync;
+window.dzCompositorWire = dzCompositorWire;

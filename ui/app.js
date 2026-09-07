@@ -37,6 +37,7 @@ function applyEditorMode() {
 }
 
 let api = null;
+let dzAbrirAlInicio = null;   // .low con el que Windows abrio LOW
 let cm = null;
 const S = {
   theme: "dark", tabs: [], cur: null, untitled: 0,
@@ -308,6 +309,12 @@ async function init() {
   const st = await api.get_state();
   applyState(st);
   newTab();
+  // Doble clic en un .low: Windows abre LOW con el archivo como argumento y el
+  // puente lo entrega UNA vez en el estado inicial. Se abre despues de armar la
+  // interfaz para que la escena caiga sobre un editor ya listo.
+  if (st && st.open_file) {
+    dzAbrirAlInicio = st.open_file;
+  }
   if (!S.safeMode) await loadChatTabs().catch(() => {});
   // retomar SOLA la última conversación: al reabrir LOW seguís donde quedaste,
   // con el agente recordando el hilo (antes arrancaba con memoria vacía y decía
@@ -318,6 +325,12 @@ async function init() {
   } catch (e) { /* sin historial: charla nueva */ }
   bind();
   restorePanelSizes();
+  if (dzAbrirAlInicio) {
+    const ruta = dzAbrirAlInicio; dzAbrirAlInicio = null;
+    dzSceneOpen(ruta).then((ok) => {
+      if (ok) dzSetStatus("Abierto desde el archivo: " + ruta);
+    }).catch(() => sysMsg(" No pude abrir " + ruta));
+  }
   initSplitters();
   sysMsg((S.safeMode ? "Modo seguro activo: proyecto anterior, disposiciones, atajos y pinceles personalizados no se cargaron. Tus datos siguen guardados.\n" : "") + "LOW v" + (S.version || "?") + " — listo.\n" +
          " API keys ·  proyecto · 🔍 junto al modelo: buscador entre todos los modelos de la API.\n" +
@@ -3029,7 +3042,7 @@ async function dzDocumentTabActivate(id) {
   const previous = dzDocumentTabCurrent();
   dzDocumentTabCapture(); dzDocumentTabParkRuntime(); DZ.activeDocumentTab = id;
   const state = target.runtime;
-  const isScene = /\.lowscene$/i.test(target.path || state?.doc?.path || "");
+  const isScene = /\.(low|lowscene)$/i.test(target.path || state?.doc?.path || "");
   // Una .lowscene no es una imagen suelta. Su LowDoc vivo ya contiene capas,
   // dibujos y exposiciones; pedir image_data() aca lo degradaba a un SVG
   // generico y, al volver, podia terminar guardando el lienzo de otra solapa.
@@ -15381,51 +15394,6 @@ function dzLayerToolsSync(el) {
   dzCompositorSync(el);
 }
 
-function dzCompValues(el) {
-  const n = (key, fallback) => el && el.hasAttribute("data-comp-" + key) ? +el.getAttribute("data-comp-" + key) : fallback;
-  return { blur:n("blur",0), bright:n("bright",100), contrast:n("contrast",100), saturate:n("saturate",100),
-    shadow:el?.getAttribute("data-comp-shadow") === "1", sx:n("sx",8), sy:n("sy",8), sb:n("sb",8),
-    sc:el?.getAttribute("data-comp-sc") || "#000000" };
-}
-/** `origen`: true = leer el panel clásico · false = releer el elemento ·
-    objeto = parche sobre los valores actuales (lo usa la mesa multiplano). */
-function dzCompositorApply(origen=true) {
-  const el = DZ.sel; if (!el) return;
-  if (origen && typeof origen === "object") origen = { ...dzCompValues(el), ...origen };
-  const v = origen === true ? { blur:+$("#dzCompBlur").value, bright:+$("#dzCompBright").value,
-    contrast:+$("#dzCompContrast").value, saturate:+$("#dzCompSaturate").value,
-    shadow:$("#dzCompShadow").checked, sx:+$("#dzCompShadowX").value, sy:+$("#dzCompShadowY").value,
-    sb:+$("#dzCompShadowBlur").value, sc:$("#dzCompShadowColor").value }
-    : origen === false ? dzCompValues(el) : origen;
-  const attrs = { blur:v.blur, bright:v.bright, contrast:v.contrast, saturate:v.saturate,
-    shadow:v.shadow?1:0, sx:v.sx, sy:v.sy, sb:v.sb, sc:v.sc };
-  Object.entries(attrs).forEach(([k,val]) => el.setAttribute("data-comp-"+k, String(val)));
-  const filters = [];
-  if (v.blur) filters.push(`blur(${v.blur}px)`);
-  if (v.bright !== 100) filters.push(`brightness(${v.bright}%)`);
-  if (v.contrast !== 100) filters.push(`contrast(${v.contrast}%)`);
-  if (v.saturate !== 100) filters.push(`saturate(${v.saturate}%)`);
-  if (v.shadow) filters.push(`drop-shadow(${v.sx}px ${v.sy}px ${v.sb}px ${v.sc})`);
-  const st = (el.getAttribute("style") || "").replace(/filter\s*:[^;]+;?/g, "").trim();
-  el.setAttribute("style", (st ? st.replace(/;?$/, ";") : "") + (filters.length ? `filter:${filters.join(" ")};` : ""));
-  if (!el.getAttribute("style")) el.removeAttribute("style");
-  dzMarkDirty(); dzCompositorSync(el);
-}
-function dzCompositorSync(el) {
-  if (!el || !$("#dzCompBlur")) return;
-  const v=dzCompValues(el), set=(id,val)=>{$("#"+id).value=val;};
-  set("dzCompBlur",v.blur); set("dzCompBright",v.bright); set("dzCompContrast",v.contrast); set("dzCompSaturate",v.saturate);
-  $("#dzCompShadow").checked=v.shadow; set("dzCompShadowX",v.sx); set("dzCompShadowY",v.sy); set("dzCompShadowBlur",v.sb); set("dzCompShadowColor",v.sc);
-  $("#dzCompBlurVal").textContent=v.blur+" px"; $("#dzCompBrightVal").textContent=v.bright+"%";
-  $("#dzCompContrastVal").textContent=v.contrast+"%"; $("#dzCompSaturateVal").textContent=v.saturate+"%";
-}
-function dzCompositorWire() {
-  const ids=["dzCompBlur","dzCompBright","dzCompContrast","dzCompSaturate","dzCompShadow","dzCompShadowX","dzCompShadowY","dzCompShadowBlur","dzCompShadowColor"];
-  ids.forEach(id=>{const e=$("#"+id);if(e)e.onchange=()=>{if(!DZ.sel)return dzSetStatus("Seleccioná una capa para componer");dzSnapshot();dzCompositorApply();};});
-  $("#dzCompReset").onclick=()=>{if(!DZ.sel)return;dzSnapshot();["blur","bright","contrast","saturate","shadow","sx","sy","sb","sc"].forEach(k=>DZ.sel.removeAttribute("data-comp-"+k));dzCompositorApply(false);};
-}
-
-/* F7: mostrar/ocultar el panel de capas y superposiciones (el inspector) */
 function dzLayersToggle() {
   const insp = $("#dzInspector");
   if (!insp) return;
@@ -16492,7 +16460,12 @@ async function dzSceneSave(comoNuevo) {
   if (!DZ.doc) return false;
   dzDocCommit();                      // lo que esté en el lienzo, adentro
   const json = JSON.stringify(DZ.doc.toJSON(), null, 1);
-  const nombre = (DZ.doc.scene.name || "escena").replace(/[^\w\-.]+/g, "_") + ".lowscene";
+  // La extension de LOW es .low. Las .lowscene de antes se siguen abriendo
+  // —§14: una version nueva no rompe documentos anteriores—; lo que cambia es
+  // con que nombre se ofrece guardar. El marcador de formato DENTRO del JSON
+  // sigue siendo "lowscene": eso no es la extension, es el contenido, y lo lee
+  // tambien el punto de recuperacion.
+  const nombre = (DZ.doc.scene.name || "escena").replace(/[^\w\-.]+/g, "_") + ".low";
   const tabBefore = dzDocumentTabCurrent();
   const recoveryBefore = dzSceneRecoveryIdentity(DZ.doc, tabBefore);
   try {
@@ -16516,10 +16489,15 @@ async function dzSceneSave(comoNuevo) {
   return false;
 }
 
-async function dzSceneOpen() {
+/** Abre una escena. Sin argumento pregunta con el diálogo; con una ruta la abre
+ *  directo — es el camino del doble clic en un .low. Es UNA sola
+ *  implementación a propósito: dos caminos que abren escenas se desincronizan
+ *  en cuanto uno de los dos cambia. */
+async function dzSceneOpen(ruta) {
   try {
-    const r = await api.open_dialog();
-    if (!r || !r.content) return false;
+    const r = ruta ? await api.open_file(ruta) : await api.open_dialog();
+    if (!r || r.error) { if (r && r.error) sysMsg(" " + r.error); return false; }
+    if (!r.content) return false;
     const existing = r.path && dzDocumentTabFind(r.path);
     if (existing) return dzDocumentTabActivate(existing.id);
     const doc = LOW.animation.LowDoc.fromJSON(r.content);

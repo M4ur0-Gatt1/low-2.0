@@ -1852,8 +1852,31 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
                              el splash quedaba tapando el lienzo y "no andaba
                              ningún botón". Ahora es puramente visual. */
 }
-#lowSplash svg { width: min(46vw, 360px); height: auto; }
-#lowSplash .sp-l { fill: #fff; font: 900 128px 'Figtree', 'Arial Black', sans-serif; }
+#lowSplash svg { width: min(46vw, 360px); height: auto; overflow: visible; }
+#lowSplash .sp-l {
+  fill: #fff; font: 900 128px 'Figtree', 'Arial Black', sans-serif;
+  /* Las letras entran desde el centro, como si el rayo las separara. Es la
+     unica animacion del arranque: mas movimiento en una pantalla que dura un
+     segundo y medio se lee como ruido. */
+  opacity: 0; animation: spLetra .45s cubic-bezier(.2,.8,.2,1) forwards;
+}
+#lowSplash text:first-of-type { transform-origin: 40px 118px; }
+#lowSplash .sp-rayo {
+  opacity: 0; transform-origin: 168px 78px;
+  animation: spRayoIn .5s cubic-bezier(.2,.9,.15,1) .12s forwards;
+  filter: drop-shadow(0 4px 18px rgba(240, 69, 14, .45));
+}
+@keyframes spLetra { to { opacity: 1; } }
+@keyframes spRayoIn {
+  0%   { opacity: 0; transform: scale(.72) rotate(-8deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+/* Con «reducir movimiento» puesto no hay animacion: aparece y se va. */
+@media (prefers-reduced-motion: reduce) {
+  #lowSplash .sp-l, #lowSplash .sp-rayo, #lowSplash .sp-tag {
+    animation: none; opacity: 1; transform: none;
+  }
+}
 #lowSplash .sp-tag {
   font: 600 13px 'Figtree', sans-serif; letter-spacing: 4px; text-transform: uppercase;
   color: var(--mut); opacity: 0; animation: lowTagIn .5s ease .3s forwards;

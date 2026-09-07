@@ -8,15 +8,34 @@
 <link rel="stylesheet" href="design/studio-polish.css?v=4.19.0">
 </head>
 <body>
-<!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
+<!-- Splash de arranque. Se desvanece por CSS y NUNCA intercepta clics: si la
+     animación de salida no termina, antes quedaba tapando el lienzo y «no
+     andaba ningún botón».
+
+     El rayo partido naranja/celeste es el de Aladdin Sane y es IDENTIDAD, no un
+     resto del celeste que se saco de la interfaz en la v4.8.0: el mismo rayo
+     esta en el logotipo de la barra superior. Acá se lo mantiene igual y se
+     mejora lo demas — el rayo apoyado en la linea de base de las letras (antes
+     colgaba 24 px por debajo), el filo del corte nitido, un reflejo que le da
+     volumen y una entrada que se ve una sola vez. -->
 <div id="lowSplash">
-  <svg viewBox="0 0 340 150" aria-hidden="true">
-    <defs><linearGradient id="splashBolt" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="50%" stop-color="#F0450E"/><stop offset="50%" stop-color="#33B5E8"/>
-    </linearGradient></defs>
-    <text x="6" y="116" class="sp-l">L</text>
-    <text x="248" y="116" class="sp-l">W</text>
-    <path d="M164 14 L118 122 L151 122 L141 150 L214 62 L176 62 Z" fill="url(#splashBolt)"/>
+  <svg viewBox="0 0 340 150" aria-label="LOW">
+    <defs>
+      <!-- corte vertical exacto, como en el logotipo de la barra -->
+      <linearGradient id="spRayo" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="50%" stop-color="#F0450E"/><stop offset="50%" stop-color="#33B5E8"/>
+      </linearGradient>
+      <linearGradient id="spBrillo" x1="0" y1="0" x2=".8" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity=".30"/>
+        <stop offset=".6" stop-color="#fff" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <text x="4" y="118" class="sp-l">L</text>
+    <text x="244" y="118" class="sp-l">W</text>
+    <g class="sp-rayo">
+      <path d="M170 8 L120 78 L152 78 L138 118 L214 52 L178 52 Z" fill="url(#spRayo)"/>
+      <path d="M170 8 L120 78 L152 78 L163 47 Z" fill="url(#spBrillo)"/>
+    </g>
   </svg>
   <div class="sp-tag">programación · diseño · video · animación</div>
 </div>
