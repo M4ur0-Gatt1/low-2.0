@@ -34,7 +34,9 @@ jobs:
       - name: Dependencias Python para pruebas del puente
         run: pip install -r requirements.txt
       - name: Pruebas del modelo 2D
-        run: node tools/run_2d_model_tests.js
+        run: |
+          node tools/run_2d_model_tests.js
+          node tools/run_safe_mode_tests.js
       - name: Modelos de composición, colaboración y storyboard
         run: |
           node tools/run_multiplane_tests.js
@@ -53,6 +55,7 @@ jobs:
           python tools/check_asset_import_backend.py
           python tools/check_relay_server.py
           python tools/check_app_js_budget.py
+          python tools/check_safe_mode_backend.py
       - name: Contratos críticos de interacción 2D
         run: python tools/check_2d_interaction_contracts.py
       - name: Recorridos reales — dibujo, rigging, composición y storyboard
@@ -102,6 +105,7 @@ jobs:
           node tools/check_copy_paste_ui.js
           node tools/check_arcs_ui.js
           node tools/check_shape_tool_ui.js
+          node tools/check_safe_mode_ui.js
           node tools/check_perf_budgets.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools server

@@ -186,8 +186,9 @@ def log(msg):
 
 
 class Api:
-    def __init__(s):
+    def __init__(s, safe_mode=False):
         s.cfg = Config()
+        s.safe_mode = bool(safe_mode)
         s._window = None
         s._ui_base = None
         s._aux_windows = {}
@@ -200,7 +201,7 @@ class Api:
         # Así el agente lee la carpeta correcta desde el arranque y no trabaja
         # "a ciegas" ni sobre un directorio viejo de otra sesión.
         _lw = (s.cfg.data.get("last_workspace") or "").strip()
-        if _lw and Path(_lw).is_dir():
+        if not s.safe_mode and _lw and Path(_lw).is_dir():
             s.ws = _lw
         s.prov = None
         s.ses_dir = data_dir() / 'historial'
@@ -221,6 +222,12 @@ class Api:
     def cancel(s):
         """El usuario pidió detener la consulta en curso."""
         s._cancel = True
+
+    def enter_safe_mode(s):
+        """Aísla esta sesión sin borrar configuración ni documentos."""
+        s.safe_mode = True
+        s.ws = None
+        return {"ok": True, "safe_mode": True}
 
     # Paneles y mesa que se pueden separar a otra ventana para dos monitores.
     PANELS = {
@@ -858,6 +865,7 @@ class Api:
             "system_prompt": s.cfg.data.get("system_prompt", ""),
             "default_sp": DEFAULT_SP,
             "version": LOW_VERSION,
+            "safe_mode": s.safe_mode,
             "tools": [{"name": t["function"]["name"],
                        "desc": t["function"].get("description", "")}
                       for t in s._get_tools()],
@@ -5519,8 +5527,11 @@ def main():
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     if "--smoke" in sys.argv:
         sys.exit(smoke(base))
-    api = Api()
+    safe_mode = "--safe-mode" in sys.argv
+    api = Api(safe_mode=safe_mode)
     ui = os.path.join(base, "ui", "index.html")
+    if safe_mode:
+        ui = Path(ui).resolve().as_uri() + "?safe=1"
     api._ui_base = os.path.join(base, "ui")
     # Dos pantallas: reabrir LOW en el monitor y el tamaño donde se cerró.
     # Antes salía siempre maximizada en la pantalla principal.
