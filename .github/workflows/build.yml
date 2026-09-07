@@ -92,6 +92,7 @@ jobs:
           node tools/check_storyboard_ui.js
           node tools/check_document_tabs_ui.js
           node tools/check_save_recovery_ui.js
+          node tools/check_document_recovery_tabs_ui.js
           node tools/check_function_editor_ui.js
           node tools/check_rig_weights_ui.js
           node tools/check_smart_bones_ui.js
@@ -99,6 +100,7 @@ jobs:
           node tools/check_colab_ui.js
           node tools/check_copy_paste_ui.js
           node tools/check_arcs_ui.js
+          node tools/check_perf_budgets.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools server
 
@@ -133,6 +135,13 @@ jobs:
           LOW_RELEASE_TAG: ${{ env.RELEASE_TAG }}
       - name: Compilar exe
         run: pyinstaller LOW.spec --noconfirm
+      - name: Humo sobre el ejecutable empaquetado (§9·4)
+        shell: bash
+        run: |
+          # Lo que rompe un empaquetado no es la logica: es un archivo de datos
+          # que no entro al bundle o una ruta que funciona desde el repo y no
+          # desde el exe. Las pruebas del repo no ven nada de eso.
+          ./dist/LOW.exe --smoke
       - name: Instalador (Inno Setup)
         shell: pwsh
         run: |
@@ -163,6 +172,8 @@ jobs:
           LOW_RELEASE_TAG: ${{ env.RELEASE_TAG }}
       - name: Compilar
         run: pyinstaller LOW.spec --noconfirm
+      - name: Humo sobre el ejecutable empaquetado (§9·4)
+        run: ./dist/LOW --smoke
       - name: Empaquetar
         run: cd dist && zip -r LOW-macos.zip LOW*
       - name: Subir al release
@@ -190,6 +201,11 @@ jobs:
           LOW_RELEASE_TAG: ${{ env.RELEASE_TAG }}
       - name: Compilar
         run: pyinstaller LOW.spec --noconfirm
+      - name: Humo sobre el ejecutable empaquetado (§9·4)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1 >/dev/null
+          xvfb-run -a ./dist/LOW --smoke
       - name: Subir al release
         run: |
           mv dist/LOW dist/LOW-linux

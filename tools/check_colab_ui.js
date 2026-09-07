@@ -64,8 +64,13 @@ async function recorrido(puertoRele) {
     if (!m.id || !pending.has(m.id)) return; const p = pending.get(m.id); pending.delete(m.id);
     m.error ? p.reject(Error(JSON.stringify(m.error))) : p.resolve(m.result);
   };
+  // 120 s y no 40: el guion de este recorrido corre entero dentro de UN
+  // Runtime.evaluate y hace decenas de esperas pautadas. Con la maquina cargada
+  // —dieciseis recorridos en rafaga— se pasaba de 40 s y fallaba por lentitud,
+  // no por regresion. Es el mismo error que confundir un runner flojo con un
+  // defecto del producto.
   const send = (method, params = {}) => new Promise((resolve, reject) => { const n = ++id;
-    const timer = setTimeout(() => { pending.delete(n); reject(Error("CDP sin respuesta: " + method)); }, 40000);
+    const timer = setTimeout(() => { pending.delete(n); reject(Error("CDP sin respuesta: " + method)); }, 120000);
     pending.set(n, { resolve: v => { clearTimeout(timer); resolve(v); }, reject: e => { clearTimeout(timer); reject(e); } });
     ws.send(JSON.stringify({ id: n, method, params }));
   });

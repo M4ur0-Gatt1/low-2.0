@@ -349,7 +349,14 @@ Una versión sólo se publica si:
 1. La versión fuente coincide con etiqueta, ejecutable e instalador.
 2. El repositorio está limpio y el commit está identificado.
 3. Todas las pruebas automáticas aprobadas.
-4. Recorrido de humo aprobado sobre el ejecutable empaquetado.
+4. Recorrido de humo aprobado sobre el ejecutable empaquetado. **Automatizado
+   desde v4.15.0** en los tres sistemas: `LOW --smoke` comprueba, dentro del
+   binario, que estén los 70 archivos que pide `index.html`, que el sello de
+   versión del HTML coincida con `LOW_VERSION`, que el puente `Api` se
+   construya y que importen `webview`, `PIL` y `numpy`. No abre ventana: mide
+   lo que hace falta para abrirla. Un archivo que no entró al bundle lo nombra
+   y devuelve 1. Antes de esto se publicaban tres instaladores de los que sólo
+   uno lo había arrancado alguien.
 5. No hay P0 ni P1 abiertos.
 6. Las migraciones abren proyectos anteriores sin pérdida.
 7. Las notas distinguen implementado, experimental y pendiente.
@@ -375,6 +382,33 @@ Los presupuestos se medirán sobre hardware de referencia definido:
 
 No se optimiza por intuición. Cada mejora de rendimiento requiere medición antes
 y después.
+
+### Escena patrón — definida y medida desde v4.15.0
+
+La escena patrón que este capítulo nombraba sin definir es parte del contrato:
+**3 capas × 24 cuadros, cada dibujo con 30 trazos de 40 puntos** (≈900 KB de
+documento). La mide `tools/check_perf_budgets.js`, que está en la puerta de CI.
+
+Dos clases de presupuesto, porque no se pueden exigir igual:
+
+- **Tiempos** (trazo, cuadro más largo, bloqueo al guardar y al abrir): se miden
+  y se imprimen siempre, y la puerta usa un margen de ×4 (`LOW_PERF_FACTOR`).
+  Un runner cargado tarda tres o cuatro veces más que una máquina de trabajo, y
+  un umbral ajustado daría fallas falsas todos los días; una regresión real
+  —quintuplicar la latencia— igual la agarra.
+- **Trabajo** (serializaciones por punto de trazo, nodos que deja un gesto):
+  no depende de la máquina, así que la puerta es estricta y sin margen. Es la
+  clase que descubre las regresiones antes de que se sientan.
+
+La latencia del trazo se mide como **trabajo de la aplicación** —cuánto tarda en
+que el trazo exista en la hoja— y no hasta el cuadro siguiente: eso último tiene
+un piso de 16,7 ms por la cadencia del monitor, y hacía oscilar el número entre
+3 y 18 ms sin que nada cambiara. Se medía el monitor, no el programa.
+
+Los cuadros perdidos en reproducción se cuentan por AVISOS de cambio de cuadro,
+no restando números de cuadro: con el bucle encendido la escena vuelve al 1 y
+restar daba 11 avances donde hubo 36 — a un paso de firmar que la reproducción
+estaba rota.
 
 ---
 

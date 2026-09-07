@@ -46,6 +46,21 @@ def main() -> int:
     if nuevo != html:
         index.write_text(nuevo, encoding="utf-8")
     print(f"scripts y hojas de estilo sellados con v{version}: {nuevo.count('?v=' + version)}")
+
+    # LOW_VERSION de main.py va junto, o la fuente miente. Se descubrió con el
+    # autochequeo del empaquetado: main.py decía 4.11.0 con VERSION en 4.14.0.
+    # CI lo sella al compilar desde el tag, así que el binario publicado estaba
+    # bien; el que quedaba desfasado era el repositorio, y ahí es donde uno mira
+    # cuando algo no cuadra. Si además se separan de verdad, el navegador
+    # embebido puede servir JavaScript viejo de su caché sin que nadie entienda.
+    main_py = RAIZ / "main.py"
+    if main_py.exists():
+        fuente = main_py.read_text(encoding="utf-8")
+        sellado = re.sub(r'^LOW_VERSION = "[0-9.]+"',
+                         f'LOW_VERSION = "{version}"', fuente, count=1, flags=re.M)
+        if sellado != fuente:
+            main_py.write_text(sellado, encoding="utf-8")
+            print(f"LOW_VERSION de main.py -> {version}")
     return 0
 
 

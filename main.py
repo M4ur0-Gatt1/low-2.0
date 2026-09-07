@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.11.0"
+LOW_VERSION = "4.15.0"
 
 
 def atomic_write_text(path, content, encoding="utf-8"):
@@ -5430,10 +5430,96 @@ class Api:
             return msgs(f" {e}")
 
 
+def smoke(base):
+    """Autochequeo del EJECUTABLE EMPAQUETADO (biblia §9·4).
+
+    Lo que rompe un empaquetado no es la lógica: es que falte un archivo de
+    datos, que un módulo no haya entrado en el bundle o que una ruta relativa
+    funcione desde el repo y no desde el .exe. Nada de eso se ve corriendo las
+    pruebas del repo, y era la razón por la que se publicaban tres instaladores
+    de los que sólo uno lo había arrancado alguien.
+
+    No abre ventana: comprueba lo que el binario necesita para abrirla y sale.
+    Imprime una línea por comprobación y devuelve 0 sólo si todas pasan.
+    """
+    import re
+    fallos = []
+    def revisar(que, cond, detalle=""):
+        print(("  OK   " if cond else "  FALLA") + " " + que + ((" :: " + str(detalle)) if detalle and not cond else ""))
+        if not cond:
+            fallos.append(que)
+
+    print("LOW smoke · %s · python %s · %s" % (LOW_VERSION, sys.version.split()[0], sys.platform))
+    print("  base: %s%s" % (base, "  (empaquetado)" if getattr(sys, "frozen", False) else "  (desde el repo)"))
+
+    ui_dir = os.path.join(base, "ui")
+    index = os.path.join(ui_dir, "index.html")
+    revisar("existe ui/index.html", os.path.isfile(index), index)
+    if not os.path.isfile(index):
+        print("SMOKE FALLA: sin la interfaz no hay nada que arrancar")
+        return 1
+
+    with open(index, encoding="utf-8") as f:
+        html = f.read()
+
+    # TODO lo que index.html pide tiene que estar dentro del bundle: es el fallo
+    # de empaquetado más común y el más silencioso — la app abre en blanco.
+    pedidos = re.findall(r'(?:src|href)="([^"]+)"', html)
+    locales = [r.split("?")[0] for r in pedidos
+               if not r.startswith(("http:", "https:", "data:", "#", "//"))]
+    faltan = [r for r in locales if not os.path.isfile(os.path.join(ui_dir, r))]
+    revisar("los %d archivos que pide index.html están en el bundle" % len(locales),
+            not faltan, faltan[:6])
+
+    # la versión sellada en el HTML tiene que ser la del binario, o el navegador
+    # embebido sirve el JavaScript viejo desde su caché
+    sellos = set(re.findall(r"[?]v=([0-9]+[.][0-9]+[.][0-9]+)", html))
+    revisar("el sello de versión del HTML coincide con el binario",
+            sellos == {LOW_VERSION} or not sellos, {"html": sorted(sellos), "binario": LOW_VERSION})
+
+    revisar("el puente Api se construye", _api_ok(), "")
+
+    for mod in ("webview", "PIL", "numpy"):
+        try:
+            __import__(mod); ok = True; det = ""
+        except Exception as e:
+            ok = False; det = repr(e)
+        revisar("importa %s" % mod, ok, det)
+
+    escribible = None
+    try:
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "x.json"), "w", encoding="utf-8") as f:
+                f.write("{}")
+        escribible = True
+    except Exception as e:
+        escribible = False
+    revisar("puede escribir archivos temporales", escribible)
+
+    if fallos:
+        print("SMOKE FALLA: %d comprobación(es) — %s" % (len(fallos), "; ".join(fallos)))
+        return 1
+    print("SMOKE OK %s" % LOW_VERSION)
+    return 0
+
+
+def _api_ok():
+    try:
+        Api()
+        return True
+    except Exception:
+        import traceback
+        print(traceback.format_exc())
+        return False
+
+
 def main():
     log("── arranque ──")
-    api = Api()
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    if "--smoke" in sys.argv:
+        sys.exit(smoke(base))
+    api = Api()
     ui = os.path.join(base, "ui", "index.html")
     api._ui_base = os.path.join(base, "ui")
     # Dos pantallas: reabrir LOW en el monitor y el tamaño donde se cerró.

@@ -2927,6 +2927,7 @@ function dzDocumentTabFind(path) {
 function dzDocumentTabCapture() {
   const tab = dzDocumentTabCurrent();
   if (!tab) return;
+  if (DZ.doc && (DZ.dirty || DZ.doc.dirty)) dzDocCommit();
   const svg = $("#dzCanvas")?.querySelector(":scope > svg:not(#dzRigOverlay):not(#dzMocapSheet)");
   if (svg) tab.content = dzSerialize(svg);
   tab.dirty = !!(DZ.dirty || DZ.doc?.dirty);
@@ -2937,6 +2938,12 @@ function dzDocumentTabCapture() {
     onionOn: !!DZ.onionOn, zoom: DZ.zoom || 1, panX: DZ.panX || 0,
     panY: DZ.panY || 0, viewRot: DZ.viewRot || 0
   };
+  if (tab.dirty && DZ.path && tab.content) {
+    window.LOW?.workspace?.recovery?.saveNow(DZ.path, tab.content, {
+      frame: DZ.doc?.frame || DZ.anim?.idx + 1 || null,
+      tool: DZ.tool || "select", reason: "document-switch"
+    });
+  }
   if (DZ.doc?.dirty) dzSceneAutosave(DZ.doc, tab);
   dzDocumentTabsRender();
 }
@@ -2950,7 +2957,22 @@ function dzDocumentTabParkRuntime() {
   });
   Object.assign(DZ, { path: null, doc: null, anim: null, scene: {}, history: null, playback: null,
     xsView: null, tlView: null, lsView: null, palView: null });
-  DZ.sel = null; DZ.multi = []; DZ.dirty = false;
+  DZ.sel = null; DZ.multi = []; DZ.dirty = false; DZ.onionOn = false;
+  DZ.rigMode = false; DZ.rigSubmode = "build"; DZ.rigNodeId = null;
+  DZ.rigSelectedId = null; DZ.rigSelectionSource = null; DZ.rigConstraintId = null;
+  DZ.rigLivePose = null; DZ.rigIKPreview = null; DZ.rigBoneTool = false;
+  $("#dzRigPanel")?.setAttribute("hidden", "");
+  $("#dzRigOverlay")?.setAttribute("hidden", "");
+  if ($("#dzRigOverlay")) $("#dzRigOverlay").innerHTML = "";
+  $("#dzRigBtn")?.classList.remove("active"); $("#tlRigOpen")?.classList.remove("active");
+  dzDeselect();
+}
+function dzDocumentTabPrepareNew() {
+  const previous = DZ.activeDocumentTab;
+  dzDocumentTabCapture(); dzDocumentTabParkRuntime();
+  DZ.activeDocumentTab = null; dzDocumentTabsRender();
+  dzMocapResetSession({ closePanel: true });
+  return previous;
 }
 function dzDocumentTabRegister(path, name) {
   let tab = dzDocumentTabFind(path);
@@ -2995,22 +3017,36 @@ function dzDocumentTabsRender() {
 async function dzDocumentTabActivate(id) {
   if (!id || id === DZ.activeDocumentTab) return true;
   const target = DZ.documentTabs.find(tab => tab.id === id); if (!target) return false;
+  const previous = dzDocumentTabCurrent();
   dzDocumentTabCapture(); dzDocumentTabParkRuntime(); DZ.activeDocumentTab = id;
-  await openDesign(target.path, { fromTab: true, sourceSvg: target.content });
   const state = target.runtime;
+  const isScene = /\.lowscene$/i.test(target.path || state?.doc?.path || "");
+  // Una .lowscene no es una imagen suelta. Su LowDoc vivo ya contiene capas,
+  // dibujos y exposiciones; pedir image_data() aca lo degradaba a un SVG
+  // generico y, al volver, podia terminar guardando el lienzo de otra solapa.
+  if (!isScene) {
+    const opened = await openDesign(target.path, { fromTab: true, sourceSvg: target.content });
+    if (!opened) {
+      DZ.activeDocumentTab = null;
+      if (previous?.id && previous.id !== id) await dzDocumentTabActivate(previous.id);
+      return false;
+    }
+  }
   if (state) {
     Object.assign(DZ, state);
     DZ.path = state.path || (state.doc ? null : target.path);
     DZ.playback = null; DZ.xsView = null; DZ.tlView = null; DZ.lsView = null; DZ.palView = null;
     DZ.dirty = !!target.dirty; DZ.sel = null; DZ.multi = [];
+    if (DZ.history) { DZ.undo = DZ.history.undoStack; DZ.redo = DZ.history.redoStack; }
     if (DZ.doc && DZ.history) DZ.doc.setHistory(DZ.history);
     if (DZ.doc) {
       const drawing = DZ.doc.drawing;
-      dzCanvasSet(drawing ? drawing.content : target.content || "");
+      if (isScene) dzCanvasSet(drawing ? drawing.content : target.content || "");
       dzSyncCanvasDocument(true); dzSyncTransportFromDoc(); dzOnionRender(); dzOnion2Render();
       if (!$("#dzTimeline")?.hidden) await dzTlMount();
       if (!$("#dzXs")?.hidden) await dzXsMount();
       dzPalMount();
+      if (DZ.colab) dzColabVigilar();
     }
     dzApplyZoom(); dzBuildLayers(); dzPaletteRender();
   }
@@ -3021,11 +3057,17 @@ async function dzDocumentTabClose(id) {
   const tab = DZ.documentTabs.find(item => item.id === id); if (!tab) return false;
   if (tab.id === DZ.activeDocumentTab) dzDocumentTabCapture();
   if (tab.dirty && !(await dzConfirmModal(`«${tab.name}» tiene cambios sin guardar. ¿Cerrar igualmente?`, { ok: "Cerrar igualmente", danger: true }))) return false;
+  // La confirmacion anterior autoriza descartar ESTA solapa solamente. Sus
+  // checkpoints no deben reaparecer luego, ni borrarse los de otra escena.
+  dzSceneRecoveryClear(tab.runtime?.doc || (tab.id === DZ.activeDocumentTab ? DZ.doc : null), tab);
+  const recoveryPath = tab.runtime?.path || tab.path;
+  if (recoveryPath) window.LOW?.workspace?.recovery?.clear?.(recoveryPath);
   const index = DZ.documentTabs.indexOf(tab); DZ.documentTabs.splice(index, 1);
   if (tab.id !== DZ.activeDocumentTab) { dzDocumentTabsRender(); return true; }
   DZ.activeDocumentTab = null;
   const next = DZ.documentTabs[Math.min(index, DZ.documentTabs.length - 1)];
   if (next) return dzDocumentTabActivate(next.id);
+  dzDocumentTabParkRuntime();
   if (DZ.d3) dz3dExit(true);
   $("#designView").hidden = true; DZ.sel = null; if (RULER) dzRulerClear();
   dzDocumentTabsRender(); return true;
@@ -3095,13 +3137,16 @@ async function openDesign(path, options = {}) {
   if (!options.fromTab && !frameOfCurrentScene) {
     const existing = dzDocumentTabFind(path);
     if (existing && existing.id !== DZ.activeDocumentTab) return dzDocumentTabActivate(existing.id);
-    if (DZ.path && DZ.path !== path) { dzDocumentTabCapture(); dzDocumentTabParkRuntime(); }
+    const current = dzDocumentTabCurrent();
+    if ((current && current.path !== path) || (!current && (DZ.path || DZ.doc))) {
+      dzDocumentTabCapture(); dzDocumentTabParkRuntime();
+    }
   } else if (frameOfCurrentScene && DZ.path && DZ.path !== path) await dzPersist();
   dzWsInit();          // el editor abre en el workspace donde se dejó
   const r = options.sourceSvg
     ? { svg: options.sourceSvg, name: dzDocumentTabName(path) }
     : await api.image_data(path);
-  if (!r || r.error || !r.svg) return sysMsg(" No pude abrir el diseño: " + ((r && r.error) || path));
+  if (!r || r.error || !r.svg) { sysMsg(" No pude abrir el diseño: " + ((r && r.error) || path)); return false; }
   DZ.path = path; DZ.sel = null;
   $("#dzTitle").textContent = r.name || path.split(/[\\/]/).pop();
   const cv = $("#dzCanvas");
@@ -3112,18 +3157,20 @@ async function openDesign(path, options = {}) {
     .filter(n => n.tagName.toLowerCase() === "svg" && !["dzRigOverlay","dzMocapSheet","dzMeshOverlay"].includes(n.id))
     .forEach(n => n.remove());
   let sourceSvg = options.sourceSvg || r.svg;
-  const recovery = window.LOW?.workspace?.recovery?.get(path);
-  if (recovery && recovery.content !== r.svg) {
-    // en mock no hay nadie para contestar: se conserva el punto y se abre el
-    // archivo del disco, que es la salida segura (nunca descartar sin elegir)
-    const decision = /[?&]mock=1/.test(location.search) ? "keep"
-      : await dzRecoveryDecide(path, r.svg, recovery);
-    if (decision === "recover") sourceSvg = recovery.content;
-    else if (decision === "discard") LOW.workspace.recovery.clear(path);
-  } else if (recovery) LOW.workspace.recovery.clear(path);
+  if (!options.fromTab) {
+    const recovery = window.LOW?.workspace?.recovery?.get(path);
+    if (recovery && recovery.content !== r.svg) {
+      // en mock no hay nadie para contestar: se conserva el punto y se abre el
+      // archivo del disco, que es la salida segura (nunca descartar sin elegir)
+      const decision = /[?&]mock=1/.test(location.search) ? "keep"
+        : await dzRecoveryDecide(path, r.svg, recovery);
+      if (decision === "recover") sourceSvg = recovery.content;
+      else if (decision === "discard") LOW.workspace.recovery.clear(path);
+    } else if (recovery) LOW.workspace.recovery.clear(path);
+  }
   const tmp = document.createElement("div"); tmp.innerHTML = sourceSvg;
   const svg = tmp.querySelector("svg");
-  if (!svg) return sysMsg(" El archivo no tiene un <svg> válido: " + path);
+  if (!svg) { sysMsg(" El archivo no tiene un <svg> válido: " + path); return false; }
   cv.insertBefore(svg, $("#dzHandle"));
   // La resolución vive en el archivo. El panel puede cambiar de tamaño, pero
   // eso sólo afecta al zoom: nunca se vuelve a inferir otro ancho/alto visual.
@@ -3152,6 +3199,7 @@ async function openDesign(path, options = {}) {
   if (DZ.d3) dz3dBuild();       // en espacio 3D: reconstruir los planos del cuadro nuevo
   $("#designView").hidden = false;
   requestAnimationFrame(() => { if (!$("#designView").hidden) dzFitView(); });
+  return true;
 }
 function closeDesign() {
   const current = dzDocumentTabCurrent();
@@ -16414,9 +16462,15 @@ function dzColabColor(id) {
  *  un trazo produce muchos avisos seguidos y no hay por qué mandar veinte
  *  copias del mismo nivel. */
 function dzColabVigilar() {
-  if (DZ.colabVigilando || !DZ.doc) return;
+  if (!DZ.doc) return;
+  if (!DZ.colabWatchedDocs) DZ.colabWatchedDocs = new WeakSet();
+  if (DZ.colabWatchedDocs.has(DZ.doc)) return;
+  DZ.colabWatchedDocs.add(DZ.doc);
   DZ.colabVigilando = true;
   DZ.doc.subscribe((doc, motivo) => {
+    // Las solapas conservan su LowDoc. Un aviso tardio de una solapa
+    // inactiva nunca debe publicarse como si perteneciera a la visible.
+    if (DZ.doc !== doc) return;
     if (!DZ.colab || DZ.colab.estado !== "listo") return;
     if (motivo === "frame") {
       // OJO: esto corre una vez POR CUADRO, y en reproduccion son 24 por
@@ -16746,11 +16800,25 @@ async function dzTlMount() {
    El autoguardado local es la red de seguridad: si LOW se cierra mal, al
    reabrir se ofrece lo último. */
 const DZ_SCENE_KEY = "low.scene.autosave";
+function dzSceneRecoveryIdentity(doc = DZ.doc, tab = dzDocumentTabCurrent()) {
+  const store = window.LOW?.workspace?.sceneRecovery;
+  return store?.identity?.({
+    path: doc?.path || tab?.path || DZ.path || "",
+    sceneId: doc?.scene?.id || tab?.runtime?.doc?.scene?.id || ""
+  }) || "";
+}
+function dzSceneRecoveryClear(doc = DZ.doc, tab = dzDocumentTabCurrent()) {
+  const store = window.LOW?.workspace?.sceneRecovery;
+  const identities = new Set([dzSceneRecoveryIdentity(doc, tab), tab?.recoveryIdentity].filter(Boolean));
+  identities.forEach(identity => store?.clear?.(identity));
+  if (tab) tab.recoveryIdentity = null;
+}
 
 /** Descarta por completo el documento activo y todo estado visual asociado.
  *  Es deliberadamente más fuerte que ocultar el módulo: un documento nuevo no
  *  puede heredar rig, cámara, selección, historial ni recuperación del anterior. */
 function dzDocumentReset() {
+  dzSceneRecoveryClear(DZ.doc, dzDocumentTabCurrent());
   if (DZ.anim?.playing) dzAnimStop();
   if (DZ.perf?.rec) dzPerfRecEnd(false);
   dzMocapResetSession({ closePanel: true });
@@ -16779,7 +16847,6 @@ function dzDocumentReset() {
   DZ.path = null;
   DZ.dirty = false;
   DZ.onionOn = false;
-  try { localStorage.removeItem(DZ_SCENE_KEY); } catch (_) { /* sin storage */ }
   $("#dzRigPanel")?.setAttribute("hidden", "");
   $("#dzRigOverlay")?.setAttribute("hidden", "");
   if ($("#dzRigOverlay")) $("#dzRigOverlay").innerHTML = "";
@@ -17079,11 +17146,14 @@ async function dzDocumentMayDiscard(action) {
 }
 
 async function dzDocumentNew() {
-  if (!(await dzDocumentMayDiscard("Crear un documento nuevo"))) return false;
-  dzDocumentReset();
   const r = await api.new_design();
   if (!r?.path) return false;
-  await openDesign(r.path);
+  const previous = dzDocumentTabPrepareNew();
+  const opened = await openDesign(r.path);
+  if (!opened || !DZ.activeDocumentTab) {
+    if (previous) await dzDocumentTabActivate(previous);
+    return false;
+  }
   await dzDocInit();
   await dzEnsureAnimationWorkspace();
   DZ.doc.scene.name = (r.name || "Documento sin título").replace(/\.svg$/i, "");
@@ -17148,6 +17218,8 @@ async function dzSceneSave(comoNuevo) {
   dzDocCommit();                      // lo que esté en el lienzo, adentro
   const json = JSON.stringify(DZ.doc.toJSON(), null, 1);
   const nombre = (DZ.doc.scene.name || "escena").replace(/[^\w\-.]+/g, "_") + ".lowscene";
+  const tabBefore = dzDocumentTabCurrent();
+  const recoveryBefore = dzSceneRecoveryIdentity(DZ.doc, tabBefore);
   try {
     const r = await api.save_file(comoNuevo ? "" : (DZ.doc.path || ""), json, nombre);
     if (dzSaveOk(r)) {
@@ -17155,7 +17227,8 @@ async function dzSceneSave(comoNuevo) {
       DZ.doc.dirty = false;
       const tab = dzDocumentTabCurrent();
       if (tab) { tab.path = r.path; tab.name = dzDocumentTabName(r.path, r.name || tab.name); tab.dirty = false; dzDocumentTabsRender(); }
-      try { localStorage.removeItem(DZ_SCENE_KEY); } catch (_) { /* sin storage */ }
+      window.LOW?.workspace?.sceneRecovery?.clear?.(recoveryBefore);
+      dzSceneRecoveryClear(DZ.doc, tab);
       dzSetStatus(" Escena guardada: " + (r.name || r.path));
       return true;
     }
@@ -17172,9 +17245,10 @@ async function dzSceneOpen() {
   try {
     const r = await api.open_dialog();
     if (!r || !r.content) return false;
+    const existing = r.path && dzDocumentTabFind(r.path);
+    if (existing) return dzDocumentTabActivate(existing.id);
     const doc = LOW.animation.LowDoc.fromJSON(r.content);
-    if (!(await dzDocumentMayDiscard("Abrir otro documento"))) return false;
-    dzDocumentReset();
+    dzDocumentTabPrepareNew();
     doc.path = r.path || null;
     dzDocUse(doc);
     $("#designView").hidden = false;
@@ -17197,7 +17271,9 @@ function dzDocUse(doc) {
   if (DZ.xsView) DZ.xsView.setDoc(doc);
   if (DZ.tlView) DZ.tlView.setDoc(doc);
   if (DZ.lsView) DZ.lsView.setDoc(doc);
+  if (DZ.colab) dzColabVigilar();
   doc.subscribe((d, motivo) => {
+    if (DZ.doc !== d) return;
     if (motivo === "frame") {
       const selectedId = DZ.sel && DZ.sel.id, dw = d.drawing;
       dzCanvasSet(dw ? dw.content : ""); dzOnionRender();
@@ -17232,21 +17308,28 @@ function dzSyncTransportFromDoc() {
 }
 
 /** Autoguardado de la escena, por si LOW se cierra mal. */
-function dzSceneAutosave() {
-  if (!DZ.doc) return;
-  try { localStorage.setItem(DZ_SCENE_KEY, JSON.stringify(DZ.doc.toJSON())); }
-  catch (_) { /* sin espacio: no romper el dibujo por esto */ }
+function dzSceneAutosave(doc = DZ.doc, tab = dzDocumentTabCurrent()) {
+  if (!doc) return false;
+  const store = window.LOW?.workspace?.sceneRecovery;
+  const identity = dzSceneRecoveryIdentity(doc, tab);
+  if (!store || !identity) return false;
+  const saved = store.saveNow(identity, doc.toJSON(), {
+    path: doc.path || tab?.path || null, sceneId: doc.scene?.id || null,
+    name: doc.scene?.name || tab?.name || "Escena", frame: doc.frame || 1
+  });
+  if (saved && tab) tab.recoveryIdentity = identity;
+  return saved;
 }
 setInterval(() => { if (DZ.doc && DZ.doc.dirty) dzSceneAutosave(); }, 8000);
 
 /** ¿Hay una escena sin guardar de la sesión anterior? */
 function dzSceneRecovered() {
-  try {
-    const raw = localStorage.getItem(DZ_SCENE_KEY);
-    if (!raw) return null;
-    const d = JSON.parse(raw);
-    return d && d.scene ? d : null;
-  } catch (_) { return null; }
+  const store = window.LOW?.workspace?.sceneRecovery;
+  const identity = dzSceneRecoveryIdentity(null, dzDocumentTabCurrent());
+  if (!store || !identity) return null;
+  let record = store.get(identity);
+  if (!record && DZ.documentTabs.length <= 1) record = store.migrateLegacy(identity);
+  return record?.content || null;
 }
 
 /* ══ PANEL DE PAPEL CEBOLLA ══════════════════════════════════════════════
@@ -17678,6 +17761,7 @@ async function dzDocInit() {
   if (!DZ.history) DZ.history = new LOW.core.HistoryManager({ limit: 180 });
   DZ.doc.setHistory(DZ.history);
   DZ.doc.subscribe((doc, motivo) => {
+    if (DZ.doc !== doc) return;
     if (motivo === "frame") {
       const selectedId = DZ.sel && DZ.sel.id;
       const drawing = doc.drawing;
@@ -17698,6 +17782,7 @@ async function dzDocInit() {
   // la paleta gobierna el color por hoja de estilos: cada cambio se ve al
   // instante en el lienzo, sin recorrer los dibujos
   DZ.doc.subscribe((doc, motivo) => {
+    if (DZ.doc !== doc) return;
     if (motivo === "palette" || (motivo === "content" && DZ.palView)) dzPalCssRender();
   });
   dzPalCssRender();

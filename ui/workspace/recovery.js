@@ -19,6 +19,80 @@
     get(path) { try { const value = JSON.parse(this.storage?.getItem(this.key(path)) || "null"); return value?.path === path ? value : null; } catch (_) { return null; } }
     clear(path) { clearTimeout(this.timers.get(path)); this.timers.delete(path); try { this.storage?.removeItem(this.key(path)); } catch (_) {} }
   }
+  const canonicalPath = value => String(value || "").trim().replace(/\\+/g, "/").replace(/\/{2,}/g, "/").toLowerCase();
+  class SceneRecoveryStore {
+    constructor(storage = global.localStorage) {
+      this.storage = storage;
+      this.prefix = "low.scene.recovery.v2.";
+      this.indexKey = this.prefix + "index";
+      this.legacyKey = "low.scene.autosave";
+    }
+    identity({ path, sceneId } = {}) {
+      const clean = canonicalPath(path);
+      return clean ? "path:" + clean : (sceneId ? "scene:" + String(sceneId) : "");
+    }
+    key(identity) { return this.prefix + encodeURIComponent(String(identity || "")); }
+    _index() {
+      try { const value = JSON.parse(this.storage?.getItem(this.indexKey) || "[]"); return Array.isArray(value) ? value : []; }
+      catch (_) { return []; }
+    }
+    _writeIndex(items) { this.storage?.setItem(this.indexKey, JSON.stringify([...new Set(items.filter(Boolean))])); }
+    saveNow(identity, content, metadata = {}) {
+      if (!identity || !content || content.format !== "lowscene") return false;
+      const record = { schema: 2, kind: "lowscene", identity,
+        path: metadata.path || null, sceneId: content.scene?.id || metadata.sceneId || null,
+        name: metadata.name || content.scene?.name || "Escena", savedAt: Date.now(), metadata,
+        content };
+      try {
+        this.storage?.setItem(this.key(identity), JSON.stringify(record));
+        const verified = this.get(identity);
+        if (!verified || verified.identity !== identity) return false;
+        this._writeIndex([...this._index(), identity]);
+        return true;
+      } catch (_) { return false; }
+    }
+    get(identity) {
+      if (!identity) return null;
+      try {
+        const value = JSON.parse(this.storage?.getItem(this.key(identity)) || "null");
+        return value?.schema === 2 && value?.kind === "lowscene" && value?.identity === identity ? value : null;
+      } catch (_) { return null; }
+    }
+    list() {
+      const good = [], records = [];
+      for (const identity of this._index()) { const value = this.get(identity); if (value) { good.push(identity); records.push(value); } }
+      if (good.length !== this._index().length) { try { this._writeIndex(good); } catch (_) { /* cuota/privacidad */ } }
+      return records.sort((a, b) => b.savedAt - a.savedAt);
+    }
+    clear(identity) {
+      if (!identity) return false;
+      try {
+        this.storage?.removeItem(this.key(identity));
+        this._writeIndex(this._index().filter(item => item !== identity));
+        return true;
+      } catch (_) { return false; }
+    }
+    rekey(from, to) {
+      if (!from || !to || from === to) return !!this.get(to);
+      const record = this.get(from); if (!record) return false;
+      if (!this.saveNow(to, record.content, { ...record.metadata, path: record.path, migratedFrom: from })) return false;
+      this.clear(from); return true;
+    }
+    legacy() {
+      try {
+        const content = JSON.parse(this.storage?.getItem(this.legacyKey) || "null");
+        return content?.format === "lowscene" && content?.scene?.id ? content : null;
+      } catch (_) { return null; }
+    }
+    migrateLegacy(identity) {
+      const content = this.legacy(); if (!content || !identity) return null;
+      if (!this.saveNow(identity, content, { sceneId: content.scene.id, legacy: true })) return null;
+      try { this.storage?.removeItem(this.legacyKey); } catch (_) { /* la copia v2 ya fue verificada */ }
+      return this.get(identity);
+    }
+  }
   workspace.DocumentRecovery = DocumentRecovery;
   workspace.recovery = new DocumentRecovery();
+  workspace.SceneRecoveryStore = SceneRecoveryStore;
+  workspace.sceneRecovery = new SceneRecoveryStore();
 })(window);
