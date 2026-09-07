@@ -1105,26 +1105,35 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#perfBake").onclick = dzPerfBake;
   let dzShapeKind = "rect";
   const dzShapeMenu = $("#dzShapeMenu"), dzShapeMainIcon = $("#dzShapeMainIcon");
-  $("#dzShapeMain").onclick = (e) => {
-    const r=e.currentTarget.getBoundingClientRect();
-    // Toda la superficie abre: funciona igual con mouse, lápiz y toque y no
-    // obliga a acertarle a un triángulo de pocos píxeles.
+  const dzShapeMenuAbrir = (boton) => {
+    const r=boton.getBoundingClientRect();
     dzShapeMenu.style.left=(r.right+6)+"px";
     dzShapeMenu.style.top=Math.max(6,Math.min(innerHeight-82,r.top-5))+"px";
-    dzShapeMenu.hidden=!dzShapeMenu.hidden;
+    dzShapeMenu.hidden=false;
   };
+  // El clic ARMA la herramienta con la forma en uso: es lo que uno espera de un
+  // botón de herramienta, y lo que hace falta para después arrastrar en la mesa.
+  // El menú se abre con la flecha o manteniendo pulsado, como dice el tooltip.
+  $("#dzShapeMain").onclick = (e) => {
+    if (e.target.closest(".dz-shape-caret")) return dzShapeMenuAbrir(e.currentTarget);
+    dzShapeMenu.hidden=true; dzFormaElegir(dzFormaKind());
+  };
+  $("#dzShapeMain").onpointerdown = (e) => {
+    const boton=e.currentTarget;
+    clearTimeout(DZ._shapeHold);
+    DZ._shapeHold=setTimeout(()=>dzShapeMenuAbrir(boton), 320);
+  };
+  ["pointerup","pointerleave","pointercancel"].forEach(ev=>
+    $("#dzShapeMain").addEventListener(ev, ()=>clearTimeout(DZ._shapeHold)));
   [["dzAddRect","rect"],["dzAddCircle","circle"],["dzAddEllipse","ellipse"],
    ["dzAddPoly","poly"],["dzAddStar","star"]].forEach(([id,kind])=>{
-    $("#"+id).onclick=()=>{
-      dzShapeKind=kind; dzShapeMainIcon.setAttribute("href",`#i-${kind}`);
-      dzShapeMenu.hidden=true; dzAddShape(kind);
-    };
+    $("#"+id).onclick=()=>{ dzShapeKind=kind; dzFormaElegir(kind); };
   });
   document.addEventListener("pointerdown", e=>{
     if(!$("#dzShapePicker")?.contains(e.target)) dzShapeMenu.hidden=true;
   });
   $("#dzAddText").onclick = () => dzAddShape("text");
-  $("#dzAddLine").onclick = () => dzAddShape("line");
+  $("#dzAddLine").onclick = () => dzFormaElegir("line");
   $("#tlIns").onclick = (e) => dzFrameInsert(e.shiftKey);
   $("#tlTween").onclick = dzTweenModal;
   const bArco = $("#tlArco");
@@ -3213,6 +3222,7 @@ function dzEscapeActive() {
   if (!$("#overlay")?.hidden) { closeModal(); return true; }
   closeCtxMenu();
   document.querySelectorAll("#dzMenubar .dz-menu.open").forEach(n => n.classList.remove("open"));
+  if (typeof dzFormaCancelar === "function" && dzFormaCancelar("escape")) return true;
   if (dzVectorGestureCancel("escape")) {
     dzSetStatus("Edición vectorial cancelada"); return true;
   }
@@ -4321,63 +4331,6 @@ function dzHandleDown(e) {
   document.addEventListener("pointercancel", up);
 }
 
-/* agregar una forma nueva al centro del lienzo y seleccionarla */
-function dzAddShape(kind) {
-  const svg = $("#dzCanvas").querySelector(":scope > svg");
-  if (!svg) return;
-  dzSnapshot();
-  const vb = (svg.getAttribute("viewBox") || "0 0 1080 1080").split(/\s+/).map(Number);
-  const W = vb[2] || 1080, H = vb[3] || 1080, cx = W / 2, cy = H / 2;
-  const NS = "http://www.w3.org/2000/svg";
-  const FILL = DZ.fillColor || "#F0450E";
-  const R = Math.min(W, H) * 0.15;
-  // polígono regular / estrella: puntos alrededor del centro (editables con ⬦)
-  const ring = (n, r1, r2) => {
-    const pts = [];
-    for (let i = 0; i < n; i++) {
-      const r = (r2 && i % 2) ? r2 : r1;
-      const a = -Math.PI / 2 + i * Math.PI * 2 / n;
-      pts.push(Math.round(cx + r * Math.cos(a)), Math.round(cy + r * Math.sin(a)));
-    }
-    return pts.join(" ");
-  };
-  let el;
-  if (kind === "rect") {
-    el = document.createElementNS(NS, "rect");
-    el.setAttribute("x", cx - W * 0.15); el.setAttribute("y", cy - H * 0.1);
-    el.setAttribute("width", W * 0.3); el.setAttribute("height", H * 0.2);
-    el.setAttribute("fill", FILL);
-  } else if (kind === "circle") {
-    el = document.createElementNS(NS, "circle");
-    el.setAttribute("cx", cx); el.setAttribute("cy", cy); el.setAttribute("r", R);
-    el.setAttribute("fill", FILL);
-  } else if (kind === "ellipse") {
-    el = document.createElementNS(NS, "ellipse");
-    el.setAttribute("cx", cx); el.setAttribute("cy", cy);
-    el.setAttribute("rx", R * 1.5); el.setAttribute("ry", R * 0.9);
-    el.setAttribute("fill", FILL);
-  } else if (kind === "poly") {
-    el = document.createElementNS(NS, "polygon");
-    el.setAttribute("points", ring(6, R * 1.2));
-    el.setAttribute("fill", FILL);
-  } else if (kind === "star") {
-    el = document.createElementNS(NS, "polygon");
-    el.setAttribute("points", ring(10, R * 1.4, R * 0.55));
-    el.setAttribute("fill", FILL);
-  } else if (kind === "line") {
-    el = document.createElementNS(NS, "line");
-    el.setAttribute("x1", cx - W * 0.15); el.setAttribute("y1", cy);
-    el.setAttribute("x2", cx + W * 0.15); el.setAttribute("y2", cy);
-    el.setAttribute("stroke", DZ.drawColor || "#F0450E"); el.setAttribute("stroke-width", Math.max(2, DZ.drawW || Math.round(H * 0.008)));
-  } else {
-    el = document.createElementNS(NS, "text");
-    el.setAttribute("x", cx); el.setAttribute("y", cy); el.setAttribute("text-anchor", "middle");
-    el.setAttribute("font-family", "Figtree"); el.setAttribute("font-size", Math.round(H * 0.06));
-    el.setAttribute("fill", FILL); el.textContent = "Texto";
-  }
-  dzArtAppend(svg, el);
-  dzSelect(el); dzMarkDirty();
-}
 function dzDeleteSelected() {
   if (!DZ.sel && !(DZ.multi || []).length) return;
   dzSnapshot();
@@ -5139,6 +5092,7 @@ function dzPenDebugToggle() {
 
 function dzSetTool(t) {
   if (t !== DZ.tool) dzVectorGestureCancel("tool-change");
+  if (t !== "shape" && typeof dzFormaCancelar === "function") dzFormaCancelar("tool-change");
   if (DRAW_TRACK) _drawFinish();
   if (RULER && t !== "ruler") dzRulerClear();
   DZ.tool = t;
@@ -5463,6 +5417,7 @@ function dzDrawDown(e) {
   if (tool === "bucket") { dzBucketApply(e); return; }
   if (tool === "eraser") { dzEraseStart(e); return; }
   if (tool === "ruler") { dzRulerDown(e); return; }
+  if (tool === "shape") { dzFormaDown(e); return; }
   if (tool === "inflator") { dzInflatorDown(e); return; }
   if (tool === "handler") { dzHandlerDown(e); return; }
   if (tool === "iron") { dzIronDown(e); return; }
@@ -5487,6 +5442,7 @@ function dzDrawMove(e) {
   if (PEN && PEN.dragging) { dzPenDrag(dzToUser(e.clientX, e.clientY)); return; }
   if (PEN && !DRAW_TRACK) { dzPenHover(dzToUser(e.clientX, e.clientY)); return; }
   if (DZ.tool === "ruler" && RULER && RULER.a) { dzRulerMove(e); return; }
+  if (dzFormaEnCurso()) { dzFormaMove(e); return; }
   if (DZ.tool === "inflator" && INFLATOR && INFLATOR.el) { dzInflatorMove(e); return; }
   if (DZ.tool === "iron" && IRON && IRON.active) { dzIronApply(e); return; }
   if (DZ.tool === "magnet" && MAGNET && MAGNET.active) { dzMagnetMove(e); return; }
@@ -5514,6 +5470,7 @@ function dzDrawMove(e) {
 }
 
 function dzDrawUp(e) {
+  if (dzFormaEnCurso()) { dzFormaUp(e); return; }
   if (PEN && PEN.dragging) { dzPenUp(); return; }
   if (INFLATOR && INFLATOR.el) { dzInflatorUp(e); return; }
   if (IRON && IRON.active) { dzIronUp(e); return; }
@@ -5808,7 +5765,8 @@ function dzRunAction(act) {
   if (TOOLS.includes(act)) return dzSetTool(act);
   if (act === "play") return dzPlayToggle();
   if (act === "camera") return dzCamToggle();
-  if (["rect", "ellipse", "text", "line"].includes(act)) return dzAddShape(act);
+  if (act === "text") return dzAddShape("text");
+  if (["rect", "ellipse", "circle", "poly", "star", "line"].includes(act)) return dzFormaElegir(act);
   if (act === "zoomin") return dzZoom(0.15);
   if (act === "zoomout") return dzZoom(-0.15);
   // Escena de animación: un archivo con TODO (dibujos, capas, timing, fps)
@@ -12531,7 +12489,7 @@ const DZ_TOOL_NAMES = { select: "seleccionar", hand: "mano", nodes: "nodos",
   pencil: "lápiz", brush: "pincel", pen: "pluma", eraser: "borrador",
   dropper: "cuentagotas", bucket: "balde", pivot: "pivote de rig", ruler: "regla",
   inflator: "inflador", handler: "manejador", iron: "plancha", pliers: "pinza", magnet: "imán",
-  camera: "cámara 2D" };
+  camera: "cámara 2D", shape: "forma" };
 function dzMenuAction(act) {
   DZ.ultimoComando = act || "";   // CRASH-01: qué se estaba haciendo al fallar
   // menú Ventana: comparte implementación con dzRunAction (atajos de teclado)

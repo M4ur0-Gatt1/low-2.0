@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=4.16.0">
-<link rel="stylesheet" href="design/studio-polish.css?v=4.16.0">
+<link rel="stylesheet" href="app.css?v=4.17.0">
+<link rel="stylesheet" href="design/studio-polish.css?v=4.17.0">
 </head>
 <body>
 <!-- splash de arranque: se desvanece solo por CSS (no depende de JS) -->
@@ -456,7 +456,7 @@
       <button class="ibtn dz-toolbtn" data-tool="bucket" title="Balde (G): clic en un elemento le aplica el relleno actual (Shift: el trazo)"><svg class="ico"><use href="#i-bucket"/></svg></button>
       <div class="hsep" data-label="Formas"></div>
       <div class="dz-shape-picker" id="dzShapePicker">
-        <button class="ibtn dz-shape-main" id="dzShapeMain" title="Crear forma · mantené pulsado o usá la flecha para elegir"><svg class="ico"><use id="dzShapeMainIcon" href="#i-rect"/></svg><span class="dz-shape-caret">▸</span></button>
+        <button class="ibtn dz-shape-main" id="dzShapeMain" title="Formas: elegí una y ARRASTRÁ en la mesa para dibujarla · Shift proporcionado · Alt desde el centro · la flecha o mantené pulsado cambia de forma"><svg class="ico"><use id="dzShapeMainIcon" href="#i-rect"/></svg><span class="dz-shape-caret">▸</span></button>
         <div class="dz-shape-menu" id="dzShapeMenu" hidden>
           <button class="ibtn" id="dzAddRect" data-shape="rect" title="Rectángulo (R)"><svg class="ico"><use href="#i-rect"/></svg></button>
           <button class="ibtn" id="dzAddCircle" data-shape="circle" title="Círculo"><svg class="ico"><use href="#i-circle"/></svg></button>
@@ -466,7 +466,7 @@
         </div>
       </div>
       <button class="ibtn" id="dzAddText" title="Texto (T)"><svg class="ico"><use href="#i-text"/></svg></button>
-      <button class="ibtn" id="dzAddLine" title="Línea (L)"><svg class="ico"><use href="#i-line"/></svg></button>
+      <button class="ibtn" id="dzAddLine" title="Línea (L): arrastrá en la mesa · Shift la fija a 45°"><svg class="ico"><use href="#i-line"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="ruler" title="Regla / Hilo tensado (R): clic = inicio, clic = fin con línea elástica · Shift+clic = 15° · clic derecho = punto de fuga para perspectiva · Esc cancela"><svg class="ico"><use href="#i-ruler"/></svg></button>
       <div class="hsep" data-label="Edición vectorial"></div>
       <!-- mesa vectorial: operaciones sobre el trazo existente -->
@@ -1115,65 +1115,66 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=4.16.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=4.17.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/history.js?v=4.16.0"></script>
-<script src="core/pointer-controller.js?v=4.16.0"></script>
-<script src="application/mode-machine.js?v=4.16.0"></script>
-<script src="animation/palette.js?v=4.16.0"></script>
-<script src="animation/coloring.js?v=4.16.0"></script>
-<script src="animation/scene-model.js?v=4.16.0"></script>
-<script src="animation/rig-policy.js?v=4.16.0"></script>
-<script src="rigging/binding.js?v=4.16.0"></script>
-<script src="rigging/rig-input.js?v=4.16.0"></script>
-<script src="rigging/rig-schematic.js?v=4.16.0"></script>
-<script src="animation/exposures.js?v=4.16.0"></script>
-<script src="animation/onion.js?v=4.16.0"></script>
-<script src="animation/mocap.js?v=4.16.0"></script>
-<script src="animation/document.js?v=4.16.0"></script>
-<script src="animation/rig-library.js?v=4.16.0"></script>
-<script src="animation/character-library.js?v=4.16.0"></script>
-<script src="animation/timeline.js?v=4.16.0"></script>
-<script src="animation/xsheet-view.js?v=4.16.0"></script>
-<script src="animation/timeline-view.js?v=4.16.0"></script>
-<script src="animation/level-strip.js?v=4.16.0"></script>
-<script src="animation/function-editor.js?v=4.16.0"></script>
-<script src="animation/premiere-xml.js?v=4.16.0"></script>
-<script src="animation/lipsync.js?v=4.16.0"></script>
-<script src="animation/arcs.js?v=4.16.0"></script>
-<script src="animation/palette-view.js?v=4.16.0"></script>
-<script src="animation/audio.js?v=4.16.0"></script>
-<script src="animation/shortcuts.js?v=4.16.0"></script>
-<script src="storyboard/shot-model.js?v=4.16.0"></script>
-<script src="storyboard/stage-view.js?v=4.16.0"></script>
-<script src="storyboard/board-view.js?v=4.16.0"></script>
-<script src="animation/model-tests.js?v=4.16.0"></script>
-<script src="animation/xsheet.js?v=4.16.0"></script>
-<script src="animation/playback.js?v=4.16.0"></script>
-<script src="animation/camera.js?v=4.16.0"></script>
-<script src="composition/multiplane-model.js?v=4.16.0"></script>
-<script src="composition/controller.js?v=4.16.0"></script>
-<script src="composition/multiplane-view.js?v=4.16.0"></script>
-<script src="drawing/stabilization.js?v=4.16.0"></script>
-<script src="drawing/selection.js?v=4.16.0"></script>
-<script src="drawing/transforms.js?v=4.16.0"></script>
-<script src="drawing/pointer-input.js?v=4.16.0"></script>
-<script src="drawing/brushes.js?v=4.16.0"></script>
-<script src="drawing/stroke-engine.js?v=4.16.0"></script>
-<script src="drawing/brush-engine-pro.js?v=4.16.0"></script>
-<script src="drawing/brush-studio.js?v=4.16.0"></script>
-<script src="collaboration/session.js?v=4.16.0"></script>
-<script src="collaboration/transport.js?v=4.16.0"></script>
-<script src="workspace/panels.js?v=4.16.0"></script>
-<script src="workspace/workspaces.js?v=4.16.0"></script>
-<script src="workspace/windows.js?v=4.16.0"></script>
-<script src="workspace/layouts.js?v=4.16.0"></script>
-<script src="workspace/recovery.js?v=4.16.0"></script>
-<script src="ai/commands.js?v=4.16.0"></script>
-<script src="ai/task-runner.js?v=4.16.0"></script>
-<script src="ai/recovery.js?v=4.16.0"></script>
-<script src="app.js?v=4.16.0"></script>
-<script src="panels/arcs-view.js?v=4.16.0"></script>
-<script src="panels/colab-panel.js?v=4.16.0"></script>
+<script src="core/history.js?v=4.17.0"></script>
+<script src="core/pointer-controller.js?v=4.17.0"></script>
+<script src="application/mode-machine.js?v=4.17.0"></script>
+<script src="animation/palette.js?v=4.17.0"></script>
+<script src="animation/coloring.js?v=4.17.0"></script>
+<script src="animation/scene-model.js?v=4.17.0"></script>
+<script src="animation/rig-policy.js?v=4.17.0"></script>
+<script src="rigging/binding.js?v=4.17.0"></script>
+<script src="rigging/rig-input.js?v=4.17.0"></script>
+<script src="rigging/rig-schematic.js?v=4.17.0"></script>
+<script src="animation/exposures.js?v=4.17.0"></script>
+<script src="animation/onion.js?v=4.17.0"></script>
+<script src="animation/mocap.js?v=4.17.0"></script>
+<script src="animation/document.js?v=4.17.0"></script>
+<script src="animation/rig-library.js?v=4.17.0"></script>
+<script src="animation/character-library.js?v=4.17.0"></script>
+<script src="animation/timeline.js?v=4.17.0"></script>
+<script src="animation/xsheet-view.js?v=4.17.0"></script>
+<script src="animation/timeline-view.js?v=4.17.0"></script>
+<script src="animation/level-strip.js?v=4.17.0"></script>
+<script src="animation/function-editor.js?v=4.17.0"></script>
+<script src="animation/premiere-xml.js?v=4.17.0"></script>
+<script src="animation/lipsync.js?v=4.17.0"></script>
+<script src="animation/arcs.js?v=4.17.0"></script>
+<script src="animation/palette-view.js?v=4.17.0"></script>
+<script src="animation/audio.js?v=4.17.0"></script>
+<script src="animation/shortcuts.js?v=4.17.0"></script>
+<script src="storyboard/shot-model.js?v=4.17.0"></script>
+<script src="storyboard/stage-view.js?v=4.17.0"></script>
+<script src="storyboard/board-view.js?v=4.17.0"></script>
+<script src="animation/model-tests.js?v=4.17.0"></script>
+<script src="animation/xsheet.js?v=4.17.0"></script>
+<script src="animation/playback.js?v=4.17.0"></script>
+<script src="animation/camera.js?v=4.17.0"></script>
+<script src="composition/multiplane-model.js?v=4.17.0"></script>
+<script src="composition/controller.js?v=4.17.0"></script>
+<script src="composition/multiplane-view.js?v=4.17.0"></script>
+<script src="drawing/stabilization.js?v=4.17.0"></script>
+<script src="drawing/selection.js?v=4.17.0"></script>
+<script src="drawing/transforms.js?v=4.17.0"></script>
+<script src="drawing/pointer-input.js?v=4.17.0"></script>
+<script src="drawing/brushes.js?v=4.17.0"></script>
+<script src="drawing/stroke-engine.js?v=4.17.0"></script>
+<script src="drawing/brush-engine-pro.js?v=4.17.0"></script>
+<script src="drawing/brush-studio.js?v=4.17.0"></script>
+<script src="collaboration/session.js?v=4.17.0"></script>
+<script src="collaboration/transport.js?v=4.17.0"></script>
+<script src="workspace/panels.js?v=4.17.0"></script>
+<script src="workspace/workspaces.js?v=4.17.0"></script>
+<script src="workspace/windows.js?v=4.17.0"></script>
+<script src="workspace/layouts.js?v=4.17.0"></script>
+<script src="workspace/recovery.js?v=4.17.0"></script>
+<script src="ai/commands.js?v=4.17.0"></script>
+<script src="ai/task-runner.js?v=4.17.0"></script>
+<script src="ai/recovery.js?v=4.17.0"></script>
+<script src="app.js?v=4.17.0"></script>
+<script src="panels/shape-tool.js?v=4.17.0"></script>
+<script src="panels/arcs-view.js?v=4.17.0"></script>
+<script src="panels/colab-panel.js?v=4.17.0"></script>
 </body>
 </html>

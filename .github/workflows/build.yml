@@ -101,6 +101,7 @@ jobs:
           node tools/check_colab_ui.js
           node tools/check_copy_paste_ui.js
           node tools/check_arcs_ui.js
+          node tools/check_shape_tool_ui.js
           node tools/check_perf_budgets.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools server

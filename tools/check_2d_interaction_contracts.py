@@ -14,6 +14,7 @@ APP = (ROOT / "ui" / "app.js").read_text(encoding="utf-8")
 # movieron, esta prueba lo noto — que es exactamente para lo que esta.
 COLABP = (ROOT / "ui" / "panels" / "colab-panel.js").read_text(encoding="utf-8")
 ARCOSV = (ROOT / "ui" / "panels" / "arcs-view.js").read_text(encoding="utf-8")
+FORMAS = (ROOT / "ui" / "panels" / "shape-tool.js").read_text(encoding="utf-8")
 INDEX = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 SHORTCUTS = (ROOT / "ui" / "animation" / "shortcuts.js").read_text(encoding="utf-8")
 SCENE_MODEL = (ROOT / "ui" / "animation" / "scene-model.js").read_text(encoding="utf-8")
@@ -43,7 +44,9 @@ def require(condition: bool, message: str) -> None:
 
 
 escape = function_body("dzEscapeActive", "dzApplyZoom")
-resize = function_body("dzHandleDown", "dzAddShape")
+# dzAddShape se mudo a ui/panels/shape-tool.js en v4.16.0: el tramo termina
+# en la funcion que quedo despues.
+resize = function_body("dzHandleDown", "dzDeleteSelected")
 camera = APP[APP.index("function dzCamDrag("):APP.index("function dzKeyToggle(")]
 timeline_scrub = APP[APP.index('$("#tlFrames").addEventListener'):APP.index("// herramientas de dibujo")]
 disc = APP[APP.index("function dzDiscToggle("):APP.index("DZ.anim = null")]
@@ -383,5 +386,24 @@ require('src="panels/colab-panel.js' in INDEX and 'src="panels/arcs-view.js' in 
         "los paneles extraidos no se cargan: la interfaz queda sin equipo ni arcos")
 require(INDEX.index('src="app.js') < INDEX.index('src="panels/'),
         "los paneles extraidos se cargan ANTES de app.js: usan DZ y $ de ahi")
+
+require("dzFormaDown" in FORMAS and 'tool === "shape"' in APP,
+        "la herramienta de formas dejo de recibir el gesto del puntero")
+require("DZ_FORMA = null" in FORMAS and "dzFormaCancelar" in APP,
+        "el gesto de forma no se puede cancelar: Escape o cambiar de herramienta "
+        "dejarian una forma a medias")
+require("DZPointerController.finish(g.gestureToken, g.pid)" in FORMAS,
+        "el gesto de forma no cierra en el controlador de puntero; ojo que la API "
+        "es finish(token, pointerId), no commit — inventar el nombre rompia el gesto "
+        "a mitad y la forma quedaba sin seleccionar")
+require("dzSnapshot();" in FORMAS.split("Recien ahora entra al historial".replace("ie","ié"))[-1][:200]
+        if "historial" in FORMAS else False,
+        "la forma entra al historial antes de soltar: se registrarian pasos por cada "
+        "movimiento del puntero")
+require("g.ancla" in FORMAS and "vb[0] + vb[2] / 2" not in FORMAS.split("if (!g.arrastro)")[-1][:400],
+        "un clic simple volvio a plantar la forma en el CENTRO del lienzo: con la mesa "
+        "paneada eso cae fuera de la pantalla y la herramienta parece rota")
+require('src="panels/shape-tool.js' in INDEX,
+        "el modulo de formas no se carga")
 
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo y arcos")
