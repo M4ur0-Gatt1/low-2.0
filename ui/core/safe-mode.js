@@ -87,4 +87,5 @@
   } : nativeStorage;
 
   LOW.safeMode = Object.freeze({ active, domains: DOMAINS, preferenceStorage, keysFor, reset });
+  global.dzPrefsStorage = () => LOW.safeMode.preferenceStorage || global.localStorage;
 })(typeof window !== "undefined" ? window : globalThis);

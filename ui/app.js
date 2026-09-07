@@ -2,7 +2,6 @@
 "use strict";
 
 const $ = s => document.querySelector(s);
-const dzPrefsStorage = () => window.LOW?.safeMode?.preferenceStorage || localStorage;
 const CM_MODE = { python: "python", javascript: "javascript", bash: "shell", powershell: "powershell" };
 // modo de resaltado por extensión (independiente del lenguaje del runner)
 const MODE_BY_EXT = {
@@ -320,8 +319,7 @@ async function init() {
   bind();
   restorePanelSizes();
   initSplitters();
-  if (S.safeMode) sysMsg("Modo seguro activo: proyecto anterior, disposiciones, atajos y pinceles personalizados no se cargaron. Tus datos siguen guardados.");
-  sysMsg("LOW v" + (S.version || "?") + " — listo.\n" +
+  sysMsg((S.safeMode ? "Modo seguro activo: proyecto anterior, disposiciones, atajos y pinceles personalizados no se cargaron. Tus datos siguen guardados.\n" : "") + "LOW v" + (S.version || "?") + " — listo.\n" +
          " API keys ·  proyecto · 🔍 junto al modelo: buscador entre todos los modelos de la API.\n" +
          "barra izquierda: 🖋 Diseño (editor de vectores SVG), 🧊 Artefactos (vista previa en vivo), " +
          " Rutinas,  Herramientas, 🕸 Servidores SSH,  Historial, ▦ Ranking.\n" +
@@ -411,10 +409,8 @@ function applyState(st) {
   S.agent = st.agent || {};
   S.sshHosts = st.ssh_hosts || [];
   if (st.session_id) S.chatId = st.session_id;
-  S.version = st.version || "";
+  S.version = st.version || ""; S.safeMode = !!st.safe_mode || !!window.LOW?.safeMode?.active; document.body.classList.toggle("low-safe-mode", S.safeMode);
   S.chain = st.chain || [];
-  S.safeMode = !!st.safe_mode || !!window.LOW?.safeMode?.active;
-  document.body.classList.toggle("low-safe-mode", S.safeMode);
   if (st.version) $("#ver").textContent = "LOW v" + st.version + (S.safeMode ? " · MODO SEGURO" : "");
   applyZoom(st.zoom || 1.0, true);
   document.body.classList.toggle("light", st.theme === "light");
@@ -5880,42 +5876,6 @@ function dzPrefsModal() {
       i2.value = (DZ.keymap[i2.dataset.act] || "").toUpperCase());
   };
   $("#mCancel").onclick = closeModal;
-}
-
-/* Preferencias por dominio. Nunca incluye escenas, recuperación, personajes ni
-   configuración del proyecto: esos datos no son "interfaz". */
-function dzConfigResetModal() {
-  const safe = window.LOW?.safeMode;
-  if (!safe) return dzNotice("El gestor de configuración no está disponible.", "Configuración 2D");
-  const rows = Object.entries(safe.domains).map(([id, domain]) =>
-    `<label class="krow"><span>${domain.label}</span><input type="checkbox" data-reset-domain="${id}"></label>`).join("");
-  openModal(`<h2>Restablecer configuración 2D</h2>
-    <div class="sub">Elegí solamente las áreas que querés devolver a sus valores de fábrica.
-    No se borran escenas, dibujos, recuperación automática, personajes ni archivos del proyecto.
-    El cambio se aplica al volver a abrir LOW.</div>
-    ${rows}
-    <div class="m-actions"><button class="ghost" id="mCancel">Cancelar</button>
-      <button class="danger" id="configResetApply">Restablecer seleccionadas</button></div>`);
-  $("#mCancel").onclick = closeModal;
-  $("#configResetApply").onclick = () => {
-    const domains = [...document.querySelectorAll("[data-reset-domain]:checked")].map(node => node.dataset.resetDomain);
-    if (!domains.length) return dzNotice("Elegí al menos un área para restablecer.", "Configuración 2D");
-    const result = safe.reset(domains, { confirmed: true, storage: localStorage });
-    closeModal();
-    dzSetStatus(` Configuración restablecida (${result.removed.length} preferencias) · cerrá y abrí LOW para aplicarla`);
-  };
-}
-
-async function dzEnterSafeMode() {
-  if ((DZ.doc && DZ.doc.dirty) || DZ.dirty)
-    return dzNotice("Hay cambios sin guardar. Guardalos antes de reiniciar la interfaz en modo seguro.", "Modo seguro");
-  const ok = await dzConfirmModal("LOW reiniciará solamente la interfaz con el espacio Dibujo, atajos y pinceles de fábrica. No borra tu configuración: al abrir normalmente vuelve a estar disponible.",
-    { title: "Modo seguro", ok: "Reiniciar en modo seguro" });
-  if (!ok) return;
-  const result = await api.enter_safe_mode();
-  if (!result || result.error) return dzNotice("No pude activar el modo seguro.", "Modo seguro");
-  const url = new URL(location.href); url.searchParams.set("safe", "1");
-  location.replace(url.toString());
 }
 
 /* ══ nodos (A): editar los puntos de un trazado, como la flecha blanca
@@ -12552,8 +12512,7 @@ function dzMenuAction(act) {
     cerrar: () => closeDesign(),
     deshacer: dzUndo, rehacer: dzRedo, duplicar: dzDuplicate, borrar: dzDeleteSelected,
     agrupar: () => dzGroupSel(false), desagrupar: () => dzGroupSel(true),
-    preferencias: dzPrefsModal, atajos: dzPrefsModal, "config-reset": dzConfigResetModal,
-    "safe-mode": dzEnterSafeMode, pendebug: dzPenDebugToggle,
+    preferencias: dzPrefsModal, atajos: dzPrefsModal, "config-reset": dzConfigResetModal, "safe-mode": dzEnterSafeMode, pendebug: dzPenDebugToggle,
     zoomin: () => dzZoom(0.15), zoomout: () => dzZoom(-0.15),
     zoom100: () => dzRunAction("zoom100"), fit: dzFitView,
     rotl: () => dzRotView(-15), rotr: () => dzRotView(15),
