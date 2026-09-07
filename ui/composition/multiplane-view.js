@@ -49,7 +49,16 @@
       this.root.querySelector('[data-a="autokey"]').classList.toggle("active", this.autoKey);
       this.setTool(null);   // deja el rotulo explicando el gesto desde el arranque
       this.root.querySelectorAll("[data-v]").forEach(button => button.onclick = () => this.setView(button.dataset.v));
-      this.root.querySelectorAll(".cmp3-inspector input[data-p]").forEach(input => input.onchange = () => this.input(input));
+      // Se escucha «input» y no solo «change». `change` llega recien al salir
+      // del campo o al apretar Enter: uno tipeaba un valor, no pasaba NADA, y
+      // la conclusion razonable era «los campos no funcionan». Ahora la mesa
+      // acompaña lo que se escribe y la CONFIRMACION —la que deja paso de
+      // historial— sigue siendo el change, asi que tipear 250 no deja tres
+      // pasos de deshacer (2, 25, 250).
+      this.root.querySelectorAll(".cmp3-inspector input[data-p]").forEach(input => {
+        input.oninput = () => this.input(input, true);
+        input.onchange = () => this.input(input);
+      });
       this.root.querySelectorAll(".cmp3-inspector input[data-fx]").forEach(input => input.onchange = () => {
         if (!this.selected) return;
         const value = input.type === "checkbox" ? input.checked : Number(input.value);
@@ -143,11 +152,24 @@
         else input.value = v[input.dataset.fx];
       });
     }
-    input(input) {
+    /** @param {boolean} previa  true mientras se escribe: mueve la mesa pero no
+     *  confirma. El campo vacio o a medio escribir («-», «1.») no se aplica: si
+     *  no, borrar para retipear tiraba el plano a cero de un salto. */
+    input(input, previa) {
       const active = this.planes.find(p => p.id === this.selected); if (!active) return;
-      const patch = { [input.dataset.p]: Number(input.value) || 0 };
+      const texto = String(input.value).trim();
+      if (previa && (texto === "" || texto === "-" || texto === "." || texto.endsWith("."))) return;
+      const valor = Number(texto);
+      if (!Number.isFinite(valor)) return;
+      const patch = { [input.dataset.p]: valor };
       if (input.dataset.p === "scaleX") patch.scaleY = patch.scaleX;
-      this.options.onTransform?.(active.id, patch); 
+      if (previa) {
+        // Solo la mesa: se ve el efecto sin tocar el documento ni el historial
+        active.transform = { ...(active.transform || {}), ...patch };
+        this.pintarTarjeta(active);
+        return;
+      }
+      this.options.onTransform?.(active.id, patch);
     }
     /** Aplica la transformacion de UN plano sobre su tarjeta ya existente.
      *  Es la version barata de render() para usar durante un arrastre. */

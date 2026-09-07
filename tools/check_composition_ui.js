@@ -145,8 +145,49 @@ async function main() {
     dzUndo(); await wait(500);
     const trasUndo={claves:Object.keys(dzCamKeys()).length};
 
+    // -- 9. EL INSPECTOR: escribir un valor tiene que MOVER el plano.
+    //    Reporte: «ahi no se pueden cambiar los valores, no hace nada ahi».
+    //    Medido, la causa: los campos solo escuchaban change, que en un
+    //    <input type=number> llega al salir del campo o al apretar Enter. Uno
+    //    tipea, mira, no pasa nada, y concluye que el panel es de adorno. Las
+    //    flechas del teclado no disparan change nunca.
+    const mesa=window.DZ_COMPOSITION_VIEW;
+    const campo=(k)=>raiz.querySelector('.cmp3-inspector input[data-p="'+k+'"]');
+    const tarjeta=()=>mesa.cards.querySelector('[data-id="'+CSS.escape(mesa.selected)+'"]');
+    const cards=[...mesa.cards.querySelectorAll("[data-id]")];
+    if(cards.length) mesa.select(cards[0].dataset.id);
+    await wait(250);
+    const cx=campo("x");
+    const inspector={hayCampo:!!cx, hayTarjeta:!!tarjeta()};
+    if(cx){
+      const idPlano=mesa.selected;
+      // TIPEAR y nada mas: el plano ya se tiene que mover, y a la vista
+      cx.value="-90"; cx.dispatchEvent(new Event("input",{bubbles:true}));
+      await wait(220);
+      inspector.tipeando=Math.round((mesa.planes.find(q=>q.id===idPlano).transform||{}).x||0);
+      inspector.tarjetaTipeando=(tarjeta()||{style:{}}).style.transform||"";
+      // A MEDIO TIPEAR («-» solo) no debe mandar cero ni romper nada
+      cx.value="-"; cx.dispatchEvent(new Event("input",{bubbles:true})); await wait(160);
+      inspector.aMedias=Math.round((mesa.planes.find(q=>q.id===idPlano).transform||{}).x||0);
+      // CONFIRMAR: un solo paso de historial y queda en el documento
+      cx.value="-90";
+      const pasosI=DZ.history?DZ.history.undoStack.length:0;
+      cx.dispatchEvent(new Event("change",{bubbles:true})); await wait(420);
+      inspector.enElDocumento=leer(idPlano).x;
+      inspector.pasos=(DZ.history?DZ.history.undoStack.length:0)-pasosI;
+      // las FLECHAS del teclado sobre Z: solo disparan input
+      const cz=campo("z");
+      if(cz){ inspector.zAntes=Math.round((mesa.planes.find(q=>q.id===idPlano).transform||{}).z||0);
+        cz.value=String((+cz.value||0)+10);
+        cz.dispatchEvent(new Event("input",{bubbles:true})); await wait(220);
+        inspector.flechaEnZ=Math.round((mesa.planes.find(q=>q.id===idPlano).transform||{}).z||0);
+        inspector.tarjetaEnZ=(tarjeta()||{style:{}}).style.transform||"";
+        cz.dispatchEvent(new Event("change",{bubbles:true})); await wait(320); }
+      dzUndo(); await wait(400);
+    }
+
     return {rotulo,mover,noElegido,profundidades,camara,paralaje,sinAutokey,
-      conAutokey,trasUndo,errs:errs.slice(0,3)};
+      conAutokey,trasUndo,inspector,errs:errs.slice(0,3)};
   })()`;
 
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -191,12 +232,29 @@ async function main() {
   if (v.trasUndo.claves !== v.sinAutokey.claves)
     mal("Ctrl+Z no saca la clave de cámara", { trasUndo: v.trasUndo, antes: v.sinAutokey });
 
+  if (!v.inspector.hayCampo) mal("el inspector de Composición no tiene campos", v.inspector);
+  if (!v.inspector.hayTarjeta) mal("no hay tarjeta del plano elegido", v.inspector);
+  if (v.inspector.tipeando !== -90)
+    mal("escribir un valor en el inspector no mueve el plano: el panel es de adorno", v.inspector);
+  if (!/-90px/.test(v.inspector.tarjetaTipeando || ""))
+    mal("el plano se mueve en el modelo pero la tarjeta no: no se ve nada al escribir", v.inspector);
+  if (v.inspector.aMedias !== -90)
+    mal("un valor a medio escribir manda al plano al cero", v.inspector);
+  if (v.inspector.enElDocumento !== -90)
+    mal("confirmar el valor no lo guarda en el documento", v.inspector);
+  if (v.inspector.pasos !== 1)
+    mal("cambiar un valor del inspector no es UN paso de historial", v.inspector);
+  if (v.inspector.flechaEnZ !== v.inspector.zAntes + 10)
+    mal("las flechas del teclado no cambian nada: no disparan change", v.inspector);
+  if (!new RegExp("-" + v.inspector.flechaEnZ + "px").test(v.inspector.tarjetaEnZ || ""))
+    mal("la flecha cambia Z pero la tarjeta no se acerca ni se aleja", v.inspector);
+
   if (v.errs?.length) throw Error("REGRESIÓN: excepciones en Composición: " + v.errs.join(" | "));
 
   console.log("E2E composición OK", JSON.stringify({ rotulo: v.rotulo.slice(0, 46),
     mover: v.mover.despues, rendersEnElArrastre: v.mover.renders,
     profundidades: v.profundidades, paralaje: v.paralaje.antes + " -> " + v.paralaje.despues,
-    claves: v.conAutokey, info: v.camara.info.slice(0, 60) }));
+    claves: v.conAutokey, inspector: v.inspector, info: v.camara.info.slice(0, 60) }));
   ws.close(); try { await fetch(endpoint + "/json/close/" + target.id); } catch (_) { /* best effort */ }
 }
 main().catch(error => { console.error(error.stack || error); process.exit(1); });

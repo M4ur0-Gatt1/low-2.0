@@ -3934,7 +3934,11 @@ function dzPointerDown(e) {
   if (e.target.closest && e.target.closest("#dzCam")) return;             // la cámara maneja lo suyo
   if (!["select", "direct"].includes(DZ.tool || "select")) return;   // otras: pointer events
   if (e.isPrimary === false) return;
-  let el = e.target;
+  // PUNTERÍA: el navegador acierta sólo donde hay PINTURA, así que una forma
+  // sin relleno no existe para el puntero en su interior y el clic caía en lo
+  // de atrás. dzHitTest prueba la GEOMETRÍA de adelante hacia atrás. Ver
+  // ui/drawing/hit-test.js.
+  let el = (typeof dzHitTest === "function" && dzHitTest(e.clientX, e.clientY)) || e.target;
   if (!el || el === $("#dzCanvas") || el.tagName.toLowerCase() === "svg" || dzIsCanvasBackground(el)) { dzMarqueeStart(e); return; }
   if (el.closest && el.closest("g.dz-onion")) { dzDeselect(); return; }
   if (el.closest && el.closest("[data-locked]")) { dzDeselect(); return; }   // capa bloqueada 🔒
@@ -8644,38 +8648,6 @@ async function dzEnsureAnimationWorkspace() {
   if (!dzIsPanelDetached("timeline")) $("#dzTimeline")?.removeAttribute("hidden");
   await dzTlMount();
   return true;
-}
-/* La pieza de arte dibujable que queda debajo de un punto de pantalla. Sirve
-   para que «Crear hueso» vincule el hueso al dibujo sin pasos extra: se mira
-   el bounding box de cada pieza (robusto aunque el overlay esté encima). */
-function dzRigArtAtPoint(clientX, clientY) {
-  const piezas = dzRigDrawableElements();
-  if (!piezas.length) return null;
-  const piezaDe = (el) => {
-    for (let n = el; n && n !== document; n = n.parentElement) if (piezas.includes(n)) return n;
-    return null;
-  };
-  // 1) LA TINTA REAL bajo el punto. Antes se miraba la caja envolvente y se
-  //    devolvía la primera pieza en orden de dibujo: en un personaje esa es el
-  //    cuerpo, y su caja tapa casi todo, así que los huesos de la pata o la
-  //    oreja quedaban vinculados al cuerpo. elementsFromPoint respeta el
-  //    relleno y el trazo, así que un hueco del dibujo ya no cuenta.
-  for (const el of document.elementsFromPoint(clientX, clientY)) {
-    const pieza = piezaDe(el);
-    if (pieza) return pieza;
-  }
-  // 2) Si el punto cayó en un hueco: la caja MÁS CHICA que lo contenga, que es
-  //    la más específica. Nunca la primera del documento.
-  let mejor = null, menor = Infinity;
-  for (const el of piezas) {
-    try {
-      const r = el.getBoundingClientRect();
-      if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) continue;
-      const area = Math.max(1, r.width) * Math.max(1, r.height);
-      if (area < menor) { menor = area; mejor = el; }
-    } catch (_) { /* pieza sin caja */ }
-  }
-  return mejor;
 }
 function dzRigPieceSpec(el, index, requestedId) {
   const svg = $("#dzCanvas")?.querySelector(":scope > svg");

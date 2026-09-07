@@ -476,4 +476,38 @@ require("33B5E8" in INDEX,
         "se saco el celeste del rayo del splash: es el rayo de Aladdin Sane y es "
         "identidad, no un resto del celeste que se quito de la interfaz")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo y arcos")
+
+# -- Punteria de la seleccion --------------------------------------------
+HIT = (ROOT / "ui" / "drawing" / "hit-test.js").read_text(encoding="utf-8")
+require('src="drawing/hit-test.js' in INDEX,
+        "el modulo de punteria no se carga: la seleccion vuelve a fallar dentro "
+        "de una forma sin relleno")
+require("dzHitTest(e.clientX, e.clientY)" in APP,
+        "dzPointerDown dejo de consultar la punteria: e.target solo acierta donde "
+        "hay pintura, y una forma sin relleno no se puede agarrar por adentro")
+require("isPointInFill" in HIT,
+        "se dejo de probar la geometria del relleno: isPointInFill es lo unico "
+        "que acierta el area de una forma con fill=none")
+require("for (let i = candidatos.length - 1; i >= 0; i--)" in HIT,
+        "la punteria dejo de recorrer de adelante hacia atras: ganaria el de "
+        "atras, que es exactamente el defecto reportado")
+require("dzHitDistanciaAlTrazo" in HIT,
+        "se saco la holgura por distancia al trazado: una linea de un pixel "
+        "volveria a exigir acertarle al pixel exacto")
+require("function dzRigArtAtPoint" in HIT and "function dzRigArtAtPoint" not in APP,
+        "dzRigArtAtPoint volvio a app.js o dejo de compartir la punteria: los "
+        "huesos se colgarian del cuerpo en vez de la pieza dibujada con linea")
+require("dz-onion" in HIT and "dz-penui" in HIT,
+        "la punteria dejo de excluir el papel cebolla y las guias de pantalla")
+
+# -- Inspector de Composicion --------------------------------------------
+require("input.oninput" in MPVIEW,
+        "los campos del inspector volvieron a escuchar solo change: tipear un "
+        "valor no haria nada hasta salir del campo, y las flechas del teclado "
+        "no harian nada nunca")
+require("previa" in MPVIEW and "pintarTarjeta" in MPVIEW,
+        "el inspector dejo de mostrar vista previa mientras se tipea")
+require('texto.endsWith(".")' in MPVIEW,
+        "un valor a medio escribir vuelve a mandar el plano al cero")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos y punteria")
