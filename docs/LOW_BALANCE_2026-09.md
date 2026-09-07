@@ -1,4 +1,70 @@
-# Balance de LOW — septiembre de 2026 (v4.14.0)
+# Balance de LOW — septiembre de 2026
+
+> **Al día en v4.21.0.** Lo que sigue del encabezado es el estado de hoy. El
+> cuerpo del documento, más abajo, es el balance tal como se midió en la
+> **v4.14.0** y se deja sin retocar: sirve para ver qué se movió y qué no.
+
+## Qué se cerró desde la v4.14.0
+
+De las seis faltas, **tres están cerradas** —la 2, la 3 y los tres P1 de la 6—
+y **una va en camino y ya no retrocede** —la 4—:
+
+| falta | estado |
+|---|---|
+| 2 · Rendimiento sin medir (§10) | **cerrada.** `check_perf_budgets.js` en la puerta de CI, con escena patrón de 3 capas × 24 cuadros × 30 trazos (~914 KB). Los cuatro presupuestos de tiempo pasan sin margen. |
+| 3 · Humo del binario en macOS y Linux (§9·4) | **cerrada.** Los tres sistemas arrancan el ejecutable empaquetado en CI. |
+| 4 · Partir `app.js` (§12) | **en camino, y ya no va para atrás.** Puerta de CI que falla si `app.js` crece, con techo que baja solo. De 18.564 líneas a **17.753**. |
+| 6 · SAFE-01 / SAFE-02 | **cerradas** en v4.18.0: inicio seguro y reset por dominio, automatizados en modelo, puente y Chromium. |
+| 6 · BRUSH-02 | **cerrada** en v4.21.0. Ver abajo. |
+
+Quedan **dos**, y son las que de verdad pesan:
+
+1. **La prueba maestra de §15** — una persona ajena, un proyecto completo, sin
+   ayuda. Sigue sin correrse ni una vez. Mientras no exista, **ningún área
+   puede pasar de 8**, porque la evidencia «validación humana» no existe en el
+   sentido que pide la biblia. Esto no lo puedo hacer yo: hace falta otra
+   persona.
+2. **MOCAP-05, el caso difícil** — oclusiones, paneo y dos sujetos. Hace falta
+   material de video que hoy no tengo.
+
+## Notas que se movieron
+
+| Área | v4.14.0 | hoy | por qué |
+|---|---|---|---|
+| **Rendimiento** | 4 | **6** | De cero medición a cuatro presupuestos medidos en cada commit. No sube más porque los presupuestos son de §10 y todavía no hay una escena de producción larga que los estire. |
+| **Distribución** | 5 | **6** | Los tres binarios arrancan; la firma está cableada y espera certificado. No sube más porque **sólo el de Windows lo usó alguien de verdad**. |
+| **Vector** | 6 | **7** | BRUSH-02 cerrado y con guardia. Sigue frenada por la edición de nodos y contornos, que casi no tiene pruebas propias. |
+| **Cámara y composición** | 6 | **7** | Composición pasó de diorama a herramienta: arrastrar mueve, hay vista de cámara con el cuadro real, y el inspector responde. Frenada por producción: falta una escena larga hecha con eso. |
+| Las demás | | **igual** | Nada cambió su evidencia más débil. |
+
+**Nota del producto: 6 — beta avanzada, con el techo puesto por la §15.**
+
+No sube a 7 por una sola razón, y no es técnica: 7 es «confiable en proyectos
+definidos», y todo lo que sabemos de uso real viene de **una persona, que además
+es quien pide las funciones**. Las cuatro faltas que se cerraron eran de
+automatización y de producción; la que queda es de validación humana, y esa no
+se cierra escribiendo código.
+
+## Lo que yo haría ahora
+
+1. **La prueba maestra de §15.** Es lo único que puede mover la nota del
+   producto. Las tres cosas que la bloqueaban ya están hechas, así que la
+   persona ajena ya no va a chocar contra defectos que conocíamos.
+2. **Pruebas propias de la edición vectorial** (nodos y contornos), que es lo
+   que hoy frena a Vector.
+3. **La columna de notas del X-sheet**, que es lo único que le falta de
+   implementación a una hoja profesional.
+4. **MOCAP-05** cuando haya material.
+
+La respuesta honesta a «¿cuánto falta?» sigue siendo la misma de la v4.14.0,
+pero por un motivo distinto y más chico: antes faltaban cosas del programa;
+ahora falta **que lo use alguien que no sea su autor**.
+
+---
+
+# El balance de la v4.14.0, sin retocar
+
+## Balance de LOW — septiembre de 2026 (v4.14.0)
 
 Medido contra la biblia (`LOW_BIBLIA_PRODUCCION.md`), no contra la impresión de
 que «anda bien». La regla de §13 es la que manda: **la nota de un área es la
@@ -40,6 +106,10 @@ ganó, no la que quisiéramos.
 ---
 
 ## Qué se ganó (cifras, no adjetivos)
+
+*Cifras de la v4.14.0. Hoy, en v4.21.0: 12 suites de modelo, **22** recorridos
+E2E en Chromium, 6 comprobaciones del puente Python y **177** contratos
+estáticos.*
 
 | | |
 |---|---|

@@ -46,7 +46,7 @@ tener una comprobación proporcional al riesgo.
 | ID | Escenario de aceptación | Prioridad |
 | --- | --- | --- |
 | BRUSH-01 | Crear, renombrar, agrupar, buscar y compartir un BrushPreset real. | P2 |
-| BRUSH-02 | Cada parámetro visible produce una diferencia medible en el trazo. | P1/P2 |
+| BRUSH-02 | Cada parámetro visible produce una diferencia medible en el trazo. | P1 — **cerrado en v4.21.0**; automatizado (`check_brush_params_ui`). En raster los nueve cambian el trazo; en vectorial siete, y los dos que no —Presión → opacidad y Dureza— están **apagados con su motivo**, porque una cinta rellena no puede variar opacidad a lo largo ni difuminar el borde. |
 | SAFE-01 | Inicio seguro usa workspace, shortcuts y brushes por defecto; no carga plugins ni proyecto previo. | P1 — automatizado en modelo, host y Chromium (`--safe-mode`) |
 | SAFE-02 | Reset UI/Shortcuts/Brushes/2D actúa por dominio y permite cancelar. | P1 — automatizado; preserva escenas y recuperación |
 | RIG-01 | Un modo contextual explica por qué un Level no admite mesh/bones y cómo prepararlo. | P3 |

@@ -83,10 +83,30 @@
     return result;
   }
 
+  /* DISPERSION EN VECTORIAL. En raster la dispersion corre cada sello por su
+     cuenta; una cinta vectorial no tiene sellos, tiene un eje. Asi que la
+     dispersion corre EL EJE: el trazo sale tembloroso en vez de limpio, que es
+     lo que uno espera de un pincel disperso.
+
+     Sin esto el deslizador existia y no hacia nada: medido, mover Dispersion
+     de 0 a 2 en un pincel vectorial daba el trazo identico. Con scatter 0 la
+     lista se devuelve tal cual y no se paga nada. */
+  function disperse(samples, brush) {
+    if (!(brush.scatter > 0) || samples.length < 3) return samples;
+    const random = seeded(brush.seed);
+    const alcance = brush.scatter * brush.size * .35;
+    return samples.map((p, i) => {
+      // Las puntas quedan quietas: el trazo tiene que empezar y terminar donde
+      // el dibujante apoyo y levanto el lapiz.
+      if (i === 0 || i === samples.length - 1) return p;
+      return { ...p, x: p.x + (random() - .5) * alcance, y: p.y + (random() - .5) * alcance };
+    });
+  }
+
   function buildVectorOutline(points, inputBrush) {
     const brush = normalizeBrush({ ...inputBrush, engine: "vector" });
     if (points.length < 2) return null;
-    const samples = resample(points, Math.max(.35, brush.size * brush.spacing));
+    const samples = disperse(resample(points, Math.max(.35, brush.size * brush.spacing)), brush);
     const left = [], right = [];
     for (let i = 0; i < samples.length; i++) {
       const p = samples[i], prev = samples[Math.max(0, i - 1)], next = samples[Math.min(samples.length - 1, i + 1)];

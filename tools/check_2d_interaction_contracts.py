@@ -510,4 +510,31 @@ require("previa" in MPVIEW and "pintarTarjeta" in MPVIEW,
 require('texto.endsWith(".")' in MPVIEW,
         "un valor a medio escribir vuelve a mandar el plano al cero")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos y punteria")
+# -- BRUSH-02: los parametros del pincel hacen algo -----------------------
+RENDER = (ROOT / "ui" / "drawing" / "brush-render.js").read_text(encoding="utf-8")
+STUDIO = (ROOT / "ui" / "drawing" / "brush-studio.js").read_text(encoding="utf-8")
+ENGINE = (ROOT / "ui" / "drawing" / "brush-engine-pro.js").read_text(encoding="utf-8")
+require('src="drawing/brush-render.js' in INDEX,
+        "el modulo del trazo final no se carga: el pincel se queda sin motor")
+require("function dzBrushFinalElement" not in APP,
+        "dzBrushFinalElement volvio a app.js")
+require('brush && brush.engine === "raster" ? "raster" : "vector"' in RENDER,
+        "volvio la comparacion cruda del motor: ocho pinceles incorporados no "
+        "declaran engine y caerian otra vez al camino viejo, con todos sus "
+        "parametros muertos")
+require('brush.engine === "vector"' not in RENDER,
+        "queda una comparacion contra 'vector' sin normalizar en el trazo final")
+require('setAttribute("fill-opacity"' in RENDER,
+        "la cinta vectorial volvio a salir siempre opaca: el deslizador de "
+        "Opacidad existiria sin hacer nada")
+require("dzBrushBordeSuave" in RENDER,
+        "se saco la dureza del raster: el motor la calcula y nadie la pintaba")
+require("function disperse" in ENGINE and "disperse(resample(" in ENGINE,
+        "la dispersion vectorial dejo de aplicarse al eje de la cinta")
+require("INERTES" in STUDIO and "pressureOpacity" in STUDIO and "hardness" in STUDIO,
+        "el Estudio dejo de declarar que Presion->opacidad y Dureza no existen "
+        "en una cinta vectorial: volverian a moverse sin hacer nada")
+require("inerte" in (ROOT / "ui" / "design" / "studio-polish.css").read_text(encoding="utf-8"),
+        "falta el estilo del deslizador apagado: se veria igual que uno vivo")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria y pincel")

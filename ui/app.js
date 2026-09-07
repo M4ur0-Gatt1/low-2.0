@@ -5188,66 +5188,6 @@ function dzCurrentBrush() {
   return window.LOW?.drawing?.brushes?.get?.(DZ.brushPreset || "") || null;
 }
 
-/** Construye el resultado final con el motor del preset. Las puntas raster se
- * guardan como stamps SVG embebidos: siguen siendo portables dentro del archivo. */
-function dzBrushFinalElement(points, color) {
-  const preset = dzCurrentBrush(), engine = window.LOW?.drawing?.brushEngine;
-  if (!preset || !engine) return dzBrushRibbon(points, DZ.drawW || 6, color);
-  const samples = points.map(p => ({ x: p[0], y: p[1], pressure: p[2],
-    tiltX: p[3] || 0, tiltY: p[4] || 0, twist: p[5] || 0, time: p[6] || 0 }));
-  const brush = { ...preset, size: DZ.drawW || preset.size || 6 };
-  if (brush.engine === "raster") {
-    const dabs = engine.buildRasterDabs(samples, brush);
-    if (!dabs.length) return null;
-    // Un trazo largo no puede convertirse en decenas de miles de nodos SVG.
-    // Conservamos una muestra uniforme (incluidos ambos extremos) y dejamos el
-    // conteo original como diagnóstico. 1600 dabs mantiene detalle a zoom de
-    // trabajo sin convertir guardar/undo/colaboración en operaciones pesadas.
-    const maxDabs = 1600;
-    const renderedDabs = dabs.length <= maxDabs ? dabs : Array.from({ length: maxDabs }, (_, index) =>
-      dabs[Math.round(index * (dabs.length - 1) / (maxDabs - 1))]);
-    const group = document.createElementNS(SVGNS, "g");
-    group.setAttribute("data-low", brush.tipData ? "imported-brush" : "raster-brush"); group.setAttribute("data-brush-id", brush.id);
-    group.setAttribute("data-dab-count", renderedDabs.length); group.setAttribute("data-source-dab-count", dabs.length);
-    if (brush.tipData) {
-      const defs = document.createElementNS(SVGNS, "defs"), filter = document.createElementNS(SVGNS, "filter"), flood = document.createElementNS(SVGNS, "feFlood"), composite = document.createElementNS(SVGNS, "feComposite");
-      const filterId = dzUniqueId("brush_color_"), tipId = dzUniqueId("brush_tip_");
-      filter.id = filterId; filter.setAttribute("x", "-50%"); filter.setAttribute("y", "-50%"); filter.setAttribute("width", "200%"); filter.setAttribute("height", "200%");
-      flood.setAttribute("flood-color", color); flood.setAttribute("result", "brushColor");
-      composite.setAttribute("in", "brushColor"); composite.setAttribute("in2", "SourceGraphic"); composite.setAttribute("operator", "in");
-      const symbol = document.createElementNS(SVGNS, "symbol"), texture = document.createElementNS(SVGNS, "image");
-      symbol.id = tipId; symbol.setAttribute("viewBox", "0 0 1 1"); symbol.setAttribute("preserveAspectRatio", "none");
-      texture.setAttribute("href", brush.tipData); texture.setAttribute("width", "1"); texture.setAttribute("height", "1");
-      texture.setAttribute("preserveAspectRatio", "none"); symbol.appendChild(texture);
-      filter.append(flood, composite); defs.append(filter, symbol); group.appendChild(defs); group.setAttribute("filter", `url(#${filterId})`);
-      group.dataset.tipId = tipId;
-    }
-    renderedDabs.forEach((dab, index) => {
-      let stamp;
-      if (brush.tipData) {
-        stamp = document.createElementNS(SVGNS, "use"); stamp.setAttribute("href", `#${group.dataset.tipId}`);
-        stamp.setAttribute("x", dab.x - dab.width / 2); stamp.setAttribute("y", dab.y - dab.height / 2);
-        stamp.setAttribute("width", dab.width); stamp.setAttribute("height", dab.height);
-      } else {
-        stamp = document.createElementNS(SVGNS, "ellipse"); stamp.setAttribute("cx", dab.x); stamp.setAttribute("cy", dab.y);
-        const grain = /charcoal|chalk|dry|pastel|spray/.test(brush.texture || "") ? .58 + ((index * 37) % 43) / 100 : 1;
-        stamp.setAttribute("rx", dab.width * .5 * grain); stamp.setAttribute("ry", dab.height * .5 * grain); stamp.setAttribute("fill", color);
-      }
-      const grainOpacity = /charcoal|chalk|dry|pastel|spray/.test(brush.texture || "") ? .55 + ((index * 29) % 45) / 100 : 1;
-      stamp.setAttribute("opacity", Math.max(0, Math.min(1, dab.opacity * grainOpacity)));
-      stamp.setAttribute("transform", `rotate(${dab.angle || 0} ${dab.x} ${dab.y})`); group.appendChild(stamp);
-    });
-    return group;
-  }
-  if (brush.engine === "vector") {
-    const outline = engine.buildVectorOutline(samples, brush);
-    if (outline?.path) {
-      const path = document.createElementNS(SVGNS, "path"); path.setAttribute("d", outline.path); path.setAttribute("fill", color);
-      path.setAttribute("data-low", "brush"); path.setAttribute("data-brush-id", brush.id); return path;
-    }
-  }
-  return dzBrushRibbon(points, DZ.drawW || 6, color);
-}
 
 /* ═══════════════════════════════════════════════════════════════════════
    SISTEMA DE DIBUJO — v5 (v3.17.7)

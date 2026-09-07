@@ -31,9 +31,30 @@
         </section>`;
       this.wire(); if (active) this.preview(active);
     }
+    /* Lo que el motor elegido NO puede usar se muestra apagado y con el motivo,
+       en vez de dejar un deslizador que se mueve y no hace nada.
+
+       Los dos casos son de una cinta vectorial: es UN camino relleno, así que
+       no puede cambiar de opacidad a lo largo del trazo (Presión → opacidad) ni
+       tener el borde difuso (Dureza). No es que falten: no existen en esa
+       forma de dibujar. Un deslizador vivo que no cambia nada es peor que uno
+       apagado que explica por qué. */
+    static get INERTES() {
+      return { vector: {
+        pressureOpacity: "Una cinta vectorial es un solo camino relleno: no puede cambiar de opacidad a lo largo del trazo. Usá un pincel raster.",
+        hardness: "El borde de una cinta vectorial es el borde del camino: no hay difuminado que ajustar. Usá un pincel raster."
+      }, raster: {} };
+    }
     controls(brush) {
       const p = brush || {};
-      const slider = (key, label, min, max, step, value) => `<label><span>${label}<output>${value}</output></span><input data-p="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"></label>`;
+      const motor = p.engine === "raster" ? "raster" : "vector";
+      const inertes = BrushStudio.INERTES[motor] || {};
+      const slider = (key, label, min, max, step, value) => {
+        const porque = inertes[key];
+        return `<label class="bst-slider${porque ? " inerte" : ""}"${porque ? ` title="${esc(porque)}"` : ""}>` +
+          `<span>${label}<output>${porque ? "—" : value}</output></span>` +
+          `<input data-p="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"${porque ? " disabled" : ""}></label>`;
+      };
       return `<div class="bst-controls">${slider("size", "Tamaño", .5, 160, .5, p.size ?? 6)}${slider("opacity", "Opacidad", 0, 1, .01, p.opacity ?? 1)}${slider("spacing", "Espaciado", .01, 1, .01, p.spacing ?? .08)}${slider("smoothing", "Suavizado", 0, 1, .01, p.smoothing ?? .35)}${slider("pressureSize", "Presión → tamaño", 0, 1, .01, p.pressureSize ?? .75)}${slider("pressureOpacity", "Presión → opacidad", 0, 1, .01, p.pressureOpacity ?? 0)}${slider("tiltSize", "Inclinación", 0, 1, .01, p.tiltSize ?? 0)}${slider("scatter", "Dispersión", 0, 2, .01, p.scatter ?? 0)}${slider("hardness", "Dureza", 0, 1, .01, p.hardness ?? .8)}</div>`;
     }
     wire() {
