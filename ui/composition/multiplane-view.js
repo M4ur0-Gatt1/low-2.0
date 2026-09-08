@@ -96,7 +96,21 @@
       const up = () => { global.removeEventListener("pointermove", move); global.removeEventListener("pointerup", up); };
       global.addEventListener("pointermove", move); global.addEventListener("pointerup", up);
     }
-    setPlanes(planes) { this.planes = planes || []; if (!this.planes.some(p => p.id === this.selected)) this.selected = this.planes[0]?.id || null; this.render(); }
+    /* Una lista VACIA no borra la seleccion. Un repintado transitorio del lienzo
+       puede dejar el arte sin hijos por un instante, y perder la seleccion ahi
+       significa que el proximo valor que uno escriba caiga en el `if (!active)
+       return` de input() y no haga NADA. Es lo que se medio en la app real:
+       movias X y despues la Z ya no respondia. */
+    setPlanes(planes) {
+      const lista = planes || [];
+      if (lista.length) {
+        this.planes = lista;
+        if (!lista.some(p => p.id === this.selected)) this.selected = lista[0].id;
+      } else {
+        this.planes = lista;   // se muestra la mesa vacia, pero el elegido se recuerda
+      }
+      this.render();
+    }
     select(id) { this.selected = id; this.render(); this.options.onSelect?.(id); }
     render() {
       this.cards.innerHTML = ""; this.list.innerHTML = "";
@@ -156,7 +170,16 @@
      *  confirma. El campo vacio o a medio escribir («-», «1.») no se aplica: si
      *  no, borrar para retipear tiraba el plano a cero de un salto. */
     input(input, previa) {
-      const active = this.planes.find(p => p.id === this.selected); if (!active) return;
+      // Sin plano elegido el campo no puede hacer nada, y callarse es lo que
+      // hacia parecer que el inspector estaba muerto: se escribia un numero y
+      // no pasaba NADA, sin una palabra. Ahora lo dice.
+      const active = this.planes.find(p => p.id === this.selected);
+      if (!active) {
+        if (!previa) this.root.querySelector(".cmp3-mode").textContent =
+          this.planes.length ? "Elegí un plano en la lista para cambiarle los valores"
+            : "No hay planos en la mesa: abrí o dibujá algo con varios elementos";
+        return;
+      }
       const texto = String(input.value).trim();
       if (previa && (texto === "" || texto === "-" || texto === "." || texto.endsWith("."))) return;
       const valor = Number(texto);

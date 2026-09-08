@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <title>LOW</title>
 <link rel="stylesheet" href="vendor/codemirror.min.css">
-<link rel="stylesheet" href="app.css?v=4.23.0">
-<link rel="stylesheet" href="design/studio-polish.css?v=4.23.0">
+<link rel="stylesheet" href="app.css?v=4.24.0">
+<link rel="stylesheet" href="design/studio-polish.css?v=4.24.0">
 </head>
 <body>
 <!-- Splash de arranque. Se desvanece por CSS y NUNCA intercepta clics: si la
@@ -93,8 +93,13 @@
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
   <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3 0z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></symbol>
   <!-- íconos del estudio de animación (línea, coherentes con el set base) -->
-  <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3l14 8.5-6.5 1L10 20z"/></symbol>
-  <symbol id="i-cursor-open" viewBox="0 0 24 24"><path d="M5 3l14 8.5-6.5 1L10 20z" fill="none"/><path d="M8 8l5 3.2-2.4.4L9.5 14z" fill="currentColor" stroke="none" opacity=".35"/></symbol>
+  <!-- La flecha NEGRA y la BLANCA se leen por su nombre, no por el tema. Antes
+       las dos se pintaban con currentColor: la negra salia RELLENA DE BLANCO
+       sobre el fondo oscuro y la blanca salia hueca, o sea al reves de como se
+       llaman. Ahora cada una lleva su interior explicito —oscuro la negra,
+       claro la blanca— con contorno para que ninguna se pierda sobre su fondo. -->
+  <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3l14 8.5-6.5 1L10 20z" fill="#16171a" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cursor-open" viewBox="0 0 24 24"><path d="M5 3l14 8.5-6.5 1L10 20z" fill="#eef0ea" stroke="#16171a" stroke-width="1.4" stroke-linejoin="round"/></symbol>
   <!-- flecha blanca (selección directa/nodos): misma silueta hueca + nodo -->
   <symbol id="i-cursor-white" viewBox="0 0 24 24"><path d="M5 3l14 8.5-6.5 1L10 20z"/><rect x="15" y="15" width="4.5" height="4.5" fill="none"/></symbol>
   <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 13V6a1.6 1.6 0 013.2 0v6"/><path d="M11.2 12V4.6a1.6 1.6 0 013.2 0V12"/><path d="M14.4 12V6a1.6 1.6 0 013.2 0v7.5"/><path d="M17.6 13.5c0 4.5-2.5 7.5-6.3 7.5-3 0-4.6-1.4-5.9-4L3.6 13.6a1.5 1.5 0 012.5-1.6L8 14.5"/></symbol>
@@ -465,8 +470,8 @@
   <div class="dz-body">
     <!-- barra de herramientas LATERAL (estilo Toon Boom/OpenToonz) -->
     <div class="dz-tools">
-      <button class="ibtn dz-toolbtn active" data-tool="select" title="Seleccionar / mover (V) · Shift+clic: sumar a la selección · doble clic entra al grupo"><svg class="ico ico-fill"><use href="#i-cursor"/></svg></button>
-      <button class="ibtn dz-toolbtn" data-tool="direct" title="Selección directa — flecha blanca (D): elige y mueve piezas DENTRO de los grupos, ideal para posar un rig"><svg class="ico"><use href="#i-cursor-open"/></svg></button>
+      <button class="ibtn dz-toolbtn active" data-tool="select" title="Seleccionar / mover (V) · Shift+clic: sumar a la selección · doble clic entra al grupo"><svg class="ico ico-flechas"><use href="#i-cursor"/></svg></button>
+      <button class="ibtn dz-toolbtn" data-tool="direct" title="Selección directa — flecha blanca (D): elige y mueve piezas DENTRO de los grupos, ideal para posar un rig"><svg class="ico ico-flechas"><use href="#i-cursor-open"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="hand" title="Mano (H): arrastrá para navegar por el lienzo — también con espacio o botón del medio"><svg class="ico"><use href="#i-hand"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="nodes" title="Nodos (A): editar los puntos de un trazado — arrastralos; doble clic en un punto lo borra"><svg class="ico"><use href="#i-nodes"/></svg></button>
       <button class="ibtn dz-toolbtn" data-tool="pencil" title="Lápiz (N): trazo a mano alzada suavizado"><svg class="ico"><use href="#i-pencil"/></svg></button>
@@ -1136,74 +1141,75 @@
 <script src="vendor/mode-htmlmixed.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-closebrackets.min.js?v=dev1787232053"></script>
 <script src="vendor/addon-activeline.min.js?v=dev1787232053"></script>
-<script src="mock-api.js?v=4.23.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
+<script src="mock-api.js?v=4.24.0"></script><!-- inerte salvo ?mock=1: arnés de pruebas en navegador -->
 <!-- Núcleos desacoplados. El orden expresa sus dependencias. -->
-<script src="core/safe-mode.js?v=4.23.0"></script>
-<script src="core/history.js?v=4.23.0"></script>
-<script src="core/pointer-controller.js?v=4.23.0"></script>
-<script src="application/mode-machine.js?v=4.23.0"></script>
-<script src="animation/palette.js?v=4.23.0"></script>
-<script src="animation/coloring.js?v=4.23.0"></script>
-<script src="animation/scene-model.js?v=4.23.0"></script>
-<script src="animation/rig-policy.js?v=4.23.0"></script>
-<script src="rigging/binding.js?v=4.23.0"></script>
-<script src="rigging/rig-input.js?v=4.23.0"></script>
-<script src="rigging/rig-schematic.js?v=4.23.0"></script>
-<script src="animation/exposures.js?v=4.23.0"></script>
-<script src="animation/onion.js?v=4.23.0"></script>
-<script src="animation/mocap.js?v=4.23.0"></script>
-<script src="animation/document.js?v=4.23.0"></script>
-<script src="animation/rig-library.js?v=4.23.0"></script>
-<script src="animation/character-library.js?v=4.23.0"></script>
-<script src="animation/timeline.js?v=4.23.0"></script>
-<script src="animation/xsheet-view.js?v=4.23.0"></script>
-<script src="animation/timeline-view.js?v=4.23.0"></script>
-<script src="animation/level-strip.js?v=4.23.0"></script>
-<script src="animation/function-editor.js?v=4.23.0"></script>
-<script src="animation/premiere-xml.js?v=4.23.0"></script>
-<script src="animation/lipsync.js?v=4.23.0"></script>
-<script src="animation/arcs.js?v=4.23.0"></script>
-<script src="animation/palette-view.js?v=4.23.0"></script>
-<script src="animation/audio.js?v=4.23.0"></script>
-<script src="animation/shortcuts.js?v=4.23.0"></script>
-<script src="storyboard/shot-model.js?v=4.23.0"></script>
-<script src="storyboard/stage-view.js?v=4.23.0"></script>
-<script src="storyboard/board-view.js?v=4.23.0"></script>
-<script src="animation/model-tests.js?v=4.23.0"></script>
-<script src="animation/xsheet.js?v=4.23.0"></script>
-<script src="animation/playback.js?v=4.23.0"></script>
-<script src="animation/camera.js?v=4.23.0"></script>
-<script src="composition/multiplane-model.js?v=4.23.0"></script>
-<script src="composition/controller.js?v=4.23.0"></script>
-<script src="composition/multiplane-view.js?v=4.23.0"></script>
-<script src="drawing/stabilization.js?v=4.23.0"></script>
-<script src="drawing/selection.js?v=4.23.0"></script>
-<script src="drawing/transforms.js?v=4.23.0"></script>
-<script src="drawing/pointer-input.js?v=4.23.0"></script>
-<script src="drawing/brushes.js?v=4.23.0"></script>
-<script src="drawing/stroke-engine.js?v=4.23.0"></script>
-<script src="drawing/brush-engine-pro.js?v=4.23.0"></script>
-<script src="drawing/brush-studio.js?v=4.23.0"></script>
-<script src="collaboration/session.js?v=4.23.0"></script>
-<script src="collaboration/transport.js?v=4.23.0"></script>
-<script src="workspace/panels.js?v=4.23.0"></script>
-<script src="workspace/workspaces.js?v=4.23.0"></script>
-<script src="workspace/windows.js?v=4.23.0"></script>
-<script src="workspace/layouts.js?v=4.23.0"></script>
-<script src="workspace/recovery.js?v=4.23.0"></script>
-<script src="ai/commands.js?v=4.23.0"></script>
-<script src="ai/task-runner.js?v=4.23.0"></script>
-<script src="ai/recovery.js?v=4.23.0"></script>
-<script src="app.js?v=4.23.0"></script>
-<script src="panels/safe-mode-view.js?v=4.23.0"></script>
-<script src="core/version-badge.js?v=4.23.0"></script>
-<script src="drawing/hit-test.js?v=4.23.0"></script>
-<script src="drawing/brush-render.js?v=4.23.0"></script>
-<script src="vector/node-editor.js?v=4.23.0"></script>
-<script src="panels/shape-tool.js?v=4.23.0"></script>
-<script src="panels/composition-panel.js?v=4.23.0"></script>
-<script src="panels/composition-camera.js?v=4.23.0"></script>
-<script src="panels/arcs-view.js?v=4.23.0"></script>
-<script src="panels/colab-panel.js?v=4.23.0"></script>
+<script src="core/safe-mode.js?v=4.24.0"></script>
+<script src="core/history.js?v=4.24.0"></script>
+<script src="core/pointer-controller.js?v=4.24.0"></script>
+<script src="application/mode-machine.js?v=4.24.0"></script>
+<script src="animation/palette.js?v=4.24.0"></script>
+<script src="animation/coloring.js?v=4.24.0"></script>
+<script src="animation/scene-model.js?v=4.24.0"></script>
+<script src="animation/rig-policy.js?v=4.24.0"></script>
+<script src="rigging/binding.js?v=4.24.0"></script>
+<script src="rigging/rig-input.js?v=4.24.0"></script>
+<script src="rigging/rig-schematic.js?v=4.24.0"></script>
+<script src="animation/exposures.js?v=4.24.0"></script>
+<script src="animation/onion.js?v=4.24.0"></script>
+<script src="animation/mocap.js?v=4.24.0"></script>
+<script src="animation/document.js?v=4.24.0"></script>
+<script src="animation/rig-library.js?v=4.24.0"></script>
+<script src="animation/character-library.js?v=4.24.0"></script>
+<script src="animation/timeline.js?v=4.24.0"></script>
+<script src="animation/xsheet-view.js?v=4.24.0"></script>
+<script src="animation/timeline-view.js?v=4.24.0"></script>
+<script src="animation/level-strip.js?v=4.24.0"></script>
+<script src="animation/function-editor.js?v=4.24.0"></script>
+<script src="animation/premiere-xml.js?v=4.24.0"></script>
+<script src="animation/lipsync.js?v=4.24.0"></script>
+<script src="animation/arcs.js?v=4.24.0"></script>
+<script src="animation/palette-view.js?v=4.24.0"></script>
+<script src="animation/audio.js?v=4.24.0"></script>
+<script src="animation/shortcuts.js?v=4.24.0"></script>
+<script src="storyboard/shot-model.js?v=4.24.0"></script>
+<script src="storyboard/stage-view.js?v=4.24.0"></script>
+<script src="storyboard/board-view.js?v=4.24.0"></script>
+<script src="animation/model-tests.js?v=4.24.0"></script>
+<script src="animation/xsheet.js?v=4.24.0"></script>
+<script src="animation/playback.js?v=4.24.0"></script>
+<script src="animation/camera.js?v=4.24.0"></script>
+<script src="composition/multiplane-model.js?v=4.24.0"></script>
+<script src="composition/controller.js?v=4.24.0"></script>
+<script src="composition/multiplane-view.js?v=4.24.0"></script>
+<script src="drawing/stabilization.js?v=4.24.0"></script>
+<script src="drawing/selection.js?v=4.24.0"></script>
+<script src="drawing/transforms.js?v=4.24.0"></script>
+<script src="drawing/pointer-input.js?v=4.24.0"></script>
+<script src="drawing/brushes.js?v=4.24.0"></script>
+<script src="drawing/stroke-engine.js?v=4.24.0"></script>
+<script src="drawing/brush-engine-pro.js?v=4.24.0"></script>
+<script src="drawing/brush-studio.js?v=4.24.0"></script>
+<script src="collaboration/session.js?v=4.24.0"></script>
+<script src="collaboration/transport.js?v=4.24.0"></script>
+<script src="workspace/panels.js?v=4.24.0"></script>
+<script src="workspace/workspaces.js?v=4.24.0"></script>
+<script src="workspace/windows.js?v=4.24.0"></script>
+<script src="workspace/layouts.js?v=4.24.0"></script>
+<script src="workspace/recovery.js?v=4.24.0"></script>
+<script src="ai/commands.js?v=4.24.0"></script>
+<script src="ai/task-runner.js?v=4.24.0"></script>
+<script src="ai/recovery.js?v=4.24.0"></script>
+<script src="app.js?v=4.24.0"></script>
+<script src="panels/safe-mode-view.js?v=4.24.0"></script>
+<script src="core/version-badge.js?v=4.24.0"></script>
+<script src="panels/onion-scroll-guard.js?v=4.24.0"></script>
+<script src="drawing/hit-test.js?v=4.24.0"></script>
+<script src="drawing/brush-render.js?v=4.24.0"></script>
+<script src="vector/node-editor.js?v=4.24.0"></script>
+<script src="panels/shape-tool.js?v=4.24.0"></script>
+<script src="panels/composition-panel.js?v=4.24.0"></script>
+<script src="panels/composition-camera.js?v=4.24.0"></script>
+<script src="panels/arcs-view.js?v=4.24.0"></script>
+<script src="panels/colab-panel.js?v=4.24.0"></script>
 </body>
 </html>

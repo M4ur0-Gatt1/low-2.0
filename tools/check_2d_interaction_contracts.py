@@ -586,4 +586,29 @@ require("#designView .onion2-channel input[type=range] { height:94px; }" in POLI
         "#designView les pone 14px con un selector de id, y el escape height:auto "
         "los dejaba en 129px desbordando una fila de grilla de 96")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos y version")
+# -- Mover un plano no es cambiar de cuadro ------------------------------
+DOCJS = (ROOT / "ui" / "animation" / "document.js").read_text(encoding="utf-8")
+GUARDIA = (ROOT / "ui" / "panels" / "onion-scroll-guard.js").read_text(encoding="utf-8")
+require('this.emit("composition"); this.emit("frame")' not in DOCJS,
+        "setCompositionTransform volvio a emitir «frame»: ese manejador reemplaza "
+        "el lienzo desde el documento y deselecciona, asi que el cambio SIGUIENTE "
+        "—la Z, por ejemplo— no hace nada. Medido en la app real")
+require('else if (motivo === "composition") dzCompositionAplicar?.()' in APP,
+        "nadie atiende el evento «composition»: mover un plano no se veria en el "
+        "lienzo")
+require("function dzCompositionAplicar" in CMPPAN,
+        "falta dzCompositionAplicar: es lo que aplica la transformacion al lienzo "
+        "sin repintar su contenido")
+require("const lista = planes || []" in MPVIEW and "se muestra la mesa vacia" in MPVIEW,
+        "setPlanes volvio a borrar la seleccion con una lista vacia: un repintado "
+        "transitorio dejaria el proximo valor sin efecto")
+require("if (!previa) this.root.querySelector" in MPVIEW,
+        "el inspector volvio a quedarse mudo sin plano elegido")
+require('src="panels/onion-scroll-guard.js' in INDEX and "requestAnimationFrame(devolver)" in GUARDIA,
+        "se cayo el guardia del salto de scroll: tocar un fader del papel cebolla "
+        "correria el panel bajo el puntero")
+require('fill="#16171a"' in INDEX and 'fill="#eef0ea"' in INDEX,
+        "las flechas de seleccion volvieron a pintarse con currentColor: la NEGRA "
+        "salia rellena de blanco y la BLANCA hueca, al reves de como se llaman")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version y composicion")

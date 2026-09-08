@@ -16293,7 +16293,7 @@ function dzDocUse(doc) {
       }
     }
     else if (motivo === "onion") dzOnionRender();
-    else if (motivo === "document") dzSyncCanvasDocument();
+    else if (motivo === "document") dzSyncCanvasDocument(); else if (motivo === "composition") dzCompositionAplicar?.();
   });
   const d = doc.drawing;
   dzCanvasSet(d ? d.content : "");
@@ -16724,7 +16724,7 @@ async function dzDocInit() {
         if (DZ.rigMode && selected) dzSelect(selected); else if (DZ.rigMode) dzRigPanelSync();
       }
     } else if (motivo === "onion") dzOnionRender();
-    else if (motivo === "document") dzSyncCanvasDocument();
+    else if (motivo === "document") dzSyncCanvasDocument(); else if (motivo === "composition") dzCompositionAplicar?.();
   });
   // la paleta gobierna el color por hoja de estilos: cada cambio se ve al
   // instante en el lienzo, sin recorrer los dibujos

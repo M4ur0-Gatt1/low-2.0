@@ -110,6 +110,7 @@ jobs:
           node tools/check_brush_params_ui.js
           node tools/check_vector_nodes_ui.js
           node tools/check_version_onion_ui.js
+          node tools/check_composition_z_ui.js
           node tools/check_safe_mode_ui.js
           node tools/check_perf_budgets.js
       - name: Validar sintaxis Python

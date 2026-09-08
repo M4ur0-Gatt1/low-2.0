@@ -235,7 +235,13 @@
         : JSON.parse(JSON.stringify(plane.transform));
       if (!this.scene.setCompositionTransform(id, transform, key)) return false;
       const after = JSON.parse(JSON.stringify(keyed ? plane.keys[key] : plane.transform));
-      this.dirty = true; this.emit("composition"); this.emit("frame");
+      // Mover un plano NO es cambiar de cuadro. Emitia "frame", y el manejador
+      // de cuadro reemplaza el lienzo entero desde el documento y deselecciona:
+      // medido en la app real, el primer cambio de un valor vaciaba la lista de
+      // planos y perdia la seleccion, asi que el SEGUNDO cambio no hacia nada.
+      // Ahora viaja por "composition", que aplica las transformaciones al
+      // lienzo sin tocar su contenido.
+      this.dirty = true; this.emit("composition");
       if (this.history) {
         const doc = this;
         this.history.push({ label, domain: "composition", before, after,
@@ -243,7 +249,7 @@
             const target = doc.scene.ensureCompositionPlane(id, source);
             if (keyed) { if (value == null) delete target.keys[key]; else target.keys[key] = JSON.parse(JSON.stringify(value)); }
             else target.transform = JSON.parse(JSON.stringify(value));
-            doc.touch(); doc.emit("composition"); doc.emit("frame");
+            doc.touch(); doc.emit("composition");
           } });
       }
       return true;

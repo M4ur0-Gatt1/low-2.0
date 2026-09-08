@@ -3508,3 +3508,9 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   .dz-aviso-reinicio { animation: dzAvisoEntra .22s ease-out both; }
   @keyframes dzAvisoEntra { from { opacity: 0; transform: translate(-50%, 8px); } }
 }
+
+/* Las dos flechas de seleccion traen su propio relleno de dos tonos —la negra
+   oscura, la blanca clara— para leerse por su nombre en cualquier tema. La
+   clase apaga el fill/stroke heredados de .ico, que las pintaba a las dos con
+   currentColor y las dejaba al reves de como se llaman. */
+.ico-flechas { fill: none; stroke: none; }

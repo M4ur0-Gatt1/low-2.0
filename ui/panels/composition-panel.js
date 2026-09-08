@@ -81,6 +81,32 @@ function dzCompositionViewShow(show) {
   });
 }
 
+/** Lo que hay que hacer cuando el modelo de composición cambia: aplicar las
+ *  transformaciones al lienzo y refrescar lo que las muestra. NO reemplaza el
+ *  contenido del lienzo ni deselecciona.
+ *
+ *  Antes esto viajaba por el evento "frame", y el manejador de cuadro sí
+ *  reemplaza el lienzo entero desde el documento y llama a dzDeselect(). Medido
+ *  en la app real: mover un plano vaciaba la lista de planos y perdía la
+ *  selección, así que el cambio SIGUIENTE —tipear la Z, por ejemplo— caía en el
+ *  `if (!active) return` de la vista y no hacía absolutamente nada. Se movía X
+ *  y después Z ya no respondía. */
+function dzCompositionAplicar() {
+  dzCompositionApplyToCanvas();
+  // La proyección se guarda SIN paso de historial. `data-z` y `data-comp-*`
+  // son estado DERIVADO del modelo, que ya registró el cambio con su propia
+  // etiqueta; si además dejaran el lienzo distinto de lo guardado, el próximo
+  // volcado los registraría como un «Dibujar», y mover un plano terminaba
+  // dejando DOS pasos de deshacer para una sola intención.
+  if (DZ.doc && typeof dzDocCommit === "function") {
+    const historia = DZ.doc.history;
+    DZ.doc.setHistory(null); dzDocCommit(); DZ.doc.setHistory(historia);
+  }
+  if (DZ_COMPOSITION_VIEW) DZ_COMPOSITION_VIEW.setPlanes(dzCompositionViewPlanes());
+  if (typeof dzCmpCamRender === "function" && DZ_COMPOSITION_VIEW?.view === "camera") dzCmpCamRender();
+  if (typeof dzZPanelRender === "function") dzZPanelRender();
+}
+
 function dzCompositionSetExactZ(value) {
   const svg = $("#dzCanvas")?.querySelector(":scope > svg"), kids = dzCompositionElements(svg);
   const index = kids.indexOf(DZ.sel); if (index < 0) return dzSetStatus("Seleccioná un plano para cambiar Z");
@@ -235,3 +261,4 @@ window.dzCompValues = dzCompValues;
 window.dzCompositorApply = dzCompositorApply;
 window.dzCompositorSync = dzCompositorSync;
 window.dzCompositorWire = dzCompositorWire;
+window.dzCompositionAplicar = dzCompositionAplicar;
