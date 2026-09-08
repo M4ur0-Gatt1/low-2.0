@@ -2412,9 +2412,18 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
   background: transparent; color: var(--fg2, #8a93a6); font-size: 11px; line-height: 1; }
 .onion2-power.on { background: var(--accent, #F0450E); color: #fff; }
 
+/* Veinte canales no entran en el ancho del panel, asi que el mixer scrollea.
+   El scroll estaba, pero sin ninguna senal: la mitad de los canales quedaba
+   invisible y el panel parecia tener diez. La barra ahora se ve siempre y los
+   bordes se desvanecen para que se note que hay mas a los costados. */
 .onion2-mixer { display: flex; align-items: flex-end; gap: 2px; min-height: 142px;
-  padding: 9px 9px 5px; overflow-x: auto; border-top: 1px solid var(--line, #2a2d35);
-  border-bottom: 1px solid var(--line, #2a2d35); background: rgba(0,0,0,.12); }
+  padding: 9px 9px 5px; overflow-x: auto; scrollbar-width: thin;
+  border-top: 1px solid var(--line, #2a2d35);
+  border-bottom: 1px solid var(--line, #2a2d35); background: rgba(0,0,0,.12);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); }
+.onion2-mixer::-webkit-scrollbar { height: 7px; }
+.onion2-mixer::-webkit-scrollbar-thumb { background: var(--line2, #3a3f4a); border-radius: 4px; }
 .onion2-channel { width: 21px; min-width: 21px; display: grid; grid-template-rows: 16px 96px 15px;
   justify-items: center; align-items: center; gap: 2px; }
 .onion2-channel.current { width: 27px; min-width: 27px; }
@@ -2422,8 +2431,16 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .onion2-channel output { font: 500 8px/1 "JetBrains Mono", monospace; color: var(--mut, #8a93a6); }
 .onion2-channel.current i { display: block; width: 5px; height: 82px; border-radius: 3px;
   background: var(--accent, #F0450E); opacity: .9; box-shadow: 0 0 0 1px rgba(255,255,255,.10); }
+/* La orientacion vertical la da writing-mode, que es lo soportado. Antes
+   estaba tambien `appearance: slider-vertical`, que Chrome ELIMINO en la 121:
+   en un WebView2 actual esa declaracion es letra muerta —computa `none`— y lo
+   unico que hacia era sugerir que el fader dependia de ella.
+   La altura va fijada y ANTES NO LO ESTABA: studio-polish.css la soltaba con
+   `height:auto` y el control medía 129 px dentro de una fila de grilla de 96,
+   desbordándose sobre la etiqueta de arriba y el porcentaje de abajo. El nudo
+   que se ve no caía donde estaba la barra. */
 .onion2-channel input[type=range] { width: 20px; height: 94px; margin: 0; padding: 0;
-  writing-mode: vertical-lr; direction: rtl; appearance: slider-vertical; accent-color: var(--channel, #c0392b); cursor: ns-resize; }
+  writing-mode: vertical-lr; direction: rtl; accent-color: var(--channel, #c0392b); cursor: ns-resize; }
 .onion2-legend, .onion2-presets { display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 6px 10px; }
 .onion2-legend label { display: flex; align-items: center; gap: 6px; color: var(--mut); font-size: 10px; }
@@ -3469,3 +3486,25 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 /* Con la cámara puesta, el diorama y sus manijas no van: lo que se ve es la
    toma, y un gizmo flotando encima sólo confunde sobre qué se está tocando. */
 .cmp3-en-camara .cmp3-world { visibility: hidden; }
+
+/* Version a la vista en la barra de estado, y el aviso de que se instalo una
+   version con LOW abierto. Ver ui/core/version-badge.js: existe porque se
+   reporto tres veces «no anda nada» sobre un build que ya estaba arreglado, y
+   nada en pantalla decia cual estaba corriendo. */
+.dz-sb-version { font: 500 10px/1 "JetBrains Mono", monospace; color: var(--mut, #8a93a6);
+  opacity: .8; letter-spacing: .02em; }
+.dz-aviso-reinicio { position: fixed; z-index: 9999; left: 50%; bottom: 34px; transform: translateX(-50%);
+  max-width: min(620px, calc(100vw - 40px)); display: flex; align-items: baseline; gap: 10px;
+  padding: 11px 14px; border-radius: 10px; background: var(--panel, #1b1d22);
+  border: 1px solid var(--accent, #F0450E); box-shadow: 0 10px 34px rgba(0,0,0,.5);
+  font: 400 12px/1.45 Figtree, sans-serif; color: var(--txt, #e9ebe8); }
+.dz-aviso-reinicio strong { color: var(--accent, #F0450E); font-weight: 600; white-space: nowrap; }
+.dz-aviso-reinicio span { flex: 1 1 auto; color: var(--mut, #b6bbc2); }
+.dz-aviso-reinicio button { flex: 0 0 auto; padding: 5px 11px; border-radius: 7px; cursor: pointer;
+  background: var(--panel2, #24262c); color: var(--txt, #e9ebe8); border: 1px solid var(--line, #2a2d35);
+  font: 500 11px Figtree, sans-serif; }
+.dz-aviso-reinicio button:hover { background: var(--accent, #F0450E); border-color: var(--accent, #F0450E); color: #fff; }
+@media (prefers-reduced-motion: no-preference) {
+  .dz-aviso-reinicio { animation: dzAvisoEntra .22s ease-out both; }
+  @keyframes dzAvisoEntra { from { opacity: 0; transform: translate(-50%, 8px); } }
+}

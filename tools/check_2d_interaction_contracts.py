@@ -4,6 +4,7 @@ No reemplazan las pruebas de navegador. Protegen reglas críticas mientras se
 incorpora el arnés end-to-end: Escape no cierra 2D, la rueda no transforma el
 rig y los gestos de tableta no mezclan Pointer Events con Mouse Events.
 """
+import re
 from pathlib import Path
 
 
@@ -556,4 +557,33 @@ require('cmds.filter(s => s.c !== "Z").length <= 2' in NODOS,
         "se saco el piso del trazado: borrando puntos se podria dejar un trazado "
         "degenerado que no dibuja nada")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel y nodos")
+# -- Que version corre, y el papel cebolla -------------------------------
+BADGE = (ROOT / "ui" / "core" / "version-badge.js").read_text(encoding="utf-8")
+POLISH = (ROOT / "ui" / "design" / "studio-polish.css").read_text(encoding="utf-8")
+# Los comentarios se sacan: el archivo EXPLICA que esa declaracion murio, y
+# buscar el texto a secas encontraria la explicacion en vez de la declaracion.
+CSS = re.sub(r"/\*.*?\*/", "", (ROOT / "ui" / "app.css").read_text(encoding="utf-8"), flags=re.S)
+require('src="core/version-badge.js' in INDEX,
+        "el modulo de version no se carga: la pantalla vuelve a no decir que "
+        "build esta corriendo, y un reporte de «no anda» no se puede diagnosticar")
+require("dzVersionSync?.(st)" in APP,
+        "app.js dejo de sincronizar la version: el chip y el aviso de reinicio "
+        "nunca se pintan")
+require("binario_reemplazado" in MAIN and '"binario_viejo"' in MAIN,
+        "se saco la deteccion de «se instalo con LOW abierto»: es la diferencia "
+        "entre «no lo arreglaron» y «no lo reiniciaste»")
+require("_ARRANQUE" in MAIN,
+        "falta el sello de arranque del proceso: sin el no se puede comparar con "
+        "la fecha del ejecutable en disco")
+require('log("── arranque ── LOW v%s' in MAIN,
+        "el log volvio a escribir el arranque SIN version: es lo que hizo que un "
+        "panel se midiera funcionando mientras se probaba otro build")
+require("appearance: slider-vertical" not in CSS,
+        "volvio `appearance: slider-vertical`, que Chrome elimino en la 121: en un "
+        "WebView2 actual es letra muerta y solo confunde")
+require("#designView .onion2-channel input[type=range] { height:94px; }" in POLISH,
+        "los faders de papel cebolla perdieron su altura explicita: la regla de "
+        "#designView les pone 14px con un selector de id, y el escape height:auto "
+        "los dejaba en 129px desbordando una fila de grilla de 96")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos y version")

@@ -424,7 +424,7 @@ function applyState(st) {
   if (st.session_id) S.chatId = st.session_id;
   S.version = st.version || ""; S.safeMode = !!st.safe_mode || !!window.LOW?.safeMode?.active; document.body.classList.toggle("low-safe-mode", S.safeMode);
   S.chain = st.chain || [];
-  if (st.version) $("#ver").textContent = "LOW v" + st.version + (S.safeMode ? " · MODO SEGURO" : "");
+  if (st.version) { $("#ver").textContent = "LOW v" + st.version + (S.safeMode ? " · MODO SEGURO" : ""); dzVersionSync?.(st); }
   applyZoom(st.zoom || 1.0, true);
   document.body.classList.toggle("light", st.theme === "light");
   $("#btnTheme").innerHTML = icoUse(st.theme === "dark" ? "i-sun" : "i-moon");

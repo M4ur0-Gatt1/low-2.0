@@ -171,9 +171,15 @@
 #designView input[type=range]:focus-visible::-webkit-slider-thumb,
 .dz-panel-floating input[type=range]:focus-visible::-webkit-slider-thumb {
   box-shadow:0 0 0 3px var(--redsoft, rgba(240,69,14,.2)); }
-/* los verticales (papel cebolla, Procreate) conservan su orientación */
-#designView .onion2-channel input[type=range], #designView .dz-procreate-sliders input[type=range] {
-  height:auto; }
+/* Los verticales conservan su orientación, y necesitan una altura EXPLÍCITA
+   que gane: la regla de arriba les pone height:14px a todos los deslizadores
+   de #designView, y con un selector de id, así que la altura de app.css no
+   alcanza. Antes esto se resolvía con height:auto, que escapaba del 14 px pero
+   dejaba el control en 129 px dentro de una fila de grilla de 96: el fader se
+   desbordaba sobre su etiqueta y su porcentaje, y el nudo que se veía no caía
+   donde estaba la barra. Ahora se declara la altura que la grilla reserva. */
+#designView .onion2-channel input[type=range] { height:94px; }
+#designView .dz-procreate-sliders input[type=range] { height:auto; }
 
 /* Function Editor: canales a la izquierda, curvas al centro ──────────────── */
 .fn2 { display:grid; grid-template-columns:174px minmax(240px,1fr); grid-template-rows:36px minmax(0,1fr);

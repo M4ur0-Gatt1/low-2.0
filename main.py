@@ -49,7 +49,10 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.22.0"
+LOW_VERSION = "4.23.0"
+# Hora en que empezó a correr ESTE proceso. Sirve para detectar que el
+# instalador reemplazó el .exe con LOW abierto: ver binario_reemplazado().
+_ARRANQUE = __import__("time").time()
 
 
 def atomic_write_text(path, content, encoding="utf-8"):
@@ -866,6 +869,7 @@ class Api:
             "system_prompt": s.cfg.data.get("system_prompt", ""),
             "default_sp": DEFAULT_SP,
             "version": LOW_VERSION,
+            "binario_viejo": binario_reemplazado(),
             "safe_mode": s.safe_mode,
             "tools": [{"name": t["function"]["name"],
                        "desc": t["function"].get("description", "")}
@@ -5548,8 +5552,34 @@ def _api_ok():
         return False
 
 
+def binario_reemplazado():
+    """¿El ejecutable en disco es más nuevo que este proceso?
+
+    Es la trampa de instalar LOW mientras LOW está abierto: el instalador
+    reemplaza el .exe, pero la ventana abierta sigue corriendo el código
+    viejo en memoria. Uno prueba el arreglo que acaba de instalar, no está,
+    y concluye que no se arregló nada. Pasó de verdad, y sin esto no hay
+    forma de darse cuenta.
+
+    Devuelve el desfase en segundos, o None si no aplica (corriendo desde
+    fuente, o sin permiso para leer la fecha).
+    """
+    if not getattr(sys, "frozen", False):
+        return None
+    try:
+        exe = Path(sys.executable)
+        del_disco = exe.stat().st_mtime
+        # El arranque del proceso: la hora en que empezó a correr ESTE código.
+        arranque = _ARRANQUE
+        return int(del_disco - arranque) if del_disco > arranque + 5 else None
+    except Exception:
+        return None
+
+
 def main():
-    log("── arranque ──")
+    log("── arranque ── LOW v%s · python %s · %s%s" % (
+        LOW_VERSION, sys.version.split()[0], sys.platform,
+        " · CONGELADO" if getattr(sys, "frozen", False) else " · desde fuente"))
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     if "--smoke" in sys.argv:
         sys.exit(smoke(base))
