@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.24.0"
+LOW_VERSION = "4.25.0"
 # Hora en que empezó a correr ESTE proceso. Sirve para detectar que el
 # instalador reemplazó el .exe con LOW abierto: ver binario_reemplazado().
 _ARRANQUE = __import__("time").time()
@@ -803,6 +803,44 @@ class Api:
             return {"error": str(e)}
         log(f"[fallo] {nombre}: {limpio.get('error') or limpio.get('motivo') or 'sin detalle'}")
         return {"path": str(destino / nombre), "name": nombre, "campos": sorted(limpio)}
+
+    def session_log(s, data=None):
+        """La bitácora de la prueba maestra de §15, al disco.
+
+        La §15 pide que el proceso «quede grabado como prueba repetible y se
+        mida en errores, tiempo, interrupciones y necesidad de ayuda». Repetible
+        quiere decir comparable: por eso van los dos archivos, el JSON con el
+        esqueleto estable de los doce pasos y el resumen legible al lado.
+
+        No lleva nada del documento: sólo tiempos, conteos y las notas que la
+        persona escribió. Es la misma regla que el informe de fallo.
+        """
+        if not isinstance(data, dict):
+            return {"error": "bitácora vacía"}
+        destino = data_dir() / "sesiones"
+        sello = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        nombre = "prueba15-" + sello
+        try:
+            destino.mkdir(parents=True, exist_ok=True)
+            cuerpo = data.get("json") if isinstance(data.get("json"), dict) else {}
+            cuerpo = dict(cuerpo)
+            cuerpo["version"] = LOW_VERSION      # la fuente de verdad es Python
+            cuerpo["plataforma"] = platform.platform()
+            cuerpo["guardada"] = datetime.datetime.now().isoformat(timespec="seconds")
+            atomic_write_text(destino / (nombre + ".json"),
+                              json.dumps(cuerpo, ensure_ascii=False, indent=1))
+            texto = data.get("texto")
+            if isinstance(texto, str) and texto.strip():
+                atomic_write_text(destino / (nombre + ".md"), texto)
+        except OSError as e:
+            log(f"session_log: no pude escribir la bitácora: {e}")
+            return {"error": str(e)}
+        resumen = (cuerpo.get("resumen") or {})
+        log("[prueba15] %s: %s/%s pasos sin ayuda, %s errores, %s ayudas, %s interrupciones" % (
+            nombre, resumen.get("hechosSolo"), resumen.get("pasos"), resumen.get("errores"),
+            resumen.get("ayudas"), resumen.get("interrupciones")))
+        return {"path": str(destino / (nombre + ".json")), "name": nombre + ".json",
+                "carpeta": str(destino)}
 
     def _base(s):
         """Workspace efectivo para las tools. Si no hay, lanza excepción

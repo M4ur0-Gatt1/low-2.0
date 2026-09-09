@@ -1,6 +1,6 @@
 # Balance de LOW — septiembre de 2026
 
-> **Al día en v4.22.0.** Lo que sigue del encabezado es el estado de hoy. El
+> **Al día en v4.25.0.** Lo que sigue del encabezado es el estado de hoy. El
 > cuerpo del documento, más abajo, es el balance tal como se midió en la
 > **v4.14.0** y se deja sin retocar: sirve para ver qué se movió y qué no.
 
@@ -20,10 +20,14 @@ y **una va en camino y ya no retrocede** —la 4—:
 Quedan **dos**, y son las que de verdad pesan:
 
 1. **La prueba maestra de §15** — una persona ajena, un proyecto completo, sin
-   ayuda. Sigue sin correrse ni una vez. Mientras no exista, **ningún área
-   puede pasar de 8**, porque la evidencia «validación humana» no existe en el
-   sentido que pide la biblia. Esto no lo puedo hacer yo: hace falta otra
-   persona.
+   ayuda. Sigue sin correrse ni una vez, y eso **no lo puedo hacer yo**: hace
+   falta otra persona. Lo que sí se hizo en v4.25.0 es el **instrumento** que
+   §15 pide para poder correrla («el proceso debe quedar grabado como prueba
+   repetible y medirse en errores, tiempo, interrupciones y necesidad de
+   ayuda»): está en Ayuda → Prueba maestra §15, y el protocolo en
+   `LOW_PRUEBA_MAESTRA_15.md`. Antes la prueba no se podía correr *como la
+   biblia la define* aunque hubiera alguien disponible. Mientras no se corra,
+   **ningún área puede pasar de 8**.
 2. **MOCAP-05, el caso difícil** — oclusiones, paneo y dos sujetos. Hace falta
    material de video que hoy no tengo.
 
@@ -53,8 +57,11 @@ se cierra escribiendo código.
 2. ~~Pruebas propias de la edición vectorial~~ — **hecho en v4.22.0**, y de
    paso apareció y se arregló un defecto del historial: mover un punto dejaba
    dos pasos y el primer Ctrl+Z no se veía.
-3. **La columna de notas del X-sheet**, que es lo único que le falta de
-   implementación a una hoja profesional.
+3. **Las columnas que le faltan al X-sheet.** Acá me corrijo: antes escribí
+   «la columna de notas», y eso era invento mío, no un requisito. §6 pide
+   literal «filas son fotogramas; columnas son niveles, cámara, audio y
+   efectos», y hoy la hoja tiene sólo `#` más una columna por capa: faltan
+   **cámara, audio y efectos**. Está repartido a Codex.
 4. **MOCAP-05** cuando haya material.
 
 La respuesta honesta a «¿cuánto falta?» sigue siendo la misma de la v4.14.0,
@@ -108,8 +115,8 @@ ganó, no la que quisiéramos.
 
 ## Qué se ganó (cifras, no adjetivos)
 
-*Cifras de la v4.14.0. Hoy, en v4.22.0: 12 suites de modelo, **23** recorridos
-E2E en Chromium, 6 comprobaciones del puente Python y **183** contratos
+*Cifras de la v4.14.0. Hoy, en v4.25.0: 12 suites de modelo, **26** recorridos
+E2E en Chromium, 6 comprobaciones del puente Python y **207** contratos
 estáticos.*
 
 | | |

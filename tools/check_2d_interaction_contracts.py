@@ -611,4 +611,45 @@ require('fill="#16171a"' in INDEX and 'fill="#eef0ea"' in INDEX,
         "las flechas de seleccion volvieron a pintarse con currentColor: la NEGRA "
         "salia rellena de blanco y la BLANCA hueca, al reves de como se llaman")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version y composicion")
+# -- El instrumento de la prueba maestra (§15) ---------------------------
+P15 = (ROOT / "ui" / "core" / "session-recorder.js").read_text(encoding="utf-8")
+BIBLIA = (ROOT / "docs" / "LOW_BIBLIA_PRODUCCION.md").read_text(encoding="utf-8")
+require('src="core/session-recorder.js' in INDEX
+        and 'href="design/session-recorder.css' in INDEX,
+        "el instrumento de la §15 no se carga")
+require('data-act="prueba15"' in INDEX,
+        "no hay entrada de menu para la prueba maestra: el instrumento existiria y "
+        "nadie podria abrirlo")
+require("function dzMenuAction" in APP and '"prueba15"' not in APP,
+        "la prueba maestra se cablo dentro de app.js: se atiende interceptando el "
+        "clic, justamente para no hacerlo crecer")
+require("def session_log" in MAIN and '"sesiones"' in MAIN,
+        "el puente no escribe la bitacora: §15 pide que el proceso quede GRABADO "
+        "como prueba repetible")
+
+# Los doce pasos tienen que ser LOS DE LA BIBLIA, palabra por palabra. Si el
+# instrumento y la §15 se separan, se mide otra cosa que la que se pide.
+_i = BIBLIA.index("## 15. Prueba maestra")
+_pasos_biblia = re.findall(r"^\s*(\d{1,2})\.\s+(.+?)$", BIBLIA[_i:_i + 1400], re.M)[:12]
+require(len(_pasos_biblia) == 12,
+        "no pude leer los doce pasos de §15 en la biblia: cambio el formato de la lista")
+for _n, _texto in _pasos_biblia:
+    require(_texto.strip() in P15,
+            "el paso %s de §15 no esta en el instrumento tal como lo pide la biblia: "
+            "«%s»" % (_n, _texto.strip()[:60]))
+require(P15.count('id: "p') == 12,
+        "el instrumento no tiene doce pasos con id estable: dos corridas no se "
+        "podrian comparar")
+
+# Las tres cosas que lo harian inutil si se caen.
+require("if (!p || !p.inicio) return false" in P15,
+        "se puede terminar un paso que nunca se empezo: un tiempo inventado ensucia "
+        "la unica medicion limpia que hay")
+require('global.addEventListener("error", contar)' in P15,
+        "los errores dejaron de contarse solos: un conteo auto-reportado no vale nada")
+require('p.ayudas.length && resultado === "ok" ? "con ayuda"' in P15,
+        "«con ayuda» volvio a contar como logrado: §15 pide los doce pasos SIN ayuda")
+require("aprobada: hechos === this.pasos.length" in P15,
+        "el veredicto de §15 dejo de exigir los doce pasos sin ayuda")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion y prueba maestra")

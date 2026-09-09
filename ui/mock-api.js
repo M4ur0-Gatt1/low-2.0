@@ -48,6 +48,14 @@
       window.__ultimoInforme = { enviado: data, guardado: limpio };
       return { path: "C:\\mock\\fallos\\fallo-mock.json", name: "fallo-mock.json", campos: Object.keys(limpio).sort() };
     },
+    // La bitácora de la prueba maestra (§15). El mock la deja a la vista para
+    // que el recorrido pueda comprobar QUE SE ESCRIBE y con qué forma: sin eso
+    // el instrumento podría medir bien y no guardar nada.
+    session_log: async (data) => {
+      window.__ultimaBitacora = data;
+      return { path: "C:\mock\sesiones\prueba15-mock.json",
+        name: "prueba15-mock.json", carpeta: "C:\mock\sesiones" };
+    },
     // paneles separados: el mock guarda el buzón en memoria y deja ver los
     // comandos, para poder probar el flujo sin ventanas nativas
     __panels: {},
