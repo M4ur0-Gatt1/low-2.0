@@ -1,6 +1,6 @@
 # Balance de LOW — septiembre de 2026
 
-> **Al día en v4.25.0.** Lo que sigue del encabezado es el estado de hoy. El
+> **Al día en v4.26.0.** Lo que sigue del encabezado es el estado de hoy. El
 > cuerpo del documento, más abajo, es el balance tal como se midió en la
 > **v4.14.0** y se deja sin retocar: sirve para ver qué se movió y qué no.
 
@@ -39,6 +39,7 @@ Quedan **dos**, y son las que de verdad pesan:
 | **Distribución** | 5 | **6** | Los tres binarios arrancan; la firma está cableada y espera certificado. No sube más porque **sólo el de Windows lo usó alguien de verdad**. |
 | **Vector** | 6 | **7** | BRUSH-02 cerrado y con guardia, y la edición de nodos —que era lo que la frenaba— pasó de cero pruebas a un recorrido propio, con un defecto de historial encontrado y arreglado en el camino. No sube a 8 porque falta producción: un dibujo entintado de verdad con estas herramientas. |
 | **Cámara y composición** | 6 | **7** | Composición pasó de diorama a herramienta: arrastrar mueve, hay vista de cámara con el cuadro real, y el inspector responde. Frenada por producción: falta una escena larga hecha con eso. |
+| **X-sheet** | 6 | **7** | Las columnas que §6 pide —cámara, audio y efectos— existen y salen del modelo; era el hueco de implementación. Frenada ahora por producción: falta una escena larga cuyo timing se haya trabajado leyendo esta hoja. |
 | Las demás | | **igual** | Nada cambió su evidencia más débil. |
 
 **Nota del producto: 6 — beta avanzada, con el techo puesto por la §15.**
@@ -57,11 +58,10 @@ se cierra escribiendo código.
 2. ~~Pruebas propias de la edición vectorial~~ — **hecho en v4.22.0**, y de
    paso apareció y se arregló un defecto del historial: mover un punto dejaba
    dos pasos y el primer Ctrl+Z no se veía.
-3. **Las columnas que le faltan al X-sheet.** Acá me corrijo: antes escribí
-   «la columna de notas», y eso era invento mío, no un requisito. §6 pide
-   literal «filas son fotogramas; columnas son niveles, cámara, audio y
-   efectos», y hoy la hoja tiene sólo `#` más una columna por capa: faltan
-   **cámara, audio y efectos**. Está repartido a Codex.
+3. ~~Las columnas que le faltan al X-sheet~~ — **hecho en v4.26.0**. Y acá me
+   corrijo: antes escribí «la columna de notas», y eso era invento mío, no un
+   requisito. §6 pide literal «filas son fotogramas; columnas son niveles,
+   cámara, audio y efectos»; ésas son las que se agregaron.
 4. **MOCAP-05** cuando haya material.
 
 La respuesta honesta a «¿cuánto falta?» sigue siendo la misma de la v4.14.0,
@@ -115,8 +115,8 @@ ganó, no la que quisiéramos.
 
 ## Qué se ganó (cifras, no adjetivos)
 
-*Cifras de la v4.14.0. Hoy, en v4.25.0: 12 suites de modelo, **26** recorridos
-E2E en Chromium, 6 comprobaciones del puente Python y **207** contratos
+*Cifras de la v4.14.0. Hoy, en v4.26.0: 12 suites de modelo, **28** recorridos
+E2E en Chromium, 6 comprobaciones del puente Python y **212** contratos
 estáticos.*
 
 | | |

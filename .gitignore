@@ -54,3 +54,7 @@ build-*/
 .chrome-profile*/
 cdp-profile*/
 low-e2e*/
+
+# Respaldos que dejan los agentes al editar index.html a mano: nunca se publican
+ui/.limb-*
+ui/.*-before.html
