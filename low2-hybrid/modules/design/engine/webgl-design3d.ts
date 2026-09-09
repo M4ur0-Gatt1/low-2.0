@@ -22,6 +22,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { Joystick3D, type JoyMode } from './joystick3d';
 import { NavCubo3D, type NavVista } from './navcubo3d';
+import { frameGeometry } from './frame-content';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
@@ -564,6 +565,8 @@ export class WebGLDesign3D {
   /** Gira la cámara alrededor del punto que mira, como el arrastre derecho de
    *  siempre. Se hace en esféricas para no acumular deriva ni pasar el polo. */
   private orbitarVista(dx: number, dy: number): void {
+    // Orbitar abandona la cámara ortográfica, no sólo su etiqueta en la UI.
+    if(this.view!=='persp')this.setView('persp');
     const cam = this.camera as THREE.Camera & { position: THREE.Vector3 };
     const t = this.controls.target;
     const off = new THREE.Vector3().subVectors(cam.position, t);
@@ -574,7 +577,6 @@ export class WebGLDesign3D {
     cam.position.copy(t).add(new THREE.Vector3().setFromSpherical(esf));
     cam.lookAt(t);
     // girar a mano deja de ser una vista con nombre: pasa a perspectiva libre
-    if (this.view !== 'persp') this.view = 'persp';
     this.controls.update();
     this.refrescarNavCubo();
   }
@@ -624,7 +626,7 @@ export class WebGLDesign3D {
       colors.setXYZ(i, c.r, c.g, c.b);
     }
     colors.needsUpdate = true;
-    gm.opacity = dark ? 0.35 : 0.5;
+    gm.opacity = dark ? 0.23 : 0.24;
     // el anillo del pincel, con doble borde: uno oscuro y un halo claro por
     // fuera. Así se ve tanto sobre el fondo como sobre un trazo negro, que es
     // donde más se perdía.
@@ -712,6 +714,19 @@ export class WebGLDesign3D {
     return this.view;
   }
 
+  canvasElement(): HTMLCanvasElement { return this.canvas; }
+  historyState(): { undo:boolean; redo:boolean } { return {undo:this.canUndo(),redo:this.canRedo()}; }
+  toggleGrid():boolean { this.grid.visible=!this.grid.visible;return this.grid.visible; }
+  frameContent():boolean {
+    const selected=this.transformTargets();
+    const objects=selected.length?selected:[...this.strokes.map(r=>r.object),...this.guides.map(g=>g.mesh),...this.surfaces.map(s=>s.mesh)];
+    const size=frameGeometry(this.camera,objects,this.controls.target,this.canvas.clientWidth/Math.max(1,this.canvas.clientHeight));
+    if(size===null)return false;
+    if(this.view!=='persp'){this.orthoSize=size;this.applyOrthoFrustum();}
+    this.controls.update();this.refrescarNavCubo();
+    window.dispatchEvent(new Event('low3d:view'));return true;
+  }
+
   setView(v: ViewName): void {
     const t = this.controls.target.clone();
     const dist = this.camera.position.distanceTo(t) || 8;
@@ -745,6 +760,7 @@ export class WebGLDesign3D {
     if (this.gizmo) this.gizmo.camera = this.camera as THREE.Camera;
     this.refrescarNavCubo();   // el cubo tiene que reflejar la vista al instante
     this.lastOnionSig = ''; // fuerza recalcular el onion-skin en la nueva vista
+    window.dispatchEvent(new Event('low3d:view'));
     // OJO: acá NO se reorienta el plano activo. Un plano de dibujo es una PARED
     // FIJA en el espacio: se crea encarando la vista en la que nació y se queda
     // ahí para siempre. Antes se re-encaraba en cada cambio de vista (incluida
@@ -1677,7 +1693,10 @@ export class WebGLDesign3D {
   private onKeyDown = (e: KeyboardEvent): void => {
     const ctrl = e.ctrlKey || e.metaKey;
     const target = document.activeElement;
-    const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+    const typing = target instanceof HTMLElement && !!target.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]');
+    // Los campos conservan Supr, Backspace, copiar/pegar y su propio Undo.
+    if(typing || e.defaultPrevented)return;
+    if(e.key==='Home'){e.preventDefault();this.frameContent();return;}
     // Barra espaciadora = MANO: mientras se mantiene, el botón izquierdo panea
     // (mover la vista vertical/horizontal, sobre todo en vistas ortogonales).
     if (e.code === 'Space' && !typing) {
@@ -4685,6 +4704,7 @@ export class WebGLDesign3D {
     // descarta el comando más viejo al pasar el tope.
     if (this.undoStack.length > WebGLDesign3D.MAX_UNDO) this.undoStack.shift();
     this.redoStack = [];
+    window.dispatchEvent(new Event('low3d:history'));
   }
 
   undo(): void {
@@ -4695,6 +4715,7 @@ export class WebGLDesign3D {
     this.redoStack.push(cmd);
     this.setSelection([]);
     this.scheduleAutosave();
+    window.dispatchEvent(new Event('low3d:history'));
   }
 
   redo(): void {
@@ -4705,6 +4726,7 @@ export class WebGLDesign3D {
     this.undoStack.push(cmd);
     this.setSelection([]);
     this.scheduleAutosave();
+    window.dispatchEvent(new Event('low3d:history'));
   }
 
   canUndo(): boolean { return this.undoStack.length > 0; }
@@ -4742,6 +4764,7 @@ export class WebGLDesign3D {
     // la lista de objetos vive en el store: sin esto la escena quedaba vacía
     // pero el panel seguía mostrando todo lo borrado
     this.publishObjects();
+    window.dispatchEvent(new Event('low3d:history'));
   }
 
   /** "Nuevo proyecto": vacía la escena y deja el store coherente (si no, el
@@ -5042,6 +5065,9 @@ export class WebGLDesign3D {
   private animate = (): void => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.animate);
+    // Al volver al módulo 2D el iframe queda oculto: no renderizar una escena
+    // invisible. La órbita y el dibujo se retoman al recuperar el viewport.
+    if(document.hidden || !this.canvas.clientWidth || !this.canvas.clientHeight)return;
     this.resize();
     this.controls.update();
     this.joyRefresh();

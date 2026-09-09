@@ -11,6 +11,7 @@
 import React from 'react';
 import { useLowStore } from '../../../store/low-store';
 import { LOW_ACCENT } from '../theme';
+import { BRUSH_PRESETS } from '../brush-presets';
 
 const panelStyle: React.CSSProperties = {
   display: 'flex',
@@ -22,8 +23,8 @@ const panelStyle: React.CSSProperties = {
   // cuerpo del panel sobresalía de su propia barra de título.
   width: '100%',
   boxSizing: 'border-box',
-  backgroundColor: '#2d2d2d',
-  color: '#ccc',
+  backgroundColor: 'var(--studio-bg, #2d2d2d)',
+  color: 'var(--studio-fg, #ccc)',
   fontSize: '12px',
   fontFamily: 'system-ui, sans-serif',
 };
@@ -44,11 +45,11 @@ const sectionTitle: React.CSSProperties = {
   fontSize: '11px',
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
-  color: '#888',
+  color: 'var(--studio-muted, #888)',
   marginBottom: '2px',
 };
 
-export const PropertiesPanel3D: React.FC = () => {
+export const PropertiesPanel3D: React.FC<{ section?: 'brush' | 'surface' }> = ({ section }) => {
   const { brushSettings, setBrushSettings, activeSurface, setActiveSurface, selectedObject } =
     useLowStore();
 
@@ -87,8 +88,13 @@ export const PropertiesPanel3D: React.FC = () => {
 
   return (
     <div style={panelStyle}>
+      {section !== 'surface' && <>
       {/* Pincel */}
       <div style={sectionTitle}>Pincel</div>
+      <div className="studio-option-grid" aria-label="Pinceles predefinidos">
+        {BRUSH_PRESETS.map(preset=><button key={preset.id} title={`Preset ${preset.label}`}
+          onClick={()=>setBrushSettings({...brushSettings,...preset.values})}>{preset.label}</button>)}
+      </div>
 
       <label style={labelStyle}>
         <span>Opacidad</span>
@@ -152,6 +158,8 @@ export const PropertiesPanel3D: React.FC = () => {
         style={sliderStyle}
       />
 
+      </>}
+      {section !== 'brush' && <>
       {/* Superficie activa */}
       <div style={{ height: '1px', backgroundColor: '#444', margin: '2px 0' }} />
       <div style={sectionTitle}>
@@ -213,6 +221,7 @@ export const PropertiesPanel3D: React.FC = () => {
         </div>
       )}
 
+      </>}
       {/* Selección */}
       {selectedObject && (
         <>

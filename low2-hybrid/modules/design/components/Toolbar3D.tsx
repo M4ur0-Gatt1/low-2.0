@@ -17,18 +17,8 @@ import { ToolType, SurfaceType, GizmoMode, BrushSettings } from '../../../types/
 import { ColorWheel } from './ColorWheel';
 import { LOW_ACCENT } from '../theme';
 
-/** Presets de pincel: mismos parámetros del motor (size/hardness/presión/
- *  estabilizador), solo con distintos valores por defecto para que cada uno
- *  se sienta distinto — lápiz fino y parejo, tinta con calado marcado y
- *  brillo, pincel grueso y mate ("con volumen"). El color no se toca. */
-const BRUSH_PRESETS: { id: string; label: string; values: Omit<BrushSettings, 'color'> }[] = [
-  { id: 'fine', label: 'Fino', values: { size: 3, opacity: 1, hardness: 0.9, pressureSensitivity: 0.3, stabilization: 0.2 } },
-  { id: 'pencil', label: 'Lápiz', values: { size: 6, opacity: 1, hardness: 0.3, pressureSensitivity: 0.25, stabilization: 0.2 } },
-  { id: 'ink', label: 'Tinta', values: { size: 10, opacity: 1, hardness: 0.95, pressureSensitivity: 0.75, stabilization: 0.45 } },
-  { id: 'marker', label: 'Marcador', values: { size: 34, opacity: 0.85, hardness: 0.6, pressureSensitivity: 0.1, stabilization: 0.3 } },
-  { id: 'brush', label: 'Pincel', values: { size: 22, opacity: 0.92, hardness: 0.15, pressureSensitivity: 0.55, stabilization: 0.35 } },
-  { id: 'charcoal', label: 'Carboncillo', values: { size: 28, opacity: 0.8, hardness: 0.05, pressureSensitivity: 0.8, stabilization: 0.35 } },
-];
+import { BRUSH_PRESETS } from '../brush-presets';
+
 
 const Icons = {
   Pencil: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 2l4 4-10 10H7v-5L18 2z"/></svg>,
@@ -63,7 +53,7 @@ const Section: React.FC<{ title: string; open: boolean; onToggle: () => void; ch
       onClick={onToggle}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        width: '100%', border: 'none', background: 'transparent', color: '#9aa3b2',
+        width: '100%', border: 'none', background: 'transparent', color: 'var(--studio-muted, #9aa3b2)',
         cursor: 'pointer', fontSize: '10px', textTransform: 'uppercase',
         letterSpacing: '0.5px', padding: '4px 2px', fontFamily: 'system-ui, sans-serif',
       }}
@@ -78,14 +68,14 @@ const Section: React.FC<{ title: string; open: boolean; onToggle: () => void; ch
 const iconBtn = (active: boolean): React.CSSProperties => ({
   width: '38px', height: '38px', border: '1px solid', borderRadius: '9px',
   borderColor: active ? 'rgba(240,69,14,.72)' : 'transparent',
-  backgroundColor: active ? 'rgba(240,69,14,.18)' : 'transparent', color: active ? '#ff7448' : '#bbbcb9',
+  backgroundColor: active ? 'rgba(240,69,14,.18)' : 'transparent', color: active ? 'var(--studio-accent, #ff7448)' : 'var(--studio-fg, #bbbcb9)',
   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
 });
 const hoverIn = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => {
-  if (!active) { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,.065)'; e.currentTarget.style.color = '#f2f2ef'; }
+  if (!active) { e.currentTarget.style.backgroundColor = 'var(--studio-hover, rgba(255,255,255,.065))'; }
 };
 const hoverOut = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => {
-  if (!active) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#ccc'; }
+  if (!active) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--studio-fg, #ccc)'; }
 };
 
 interface Toolbar3DProps {
@@ -105,11 +95,11 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
   const toggleWheel = () => {
     if (!showWheel && swatchRef.current) {
       const r = swatchRef.current.getBoundingClientRect();
-      setWheelPos({ top: r.top, left: r.right + 8 });
+      setWheelPos({ top: Math.max(8, Math.min(r.top, window.innerHeight - 300)), left: Math.max(8, Math.min(r.right + 8, window.innerWidth - 290)) });
     }
     setShowWheel((v) => !v);
   };
-  const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, figuras: true, seleccion: true, superficies: false, pincel: true });
+  const [open, setOpen] = useState<Record<string, boolean>>({ dibujo: true, figuras: false, seleccion: false, superficies: false, pincel: false });
   const [estilo, setEstilo] = useState<'stroke' | 'fill' | 'both'>(engine?.current?.getShapeStyle() ?? 'both');
   const esFigura = currentTool === 'rect' || currentTool === 'circle' || currentTool === 'poly';
   // Joystick: el estado real vive en el motor (es una opcion de la herramienta,
@@ -130,10 +120,15 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
     window.addEventListener('low3d:joy', alDia);
     return () => window.removeEventListener('low3d:joy', alDia);
   }, [engine]);
+  useEffect(() => {
+    const group = ['rect','circle','poly'].includes(currentTool) ? 'figuras' : ['move','select'].includes(currentTool) ? 'seleccion' : 'dibujo';
+    setOpen(o => ({ ...o, [group]: true }));
+  }, [currentTool]);
   const toggle = (k: string) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   const draw: { id: ToolType; icon: React.FC; label: string }[] = [
     { id: 'pencil', icon: Icons.Pencil, label: 'Lápiz (P)' },
+    { id: 'pencil-free', icon: Icons.Pencil, label: 'Dibujo libre — sin guía; rueda ajusta profundidad (F)' },
     { id: 'guide', icon: Icons.Guide, label: 'Línea guía — define un plano de dibujo (G)' },
     { id: 'eraser', icon: Icons.Eraser, label: 'Borrar (E)' },
     { id: 'scissors', icon: Icons.Scissors, label: 'Tijera — corta el trazo donde clickees encima (C)' },
@@ -158,7 +153,7 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
   ];
 
   const toolBtn = (t: { id: ToolType; icon: React.FC; label: string }) => (
-    <button key={t.id} onClick={() => setCurrentTool(t.id)} title={t.label} style={iconBtn(currentTool === t.id)}
+    <button key={t.id} onClick={() => setCurrentTool(t.id)} title={t.label} aria-label={t.label} aria-pressed={currentTool === t.id} style={iconBtn(currentTool === t.id)}
       onMouseEnter={(e) => hoverIn(e, currentTool === t.id)} onMouseLeave={(e) => hoverOut(e, currentTool === t.id)}>
       <div style={{ width: '20px', height: '20px' }}><t.icon /></div>
     </button>
@@ -167,7 +162,7 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: '3px', padding: '9px',
-      backgroundColor: 'rgba(22,23,25,.96)', width: 150, maxHeight: 'calc(100vh - 90px)', overflowY: 'auto',
+      backgroundColor: 'var(--studio-bg, #161719)', color: 'var(--studio-fg, #bbbcb9)', width: '100%', boxSizing: 'border-box',
       borderBottomLeftRadius: 11, borderBottomRightRadius: 11,
     }}>
       <Section title="Dibujo" open={open.dibujo} onToggle={() => toggle('dibujo')}>
@@ -191,7 +186,7 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
                   flex: 1, height: 22, border: 'none', borderRadius: 5, cursor: 'pointer',
                   fontSize: 10, fontFamily: 'system-ui, sans-serif',
                   backgroundColor: estilo === id ? LOW_ACCENT : 'transparent',
-                  color: estilo === id ? '#fff' : '#ccc',
+                  color: estilo === id ? '#fff' : 'var(--studio-fg, #ccc)',
                 }}>{label}</button>
             ))}
           </div>
@@ -217,7 +212,7 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
               style={{
                 height: 24, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 10,
                 fontFamily: 'system-ui, sans-serif',
-                backgroundColor: joyOn ? LOW_ACCENT : 'transparent', color: joyOn ? '#fff' : '#ccc',
+                backgroundColor: joyOn ? LOW_ACCENT : 'transparent', color: joyOn ? '#fff' : 'var(--studio-fg, #ccc)',
               }}><span aria-hidden="true" style={{ fontSize: 14, marginRight: 5 }}>◎</span>Joystick</button>
             {joyOn && (
               <div style={{ display: 'flex', gap: 2 }}>
@@ -231,7 +226,7 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
                       flex: 1, height: 22, border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 10,
                       fontFamily: 'system-ui, sans-serif',
                       backgroundColor: joyMode === m ? LOW_ACCENT : 'transparent',
-                      color: joyMode === m ? '#fff' : '#ccc',
+                      color: joyMode === m ? '#fff' : 'var(--studio-fg, #ccc)',
                     }}>{m.toUpperCase()}</button>
                 ))}
                 <button
@@ -239,7 +234,7 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
                   title="Candado (K) - mover solo en las cuatro direcciones, escalar uniforme y rotar de 15 en 15 grados"
                   style={{
                     width: 26, height: 22, border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 11,
-                    backgroundColor: joyLock ? LOW_ACCENT : 'transparent', color: joyLock ? '#fff' : '#ccc',
+                    backgroundColor: joyLock ? LOW_ACCENT : 'transparent', color: joyLock ? '#fff' : 'var(--studio-fg, #ccc)',
                   }}>{joyLock ? '\u{1F512}' : '\u{1F513}'}</button>
               </div>
             )}
@@ -281,9 +276,9 @@ export const Toolbar3D: React.FC<Toolbar3DProps> = ({ engine }) => {
       <Section title="Pincel" open={open.pincel} onToggle={() => toggle('pincel')}>
         {BRUSH_PRESETS.map((p) => (
           <button key={p.id} onClick={() => setBrushSettings({ ...brushSettings, ...p.values })} title={`Preset "${p.label}"`}
-            style={{ height: 26, minWidth: 42, padding: '0 6px', border: 'none', borderRadius: 6, backgroundColor: 'transparent', color: '#ccc', cursor: 'pointer', fontSize: 10, fontFamily: 'system-ui, sans-serif' }}
+            style={{ height: 26, minWidth: 42, padding: '0 6px', border: 'none', borderRadius: 6, backgroundColor: 'transparent', color: 'var(--studio-fg, #ccc)', cursor: 'pointer', fontSize: 10, fontFamily: 'system-ui, sans-serif' }}
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#3d3d3d'; e.currentTarget.style.color = '#fff'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#ccc'; }}>
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--studio-fg, #ccc)'; }}>
             {p.label}
           </button>
         ))}

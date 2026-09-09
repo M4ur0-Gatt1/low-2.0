@@ -41,10 +41,10 @@ export const LayerManager3D: React.FC<Props> = ({ engine }) => {
 
   return (
     <div style={{
-      backgroundColor: '#2d2d2d', color: '#ccc', fontSize: 12,
+      backgroundColor: 'transparent', color: 'var(--studio-fg, #ccc)', fontSize: 12,
       fontFamily: 'system-ui, sans-serif', maxHeight: 320, display: 'flex', flexDirection: 'column',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 10px', borderBottom: '1px solid #444' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 10px', borderBottom: '1px solid var(--studio-line, #444)' }}>
         <button style={iconBtn} title="Nueva capa" onClick={() => addLayer()}>＋ capa</button>
       </div>
 
@@ -57,9 +57,9 @@ export const LayerManager3D: React.FC<Props> = ({ engine }) => {
               onClick={() => setActiveLayer(layer.id)}
               style={{
                 display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px',
-                cursor: 'pointer', borderBottom: '1px solid #383838',
-                backgroundColor: isActive ? LOW_ACCENT_DEEP : 'transparent',
-                color: isActive ? '#fff' : '#ccc',
+                cursor: 'pointer', borderBottom: '1px solid var(--studio-line, #383838)',
+                backgroundColor: isActive ? 'var(--studio-active, #B8330A)' : 'transparent',
+                color: 'var(--studio-fg, #ccc)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

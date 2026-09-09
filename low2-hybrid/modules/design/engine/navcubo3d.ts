@@ -41,12 +41,12 @@ function texturaCara(texto: string, resaltada: boolean): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = lado; c.height = lado;
   const g = c.getContext('2d')!;
-  g.fillStyle = resaltada ? '#3b82f6' : '#f4f6fb';
+  g.fillStyle = resaltada ? '#f5ded1' : '#f4f3ee';
   g.fillRect(0, 0, lado, lado);
-  g.strokeStyle = resaltada ? '#1d4ed8' : '#c9d2e4';
+  g.strokeStyle = resaltada ? '#d74a24' : '#c4c7bf';
   g.lineWidth = 6;
   g.strokeRect(3, 3, lado - 6, lado - 6);
-  g.fillStyle = resaltada ? '#ffffff' : '#4a5568';
+  g.fillStyle = resaltada ? '#a4391b' : '#53594f';
   g.font = '600 21px system-ui, -apple-system, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
