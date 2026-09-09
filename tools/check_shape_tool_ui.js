@@ -132,8 +132,97 @@ async function main() {
     dzSetTool("pencil"); await wait(400);
     const cambioHerramienta={quedaAlgo:!!uno("rect"), herramienta:DZ.tool};
 
+    // 9. LA FORMA NACE SOLO CON CONTORNO. Pedido de Mauro: «actualmente dibuja
+    //    rellenos rojos». Antes salia un bloque macizo con fill y NINGUN
+    //    stroke, que en una mesa de animacion es al revés de lo que se
+    //    necesita: primero la linea, el relleno despues si viene.
+    limpiar(); DZ.formaRelleno=false; dzFormaElegir("rect"); await wait(200);
+    pt("pointerdown",X(.2),Y(.2)); await wait(60);
+    pt("pointermove",X(.45),Y(.5)); await wait(60);
+    pt("pointerup",X(.45),Y(.5)); await wait(400);
+    const rc=uno("rect");
+    const contorno = rc ? {fill:rc.getAttribute("fill"), stroke:rc.getAttribute("stroke"),
+      grosor:+(rc.getAttribute("stroke-width")||0),
+      w:Math.round(+rc.getAttribute("width")||0)} : null;
+
+    // 10. y la casilla del menu la hace nacer rellena, sin perder el contorno
+    const casilla=document.querySelector("#dzFormaRelleno");
+    let rellena=null;
+    if (casilla) {
+      limpiar(); casilla.checked=true; casilla.onchange();
+      dzFormaElegir("ellipse"); await wait(200);
+      pt("pointerdown",X(.25),Y(.25)); await wait(60);
+      pt("pointermove",X(.5),Y(.5)); await wait(60);
+      pt("pointerup",X(.5),Y(.5)); await wait(400);
+      const el=uno("ellipse");
+      rellena = el ? {fill:el.getAttribute("fill"), stroke:el.getAttribute("stroke")} : null;
+      casilla.checked=false; casilla.onchange();
+    }
+    const interruptor={hayCasilla:!!casilla, rellena,
+      recuerda:(()=>{try{return localStorage.getItem("low.forma.relleno")}catch(e){return "sin ls"}})()};
+
+    // 11. EL CONTORNO CON PINCEL. Pedido de Mauro: «que se le pueda poner un
+    //     pincel como forma de la linea de contorno». Un stroke de SVG es una
+    //     linea de grosor constante y sin caracter; el pincel tiene punta,
+    //     presion y dureza. Se comprueba en el mismo montaje que el paso 6, que
+    //     es el que sabe medir «un solo paso de historial».
+    // OJO CON EL MONTAJE: limpiar() vacía el DOM pero NO el modelo, y el
+    // modelo tiene su propio historial. Sin sincronizarlo, el Ctrl+Z de acá
+    // restaura el contenido del paso ANTERIOR —que trae su propia elipse— y la
+    // aserción culpa al código nuevo por una elipse que no es la suya. Me pasó:
+    // «tag no es identidad», la misma trampa de siempre.
+    limpiar(); dzMarkDirty(); await wait(600);
+    DZ.formaRelleno=false;
+    const cp=document.querySelector("#dzFormaPincel");
+    let entintado=null;
+    if (cp) {
+      cp.checked=true; cp.onchange();
+      dzFormaElegir("ellipse"); await wait(200);
+      pt("pointerdown",X(.25),Y(.25));
+      pt("pointermove",X(.5),Y(.55)); await wait(70);
+      pt("pointerup",X(.5),Y(.55)); await wait(600);
+      const g=uno('[data-low="forma-pincel"]');
+      let sup=null;
+      try { const bb=g&&g.getBBox(); if(bb) sup={w:Math.round(bb.width),h:Math.round(bb.height)}; } catch(e){}
+      entintado={
+        hayGrupo:!!g,
+        guardaGeometria: !!(g && (g.getAttribute("data-d")||"").length>10),
+        guardaPincelYGrosor: !!(g && g.getAttribute("data-grosor")),
+        // la tinta es un hijo con rol de contorno, no un stroke del elemento
+        contornos: g ? [...g.children].filter(h=>h.getAttribute("data-rol")==="contorno").length : 0,
+        sinStrokePelado: !!(g && !g.getAttribute("stroke")),
+        superficie: sup,
+        seleccionado: !!(g && DZ.sel===g),
+        dice:(document.querySelector("#sbHint")||{}).textContent||""
+      };
+      // un Ctrl+Z tiene que sacar la forma entintada COMPLETA, no dejar la
+      // forma pelada atrás: entintar es parte de cómo nace, no una edición aparte
+      dzUndo(); await wait(600);
+      entintado.trasUndoGrupo = !!uno('[data-low="forma-pincel"]');
+      entintado.trasUndoPelada = !!uno("ellipse");
+      cp.checked=false; cp.onchange();
+    }
+
+    // 12. y entintar algo que YA está dibujado, por el botón
+    limpiar(); dzMarkDirty(); await wait(600);
+    DZ.formaRelleno=false; dzFormaElegir("rect"); await wait(200);
+    pt("pointerdown",X(.3),Y(.3));
+    pt("pointermove",X(.55),Y(.55)); await wait(70);
+    pt("pointerup",X(.55),Y(.55)); await wait(450);
+    const boton=document.querySelector("#dzFormaEntintar");
+    let aMano=null;
+    if (boton) {
+      const antes=!!uno("rect");
+      boton.click(); await wait(600);
+      const g=uno('[data-low="forma-pincel"]');
+      aMano={habiaForma:antes, hayGrupo:!!g, sigueLaForma:!!uno("rect"),
+        conserva: g ? g.getAttribute("data-forma") : null};
+      dzUndo(); await wait(600);
+      aMano.undoDevuelveLaForma = !!uno("rect") && !uno('[data-low="forma-pincel"]');
+    }
+
     return {armado,arrastre,conShift,conAlt,clicSimple,historial,escape,
-      cambioHerramienta,errs:errs.slice(0,3)};
+      cambioHerramienta,contorno,interruptor,entintado,aMano,errs:errs.slice(0,3)};
   })()`;
 
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -170,6 +259,62 @@ async function main() {
     mal("la forma volvió a plantarse en el centro del lienzo: con la mesa paneada no se ve",
       v.clicSimple);
   if (!v.clicSimple.tieneTamano) mal("el clic simple deja una forma sin tamaño", v.clicSimple);
+
+  const c = v.contorno;
+  if (!c) mal("la forma del gesto de contorno no se dibujó", v.contorno);
+  if (c.fill !== "none")
+    mal("la forma nace RELLENA: el pedido es que nazca sólo con contorno, que es " +
+      "como se dibuja en una mesa de animación — la línea primero y el relleno " +
+      "después, si viene", c);
+  if (!c.stroke || c.stroke === "none")
+    mal("la forma nace sin contorno: sin relleno Y sin trazo no se ve nada, que es " +
+      "peor que el bloque rojo", c);
+  if (!(c.grosor > 0)) mal("el contorno de la forma no tiene grosor", c);
+  if (!(c.w > 50)) mal("el gesto de esta comprobación no dibujó una forma medible", c);
+
+  if (!v.interruptor.hayCasilla)
+    mal("no hay manera de pedir una forma rellena: el interruptor «Rellenar» del " +
+      "menú de formas desapareció", v.interruptor);
+  if (!v.interruptor.rellena || v.interruptor.rellena.fill === "none")
+    mal("con «Rellenar» tildado la forma sigue naciendo sin relleno", v.interruptor);
+  if (!v.interruptor.rellena.stroke || v.interruptor.rellena.stroke === "none")
+    mal("una forma rellena perdió el contorno: relleno Y contorno, no uno u otro",
+      v.interruptor);
+
+  const e = v.entintado;
+  if (!e) mal("no existe el interruptor «Contorno con pincel»", v.entintado);
+  if (!e.hayGrupo)
+    mal("con «Contorno con pincel» tildado la forma sale igual que antes: el " +
+      "contorno tiene que dibujarse con el pincel, no con un trazo de grosor " +
+      "constante", e);
+  if (!e.guardaGeometria)
+    mal("la forma entintada no guarda su geometría: los hijos son un render, y sin " +
+      "el dato no se puede deformar ni volver a entintar", e);
+  if (!e.guardaPincelYGrosor)
+    mal("la forma entintada no guarda su pincel y su grosor: al re-dibujarla " +
+      "tomaría el pincel que esté elegido en ese momento, así que deformarla le " +
+      "cambiaría el trazo", e);
+  if (!e.contornos)
+    mal("la forma entintada no tiene ni un tramo de contorno dibujado", e);
+  if (!e.superficie || e.superficie.w < 40 || e.superficie.h < 40)
+    mal("el contorno entintado no tiene superficie: quedó un grupo vacío", e);
+  if (!e.seleccionado)
+    mal("la forma entintada no queda seleccionada, así que no se la puede seguir " +
+      "trabajando", e);
+  if (e.trasUndoGrupo || e.trasUndoPelada)
+    mal("Ctrl+Z no saca la forma entintada de una: entintar es parte de cómo nace " +
+      "la forma, no una edición aparte, así que no puede quedar la forma pelada " +
+      "en la mesa", e);
+
+  if (!v.aMano) mal("no hay botón para entintar lo que ya está dibujado", v.aMano);
+  if (!v.aMano.hayGrupo || v.aMano.sigueLaForma)
+    mal("«Entintar la selección» no convierte la forma seleccionada", v.aMano);
+  if (v.aMano.conserva !== "rect")
+    mal("al entintar se pierde qué forma era: sin eso no se la puede volver a " +
+      "editar como forma", v.aMano);
+  if (!v.aMano.undoDevuelveLaForma)
+    mal("Ctrl+Z no devuelve la forma sin entintar: entintar a mano SÍ es una " +
+      "edición aparte y tiene que poder desandarse sola", v.aMano);
 
   if (!v.historial.hayElipse) mal("el gesto no dejó la elipse", v.historial);
   if (v.historial.trasUndo) mal("Ctrl+Z no saca la forma de una", v.historial);

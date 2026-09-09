@@ -3919,7 +3919,7 @@ function dzFromUser(x, y) {
    valores del papel cebolla no cambian" + trazos fantasma) */
 const DZ_UI_SEL = ".dz-onionpanel,.dz-zpanel,.dz-xsheet,.dz-tlgrid,.dz-disc," +
   ".dz-pendbg,.dz3d-gizmo,.dz3d-zbar,.dz3d-zhandle,.dz3d-rothandle,.dz-rulers," +
-  ".dz-selbox,.dz-cam,.dz-rig-overlay,#dzCam,.bien2d";   // .bien2d: la bienvenida del 2D
+  ".dz-selbox,.dz-cam,.dz-rig-overlay,#dzCam,.bien2d,.dz-warp";   // .bien2d y .dz-warp: bienvenida y jaula de deformacion
 function dzOnUiPanel(e) {
   return e.target && e.target.closest && e.target.closest(DZ_UI_SEL);
 }
@@ -12202,7 +12202,7 @@ function dzMenuAction(act) {
     rotl: () => dzRotView(-15), rotr: () => dzRotView(15),
     enderezar: () => { DZ.viewRot = 0; dzApplyZoom(); },
     diorama: dzZPanelToggle, profundidad: dzZPanelToggle,
-    cebolla: dzOnionPanelToggle,
+    cebolla: dzOnionPanelToggle, deformar: () => window.dzWarpAlternar?.(),
     xsheet: dzXsToggle, codigo: dzToggleCode,
     alfrente: () => { if (!DZ.sel) return dzSetStatus("Seleccioná un elemento primero");
       dzSnapshot(); DZ.sel.parentNode.appendChild(DZ.sel); dzMarkDirty(); dzBuildLayers(); },

@@ -106,6 +106,7 @@ jobs:
           node tools/check_copy_paste_ui.js
           node tools/check_arcs_ui.js
           node tools/check_shape_tool_ui.js
+          node tools/check_warp_cage_ui.js
           node tools/check_hit_test_ui.js
           node tools/check_brush_params_ui.js
           node tools/check_vector_nodes_ui.js

@@ -35,12 +35,22 @@ function dzBrushMotor(brush) {
   return brush && brush.engine === "raster" ? "raster" : "vector";
 }
 
-function dzBrushFinalElement(points, color) {
-  const preset = dzCurrentBrush(), engine = window.LOW?.drawing?.brushEngine;
-  if (!preset || !engine) return dzBrushRibbon(points, DZ.drawW || 6, color);
+/** `opciones` es OPCIONAL y sólo la usa quien necesita un pincel FIJO en vez
+ *  del que está elegido ahora: `{ brushId, size }`.
+ *
+ *  Lo pide el contorno de las formas (`ui/drawing/forma-pincel.js`): una forma
+ *  entintada se re-dibuja cuando se la deforma, y si en ese momento se leyera
+ *  el pincel actual, deformar cambiaría el trazo por el que uno tenga elegido
+ *  en ese momento. El trazo pertenece a la forma, no al estado de la barra. */
+function dzBrushFinalElement(points, color, opciones) {
+  const fijo = opciones && opciones.brushId
+    ? (window.LOW?.drawing?.brushes?.get?.(opciones.brushId) || null) : null;
+  const preset = fijo || dzCurrentBrush(), engine = window.LOW?.drawing?.brushEngine;
+  const grosor = (opciones && opciones.size) || DZ.drawW || 6;
+  if (!preset || !engine) return dzBrushRibbon(points, grosor, color);
   const samples = points.map(p => ({ x: p[0], y: p[1], pressure: p[2],
     tiltX: p[3] || 0, tiltY: p[4] || 0, twist: p[5] || 0, time: p[6] || 0 }));
-  const brush = { ...preset, size: DZ.drawW || preset.size || 6 };
+  const brush = { ...preset, size: grosor };
   if (dzBrushMotor(brush) === "raster") {
     const dabs = engine.buildRasterDabs(samples, brush);
     if (!dabs.length) return null;
@@ -103,7 +113,7 @@ function dzBrushFinalElement(points, color) {
     if (Number.isFinite(opacidad) && opacidad < 1) path.setAttribute("fill-opacity", Math.max(0, opacidad).toFixed(3));
     path.setAttribute("data-low", "brush"); path.setAttribute("data-brush-id", brush.id); return path;
   }
-  return dzBrushRibbon(points, DZ.drawW || 6, color);
+  return dzBrushRibbon(points, grosor, color);
 }
 
 /** Un único gradiente radial por trazo para la dureza. Devuelve la referencia

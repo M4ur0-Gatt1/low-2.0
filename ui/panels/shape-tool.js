@@ -64,6 +64,18 @@ function dzFormaDown(e) {
   if (!el) return;
   // El elemento se agrega YA, pero el historial no se toca hasta soltar: lo que
   // crece bajo el dedo es una previsualización, no una edición confirmada.
+  //
+  // Y POR ESO SE CANCELA EL VOLCADO PENDIENTE AL MODELO: si la previsualización
+  // no es una edición, tampoco tiene que llegar al documento a medio hacer.
+  // `dzMarkDirty` agenda un `dzDocCommit` a 260 ms y el modelo tiene su PROPIO
+  // historial, así que un commit agendado por una acción anterior puede caer en
+  // medio del arrastre y grabar la forma a medio crecer como un paso.
+  //
+  // HONESTIDAD SOBRE ESTA LÍNEA: la puse creyendo que explicaba un Ctrl+Z que
+  // dejaba la forma pelada al entintar, y NO era eso —era el montaje de mi
+  // propia prueba, que vaciaba el lienzo sin sincronizar el modelo—. Se queda
+  // porque la carrera es real y la línea es correcta, pero no la vi fallar.
+  clearTimeout(DZ_DOC_TIMER);
   dzArtAppend(svg, el);
   DZ_FORMA = { kind, el, ancla: p, pid: e.pointerId, arrastro: false,
     desdePantalla: { x: e.clientX, y: e.clientY } };
@@ -109,11 +121,29 @@ function dzFormaUp(e) {
     return;
   }
 
+  // La medida se lee ANTES de entintar: después el elemento original queda
+  // reemplazado por el grupo del pincel.
+  const medida = dzFormaMedida(g);
+
+  // ENTINTAR VA ANTES DEL SNAPSHOT, y esto importa. `dzSnapshot()` guarda como
+  // estado anterior el lienzo TAL COMO ESTÁ en ese momento, y el historial
+  // trata el paso como no-op cuando el antes y el después son iguales —es por
+  // eso que un Ctrl+Z «saca la forma de una» en vez de dejar el paso vacío—.
+  // Entintando después del snapshot, el estado anterior era «la forma pelada»
+  // y un Ctrl+Z dejaba el rectángulo sin pincel en la mesa. Medido:
+  // {quedaGrupo:false, quedaRect:true}.
+  let el = g.el;
+  if (dzFormaConPincel() && typeof dzFormaPincelAplicar === "function") {
+    const entintada = dzFormaPincelAplicar(el);
+    if (entintada) el = entintada;
+  }
+
   // Recién ahora entra al historial, y como UN paso.
   dzSnapshot();
-  dzSelect(g.el);
+  dzSelect(el);
   dzMarkDirty();
-  dzSetStatus(dzFormaMedida(g) + " · Ctrl+Z la saca de una");
+  dzSetStatus(medida + (el !== g.el ? " · contorno con pincel" : "") +
+    " · Ctrl+Z la saca de una");
 }
 
 function dzFormaCancelar(motivo) {
@@ -213,13 +243,27 @@ function dzFormaMedida(g) {
   return g.kind === "star" ? "Estrella" : "Polígono";
 }
 
+/** ¿La forma nace rellena? NO por omisión.
+ *
+ *  Pedido de Mauro: «cuando dibujo una forma en LOW 2D, lo que dibuje primero
+ *  por defecto sea una forma sin relleno, sólo contorno». Antes salía un bloque
+ *  rojo macizo y sin contorno —`fill` con el color de relleno y NINGÚN
+ *  `stroke`—, que en una mesa de animación es lo contrario de lo que se
+ *  necesita: uno dibuja la línea y el relleno viene después, si viene.
+ *
+ *  El interruptor está en el menú de formas, no en el inspector, porque es una
+ *  propiedad de LA HERRAMIENTA —cómo va a nacer la próxima— y no del elemento
+ *  que ya está en la mesa: ése se rellena con el chip de Relleno de siempre. */
+function dzFormaRellena() { return DZ.formaRelleno === true; }
+
 /** El elemento vacío del tipo pedido, con el color y el trazo actuales. */
 function dzFormaCrear(kind) {
   const NS = "http://www.w3.org/2000/svg";
-  const FILL = DZ.fillColor || "#F0450E";
+  const TRAZO = DZ.drawColor || "#F0450E";
+  const GROSOR = Math.max(1, DZ.drawW || 4);
   if (kind === "line") {
     const el = document.createElementNS(NS, "line");
-    el.setAttribute("stroke", DZ.drawColor || "#F0450E");
+    el.setAttribute("stroke", TRAZO);
     el.setAttribute("stroke-width", Math.max(2, DZ.drawW || 4));
     el.setAttribute("stroke-linecap", "round");
     return el;
@@ -230,7 +274,13 @@ function dzFormaCrear(kind) {
         : (kind === "poly" || kind === "star") ? "polygon" : null;
   if (!tag) return null;
   const el = document.createElementNS(NS, tag);
-  el.setAttribute("fill", FILL);
+  // CONTORNO SIEMPRE, relleno sólo si se pidió. Sin `stroke` una forma sin
+  // relleno seria invisible: no habria nada que dibujar.
+  el.setAttribute("fill", dzFormaRellena() ? (DZ.fillColor || "#F0450E") : "none");
+  el.setAttribute("stroke", TRAZO);
+  el.setAttribute("stroke-width", GROSOR);
+  el.setAttribute("stroke-linejoin", "round");
+  el.setAttribute("stroke-linecap", "round");
   return el;
 }
 
@@ -268,8 +318,100 @@ function dzAddShape(kind, punto) {
   dzSelect(el); dzMarkDirty();
 }
 
+/* ── el interruptor de relleno, dentro del menú de formas ───────────────── */
+
+const DZ_FORMA_RELLENO_LS = "low.forma.relleno";
+
+/** Pone la fila de «Rellenar» al pie del menú de formas.
+ *
+ *  Se arma desde acá y no desde `index.html` a propósito: la casilla es de la
+ *  herramienta y vive con ella. Y la elección se recuerda, porque quien dibuja
+ *  entintando trabaja siempre igual y no va a querer destildarla cada vez. */
+function dzFormaRellenoUI() {
+  const menu = document.getElementById("dzShapeMenu");
+  if (!menu || menu.querySelector(".dz-forma-relleno")) return;
+  try {
+    if (localStorage.getItem(DZ_FORMA_RELLENO_LS) === "1") DZ.formaRelleno = true;
+  } catch (_) { /* sin almacenamiento: nace sin relleno, que es lo pedido */ }
+  const fila = document.createElement("label");
+  fila.className = "dz-forma-relleno";
+  fila.title = "Con esto apagado la forma nace sólo con contorno, que es lo " +
+    "que uno quiere al dibujar. El relleno se le puede poner después con el " +
+    "chip de Relleno.";
+  const caja = document.createElement("input");
+  caja.type = "checkbox";
+  caja.id = "dzFormaRelleno";
+  caja.checked = dzFormaRellena();
+  caja.onchange = () => {
+    DZ.formaRelleno = caja.checked;
+    try { localStorage.setItem(DZ_FORMA_RELLENO_LS, caja.checked ? "1" : "0"); } catch (_) { }
+    if (typeof dzSetStatus === "function")
+      dzSetStatus(caja.checked
+        ? "Las formas nuevas nacen rellenas"
+        : "Las formas nuevas nacen sólo con contorno");
+  };
+  const texto = document.createElement("span");
+  texto.textContent = "Rellenar";
+  fila.append(caja, texto);
+  menu.appendChild(fila);
+  dzFormaPincelUI(menu);
+}
+
+const DZ_FORMA_PINCEL_LS = "low.forma.pincel";
+
+function dzFormaConPincel() { return DZ.formaPincel === true; }
+
+/** «Contorno con pincel», y un botón para entintar lo que ya está dibujado.
+ *
+ *  Van en el menú de la herramienta por lo mismo que la casilla de relleno: es
+ *  cómo va a nacer la próxima forma. El botón es para las que ya están. */
+function dzFormaPincelUI(menu) {
+  if (!menu || menu.querySelector(".dz-forma-pincel")) return;
+  try {
+    if (localStorage.getItem(DZ_FORMA_PINCEL_LS) === "1") DZ.formaPincel = true;
+  } catch (_) { /* sin almacenamiento: contorno de trazo simple */ }
+  const fila = document.createElement("label");
+  fila.className = "dz-forma-relleno dz-forma-pincel";
+  fila.title = "El contorno se dibuja con el pincel elegido —punta, presión y " +
+    "dureza— en vez de una línea de grosor constante. El pincel y el grosor " +
+    "quedan guardados en la forma, así deformarla no le cambia el trazo.";
+  const caja = document.createElement("input");
+  caja.type = "checkbox";
+  caja.id = "dzFormaPincel";
+  caja.checked = dzFormaConPincel();
+  caja.onchange = () => {
+    DZ.formaPincel = caja.checked;
+    try { localStorage.setItem(DZ_FORMA_PINCEL_LS, caja.checked ? "1" : "0"); } catch (_) { }
+    if (typeof dzSetStatus === "function")
+      dzSetStatus(caja.checked
+        ? "El contorno de las formas nuevas se dibuja con el pincel"
+        : "El contorno de las formas nuevas es una línea simple");
+  };
+  const texto = document.createElement("span");
+  texto.textContent = "Contorno con pincel";
+  fila.append(caja, texto);
+  menu.appendChild(fila);
+
+  const entintar = document.createElement("button");
+  entintar.type = "button";
+  entintar.className = "dz-forma-entintar";
+  entintar.id = "dzFormaEntintar";
+  entintar.textContent = "Entintar la selección";
+  entintar.title = "Le pone el pincel al contorno de la forma que está " +
+    "seleccionada. Ctrl+Z la devuelve a forma.";
+  entintar.onclick = () => window.dzFormaPincelSeleccion?.();
+  menu.appendChild(entintar);
+}
+
+if (document.readyState === "loading")
+  document.addEventListener("DOMContentLoaded", dzFormaRellenoUI, { once: true });
+else dzFormaRellenoUI();
+
 /* Nombres que la interfaz y los recorridos usan por nombre global. */
 window.dzFormaElegir = dzFormaElegir;
+window.dzFormaRellena = dzFormaRellena;
+window.dzFormaConPincel = dzFormaConPincel;
+window.dzFormaRellenoUI = dzFormaRellenoUI;
 window.dzFormaDown = dzFormaDown;
 window.dzFormaMove = dzFormaMove;
 window.dzFormaUp = dzFormaUp;

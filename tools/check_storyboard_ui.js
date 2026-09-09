@@ -39,6 +39,14 @@ async function main() {
   // devuelve el archivo anterior y la prueba certifica código que ya no existe.
   await send("Network.enable"); await send("Network.setCacheDisabled", { cacheDisabled: true });
   stage("navegar");
+  // LA VENTANA SE FIJA ACÁ, y no es un detalle: este recorrido comprueba que el
+  // panel flotante no tape el escenario, y eso depende del ancho. Sin fijarla se
+  // hereda el tamaño con que quedó el Chromium de turno; en mi máquina eran
+  // 764×485 y el panel tapaba de verdad, así que el guard acusaba una regresión
+  // que no existía —falla contra el mismo código que estaba verde dos horas
+  // antes, y también contra el árbol anterior—. 1366×768 es lo que usa CI.
+  await send("Emulation.setDeviceMetricsOverride",
+    { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
   await send("Page.navigate", { url: pageUrl });
   // Esperar por CONDICIoN, no por reloj: con la maquina cargada un sleep fijo
   // se queda corto, la app todavia no expuso sus funciones y la prueba falla

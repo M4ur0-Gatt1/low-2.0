@@ -22,6 +22,7 @@ CMPPAN = (ROOT / "ui" / "panels" / "composition-panel.js").read_text(encoding="u
 INDEX = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 SHORTCUTS = (ROOT / "ui" / "animation" / "shortcuts.js").read_text(encoding="utf-8")
 SCENE_MODEL = (ROOT / "ui" / "animation" / "scene-model.js").read_text(encoding="utf-8")
+BRUSH_RENDER = (ROOT / "ui" / "drawing" / "brush-render.js").read_text(encoding="utf-8")
 
 
 def function_body(name: str, next_name: str) -> str:
@@ -682,6 +683,147 @@ require("scene.camera && this.doc.scene.camera.keys" in XSV,
 require(".xs2-fija { flex: 0 0 auto" in CSS,
         "las columnas fijas se estiran como las de capas: el espacio de la hoja es "
         "de los niveles")
+
+# -- Formas: contorno, pincel y deformacion libre -----------------------
+# Pedido de Mauro: que la forma nazca SIN RELLENO y solo con contorno, que al
+# contorno se le pueda poner un pincel como linea, y que la forma se pueda
+# deformar libremente. Las tres tienen que COMPONER: una forma entintada que se
+# deforma tiene que seguir siendo tinta sobre la curva nueva.
+PINCELF = (ROOT / "ui" / "drawing" / "forma-pincel.js").read_text(encoding="utf-8")
+WARP = (ROOT / "ui" / "vector" / "warp-cage.js").read_text(encoding="utf-8")
+FORMACSS = (ROOT / "ui" / "design" / "forma.css").read_text(encoding="utf-8")
+
+require('src="drawing/forma-pincel.js' in INDEX
+        and 'src="vector/warp-cage.js' in INDEX
+        and 'href="design/forma.css' in INDEX,
+        "los modulos de forma/pincel/deformacion o su hoja no se cargan: la "
+        "herramienta queda muerta sin decir nada")
+require(INDEX.index('src="drawing/brush-render.js') < INDEX.index('src="drawing/forma-pincel.js'),
+        "el contorno con pincel se carga ANTES que el motor de pincel del que "
+        "depende")
+
+# La forma nace sin relleno. Es el pedido textual: «actualmente dibuja rellenos
+# rojos». Sin `stroke` una forma sin relleno seria invisible, asi que van los dos.
+require("dzFormaRellena" in FORMAS
+        and 'el.setAttribute("fill", dzFormaRellena()' in FORMAS,
+        "la forma volvio a nacer con el relleno puesto a secas: el pedido es que "
+        "nazca solo con contorno, y que rellenarla sea una eleccion")
+_forma_crear = FORMAS[FORMAS.index("function dzFormaCrear("):]
+_forma_crear = _forma_crear[:_forma_crear.index("/* \u2500\u2500 el texto sigue siendo un clic")]
+# La rama de las formas, no la de la linea recta: `stroke` con TRAZO aparece en
+# las DOS, asi que buscarlo suelto no prueba nada. Se pide la secuencia.
+require(re.search(r'setAttribute\("fill", dzFormaRellena\(\).*?'
+                  r'setAttribute\("stroke", TRAZO\).*?'
+                  r'setAttribute\("stroke-width", GROSOR\)',
+                  _forma_crear, flags=re.S),
+        "la forma nace sin contorno: sin relleno Y sin trazo no se ve nada, que "
+        "es peor que el bloque rojo")
+
+# El pincel se guarda POR ID Y GROSOR en la forma. Si al re-dibujar se leyera el
+# pincel actual, deformar una forma le cambiaria el trazo por el que uno tenga
+# elegido en ese momento: el trazo es de la forma, no de la barra.
+require('g.setAttribute("data-pincel"' in PINCELF
+        and 'g.setAttribute("data-grosor"' in PINCELF,
+        "la forma entintada dejo de guardar su pincel y su grosor: al re-dibujarla "
+        "—al deformarla, por ejemplo— tomaria el pincel elegido en ese momento")
+require('g.setAttribute("data-d"' in PINCELF,
+        "la forma entintada dejo de guardar su geometria: los hijos son un RENDER, "
+        "y sin el dato no se puede deformar ni volver a entintar")
+require("brushId" in PINCELF and "opciones" in BRUSH_RENDER,
+        "dzBrushFinalElement dejo de aceptar un pincel explicito, asi que el "
+        "contorno de una forma se re-dibujaria con el pincel de la barra")
+
+# La jaula de deformacion vive DENTRO de #dzCanvas: sin estar en DZ_UI_SEL el
+# lienzo se come sus propios clics. Es la leccion de v4.29.0 con la invitacion.
+_APP_COD = re.sub(r"/\*.*?\*/", "", APP, flags=re.S)
+_APP_COD = re.sub(r"//.*$", "", _APP_COD, flags=re.M)
+_ui_sel = _APP_COD[_APP_COD.index("const DZ_UI_SEL"):]
+_ui_sel = _ui_sel[:_ui_sel.index(";")]
+require(".dz-warp" in _ui_sel,
+        "la jaula de deformacion no esta en DZ_UI_SEL: el lienzo tomaria sus "
+        "puntos por dibujo y el preventDefault del trazo se comeria los clics, "
+        "exactamente lo que paso con la invitacion del 2D en v4.29.0")
+require('data-act="deformar"' in INDEX and "deformar: () => window.dzWarpAlternar" in APP,
+        "no hay manera de abrir la deformacion libre: se perdio la entrada de menu "
+        "o su accion")
+require("animation.rigMalla = rigMalla" in SCENE_MODEL,
+        "la malla dejo de exportarse: la deformacion libre se queda sin matematica "
+        "y no deforma nada, en silencio")
+
+# Un tiron de la jaula es UN paso. Hay dos historiales —el del lienzo y el del
+# documento, que vuelca con 260 ms de retardo— y sin transaccion hacian falta
+# dos Ctrl+Z. Medido: 2 pasos.
+require("function abrirPaso" in WARP and "function cerrarPaso" in WARP
+        and 'abrirPaso("Deformar")' in WARP
+        and "cerrarPaso();" in WARP
+        and "DZ.history.begin(etiqueta" in WARP
+        and "dzDocCommit()" in WARP,
+        "la deformacion volvio a dejar DOS pasos de historial por gesto: hay que "
+        "abrir transaccion y forzar el volcado al documento adentro")
+# Reponer tiene que devolver el dibujo ORIGINAL. Pasar la geometria por la malla
+# en reposo la re-muestrea: un rectangulo queda convertido en una polilinea de
+# trescientos puntos, igual al ojo y distinta como dato.
+require("function enReposo" in WARP and "restaurarBase" in WARP,
+        "Reponer volvio a pasar la geometria por la malla en reposo: devuelve una "
+        "copia equivalente en vez del dibujo original")
+require(".dz-warp-punto" in FORMACSS and "pointer-events: auto" in FORMACSS,
+        "los puntos de la jaula quedaron sin recibir el puntero: la superposicion "
+        "entera es pointer-events:none para no tapar el dibujo, y los puntos son "
+        "la excepcion")
+
+# -- `DZ` NO VIVE EN window, y ya me morfo tres veces -------------------
+# DZ se declara con `const` en app.js, asi que es un binding lexico que los
+# scripts clasicos comparten pero NO una propiedad de window. Leerlo como
+# window.DZ o global.DZ devuelve undefined en silencio: la invitacion del 2D no
+# se iba nunca (v4.28.0) y la jaula de deformacion decia «elegi un dibujo» con
+# el dibujo elegido. Lo mismo pasa con `api`.
+def _lee_sin_comentarios(ruta):
+    txt = ruta.read_text(encoding="utf-8")
+    txt = re.sub(r"/\*.*?\*/", "", txt, flags=re.S)
+    return re.sub(r"^\s*//.*$", "", txt, flags=re.M)
+
+
+def _lee_por_window(codigo, nombre):
+    """Devuelve las lecturas de `nombre` como propiedad de window/global.
+
+    SIN REGEX A PROPOSITO. La primera version usaba una con \\b y el heredoc
+    que la escribio convirtio esa secuencia en un BYTE DE RETROCESO de verdad
+    (0x08): el patron pedia un caracter invisible despues de DZ, no podia
+    coincidir nunca, y el contrato pasaba en verde con la violacion puesta.
+    Lo encontro `cat -A`, no el ojo. Buscando el texto a mano no hay escapado
+    que se pueda arruinar.
+    """
+    encontradas = []
+    for prefijo in ("window.", "global.", "globalThis."):
+        aguja = prefijo + nombre
+        desde = 0
+        while True:
+            i = codigo.find(aguja, desde)
+            if i < 0:
+                break
+            desde = i + len(aguja)
+            siguiente = codigo[desde:desde + 1]
+            # window.DZ_FORMA y window.dzAlgo NO son esto: se pide el nombre
+            # completo, no un prefijo de otro identificador.
+            if not (siguiente.isalnum() or siguiente == "_"):
+                encontradas.append(aguja)
+    return encontradas
+
+
+_MODULOS = sorted((ROOT / "ui").rglob("*.js"))
+for _f in _MODULOS:
+    if _f.name == "app.js":
+        continue
+    _txt = _f.read_text(encoding="utf-8")
+    _cod = re.sub(r"/\*.*?\*/", "", _txt, flags=re.S)
+    _cod = re.sub(r"^\s*//.*$", "", _cod, flags=re.M)
+    require(not _lee_por_window(_cod, "DZ"),
+            "en " + _f.name + " se lee DZ como propiedad de window/global: DZ es "
+            "`const` en app.js, asi que eso es undefined EN SILENCIO. Hay que "
+            "nombrarlo suelto, con guarda `typeof DZ !== \"undefined\"`")
+    require(not _lee_por_window(_cod, "api"),
+            "en " + _f.name + " se lee api como propiedad de window/global: `api` "
+            "tambien es `const` en app.js y eso es undefined en silencio")
 
 # -- El modulo 2D es la primera pantalla --------------------------------
 INICIAL = (ROOT / "ui" / "application" / "pantalla-inicial.js").read_text(encoding="utf-8")
