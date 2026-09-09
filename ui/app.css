@@ -2789,6 +2789,42 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .xs2 { font-size: 12px; }
 .xs2-col-head, .xs2-fnum, .xs2-op, .xs2-num, .xs2-tpinfo { font-size: 11px; color: var(--mut); }
 .xs2-row { height: 22px; }
+
+/* Las tres columnas fijas de §6 —cámara, audio y efectos—. No se estiran como
+   las de capas: son angostas y de ancho fijo, para que el espacio siga siendo
+   de los niveles, que es donde se trabaja. Ver ui/animation/xsheet-view.js. */
+.xs2-fija { flex: 0 0 auto; min-width: 0; }
+.xs2-col-head.xs2-fija {
+  cursor: default; font: 600 8.5px/1 "JetBrains Mono", monospace;
+  letter-spacing: .04em; text-align: center; padding: 5px 2px;
+  border-left: 1px solid var(--line2, #23252c);
+}
+.xs2-col-head.xs2-fija:hover { background: transparent; color: var(--mut); }
+.xs2-cell.xs2-fija { border-left: 1px solid var(--line2, #23252c); cursor: pointer; }
+.xs2-cell.xs2-fija:hover { background: rgba(255, 255, 255, .05); }
+.xs2-cam { width: 26px; flex-basis: 26px; }
+.xs2-aud { width: 48px; flex-basis: 48px; }
+.xs2-fx  { width: 26px; flex-basis: 26px; }
+
+/* La clave de cámara usa el rombo, igual que la marca de papel cebolla del
+   número de cuadro: en una hoja de exposición el rombo YA significa clave. */
+.xs2-camkey {
+  width: 7px; height: 7px; border-radius: 1px; transform: rotate(45deg);
+  background: var(--accent, #F0450E); box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+/* El audio se lee como onda: la barra crece con el nivel del cuadro. */
+.xs2-cell.xs2-aud { place-items: center stretch; padding: 0 5px; }
+.xs2-onda {
+  display: block; align-self: center; height: 8px; border-radius: 2px;
+  width: var(--nivel, 0%); min-width: 1px;
+  background: linear-gradient(90deg, #45a7de, #7bc4e8);
+}
+.xs2-cell.xs2-aud.vacia { background: none; }
+.xs2-fxkey {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #8f7ae0; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+.xs2-cell.xs2-fx.hay { color: #b3a5ee; font: 600 9px "JetBrains Mono", monospace; }
 .tl2 { font-size: 12px; }
 .tl2-name, .tl2-tick, .tl2-cell { height: var(--tl-row-h, 24px); }
 .tl2-tick, .tl2-cell, .tl2-lightcell { width: var(--tl-frame-w, 16px); flex-basis: var(--tl-frame-w, 16px); font-size: 10px; color: var(--mut); }

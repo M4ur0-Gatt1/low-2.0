@@ -93,6 +93,27 @@
       mas.title = "Agregar capa";
       mas.onclick = () => doc.addLayer();
       head.appendChild(mas);
+
+      /* Las tres columnas que §6 pide además de los niveles: «filas son
+         fotogramas; columnas son niveles, cámara, audio y efectos». Hasta la
+         v4.27.0 la hoja tenía sólo el número de cuadro y una columna por capa,
+         así que la mitad de lo que la biblia define no estaba.
+
+         Van a la derecha del botón de agregar capa —que pertenece a los
+         niveles— y son de LECTURA y navegación: muestran qué pasa en cada
+         cuadro y llevan ahí al hacer clic. La edición de claves de cámara sigue
+         donde ya estaba, en el panel de cámara: `dzCamKeyToggle` exige el modo
+         cámara y opera sobre el cuadro actual, y meter una segunda forma de
+         crear claves desde acá sería inventar una operación que nadie pidió. */
+      const pista = doc.audio;
+      head.appendChild(this._colFija("cam", "CÁM",
+        "Cámara: un rombo por cada clave. Clic en la celda: ir a ese cuadro"));
+      head.appendChild(this._colFija("aud", "AUDIO", pista
+        ? "Audio: el nivel de «" + (pista.name || "la pista") + "» en cada cuadro, " +
+          "con el desplazamiento ya aplicado"
+        : "Audio: no hay pista cargada en esta escena"));
+      head.appendChild(this._colFija("fx", "EFEC",
+        "Efectos: claves de composición por cuadro — profundidad y transformación de los planos"));
       tabla.appendChild(head);
 
       // ── cuerpo ──
@@ -127,6 +148,9 @@
         for (const ly of sc.layers) {
           fila.appendChild(this._celdaXs(ly, f));
         }
+        fila.appendChild(this._celdaCamara(f));
+        fila.appendChild(this._celdaAudio(f));
+        fila.appendChild(this._celdaEfectos(f));
         cuerpo.appendChild(fila);
       }
       tabla.appendChild(cuerpo);
@@ -148,6 +172,83 @@
       return d;
     }
     _icon(id) { return `<svg class="ico"><use href="#${id}"/></svg>`; }
+
+    /** Encabezado de una de las tres columnas fijas de §6. */
+    _colFija(clase, texto, titulo) {
+      const h = document.createElement("div");
+      h.className = "xs2-col-head xs2-fija xs2-" + clase;
+      h.textContent = texto;
+      h.title = titulo;
+      return h;
+    }
+    /** El armazón común de las tres: misma clase, mismo clic, mismo cuadro. */
+    _celdaFija(clase, f) {
+      const c = document.createElement("div");
+      c.className = "xs2-cell xs2-fija xs2-" + clase +
+        (f === this.doc.frame ? " cursor" : "");
+      c.onclick = () => this.doc.goTo(f);
+      return c;
+    }
+    /** CÁMARA: un rombo por clave. Sale de scene.camera.keys, que es lo que
+     *  usa la cámara para interpolar; no hay una segunda fuente. */
+    _celdaCamara(f) {
+      const c = this._celdaFija("cam", f);
+      const claves = (this.doc.scene.camera && this.doc.scene.camera.keys) || {};
+      const k = claves[f] != null ? claves[f] : claves[String(f)];
+      if (k == null) { c.title = "Cuadro " + f + " — sin clave de cámara"; return c; }
+      const rombo = document.createElement("i");
+      rombo.className = "xs2-camkey";
+      c.appendChild(rombo);
+      const z = Number(k.zoom); const partes = [];
+      if (Number.isFinite(z) && Math.abs(z - 1) > 1e-3) partes.push("zoom " + z.toFixed(2));
+      if (Number.isFinite(Number(k.x)) || Number.isFinite(Number(k.y)))
+        partes.push("x " + Math.round(Number(k.x) || 0) + " · y " + Math.round(Number(k.y) || 0));
+      c.title = "Clave de cámara en el cuadro " + f + (partes.length ? " — " + partes.join(" · ") : "");
+      return c;
+    }
+    /** AUDIO: el nivel del cuadro, con una barra proporcional. Se pide por
+     *  `peakAt`, que ya aplica el desplazamiento de la pista: leer `peaks`
+     *  crudo mostraría el audio corrido respecto de lo que se escucha. */
+    _celdaAudio(f) {
+      const c = this._celdaFija("aud", f);
+      const pista = this.doc.audio;
+      if (!pista || typeof pista.peakAt !== "function") {
+        c.classList.add("vacia");
+        c.title = "Sin audio en esta escena";
+        return c;
+      }
+      const nivel = Math.max(0, Math.min(1, Number(pista.peakAt(f)) || 0));
+      const barra = document.createElement("i");
+      barra.className = "xs2-onda";
+      barra.style.setProperty("--nivel", (nivel * 100).toFixed(1) + "%");
+      c.appendChild(barra);
+      c.title = "Cuadro " + f + " — nivel " + Math.round(nivel * 100) + "%" +
+        (pista.offset ? " (desplazamiento " + pista.offset + " cuadros)" : "");
+      return c;
+    }
+    /** EFECTOS: cuántos planos tienen clave de composición en este cuadro.
+     *  Es lo que hace que la profundidad y la transformación cambien con el
+     *  tiempo, y hasta ahora no se veía en ninguna parte de la hoja. */
+    _celdaEfectos(f) {
+      const c = this._celdaFija("fx", f);
+      const planos = (this.doc.scene.composition && this.doc.scene.composition.planes) || {};
+      const conClave = Object.values(planos).filter(p => {
+        const k = p && p.keys;
+        return k && (k[f] != null || k[String(f)] != null);
+      });
+      if (!conClave.length) { c.title = "Cuadro " + f + " — sin claves de composición"; return c; }
+      c.classList.add("hay");
+      c.textContent = conClave.length > 1 ? String(conClave.length) : "";
+      if (conClave.length === 1) {
+        const punto = document.createElement("i");
+        punto.className = "xs2-fxkey";
+        c.appendChild(punto);
+      }
+      c.title = conClave.length === 1
+        ? "Clave de composición en el cuadro " + f + " (1 plano)"
+        : "Claves de composición en el cuadro " + f + " (" + conClave.length + " planos)";
+      return c;
+    }
 
     /** Una celda de la planilla. */
     _celdaXs(ly, f) {

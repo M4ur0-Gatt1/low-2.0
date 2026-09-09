@@ -652,4 +652,21 @@ require('p.ayudas.length && resultado === "ok" ? "con ayuda"' in P15,
 require("aprobada: hechos === this.pasos.length" in P15,
         "el veredicto de §15 dejo de exigir los doce pasos sin ayuda")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion y prueba maestra")
+# -- Las columnas de §6 en el X-sheet -----------------------------------
+XSV = (ROOT / "ui" / "animation" / "xsheet-view.js").read_text(encoding="utf-8")
+require("_celdaCamara" in XSV and "_celdaAudio" in XSV and "_celdaEfectos" in XSV,
+        "faltan las columnas que §6 pide: «filas son fotogramas; columnas son "
+        "niveles, camara, audio y efectos»")
+require('"CÁM"' in XSV and '"AUDIO"' in XSV and '"EFEC"' in XSV,
+        "las tres columnas fijas perdieron su encabezado")
+require("pista.peakAt(f)" in XSV and "pista.peaks[f" not in XSV,
+        "la columna de audio lee `peaks` CRUDO: mostraria la onda corrida respecto "
+        "de lo que se escucha, porque peakAt es el que aplica el desplazamiento")
+require("scene.camera && this.doc.scene.camera.keys" in XSV,
+        "la columna de camara dejo de leer scene.camera.keys, que es la fuente que "
+        "usa la camara para interpolar")
+require(".xs2-fija { flex: 0 0 auto" in CSS,
+        "las columnas fijas se estiran como las de capas: el espacio de la hoja es "
+        "de los niveles")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra y X-sheet")
