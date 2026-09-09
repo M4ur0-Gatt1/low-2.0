@@ -51,7 +51,15 @@
      Lo mismo pasa con `api`, que tampoco vive en window. */
   function hayTrabajoAbierto() {
     if (typeof DZ === "undefined" || !DZ) return false;
-    return !!(DZ.path || DZ.doc);
+    if (DZ.path || DZ.doc) return true;
+    /* Y ADEMAS LAS PESTANAS, que es lo que salio de medirlo en la app real: con
+       un diseno .svg abierto —dos pestanas, siete cuadros— `DZ.path` y `DZ.doc`
+       estaban los dos en null, asi que la invitacion se quedaba CLAVADA encima
+       del documento y tapandolo. La contabilidad de «que hay abierto» son
+       `documentTabs` / `activeDocumentTab`: es con eso que app.js decide si
+       muestra la barra de pestanas. */
+    if (DZ.activeDocumentTab) return true;
+    return !!(DZ.documentTabs && DZ.documentTabs.length);
   }
 
   /** Esconde el estudio SIN cerrar el documento, y deja el lado del agente a la
@@ -129,10 +137,25 @@
     caja.querySelector('[data-a="abrir"]').onclick = () => global.dzMenuAction?.("escena-abrir");
     caja.querySelector('[data-a="agente"]').onclick = dzIrAlAgente;
     lienzo.appendChild(caja);
+    vigilar();
+  }
+
+  /* EL RELOJ VIVE CON LA INVITACION, no con el arranque.
+     El documento puede aparecer por varios caminos —Nuevo, Abrir, un .low por
+     doble clic, o el que se estaba restaurando— y ninguno emite un evento
+     global al que colgarse, asi que hay que mirar. Estaba armado UNA vez en el
+     arranque: una invitacion repintada al volver de la IA no la vigilaba nadie,
+     y se volvia a clavar. Ahora se arma al pintarla y se apaga al quitarla. */
+  let reloj = 0;
+
+  function vigilar() {
+    if (reloj) return;
+    reloj = setInterval(() => { if (hayTrabajoAbierto()) quitarInvitacion(); }, 500);
   }
 
   function quitarInvitacion() {
     document.querySelector("#" + ID_INVITACION)?.remove();
+    if (reloj) { clearInterval(reloj); reloj = 0; }
   }
 
   /** Se llama una vez al terminar de armar la interfaz. */
@@ -149,16 +172,8 @@
       pluma.onclick = dzVolverAlEstudio;
       pluma.title = "Animación 2D — el estudio de dibujo";
     }
+    // pintarInvitacion() se encarga de dejar el reloj vigilando.
     pintarInvitacion();
-    // La invitación se va en cuanto hay algo abierto. El documento puede
-    // aparecer por varios caminos —Nuevo, Abrir, un .low por doble clic, o el
-    // que se estaba restaurando— y ninguno emite un evento global al que
-    // colgarse, así que se revisa un rato y se deja de revisar en cuanto pasa.
-    let vueltas = 0;
-    const reloj = setInterval(() => {
-      if (hayTrabajoAbierto()) { quitarInvitacion(); clearInterval(reloj); return; }
-      if (++vueltas > 60) clearInterval(reloj);      // ~30 s y listo
-    }, 500);
     if (typeof global.dzFitView === "function") requestAnimationFrame(() => {
       try { global.dzFitView(); } catch (_) { /* sin lienzo todavía */ }
     });

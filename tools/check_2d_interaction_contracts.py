@@ -721,4 +721,29 @@ require("closeDesign" not in INICIAL_COD,
         "el boton a la IA volvio a usar closeDesign(), que CIERRA EL DOCUMENTO: "
         "cambiar de pantalla te haria perder el dibujo")
 
+# La invitacion vive DENTRO de #dzCanvas, asi que sin estar en la lista de UI
+# flotante el lienzo la trata como dibujo: `dzPointerDown` seleccionaba el
+# <button> como si fuera arte y su `preventDefault()` se comia el click que el
+# navegador iba a generar. Los botones no hacian NADA.
+require(".bien2d" in APP and "DZ_UI_SEL" in APP
+        and ".bien2d" in APP[APP.index("DZ_UI_SEL"):APP.index("DZ_UI_SEL") + 700],
+        "la invitacion del 2D no esta en DZ_UI_SEL: el lienzo la toma por dibujo, "
+        "selecciona el <button> y su preventDefault() se come el click, asi que "
+        "los botones de la primera pantalla no hacen nada")
+# Medido en la app real: con un diseno .svg abierto —dos pestanas, siete
+# cuadros— DZ.path y DZ.doc estaban los DOS en null, asi que la invitacion se
+# quedaba clavada TAPANDO el documento. Las pestanas son la contabilidad real.
+require("documentTabs" in INICIAL_COD,
+        "hayTrabajoAbierto() volvio a mirar solo DZ.path y DZ.doc: con un diseno "
+        "abierto los dos estan en null y la invitacion se queda CLAVADA encima "
+        "del documento. La contabilidad real son las pestanas (documentTabs)")
+require(re.search(r"lienzo\.appendChild\(caja\);\s*vigilar\(\);", INICIAL_COD),
+        "la invitacion se pinta sin dejar el reloj vigilando: armado una sola vez "
+        "en el arranque, una invitacion REPINTADA al volver de la IA no la vigila "
+        "nadie y se vuelve a clavar encima del documento")
+require("vueltas" not in INICIAL_COD,
+        "volvio el tope de vueltas del reloj que vigila la invitacion: el caso en "
+        "que el reloj sigue corriendo es exactamente el caso en que la invitacion "
+        "todavia esta en pantalla, y rendirse ahi la deja pegada para siempre")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet y primera pantalla")

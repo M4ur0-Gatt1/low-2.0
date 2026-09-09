@@ -80,9 +80,69 @@ async function main() {
       // y va ANTES del de cerrar, para que el de cerrar siga siendo el ultimo
       antesDelCerrar:!!(bot && (bot.compareDocumentPosition(document.querySelector("#dzClose"))&4)===4)};
 
-    // ── EL BOTON: esconde el estudio y NO cierra el documento.
-    dzMenuAction("nuevo"); await w(1400);
+    // ── LA INVITACION SE USA CON EL PUNTERO, no llamando a su onclick. Esta
+    //    distincion no es un detalle: la invitacion vive DENTRO de #dzCanvas,
+    //    que es la superficie de dibujo, y el lienzo atiende el pointerdown
+    //    antes que nadie. La primera version de esta prueba hacia boton.click()
+    //    y pasaba; en la app real el clic SELECCIONABA el boton como si fuera
+    //    arte —el inspector mostraba «<button>»— y el documento no se creaba
+    //    nunca. Los paneles que ya viven ahi funcionan porque estan en
+    //    DZ_UI_SEL; el mio faltaba. Asi que se clickea por coordenada, sobre lo
+    //    que el navegador ponga bajo el punto.
+    const nuevo=document.querySelector('#dzBienvenida2D [data-a="nuevo"]');
+    const rb=nuevo.getBoundingClientRect();
+    const bx=Math.round(rb.x+rb.width/2), by=Math.round(rb.y+rb.height/2);
+    const bajo=document.elementFromPoint(bx,by);
+    const clicLlegaAlBoton = bajo===nuevo || nuevo.contains(bajo);
+    // NO se dispara el click a mano: eso es justo lo que enmascaraba el defecto.
+    // dzPointerDown hace e.preventDefault(), y un preventDefault en pointerdown
+    // CANCELA el click que el navegador iba a generar. Mandando el click aparte,
+    // el boton respondia en la prueba y no respondia en la app. Asi que se
+    // dispara pointerdown y se pregunta si alguien lo cancelo.
+    const abajo=new PointerEvent("pointerdown",{bubbles:true,cancelable:true,
+      pointerId:1,pointerType:"mouse",isPrimary:true,button:0,buttons:1,
+      clientX:bx,clientY:by});
+    bajo.dispatchEvent(abajo);
+    // La seleccion se lee EN EL ACTO: si despues se crea el documento,
+    // dzDeselect() la limpia y el sintoma desaparece de la medicion.
+    const seleccionoElBoton = !!(DZ.sel && DZ.sel.tagName==="BUTTON");
+    const loCancelaron = abajo.defaultPrevented;
+    bajo.dispatchEvent(new PointerEvent("pointerup",{bubbles:true,cancelable:true,
+      pointerId:1,pointerType:"mouse",isPrimary:true,button:0,buttons:0,
+      clientX:bx,clientY:by}));
+    // Y el click, sólo si nadie canceló el pointerdown: es lo que haría el
+    // navegador. Si lo cancelaron, el boton NO se entera y eso es el defecto.
+    if (!loCancelaron) bajo.dispatchEvent(new MouseEvent("click",{bubbles:true,
+      cancelable:true,button:0,clientX:bx,clientY:by}));
+    await w(1600);
+    const porElPuntero={clicLlegaAlBoton, seleccionoElBoton, loCancelaron,
+      creoElDocumento: !!DZ.doc};
+    if (!DZ.doc) { dzMenuAction("nuevo"); await w(1400); }
     const conDocumento={hayDoc:!!DZ.doc, invitacionSeFue:!document.querySelector("#dzBienvenida2D")};
+
+    // ── LA INVITACIÓN CLAVADA, que es como lo vio Mauro: la invitación puesta
+    //    ENCIMA de un documento abierto, tapándolo, con sus botones sin
+    //    responder. Medido en la app real: con un diseño .svg abierto —dos
+    //    pestañas, siete cuadros— DZ.path y DZ.doc estaban los DOS en null,
+    //    así que mirar sólo esos dos no alcanza. Se reproduce ese estado exacto:
+    //    pestañas sí, doc y path no. Y se repinta, que además ejercita que el
+    //    reloj se arme al pintar y no sólo en el arranque.
+    const docReal=DZ.doc, pathReal=DZ.path, tabsReales=(DZ.documentTabs||[]).slice(),
+      activaReal=DZ.activeDocumentTab;
+    // activeDocumentTab TAMBIÉN, o el montaje de la prueba miente: la primera
+    // versión de esto dejaba la pestaña activa puesta, hayTrabajoAbierto()
+    // decía «hay algo» —con razón— y la invitación no se repintaba nunca.
+    DZ.doc=null; DZ.path=null; DZ.documentTabs.length=0; DZ.activeDocumentTab=null;
+    dzBienvenida2DPintar(); await w(120);
+    const repintada=!!document.querySelector("#dzBienvenida2D");
+    DZ.documentTabs.push({id:"__prueba_clavada__", path:"diseno_prueba.svg",
+      name:"diseno_prueba.svg"});
+    await w(1500);   // el reloj mira cada 500 ms
+    const clavada={repintada,
+      sigueTapandoElDocumento:!!document.querySelector("#dzBienvenida2D")};
+    DZ.documentTabs.length=0; for(const t of tabsReales) DZ.documentTabs.push(t);
+    DZ.doc=docReal; DZ.path=pathReal; DZ.activeDocumentTab=activaReal;
+    dzBienvenida2DQuitar();
     const antes={doc:!!DZ.doc, pestanas:DZ.documentTabs?DZ.documentTabs.length:0};
     document.querySelector("#dzIrAlAgente").click(); await w(500);
     const trasIrALaIA={oculto:document.querySelector("#designView").hidden,
@@ -100,7 +160,7 @@ async function main() {
       noCreoNada:(DZ.documentTabs?DZ.documentTabs.length:0)===pestanasAntes,
       plumaSinMarca:!(document.querySelector("#abDesign")||{}).classList?.contains("vuelve-al-2d")};
 
-    return {arranque,conDocumento,trasIrALaIA,trasVolver,errs:errs.slice(0,4)};
+    return {arranque,porElPuntero,conDocumento,clavada,trasIrALaIA,trasVolver,errs:errs.slice(0,4)};
   })()`;
 
   const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -127,10 +187,34 @@ async function main() {
   if (!a.esOtroBoton) mal("el botón a IA es el mismo que cierra el documento", a);
   if (!a.antesDelCerrar) mal("el botón a IA quedó después del de cerrar", a);
 
+  const pp = v.porElPuntero;
+  if (!pp.clicLlegaAlBoton)
+    mal("el puntero no llega al botón de la invitación: algo se le pone encima", pp);
+  if (pp.loCancelaron)
+    mal("el lienzo CANCELA el pointerdown de la invitación: un preventDefault en " +
+      "pointerdown se come el click que el navegador iba a generar, así que el botón " +
+      "no se entera nunca. Le falta estar en DZ_UI_SEL", pp);
+  if (pp.seleccionoElBoton)
+    mal("un clic en la invitación SELECCIONA el botón como si fuera un dibujo: la " +
+      "invitación vive dentro del lienzo y le falta estar en DZ_UI_SEL. Es lo que " +
+      "hacía que el panel de la derecha mostrara «<button>» y no se creara nada", pp);
+  if (!pp.creoElDocumento)
+    mal("«Nuevo documento» no crea nada al CLICKEARLO de verdad —llamando a su onclick " +
+      "sí funcionaba, y por eso esto se escapó", pp);
   if (!v.conDocumento.hayDoc) mal("«Nuevo documento» de la invitación no crea nada", v.conDocumento);
   if (!v.conDocumento.invitacionSeFue)
     mal("la invitación sigue puesta con un documento abierto: taparía el dibujo",
       v.conDocumento);
+
+  if (!v.clavada.repintada)
+    mal("la invitación no se puede repintar: al volver de la IA sin nada abierto el " +
+      "estudio queda vacío y parece roto otra vez", v.clavada);
+  if (v.clavada.sigueTapandoElDocumento)
+    mal("la invitación se queda CLAVADA encima de un documento abierto: es como lo " +
+      "vio Mauro —dos pestañas, siete cuadros y la invitación tapando todo—. Con un " +
+      "diseño .svg abierto DZ.path y DZ.doc están los DOS en null, así que hay que " +
+      "mirar las pestañas (documentTabs); y el reloj tiene que armarse al PINTAR, " +
+      "no una sola vez en el arranque", v.clavada);
 
   if (!v.trasIrALaIA.oculto) mal("el botón a IA no cambia de pantalla", v.trasIrALaIA);
   if (!v.trasIrALaIA.sigueElDoc || !v.trasIrALaIA.mismasPestanas)

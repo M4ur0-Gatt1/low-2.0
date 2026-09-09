@@ -3919,7 +3919,7 @@ function dzFromUser(x, y) {
    valores del papel cebolla no cambian" + trazos fantasma) */
 const DZ_UI_SEL = ".dz-onionpanel,.dz-zpanel,.dz-xsheet,.dz-tlgrid,.dz-disc," +
   ".dz-pendbg,.dz3d-gizmo,.dz3d-zbar,.dz3d-zhandle,.dz3d-rothandle,.dz-rulers," +
-  ".dz-selbox,.dz-cam,.dz-rig-overlay,#dzCam";
+  ".dz-selbox,.dz-cam,.dz-rig-overlay,#dzCam,.bien2d";   // .bien2d: la bienvenida del 2D
 function dzOnUiPanel(e) {
   return e.target && e.target.closest && e.target.closest(DZ_UI_SEL);
 }
