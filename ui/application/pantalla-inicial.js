@@ -129,7 +129,7 @@
         <button type="button" data-a="nuevo" class="bien2d-primario" disabled>Nuevo documento</button>
         <button type="button" data-a="abrir" disabled>Abrir documento…</button>
       </div>
-      <button type="button" data-a="agente" class="bien2d-agente" hidden>o ir a IA y redes</button>
+      <button type="button" data-a="agente" class="bien2d-agente">o ir a IA y redes</button>
       <p class="bien2d-espera">Preparando LOW…</p>
     </div>`;
     // Las dos acciones son las del menú Archivo, por su nombre: no hay un
@@ -158,7 +158,11 @@
      La invitacion se pinta a los ~100 ms para que no se vea la pantalla vieja,
      pero «Nuevo documento» necesita el puente de Python: un boton visible que
      no hace nada es exactamente el defecto que acabamos de arreglar, asi que
-     hasta que el arranque termina se muestran apagados y con «Preparando LOW». */
+     hasta que el arranque termina se muestran apagados y con «Preparando LOW».
+
+     El de «ir a IA y redes» es la excepcion y nace USABLE: no necesita nada del
+     puente —solo esconde el estudio—, y si el arranque muriera seria la unica
+     cosa clickeable de la pantalla. */
   function habilitar() {
     const caja = document.querySelector("#" + ID_INVITACION);
     if (!caja) return;

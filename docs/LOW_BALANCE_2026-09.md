@@ -1,6 +1,6 @@
 # Balance de LOW — septiembre de 2026
 
-> **Al día en v4.26.0.** Lo que sigue del encabezado es el estado de hoy. El
+> **Al día en v4.30.0.** Lo que sigue del encabezado es el estado de hoy. El
 > cuerpo del documento, más abajo, es el balance tal como se midió en la
 > **v4.14.0** y se deja sin retocar: sirve para ver qué se movió y qué no.
 
@@ -40,9 +40,18 @@ Quedan **dos**, y son las que de verdad pesan:
 | **Vector** | 6 | **7** | BRUSH-02 cerrado y con guardia, y la edición de nodos —que era lo que la frenaba— pasó de cero pruebas a un recorrido propio, con un defecto de historial encontrado y arreglado en el camino. No sube a 8 porque falta producción: un dibujo entintado de verdad con estas herramientas. |
 | **Cámara y composición** | 6 | **7** | Composición pasó de diorama a herramienta: arrastrar mueve, hay vista de cámara con el cuadro real, y el inspector responde. Frenada por producción: falta una escena larga hecha con eso. |
 | **X-sheet** | 6 | **7** | Las columnas que §6 pide —cámara, audio y efectos— existen y salen del modelo; era el hueco de implementación. Frenada ahora por producción: falta una escena larga cuyo timing se haya trabajado leyendo esta hoja. |
+| **Primera pantalla / puesta en marcha** | — | **7** | Área que antes no se miraba, y en v4.28.0 pasó a ser lo primero que se ve: LOW abre en el estudio 2D y la IA quedó detrás de un botón, por decisión de Mauro. Se abrió con tres defectos que él reportó y que se cerraron en v4.29.0 y v4.30.0 —botones que no respondían, la invitación clavada tapando el documento, y el estudio apareciendo a los 6.542 ms porque esperaba a que cargara el chat—. No sube a 8 porque los tres se descubrieron **usándola**, no probándola: la puerta tenía un guard que pasaba en verde mientras el panel estaba muerto. |
 | Las demás | | **igual** | Nada cambió su evidencia más débil. |
 
 **Nota del producto: 6 — beta avanzada, con el techo puesto por la §15.**
+
+Y una advertencia que dejaron v4.28.0–v4.30.0, porque afecta a cómo leer esta
+tabla entera: **un guard verde no es evidencia de que algo funcione si no se
+verificó que falle con el código roto.** Los tres defectos de la primera pantalla
+convivieron con una prueba propia que pasaba: disparaba el `click` a mano, y un
+`preventDefault()` en `pointerdown` se come el click que el navegador iba a
+generar. Desde entonces cada aserción nueva se comprueba contra su violación
+antes de darla por buena, y eso está en la regla de trabajo, no sólo en el ánimo.
 
 No sube a 7 por una sola razón, y no es técnica: 7 es «confiable en proyectos
 definidos», y todo lo que sabemos de uso real viene de **una persona, que además
