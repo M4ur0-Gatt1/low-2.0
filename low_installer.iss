@@ -54,6 +54,14 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 ; Asociación de .low POR USUARIO (HKCU): el instalador corre sin permisos de
 ; administrador (PrivilegesRequired=lowest), así que no puede escribir en HKLM.
 ; No se toca ningún otro tipo de archivo.
+; LA VERSION QUE SE ACABA DE INSTALAR. El programa la compara con la que trae
+; compilada adentro: si el registro dice una MAS NUEVA que la que esta
+; corriendo, es que se instalo con LOW abierto y esa ventana quedo con codigo
+; viejo. Antes eso se adivinaba por la fecha del .exe, y no funcionaba: el
+; instalador conserva la marca de tiempo del build —el runner compila en UTC—
+; asi que el archivo parecia estar horas en el FUTURO y el aviso saltaba en
+; todos los arranques. Esto es exacto y no depende de relojes.
+Root: HKCU; Subkey: "Software\{#AppName}"; ValueType: string; ValueName: "Version"; ValueData: "{#AppVersion}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\{#AppExt}"; ValueType: string; ValueData: "{#AppProgId}"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\{#AppProgId}"; ValueType: string; ValueData: "Escena de LOW"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\{#AppProgId}\DefaultIcon"; ValueType: string; ValueData: "{app}\low_doc.ico"

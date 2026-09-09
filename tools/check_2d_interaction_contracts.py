@@ -572,6 +572,20 @@ require("dzVersionSync?.(st)" in APP,
 require("binario_reemplazado" in MAIN and '"binario_viejo"' in MAIN,
         "se saco la deteccion de «se instalo con LOW abierto»: es la diferencia "
         "entre «no lo arreglaron» y «no lo reiniciaste»")
+require("st_mtime" not in MAIN,
+        "volvio la heuristica de la FECHA del ejecutable. No sirve: el instalador "
+        "conserva la marca de tiempo del build, que corre en UTC, asi que en una "
+        "maquina en UTC-3 el archivo dice estar horas en el futuro y el aviso salta "
+        "en TODOS los arranques. Medido: mtime 12:47 con el reloj en 10:16")
+require("def version_instalada" in MAIN and "winreg" in MAIN,
+        "el aviso dejo de leer la version que el instalador anota: es la unica senal "
+        "exacta, porque un ejecutable de un solo archivo no puede leer su propia "
+        "version nueva sin desempacarse")
+require('ValueName: "Version"' in ISS,
+        "el instalador dejo de anotar la version instalada en el registro: sin eso "
+        "el aviso de reinicio se queda sin senal")
+require("def _version_tupla" in MAIN,
+        "se comparan versiones como texto: «4.9.0» daria mayor que «4.26.0»")
 require("_ARRANQUE" in MAIN,
         "falta el sello de arranque del proceso: sin el no se puede comparar con "
         "la fecha del ejecutable en disco")

@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.26.0"
+LOW_VERSION = "4.27.0"
 # Hora en que empezó a correr ESTE proceso. Sirve para detectar que el
 # instalador reemplazó el .exe con LOW abierto: ver binario_reemplazado().
 _ARRANQUE = __import__("time").time()
@@ -5590,28 +5590,65 @@ def _api_ok():
         return False
 
 
+def _version_tupla(texto):
+    """«4.26.0» → (4, 26, 0). Lo que no sea número no cuenta."""
+    partes = []
+    for pedazo in str(texto or "").split("."):
+        digitos = "".join(c for c in pedazo if c.isdigit())
+        if not digitos:
+            break
+        partes.append(int(digitos))
+    return tuple(partes)
+
+
+def version_instalada():
+    """La versión que el INSTALADOR dejó anotada, o None.
+
+    El instalador escribe HKCU\\Software\\LOW\\Version al terminar. Es la única
+    señal exacta de qué versión hay en el disco: un ejecutable de un solo
+    archivo no puede leer su propia versión nueva sin desempacarse.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\LOW") as k:
+            valor, _ = winreg.QueryValueEx(k, "Version")
+            return str(valor).strip() or None
+    except Exception:
+        return None
+
+
 def binario_reemplazado():
-    """¿El ejecutable en disco es más nuevo que este proceso?
+    """¿Se instaló una versión más nueva mientras esta ventana corre?
 
-    Es la trampa de instalar LOW mientras LOW está abierto: el instalador
-    reemplaza el .exe, pero la ventana abierta sigue corriendo el código
-    viejo en memoria. Uno prueba el arreglo que acaba de instalar, no está,
-    y concluye que no se arregló nada. Pasó de verdad, y sin esto no hay
-    forma de darse cuenta.
+    Es la trampa de instalar LOW con LOW abierto: el .exe del disco se
+    reemplaza, pero la ventana sigue corriendo el código viejo en memoria. Uno
+    prueba el arreglo que acaba de instalar, no está, y concluye que no se
+    arregló nada. Pasó de verdad.
 
-    Devuelve el desfase en segundos, o None si no aplica (corriendo desde
-    fuente, o sin permiso para leer la fecha).
+    ESTO ANTES SE ADIVINABA POR LA FECHA DEL .EXE, Y ESTABA MAL. El instalador
+    conserva la marca de tiempo del build, y el build corre en UTC: en una
+    máquina en UTC−3 el archivo instalado dice estar unas TRES HORAS en el
+    futuro. Medido en la máquina de Mauro: mtime 12:47 con el reloj en 10:16,
+    151 minutos de diferencia. Así que la comparación era verdadera SIEMPRE y el
+    aviso saltaba en cada arranque —criar lobo es peor que no avisar, porque
+    entrena a ignorar el único mensaje que iba a importar—.
+
+    Ahora se comparan VERSIONES, que no dependen de ningún reloj: la que el
+    instalador anotó en el registro contra la que este ejecutable trae
+    compilada adentro.
+
+    Devuelve la versión instalada (str) si es MÁS NUEVA que la que corre, o
+    None: corriendo desde fuente, sin registro, o ya estando al día.
     """
     if not getattr(sys, "frozen", False):
         return None
-    try:
-        exe = Path(sys.executable)
-        del_disco = exe.stat().st_mtime
-        # El arranque del proceso: la hora en que empezó a correr ESTE código.
-        arranque = _ARRANQUE
-        return int(del_disco - arranque) if del_disco > arranque + 5 else None
-    except Exception:
+    instalada = version_instalada()
+    if not instalada:
         return None
+    a, b = _version_tupla(instalada), _version_tupla(LOW_VERSION)
+    return instalada if (a and b and a > b) else None
 
 
 def main():

@@ -67,14 +67,25 @@ async function main() {
     dzVersionBadge("9.9.9"); // idempotente: no puede duplicar el chip
     version.sinDuplicar=document.querySelectorAll("#dzStatusbar #sbVersion").length===1;
 
-    // 2. EL AVISO DE REINICIO cuando el binario en disco es mas nuevo.
-    dzAvisoBinarioViejo(0);
-    const conCero=!document.querySelector("#dzAvisoReinicio");
-    dzAvisoBinarioViejo(600);
+    // 2. EL AVISO DE REINICIO. La senal es la VERSION que el instalador anoto,
+    //    no la fecha del ejecutable: esa heuristica saltaba en todos los
+    //    arranques porque el instalador conserva la marca de tiempo del build,
+    //    que corre en UTC. Lo reporto Mauro con el cartel apareciendo sin
+    //    motivo, y persistiendo tras cerrar y volver a abrir.
+    dzAvisoBinarioViejo(null, "4.26.0");
+    const sinNada=!document.querySelector("#dzAvisoReinicio");
+    dzAvisoBinarioViejo("", "4.26.0");
+    const conVacio=!document.querySelector("#dzAvisoReinicio");
+    // y lo que hacia el defecto: un NUMERO ya no dispara nada
+    dzAvisoBinarioViejo(151*60, "4.26.0");
+    const conNumero=!document.querySelector("#dzAvisoReinicio");
+    dzAvisoBinarioViejo("4.27.0", "4.26.0");
     const av=document.querySelector("#dzAvisoReinicio");
-    const aviso={noAvisaSinMotivo:conCero, aparece:!!av,
-      dice:!!(av&&/nueva|reinici|cerr/i.test(av.textContent)),
-      diceElMotivo:!!(av&&/con LOW abierto|codigo de antes|código de antes/i.test(av.textContent)),
+    const aviso={noAvisaSinMotivo:sinNada && conVacio, noAvisaPorUnNumero:conNumero,
+      aparece:!!av,
+      dice:!!(av&&/reinici|cerr/i.test(av.textContent)),
+      diceLasDos:!!(av&&/4\.27\.0/.test(av.textContent)&&/4\.26\.0/.test(av.textContent)),
+      diceElMotivo:!!(av&&/con el programa abierto/i.test(av.textContent)),
       seCierra:false};
     if(av){ av.querySelector('[data-a="cerrar"]').click(); await w(120);
       aviso.seCierra=!document.querySelector("#dzAvisoReinicio"); }
@@ -131,6 +142,12 @@ async function main() {
   if (!v.sinDuplicar) mal("llamar dos veces duplica el chip de versión", v);
 
   if (!a.noAvisaSinMotivo) mal("el aviso de reinicio aparece sin motivo", a);
+  if (!a.noAvisaPorUnNumero)
+    mal("un número vuelve a disparar el aviso: era la señal vieja —la fecha del " +
+      "ejecutable— y saltaba en todos los arranques porque el instalador conserva la " +
+      "marca de tiempo del build, que corre en UTC", a);
+  if (!a.diceLasDos)
+    mal("el aviso no dice QUÉ versión se instaló y cuál está corriendo", a);
   if (!a.aparece) mal("no se avisa que se instaló una versión con LOW abierto: es la " +
     "diferencia entre «no lo arreglaron» y «no lo reiniciaste»", a);
   if (!a.dice) mal("el aviso no dice qué hacer", a);
