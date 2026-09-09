@@ -331,7 +331,7 @@ async function init() {
       if (ok) dzSetStatus("Abierto desde el archivo: " + ruta);
     }).catch(() => sysMsg(" No pude abrir " + ruta));
   }
-  initSplitters();
+  initSplitters(); window.dzPantallaInicial?.();   // el 2D es la primera pantalla; por window: un identificador suelto tiraria init()
   sysMsg((S.safeMode ? "Modo seguro activo: proyecto anterior, disposiciones, atajos y pinceles personalizados no se cargaron. Tus datos siguen guardados.\n" : "") + "LOW v" + (S.version || "?") + " — listo.\n" +
          " API keys ·  proyecto · 🔍 junto al modelo: buscador entre todos los modelos de la API.\n" +
          "barra izquierda: 🖋 Diseño (editor de vectores SVG), 🧊 Artefactos (vista previa en vivo), " +

@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.27.0"
+LOW_VERSION = "4.28.0"
 # Hora en que empezó a correr ESTE proceso. Sirve para detectar que el
 # instalador reemplazó el .exe con LOW abierto: ver binario_reemplazado().
 _ARRANQUE = __import__("time").time()

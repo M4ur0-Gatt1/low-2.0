@@ -683,4 +683,42 @@ require(".xs2-fija { flex: 0 0 auto" in CSS,
         "las columnas fijas se estiran como las de capas: el espacio de la hoja es "
         "de los niveles")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra y X-sheet")
+# -- El modulo 2D es la primera pantalla --------------------------------
+INICIAL = (ROOT / "ui" / "application" / "pantalla-inicial.js").read_text(encoding="utf-8")
+# SIN COMENTARIOS. El archivo EXPLICA por que no hay que usar closeDesign ni
+# designEntry en el arranque, asi que buscar el texto a secas encuentra la
+# explicacion en vez del uso. Ya me paso con `appearance: slider-vertical` en
+# app.css: el contrato mordio su propio comentario.
+INICIAL_COD = re.sub(r"/\*.*?\*/", "", INICIAL, flags=re.S)
+INICIAL_COD = re.sub(r"^\s*//.*$", "", INICIAL_COD, flags=re.M)
+require('src="application/pantalla-inicial.js' in INDEX
+        and 'href="design/pantalla-inicial.css' in INDEX,
+        "el modulo de la primera pantalla no se carga: LOW volveria a abrir en el "
+        "lado programador")
+require("window.dzPantallaInicial?.()" in APP,
+        "la primera pantalla no se llama en el arranque, o se llama por un "
+        "identificador SUELTO: con `?.` un identificador no declarado lanza "
+        "ReferenceError y init() muere ahi, dejando el programa en nada")
+require("typeof DZ === \"undefined\"" in INICIAL_COD,
+        "el modulo volvio a leer DZ por window. DZ se declara con const en app.js: "
+        "window.DZ NO existe, y leerlo asi dejaba la invitacion puesta para siempre")
+require("function dzVolverAlEstudio" in INICIAL_COD and "pluma.onclick = dzVolverAlEstudio" in INICIAL_COD,
+        "la vuelta al estudio volvio a pasar por designEntry(), que llama a "
+        "new_design() y ESCRIBE un archivo: con la IA detras de un boton el viaje "
+        "es constante y dejaria un SVG por cada vuelta")
+# El cuerpo de dzPantallaInicial —lo que corre EN EL ARRANQUE— no puede llamar
+# al camino que crea archivos. dzVolverAlEstudio si puede: ahi es el ultimo
+# recurso cuando de verdad no hay nada abierto.
+_cuerpo = INICIAL_COD[INICIAL_COD.index("function dzPantallaInicial"):]
+_cuerpo = _cuerpo[:_cuerpo.index("global.dzPantallaInicial =")]
+require("designEntry" not in _cuerpo,
+        "el arranque volvio a usar designEntry(), que llama a new_design() y "
+        "ESCRIBE un archivo: dejaria un SVG nuevo por cada vez que se abre LOW")
+require("designEntry" in INICIAL_COD,
+        "se perdio el ultimo recurso de dzVolverAlEstudio para cuando no hay nada "
+        "abierto")
+require("closeDesign" not in INICIAL_COD,
+        "el boton a la IA volvio a usar closeDesign(), que CIERRA EL DOCUMENTO: "
+        "cambiar de pantalla te haria perder el dibujo")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet y primera pantalla")
