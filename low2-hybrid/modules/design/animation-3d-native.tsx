@@ -19,7 +19,7 @@ const bg: Record<Theme, string> = {
   // que es donde uno dibuja: contra ese fondo se perdían de vista el anillo del
   // pincel y el cursor. Un gris claro los deja siempre visibles y no cansa.
   light: 'radial-gradient(120% 115% at 50% 8%, #f3f2ef 0%, #e7e6e2 68%, #d9d8d4 100%)',
-  dark: 'radial-gradient(120% 115% at 50% 10%, #202124 0%, #131416 62%, #0c0d0e 100%)',
+  dark: 'radial-gradient(120% 115% at 50% 10%, #45494b 0%, #34383a 62%, #2c3032 100%)',
 };
 
 interface Props {
@@ -265,8 +265,8 @@ ${m.path || '(ruta desconocida)'}` };
         }} onClick={() => { setConfirmNuevo(false); setAviso(''); }}>
           <div onClick={(ev) => ev.stopPropagation()} style={{
             width: 340, padding: 16, borderRadius: 10,
-            background: dark ? '#1b1d23' : '#f4f6fa',
-            border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+            background: dark ? '#414443' : '#f4f6fa',
+            border: `1px solid ${dark ? '#626762' : '#d3d8e2'}`,
             boxShadow: '0 24px 60px rgba(0,0,0,.5)',
             color: dark ? '#e6e9f0' : '#23272f',
             font: '400 12px/1.5 Figtree, system-ui, sans-serif',
@@ -281,7 +281,7 @@ ${m.path || '(ruta desconocida)'}` };
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
               <button onClick={() => { setConfirmNuevo(false); setAviso(''); }} style={{
                 height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
-                border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+                border: `1px solid ${dark ? '#626762' : '#d3d8e2'}`,
                 background: 'transparent', color: 'inherit', fontSize: 12,
               }}>{confirmNuevo ? 'Cancelar' : 'Cerrar'}</button>
               {confirmNuevo && (
@@ -302,8 +302,8 @@ ${m.path || '(ruta desconocida)'}` };
         }} onClick={() => setStlPanel((p) => (p && p.fase === 'guardando' ? p : null))}>
           <div onClick={(ev) => ev.stopPropagation()} style={{
             width: 372, padding: 16, borderRadius: 10,
-            background: dark ? '#1b1d23' : '#f4f6fa',
-            border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+            background: dark ? '#414443' : '#f4f6fa',
+            border: `1px solid ${dark ? '#626762' : '#d3d8e2'}`,
             boxShadow: '0 24px 60px rgba(0,0,0,.5)',
             color: dark ? '#e6e9f0' : '#23272f',
             font: '400 12px/1.5 Figtree, system-ui, sans-serif',
@@ -321,7 +321,7 @@ ${m.path || '(ruta desconocida)'}` };
                     : (dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)'),
                   border: `1px solid ${stlPanel.fase === 'falla' ? 'rgba(240,69,14,.45)'
                     : stlPanel.fase === 'listo' ? 'rgba(30,132,73,.5)'
-                    : (dark ? '#2a2d35' : '#d3d8e2')}` }}>
+                    : (dark ? '#626762' : '#d3d8e2')}` }}>
                   {stlPanel.msg}
                 </div>
                 {stlPanel.fase === 'guardando' && (
@@ -388,7 +388,7 @@ ${m.path || '(ruta desconocida)'}` };
               ) : (
                 <button onClick={() => setStlPanel(null)} style={{
                   height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer',
-                  border: `1px solid ${dark ? '#2a2d35' : '#d3d8e2'}`,
+                  border: `1px solid ${dark ? '#626762' : '#d3d8e2'}`,
                   background: 'transparent', color: 'inherit', fontSize: 12,
                 }}>{stlPanel.fase === 'informe' && stlPanel.exportables > 0 ? 'Cancelar' : 'Cerrar'}</button>
               )}

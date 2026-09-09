@@ -76,7 +76,7 @@ async function main(){
    await evaluate(`__low3d.importProject(JSON.parse(${JSON.stringify(saved)}))`);
    console.log('3D OK: dibujo, Undo/Redo, campos protegidos, cámara, encuadre, concentración, herramientas, capas, persistencia y proyecto nuevo',rectangles);
  }
- if(process.env.LOW_3D_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(process.env.LOW_3D_SCREENSHOT,Buffer.from(shot.data,'base64'));}
+ if(process.env.LOW_3D_SCREENSHOT){if(process.env.LOW_3D_DARK){await evaluate(`document.querySelector('[aria-label="Usar fondo oscuro"]')?.click()`);await new Promise(r=>setTimeout(r,150));}const shot=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(process.env.LOW_3D_SCREENSHOT,Buffer.from(shot.data,'base64'));}
  }finally{ws.close();if(!embedded)await fetch(endpoint+'/json/close/'+target.id);}
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

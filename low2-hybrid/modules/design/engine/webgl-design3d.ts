@@ -616,11 +616,11 @@ export class WebGLDesign3D {
   setTheme(theme: Theme): void {
     this.theme = theme;
     const dark = theme === 'dark';
-    this.scene.fog = dark ? new THREE.FogExp2(0x0e0f13, 0.025) : null;
+    this.scene.fog = dark ? new THREE.FogExp2(0x34383a, 0.025) : null;
     const gm = this.grid.material as THREE.LineBasicMaterial;
     const colors = this.grid.geometry.getAttribute('color') as THREE.BufferAttribute;
-    const c1 = new THREE.Color(dark ? 0x3a3f4b : 0xc2c8d2);
-    const c2 = new THREE.Color(dark ? 0x23262e : 0xd7dce4);
+    const c1 = new THREE.Color(dark ? 0x858d92 : 0xc2c8d2);
+    const c2 = new THREE.Color(dark ? 0x687177 : 0xd7dce4);
     for (let i = 0; i < colors.count; i++) {
       const c = i < colors.count / 2 ? c1 : c2;
       colors.setXYZ(i, c.r, c.g, c.b);
