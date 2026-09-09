@@ -126,10 +126,11 @@
       <h2>Animación 2D</h2>
       <p>Dibujo cuadro a cuadro, X-sheet, esqueletos, cámara y multiplano.</p>
       <div class="bien2d-acciones">
-        <button type="button" data-a="nuevo" class="bien2d-primario">Nuevo documento</button>
-        <button type="button" data-a="abrir">Abrir documento…</button>
+        <button type="button" data-a="nuevo" class="bien2d-primario" disabled>Nuevo documento</button>
+        <button type="button" data-a="abrir" disabled>Abrir documento…</button>
       </div>
-      <button type="button" data-a="agente" class="bien2d-agente">o ir a IA y redes</button>
+      <button type="button" data-a="agente" class="bien2d-agente" hidden>o ir a IA y redes</button>
+      <p class="bien2d-espera">Preparando LOW…</p>
     </div>`;
     // Las dos acciones son las del menú Archivo, por su nombre: no hay un
     // segundo camino para crear ni para abrir.
@@ -153,9 +154,44 @@
     reloj = setInterval(() => { if (hayTrabajoAbierto()) quitarInvitacion(); }, 500);
   }
 
+  /* LAS ACCIONES NACEN APAGADAS, y esto las prende.
+     La invitacion se pinta a los ~100 ms para que no se vea la pantalla vieja,
+     pero «Nuevo documento» necesita el puente de Python: un boton visible que
+     no hace nada es exactamente el defecto que acabamos de arreglar, asi que
+     hasta que el arranque termina se muestran apagados y con «Preparando LOW». */
+  function habilitar() {
+    const caja = document.querySelector("#" + ID_INVITACION);
+    if (!caja) return;
+    caja.querySelectorAll("button[data-a]").forEach((b) => { b.disabled = false; b.hidden = false; });
+    caja.querySelector(".bien2d-espera")?.remove();
+  }
+
   function quitarInvitacion() {
     document.querySelector("#" + ID_INVITACION)?.remove();
     if (reloj) { clearInterval(reloj); reloj = 0; }
+  }
+
+  /** LO QUE SE VE, lo antes posible.
+   *
+   *  MEDIDO EN LA APP REAL: el estudio aparecia a los 6.542 ms, y hasta ese
+   *  momento lo que se veia era la pantalla vieja. La llamada del arranque esta
+   *  al final de `init()`, detras de `api.get_state()`, `loadChatTabs()` y
+   *  `resume()` —o sea, el estudio de dibujo esperaba a que cargara el CHAT DE
+   *  LA IA, que es justo la jerarquia que Mauro pidio dar vuelta—. El splash
+   *  tapa el primer segundo; los otros cinco los veia.
+   *
+   *  Esta fase no necesita nada del puente: el estudio, su barra y la
+   *  invitacion son HTML que ya esta en la pagina. Corre con el DOM y nada mas.
+   *  El re-cableado de la pluma NO puede venir acá: `bind()` le pone
+   *  `designEntry` en la linea 517 de app.js y corre DESPUES de las esperas,
+   *  asi que pisaria lo nuestro. Por eso son dos fases. */
+  function dzPantallaInicialTemprano() {
+    const vista = document.querySelector("#designView");
+    if (!vista) return false;
+    vista.hidden = false;
+    ponerBoton();
+    pintarInvitacion();
+    return true;
   }
 
   /** Se llama una vez al terminar de armar la interfaz. */
@@ -174,6 +210,7 @@
     }
     // pintarInvitacion() se encarga de dejar el reloj vigilando.
     pintarInvitacion();
+    habilitar();      // el puente ya esta: las acciones se pueden usar
     if (typeof global.dzFitView === "function") requestAnimationFrame(() => {
       try { global.dzFitView(); } catch (_) { /* sin lienzo todavía */ }
     });
@@ -181,6 +218,11 @@
   }
 
   global.dzPantallaInicial = dzPantallaInicial;
+  global.dzPantallaInicialTemprano = dzPantallaInicialTemprano;
+  // Se arranca solo, sin agregarle una linea a app.js, que esta en su techo.
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", dzPantallaInicialTemprano, { once: true });
+  else dzPantallaInicialTemprano();
   global.dzIrAlAgente = dzIrAlAgente;
   global.dzVolverAlEstudio = dzVolverAlEstudio;
   global.dzBienvenida2DPintar = pintarInvitacion;

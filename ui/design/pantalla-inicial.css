@@ -37,6 +37,26 @@
 }
 .bien2d-agente:hover { color: var(--txt, #e9ebe8); }
 
+/* MIENTRAS ARRANCA. La invitación se pinta a los ~100 ms para que no se vea la
+   pantalla vieja —medido: el estudio aparecía a los 6.542 ms, esperando a que
+   cargara el chat de la IA—, pero «Nuevo documento» necesita el puente de
+   Python. Un botón visible que no hace nada es el defecto que se acaba de
+   arreglar, así que hasta que el arranque termina se ven apagados y se dice. */
+.bien2d-acciones button[disabled] {
+  cursor: default; opacity: .45;
+  background: var(--panel2, #24262c); border-color: var(--line, #2a2d35);
+  color: var(--mut, #8a93a6);
+}
+.bien2d-acciones button[disabled]:hover { border-color: var(--line, #2a2d35); filter: none; }
+.bien2d-espera {
+  margin: 14px 0 0; color: var(--mut, #8a93a6);
+  font: 400 11.5px Figtree, sans-serif;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bien2d-espera { animation: bien2dLate 1.4s ease-in-out infinite; }
+  @keyframes bien2dLate { 50% { opacity: .45; } }
+}
+
 /* El botón que lleva al agente. Lleva texto además del ícono: es un cambio de
    pantalla, no una acción de la herramienta, y conviene que se lea. */
 .ibtn.dz-ir-agente {

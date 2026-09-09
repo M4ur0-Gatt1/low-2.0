@@ -709,7 +709,7 @@ require("function dzVolverAlEstudio" in INICIAL_COD and "pluma.onclick = dzVolve
 # El cuerpo de dzPantallaInicial —lo que corre EN EL ARRANQUE— no puede llamar
 # al camino que crea archivos. dzVolverAlEstudio si puede: ahi es el ultimo
 # recurso cuando de verdad no hay nada abierto.
-_cuerpo = INICIAL_COD[INICIAL_COD.index("function dzPantallaInicial"):]
+_cuerpo = INICIAL_COD[INICIAL_COD.index("function dzPantallaInicial("):]
 _cuerpo = _cuerpo[:_cuerpo.index("global.dzPantallaInicial =")]
 require("designEntry" not in _cuerpo,
         "el arranque volvio a usar designEntry(), que llama a new_design() y "
@@ -741,6 +741,33 @@ require(re.search(r"lienzo\.appendChild\(caja\);\s*vigilar\(\);", INICIAL_COD),
         "la invitacion se pinta sin dejar el reloj vigilando: armado una sola vez "
         "en el arranque, una invitacion REPINTADA al volver de la IA no la vigila "
         "nadie y se vuelve a clavar encima del documento")
+# EL ESTUDIO NO PUEDE ESPERAR AL CHAT. Medido en la app real: aparecia a los
+# 6.542 ms, porque la llamada del arranque esta al final de init(), detras de
+# api.get_state(), loadChatTabs() y resume(). Hasta entonces se veia la pantalla
+# vieja, que es el segundo reporte de Mauro.
+require("function dzPantallaInicialTemprano" in INICIAL_COD
+        and 'addEventListener("DOMContentLoaded", dzPantallaInicialTemprano' in INICIAL_COD,
+        "se perdio la fase TEMPRANA de la primera pantalla: sin ella el estudio "
+        "aparece cuando termina init() —detras de api.get_state(), loadChatTabs() y "
+        "resume()—, o sea el 2D esperando a que cargue el chat de la IA, y hasta "
+        "entonces se ve la pantalla vieja")
+_temprano = INICIAL_COD[INICIAL_COD.index("function dzPantallaInicialTemprano"):]
+_temprano = _temprano[:_temprano.index("function dzPantallaInicial(")]
+require("onclick" not in _temprano,
+        "la fase temprana re-cablea la pluma: no sirve, porque bind() le pone "
+        "designEntry DESPUES de las esperas del arranque y pisaria esto. El "
+        "re-cableado va en la fase tardia")
+# La fase temprana pinta ANTES de que exista el puente, asi que sus acciones no
+# pueden estar usables: un boton visible que no hace nada es justo el defecto
+# que se arreglo en v4.29.0.
+require(re.search(r'data-a="nuevo"[^>]*disabled', INICIAL_COD)
+        and re.search(r'data-a="abrir"[^>]*disabled', INICIAL_COD),
+        "las acciones de la invitacion nacen usables: la fase temprana pinta antes "
+        "de que exista el puente de Python, asi que «Nuevo documento» seria un boton "
+        "visible que no hace nada")
+require("habilitar()" in _cuerpo,
+        "nadie prende las acciones de la invitacion: nacen apagadas para la fase "
+        "temprana y se quedarian apagadas para siempre")
 require("vueltas" not in INICIAL_COD,
         "volvio el tope de vueltas del reloj que vigila la invitacion: el caso en "
         "que el reloj sigue corriendo es exactamente el caso en que la invitacion "

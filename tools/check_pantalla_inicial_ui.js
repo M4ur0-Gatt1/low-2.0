@@ -48,6 +48,36 @@ async function main() {
   await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
   await send("Network.setCacheDisabled", { cacheDisabled: true });
   await send("Emulation.setDeviceMetricsOverride", { width: 1500, height: 900, deviceScaleFactor: 1, mobile: false });
+  // EL ESTUDIO NO PUEDE ESPERAR AL CHAT. Medido en la app real: el estudio
+  // aparecia a los 6.542 ms porque la llamada esta al final de init(), detras de
+  // api.get_state(), loadChatTabs() y resume() —el 2D esperando a que cargara la
+  // IA, justo la jerarquia que Mauro pidio dar vuelta—. Asi que hay una fase
+  // TEMPRANA, que corre con el DOM. Se instrumenta desde antes de que corra
+  // nada de la app: cuando el arranque termina ya no queda rastro de quien
+  // pinto primero.
+  await send("Page.addScriptToEvaluateOnNewDocument", { source: `
+    window.__inicio = Date.now(); window.__foto = null; window.__tTardio = null;
+    const mirar = setInterval(() => {
+      const caja = document.querySelector("#dzBienvenida2D");
+      if (caja && !window.__foto) {
+        window.__foto = { t: Date.now() - window.__inicio,
+          estudioVisible: !document.querySelector("#designView").hidden,
+          acciones: [...caja.querySelectorAll("button[data-a]")]
+            .map(b => b.dataset.a + ":" + (b.disabled ? "apagado" : "prendido")),
+          dice: (caja.querySelector(".bien2d-espera") || {}).textContent || null };
+      }
+      if (Date.now() - window.__inicio > 25000) clearInterval(mirar);
+    }, 5);
+    const esperar = setInterval(() => {
+      if (typeof window.dzPantallaInicial === "function" && !window.dzPantallaInicial.__espiada) {
+        const orig = window.dzPantallaInicial;
+        const espia = function () { window.__tTardio = Date.now() - window.__inicio;
+          return orig.apply(this, arguments); };
+        espia.__espiada = true; window.dzPantallaInicial = espia; clearInterval(esperar);
+      }
+      if (Date.now() - window.__inicio > 20000) clearInterval(esperar);
+    }, 5);
+  ` });
   await send("Page.navigate", { url: pageUrl });
   for (let i = 0; i < 60; i++) {
     const r = await send("Runtime.evaluate", { expression: 'typeof dzPantallaInicial==="function" && !!api', returnByValue: true });
@@ -160,7 +190,8 @@ async function main() {
       noCreoNada:(DZ.documentTabs?DZ.documentTabs.length:0)===pestanasAntes,
       plumaSinMarca:!(document.querySelector("#abDesign")||{}).classList?.contains("vuelve-al-2d")};
 
-    return {arranque,porElPuntero,conDocumento,clavada,trasIrALaIA,trasVolver,errs:errs.slice(0,4)};
+    const temprano={foto:window.__foto, tTardio:window.__tTardio};
+    return {arranque,temprano,porElPuntero,conDocumento,clavada,trasIrALaIA,trasVolver,errs:errs.slice(0,4)};
   })()`;
 
   const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -186,6 +217,24 @@ async function main() {
   if (!/IA/.test(a.textoBoton || "")) mal("el botón a IA no se lee", a);
   if (!a.esOtroBoton) mal("el botón a IA es el mismo que cierra el documento", a);
   if (!a.antesDelCerrar) mal("el botón a IA quedó después del de cerrar", a);
+
+  const t = v.temprano || {};
+  if (!t.foto) mal("no se pudo ver quién pintó la invitación primero", t);
+  if (!t.foto.estudioVisible)
+    mal("la invitación apareció con el estudio todavía escondido", t);
+  if (t.tTardio !== null && t.foto.t >= t.tTardio)
+    mal("la primera pantalla la pinta la fase TARDÍA, que corre al final de init() " +
+      "detrás de api.get_state(), loadChatTabs() y resume(): el estudio de dibujo " +
+      "espera a que cargue el chat de la IA y hasta entonces se ve la pantalla vieja. " +
+      "Medido en la app real: 6.542 ms", t);
+  if (!t.foto.acciones.includes("nuevo:apagado") || !t.foto.acciones.includes("abrir:apagado"))
+    mal("las acciones de la invitación nacen PRENDIDAS: la fase temprana pinta antes " +
+      "de que exista el puente de Python, así que «Nuevo documento» sería un botón " +
+      "visible que no hace nada — el defecto que se acaba de arreglar", t);
+  if (!/Prepar/i.test(t.foto.dice || ""))
+    mal("nada dice que LOW todavía está arrancando: los botones apagados sin " +
+      "explicación se leen como una pantalla fallada", t);
+  if (!v.conDocumento) mal("no se llegó a medir con documento", v);
 
   const pp = v.porElPuntero;
   if (!pp.clicLlegaAlBoton)
