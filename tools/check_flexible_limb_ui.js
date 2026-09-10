@@ -44,7 +44,14 @@ async function main(){
  assert(sc.rigNode("limbtest:lower").parentId==="limbtest:upper","Sin cadena articulada");
  assert(mesh.weights.every(w=>Math.abs(Object.values(w).reduce((a,b)=>a+b,0)-1)<1e-6),"Pesos inválidos");
  assert(DZ.history.undoStack.length-before===1,"Crear articulación requiere más de un Undo: "+JSON.stringify(DZ.history.undoStack.slice(before).map(e=>e.label)));
+ const beforePose=DZ.history.undoStack.length;
+ assert(!document.querySelector('#rigLimbPose').hidden,'Falta el siguiente paso visible');
+ document.querySelector('#rigLimbPose').click();
+ assert(DZ.rigSubmode==='fk'&&DZ.rigTool==='pose'&&DZ.rigSelectedId==='limbtest:lower','Posar no prepara herramienta y articulación');
+ assert(DZ.history.undoStack.length===beforePose,'Entrar a posar crea una clave o historial');
+ dzRigSetMode('build');
  dzUndo();await wait(150);assert(!DZ.doc.scene.rigMesh("limbtest"),"Undo conserva la malla");assert(DZ.doc.drawing.content===original,"Undo no devuelve el dibujo original");
+ document.querySelector('#rigLimbPose').click();assert(DZ.rigSubmode==='build','Posar reutiliza una articulación deshecha');
  dzRedo();await wait(150);assert(DZ.doc.scene.rigMesh("limbtest"),"Redo no recupera el rig");
  const base=document.querySelector("#limbtest").getAttribute("d");
  DZ.doc.setRigKey("limbtest:lower",1,{r:70,x:0,y:0,sx:1,sy:1});await wait(200);dzRigApplyLive(1);

@@ -2,6 +2,7 @@
 (function () {
   "use strict";
   let gesture=null;
+  let created=null;
   const $id=id=>document.getElementById(id);
   function message(text) { $id("rigLimbHint").textContent=text; dzSetStatus(text); }
   function cancel() {
@@ -57,6 +58,17 @@
     canvas.addEventListener("pointermove",preview,true);
     $id("rigLimbCancel").hidden=false;
     message(kind==="cut"?"1/2 · Marcá un lado de la línea de corte · Esc cancela":kind==="leg"?"1/3 · Marcá la cadera · Esc cancela":"1/3 · Marcá el hombro · Esc cancela");
+  }
+  function poseCreated() {
+    if(!created || DZ.doc!==created.doc || !DZ.doc.scene.rigNode(created.lower)) {
+      $id("rigLimbPose").hidden=true;
+      return message("La articulación ya no está en este documento; creá o seleccioná otra desde Rigging");
+    }
+    cancel();
+    if(!DZ.rigMode)dzRigToggle();
+    dzRigSetMode("fk");dzRigSetTool("pose");dzRigSelectNode(created.lower);
+    dzRigPanelSync();dzRigOverlayRender();
+    dzSetStatus("Arrastrá la manija del codo o la rodilla para doblar la pieza · el gesto anima el cuadro actual");
   }
   function pick(e) {
     if(e.button!==0)return;
@@ -154,7 +166,9 @@
       if(!DZ.rigMode)dzRigToggle();
       dzRigSelectNode(result.lower); dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
       dzDocCommit(); doc.history.commit();
-      message("Articulación creada · Posar permite doblar el codo o la rodilla · Ctrl+Z deshace todo");
+      created={doc,lower:result.lower};
+      $id("rigLimbPose").hidden=false;
+      message("Articulación creada · Pulsá Posar articulación para doblarla · Ctrl+Z deshace la creación");
       return result;
     } catch(error) {
       const entries=doc.history.transaction?.entries||[];
@@ -167,6 +181,9 @@
     const panel=document.createElement("section"); panel.className="rig2-section"; panel.dataset.rigSection="build";
     panel.innerHTML='<div class="rig2-title"><b>Cortar y articular</b></div><p class="rig2-hint" id="rigLimbHint">Separá una pieza vectorial con dos puntos de corte. Para doblarla, marcá inicio, codo o rodilla y extremo.</p><label class="rig2-mesh-ctl">Zona flexible<input id="rigLimbSoft" type="range" min="2" max="50" value="18" aria-label="Ancho de la zona flexible"></label><div class="rig2-lip-acciones"><button id="rigLimbCut">Cortar pieza</button><button id="rigLimbArm">Crear codo</button><button id="rigLimbLeg">Crear rodilla</button><button id="rigLimbCancel" hidden>Cancelar</button></div>';
     anchor.before(panel); $id("rigLimbArm").onclick=()=>start("arm"); $id("rigLimbLeg").onclick=()=>start("leg");
+    const pose=document.createElement("button");pose.id="rigLimbPose";pose.textContent="Posar articulación";pose.hidden=true;
+    pose.style.cssText="width:100%;margin-top:8px";pose.onclick=poseCreated;
+    panel.append(pose);
     panel.querySelector(".rig2-lip-acciones").style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:4px";
     $id("rigLimbCut").onclick=()=>start("cut");
     $id("rigLimbCancel").onclick=()=>{cancel();message("Articulación cancelada");};
