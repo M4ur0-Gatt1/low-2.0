@@ -139,6 +139,83 @@ async function main() {
       const valorSel=canalSel&&canalSel.keys[Object.keys(canalSel.keys)[0]];
       assert(valorSel===1,"clickear la opción no puso el valor 1 (dio "+valorSel+")");
 
+      // 7. EL PUNTO 2D MUEVE LOS DOS EJES CON UN ARRASTRE.
+      //    El modelo ya guardaba link.partner con su eje, pero la interfaz
+      //    movia el tirador en UN eje y escribia UN canal: era un control de una
+      //    dimension dibujado dentro de un cuadrado. Un punto 2D sirve para lo
+      //    que tiene que servir —la mirada de un ojo, la inclinacion de una
+      //    cabeza— solo si un arrastre mueve los dos canales.
+      assert(DZ.doc.createRigControl("p2d_x",{name:"mirada X",min:-1,max:1,default:0}),
+        "no se pudo crear el control del eje X");
+      assert(DZ.doc.createRigControl("p2d_y",{name:"mirada Y",min:-1,max:1,default:0}),
+        "no se pudo crear el control del eje Y");
+      DZ.doc.setRigControlWidget("p2d_x",{kind:"point2d",x:300,y:220,
+        link:{partner:"p2d_y",axis:"x"}});
+      // el socio TAMBIEN colocado a proposito: si se dibujara aparte, un solo
+      // punto 2D se veria como dos cuadrados
+      DZ.doc.setRigControlWidget("p2d_y",{kind:"point2d",x:300,y:220,
+        link:{partner:"p2d_x",axis:"y"}});
+      await wait(220);
+
+      const g2d=document.querySelector('.rig-control-overlay [data-control="p2d_x"]');
+      assert(g2d,"el punto 2D no se dibujo");
+      assert(!document.querySelector('.rig-control-overlay [data-control="p2d_y"]'),
+        "el socio del punto 2D se dibujo aparte: un solo control se veria como dos cuadrados");
+      assert(g2d.querySelectorAll("line").length===2,
+        "el punto 2D no dibuja sus dos guias: sin ellas se lee como una caja con un "
+        +"punto adentro y no se entiende que se puede mover en diagonal");
+
+      const rx=LOW.animation.rigControlPath("p2d_x");
+      const ry=LOW.animation.rigControlPath("p2d_y");
+      const pasos2dAntes=DZ.history.undoStack.length;
+      const t2d=g2d.querySelector("[data-tirador]");
+      assert(t2d,"el punto 2D no tiene tirador");
+      const c2d=t2d.getBoundingClientRect();
+      const o2d={x:c2d.left+c2d.width/2,y:c2d.top+c2d.height/2};
+      t2d.dispatchEvent(new PointerEvent("pointerdown",
+        {bubbles:true,cancelable:true,button:0,pointerId:1,clientX:o2d.x,clientY:o2d.y}));
+      // EN DIAGONAL Y ASIMETRICO. Si se moviera un solo eje, el otro canal
+      // quedaria vacio; y si los dos ejes escribieran el MISMO valor —un error
+      // facil— un arrastre simetrico no lo notaria. Asi que se mueve mucho en X
+      // y poco en Y, y despues se exige que los dos valores sean DISTINTOS.
+      // Se apunta a una COORDENADA DEL DIBUJO, no a un desplazamiento en
+      // pixeles: al zoom de trabajo unos pocos pixeles de pantalla son muchas
+      // unidades del lienzo y los dos ejes se iban al tope. El cuadro del punto
+      // 2D va de (300,220) a (344,264), asi que (335,229) es 0.8 en X y 0.2 en
+      // Y — con recorrido -1..1 eso es +0.6 y -0.6, bien distintos.
+      const destino=screen({x:335,y:229});
+      for(const k of [0.4,0.7,1]){
+        const medio=screen({x:300+35*k,y:220+9*k});
+        document.querySelector('.rig-control-overlay svg').dispatchEvent(new PointerEvent("pointermove",
+          {bubbles:true,cancelable:true,button:0,pointerId:1,clientX:medio.x,clientY:medio.y}));
+        await wait(30);
+      }
+      document.querySelector('.rig-control-overlay svg').dispatchEvent(new PointerEvent("pointerup",
+        {bubbles:true,cancelable:true,button:0,pointerId:1,clientX:destino.x,clientY:destino.y}));
+      await wait(220);
+
+      const cx=DZ.doc.scene.rigChannel(rx), cy=DZ.doc.scene.rigChannel(ry);
+      const vx=cx&&cx.keys[Object.keys(cx.keys||{})[0]];
+      const vy=cy&&cy.keys[Object.keys(cy.keys||{})[0]];
+      assert(Number.isFinite(vx),"el arrastre no dejo clave en el canal del eje X");
+      assert(Number.isFinite(vy),
+        "el arrastre en diagonal NO movio el segundo eje: el punto 2D sigue siendo un "
+        +"control de una dimension dibujado dentro de un cuadrado");
+      assert(Math.abs(vx)>1e-6&&Math.abs(vy)>1e-6,
+        "uno de los dos ejes quedo en su valor neutro (X="+vx+", Y="+vy+")");
+      assert(Math.abs(vx-vy)>1e-3,
+        "los dos ejes recibieron el MISMO valor ("+vx+"): el arrastre fue asimetrico "
+        +"—mucho en X, poco en Y— asi que cada canal tiene que leer SU eje");
+      const pasos2d=DZ.history.undoStack.length-pasos2dAntes;
+      assert(pasos2d===1,
+        "el arrastre del punto 2D dejo "+pasos2d+" pasos de historial en vez de UNO: "
+        +"setRigControlValue deja un paso por canal, asi que los dos tienen que ir "
+        +"dentro de una transaccion o el dibujante necesita dos Ctrl+Z");
+      DZ.history.undo(); await wait(150);
+      const dx=DZ.doc.scene.rigChannel(rx), dy=DZ.doc.scene.rigChannel(ry);
+      assert(!(dx&&Object.keys(dx.keys||{}).length)&&!(dy&&Object.keys(dy.keys||{}).length),
+        "un Undo no deshizo los DOS ejes del punto 2D");
+
       // 6. Escape cierra y no deja la capa colgada sobre el dibujo.
       document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}));
       await wait(120);
@@ -146,7 +223,8 @@ async function main() {
         "Escape no quitó la capa de mandos");
 
       return "Mandos sobre el personaje OK "+JSON.stringify(
-        {colocado:true,claves:1,undo:1,selector:valorSel});
+        {colocado:true,claves:1,undo:1,selector:valorSel,
+         punto2d:{ejeX:vx,ejeY:vy,pasos:pasos2d,guias:2}});
     })()` });
 
     if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description ||

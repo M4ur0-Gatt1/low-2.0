@@ -932,6 +932,30 @@ require("openDesign?.(rescate.ruta)" in INICIAL_COD,
         "el rescate del documento dejo de abrirse por openDesign, que es quien lo "
         "consume y quien pregunta que version se quiere")
 
+# ── C02: UN PUNTO 2D MUEVE LOS DOS EJES ────────────────────────────────
+#
+# El modelo guardaba `link.partner` con su eje desde el principio, pero la
+# interfaz movia el tirador en UN eje y escribia UN canal: el «punto 2D» era un
+# control de una dimension dibujado dentro de un cuadrado. Sirve para lo que
+# tiene que servir —la mirada de un ojo, la inclinacion de una cabeza— solo si
+# un arrastre mueve los dos canales.
+MANDOS = (ROOT / "ui" / "rigging" / "rig-control-ui.js").read_text(encoding="utf-8")
+_MANDOS_COD = re.sub(r"/\*.*?\*/", "", MANDOS, flags=re.S)
+_MANDOS_COD = re.sub(r"^\s*//.*$", "", _MANDOS_COD, flags=re.M)
+require("function socioDe" in _MANDOS_COD
+        and "previsualizar(s, socio, valorSocio)" in _MANDOS_COD,
+        "el punto 2D dejo de escribir el canal de su socio: vuelve a ser un control "
+        "de UNA dimension dibujado dentro de un cuadrado")
+require("if (esSocioDeOtro(s, control)) continue;" in _MANDOS_COD,
+        "el socio de un punto 2D volvio a dibujarse aparte: un solo control se veria "
+        "como dos cuadrados y no se sabria cual agarrar")
+# Los dos canales en UNA transaccion: setRigControlValue deja un paso por canal.
+require('h.begin("Mover el punto 2D")' in _MANDOS_COD
+        and "setRigControlValue(socio.id" in _MANDOS_COD
+        and "if (abre) h.commit();" in _MANDOS_COD,
+        "el arrastre del punto 2D volvio a dejar DOS pasos de historial: hacen falta "
+        "dos Ctrl+Z para deshacer un solo gesto")
+
 require("closeDesign" not in INICIAL_COD,
         "el boton a la IA volvio a usar closeDesign(), que CIERRA EL DOCUMENTO: "
         "cambiar de pantalla te haria perder el dibujo")

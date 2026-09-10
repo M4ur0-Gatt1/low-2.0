@@ -63,6 +63,56 @@
     return control.link && control.link.axis === "y" ? "y" : "x";
   }
 
+  /** EL SOCIO DE UN PUNTO 2D: el control que maneja el OTRO eje.
+   *
+   *  El modelo ya guardaba `link.partner` con su eje, pero la interfaz no lo
+   *  usaba: el tirador se movía en un solo eje y escribía un solo canal, así
+   *  que el «punto 2D» era un control de UNA dimensión dibujado dentro de un
+   *  cuadrado. Un punto 2D sirve para lo que tiene que servir —la mirada de un
+   *  ojo, la inclinación de una cabeza, la apertura y el ancho de una boca—
+   *  sólo si UN arrastre mueve LOS DOS canales. */
+  function socioDe(s, control) {
+    if (!control || control.kind !== "point2d") return null;
+    const id = control.link && control.link.partner;
+    if (!id) return null;
+    const socio = controlesDe(s.doc)[id];
+    return socio && socio.id !== control.id ? socio : null;
+  }
+
+  /** ¿Este control es el socio de otro que YA está colocado? Entonces no se
+   *  dibuja aparte: si no, un solo punto 2D se vería como dos cuadrados y el
+   *  dibujante no sabría cuál agarrar. */
+  function esSocioDeOtro(s, control) {
+    for (const otro of Object.values(controlesDe(s.doc))) {
+      if (otro.id === control.id) continue;
+      if (!Number.isFinite(otro.x) || !Number.isFinite(otro.y)) continue;
+      if (otro.kind !== "point2d" || !otro.link || otro.link.partner !== control.id) continue;
+      // QUIEN DIBUJA EL PLANO ES EL DEL EJE X. El enlace suele ser MUTUO —cada
+      // uno nombra al otro—, y sin esta regla se escondian los DOS y no se
+      // dibujaba nada. Lo vi al primer intento: «el punto 2D no se dibujo».
+      if (ejeDe(otro) === "x" && ejeDe(control) !== "x") return true;
+      // Par mal formado (los dos declaran el mismo eje): decide el id, para que
+      // sea estable y no dependa del orden en que el objeto liste las claves.
+      if (ejeDe(otro) === ejeDe(control) && String(otro.id) < String(control.id)) return true;
+    }
+    return false;
+  }
+
+  const entre01 = (v) => Math.max(0, Math.min(1, v));
+
+  /** El valor que le corresponde a un control para una fracción 0..1. */
+  function valorDe(control, t) {
+    const lo = Math.min(control.min, control.max), hi = Math.max(control.min, control.max);
+    return lo + entre01(t) * (hi - lo);
+  }
+
+  /** La escritura de PREVISUALIZACIÓN: directo al canal, sin historial. Al
+   *  soltar se compromete con setRigControlValue. */
+  function previsualizar(s, control, valor) {
+    const canal = s.doc.scene.rigChannel(LOW.animation.rigControlPath(control.id));
+    if (canal) canal.keys[Math.max(1, Math.round(s.doc.frame))] = valor;
+  }
+
   function normalizado(s, control) {
     const min = Math.min(control.min, control.max);
     const max = Math.max(control.min, control.max);
@@ -107,9 +157,33 @@
       caja.setAttribute("stroke-width", "1.2");
       g.append(caja);
       const eje = ejeDe(control);
+      const socio = socioDe(s, control);
+      const tSocio = socio ? normalizado(s, socio) : null;
+      // Con socio, el tirador va a (x, y) de VERDAD. Sin socio se queda en el
+      // medio del otro eje, que es la degradación honesta de un control de una
+      // sola dimensión: se mueve en el eje que tiene y no finge el otro.
+      const tx = eje === "x" ? t : (tSocio == null ? 0.5 : tSocio);
+      const ty = eje === "y" ? t : (tSocio == null ? 0.5 : tSocio);
+      // Dos guías cruzadas: sin ellas un plano de dos ejes se lee como una caja
+      // con un punto adentro y no se entiende que se puede mover en diagonal.
+      for (const guia of [
+        { x1: control.x, y1: control.y + ty * LADO_PUNTO2D,
+          x2: control.x + LADO_PUNTO2D, y2: control.y + ty * LADO_PUNTO2D },
+        { x1: control.x + tx * LADO_PUNTO2D, y1: control.y,
+          x2: control.x + tx * LADO_PUNTO2D, y2: control.y + LADO_PUNTO2D }]) {
+        if (!socio) break;
+        const l = document.createElementNS(NS, "line");
+        l.setAttribute("x1", guia.x1); l.setAttribute("y1", guia.y1);
+        l.setAttribute("x2", guia.x2); l.setAttribute("y2", guia.y2);
+        l.setAttribute("stroke", "#9bf9d5");
+        l.setAttribute("stroke-opacity", ".35");
+        l.setAttribute("stroke-width", "1");
+        l.style.pointerEvents = "none";
+        g.append(l);
+      }
       const p = document.createElementNS(NS, "circle");
-      p.setAttribute("cx", control.x + (eje === "x" ? t * LADO_PUNTO2D : LADO_PUNTO2D / 2));
-      p.setAttribute("cy", control.y + (eje === "y" ? t * LADO_PUNTO2D : LADO_PUNTO2D / 2));
+      p.setAttribute("cx", control.x + tx * LADO_PUNTO2D);
+      p.setAttribute("cy", control.y + ty * LADO_PUNTO2D);
       p.setAttribute("r", "5");
       p.setAttribute("fill", "#ff9a65");
       p.dataset.tirador = "1";
@@ -152,6 +226,7 @@
     let colocados = 0;
     for (const control of Object.values(controlesDe(s.doc))) {
       if (!Number.isFinite(control.x) || !Number.isFinite(control.y)) continue;
+      if (esSocioDeOtro(s, control)) continue;
       colocados++;
       s.capa.append(mando(s, control));
     }
@@ -193,20 +268,28 @@
       if (!control) return;
       ev.preventDefault();
       const p = aUsuario(s.svg, ev);
-      const min = Math.min(control.min, control.max);
-      const max = Math.max(control.min, control.max);
       const eje = control.kind === "point2d" ? ejeDe(control) : "x";
       const largo = control.kind === "point2d" ? LADO_PUNTO2D : LARGO_DESLIZADOR;
       const bruto = eje === "y" ? (p.y - control.y) / largo : (p.x - control.x) / largo;
-      const valor = min + Math.max(0, Math.min(1, bruto)) * (max - min);
+      const valor = valorDe(control, bruto);
       // Arrastrar PREVISUALIZA escribiendo directo en el canal; al soltar se
       // compromete con setRigControlValue. Es una decision de RENDIMIENTO, no
       // de correccion: se midio que comprometer en cada movimiento da el mismo
       // resultado (una clave, un paso de historial) porque el modelo coalesce.
       // Esto evita abrir una transaccion de historial por cada evento.
-      const canal = s.doc.scene.rigChannel(LOW.animation.rigControlPath(control.id));
-      if (canal) canal.keys[Math.max(1, Math.round(s.doc.frame))] = valor;
+      previsualizar(s, control, valor);
       s.previo = valor;
+      // UN PUNTO 2D MUEVE LOS DOS EJES CON EL MISMO ARRASTRE. El otro eje va al
+      // canal del socio; si no hay socio, esto no corre y el control se mueve en
+      // el eje que tiene, sin fingir el otro.
+      const socio = socioDe(s, control);
+      if (socio) {
+        const otroBruto = eje === "y" ? (p.x - control.x) / LADO_PUNTO2D
+          : (p.y - control.y) / LADO_PUNTO2D;
+        const valorSocio = valorDe(socio, otroBruto);
+        previsualizar(s, socio, valorSocio);
+        s.previoSocio = { id: socio.id, valor: valorSocio };
+      }
       pintar(s);
       aplicar(s);
     }, { signal });
@@ -215,16 +298,27 @@
       if (!s.arrastre || s.arrastre.pointer !== ev.pointerId) return;
       const id = s.arrastre.id;
       const valor = s.previo;
+      const socio = s.previoSocio;
       s.arrastre = null;
       s.previo = null;
+      s.previoSocio = null;
       s.capa.querySelectorAll("[data-control]").forEach((g) => { g.style.cursor = "grab"; });
       if (valor == null) return;
-      // Una clave, no cien: el arrastre previsualizó, esto la deja en el historial.
+      // Una clave, no cien: el arrastre previsualizó, esto la deja en el
+      // historial. Y con los DOS canales del punto 2D adentro de UNA
+      // transacción: `setRigControlValue` deja un paso por canal, así que sin
+      // esto un arrastre en diagonal pediría dos Ctrl+Z para deshacerse.
+      const h = s.doc.history;
+      const abre = !!(socio && h && !h.transaction);
+      if (abre) h.begin("Mover el punto 2D");
       s.doc.setRigControlValue(id, s.doc.frame, valor);
+      if (socio) s.doc.setRigControlValue(socio.id, s.doc.frame, socio.valor);
+      if (abre) h.commit();
       s.huella = JSON.stringify(s.doc.scene.rig.controls);
       pintar(s);
       aplicar(s);
-      avisar("Clave en el cuadro " + Math.round(s.doc.frame) + " · Ctrl+Z la deshace");
+      avisar("Clave en el cuadro " + Math.round(s.doc.frame) +
+        (socio ? " · los dos ejes" : "") + " · Ctrl+Z la deshace");
     };
     s.capa.addEventListener("pointerup", soltar, { signal });
     s.capa.addEventListener("pointercancel", soltar, { signal });
