@@ -63,6 +63,66 @@
     return !!(DZ.documentTabs && DZ.documentTabs.length);
   }
 
+  /** ¿Quedó trabajo sin guardar de una sesión que se cortó?
+   *
+   *  NO se puede usar `dzSceneRecovered()`: ésa pide la identidad del documento
+   *  ACTUAL, y al arrancar no hay ninguno —devuelve null aunque el rescate esté
+   *  guardado, medido—. El almacén sí se puede listar, y se pregunta por
+   *  contenido de verdad con la misma vara que usa `dzDocInit`: un dibujo con
+   *  más de 40 caracteres de geometría. Un lienzo en blanco no es «trabajo». */
+  function hayRescate() {
+    // HAY DOS RESCATES, y el que importa es el del DOCUMENTO.
+    //
+    // `LOW.workspace.recovery` guarda el SVG del lienzo con 450 ms de retardo:
+    // es el que tiene los últimos trazos. `LOW.workspace.sceneRecovery` guarda
+    // el modelo de la escena y se escribe en momentos más gruesos — medido: tras
+    // dibujar un trazo y matar el proceso, el punto de la escena tenía 189 bytes
+    // de lienzo VACÍO y el del documento sí traía el trazo.
+    //
+    // El del documento no se puede listar: `DocumentRecovery` indexa por hash de
+    // la ruta y sólo ofrece `get(path)`. Pero cada valor guarda su propia ruta
+    // adentro, así que se recorren las claves con su prefijo.
+    let mejor = null;
+    try {
+      for (const clave of Object.keys(localStorage)) {
+        if (clave.indexOf("low.document.recovery.") !== 0) continue;
+        let v = null;
+        try { v = JSON.parse(localStorage.getItem(clave) || "null"); } catch (_) { continue; }
+        if (!v || !v.path || !v.content) continue;
+        if (!mejor || (v.savedAt || 0) > (mejor.savedAt || 0))
+          mejor = { tipo: "documento", ruta: v.path, savedAt: v.savedAt };
+      }
+    } catch (_) { /* sin almacenamiento */ }
+    if (mejor) return mejor;
+    // Y si no hay ninguno, el de la escena. Se pregunta por contenido de verdad
+    // con la misma vara que usa `dzDocInit`: más de 40 caracteres de geometría.
+    // Un lienzo en blanco no es «trabajo».
+    const almacen = global.LOW && global.LOW.workspace && global.LOW.workspace.sceneRecovery;
+    if (!almacen || typeof almacen.list !== "function") return null;
+    try {
+      const r = almacen.list().find((x) => ((x.content && x.content.scene &&
+        x.content.scene.levels) || []).some((nivel) => (nivel.drawings || [])
+          .some((d) => d.content && d.content.length > 40)));
+      return r ? { tipo: "escena", savedAt: r.savedAt } : null;
+    } catch (_) { return null; }
+  }
+
+  function soloElNombre(ruta) {
+    const partes = String(ruta || "").split(/[\\/]/);
+    return partes[partes.length - 1] || "el dibujo";
+  }
+
+  function cuandoFue(marca) {
+    const t = Number(marca);
+    if (!Number.isFinite(t) || t <= 0) return "";
+    const minutos = Math.round((Date.now() - t) / 60000);
+    if (minutos < 1) return " · de hace un instante";
+    if (minutos < 60) return " · de hace " + minutos + " min";
+    const horas = Math.round(minutos / 60);
+    if (horas < 24) return " · de hace " + horas + (horas === 1 ? " hora" : " horas");
+    try { return " · del " + new Date(t).toLocaleDateString(); } catch (_) { return ""; }
+  }
+
   /** Esconde el estudio SIN cerrar el documento, y deja el lado del agente a la
    *  vista. Volver es el botón de la pluma en la barra izquierda. */
   function dzIrAlAgente() {
@@ -183,6 +243,10 @@
         <button type="button" data-a="nuevo" class="bien2d-primario" disabled>Nuevo documento</button>
         <button type="button" data-a="abrir" disabled>Abrir documento…</button>
       </div>
+      <div class="bien2d-rescate" hidden>
+        <p></p>
+        <button type="button" data-a="rescate" disabled>Recuperar lo que quedó sin guardar</button>
+      </div>
       <button type="button" data-a="agente" class="bien2d-agente">o ir a IA y redes</button>
       <p class="bien2d-espera">Preparando LOW…</p>
     </div>`;
@@ -191,6 +255,36 @@
     caja.querySelector('[data-a="nuevo"]').onclick = () => global.dzMenuAction?.("nuevo");
     caja.querySelector('[data-a="abrir"]').onclick = () => global.dzMenuAction?.("escena-abrir");
     caja.querySelector('[data-a="agente"]').onclick = dzIrAlAgente;
+    // EL RESCATE ANTE CAÍDA SE OFRECE ACÁ, y antes no se ofrecía en ningún
+    // lado. El ofrecimiento vive dentro de `dzDocInit`, que sólo corre al crear
+    // o abrir un documento; desde que LOW abre SIN documento, quien volvía
+    // después de un cierre forzado veía un estudio vacío y ninguna señal de que
+    // su trabajo estaba guardado. Medido en la app real: un trazo sin guardar,
+    // matar el proceso, reabrir — el rescate estaba en el almacén (2.674 bytes
+    // de escena) y la invitación ofrecía sólo Nuevo, Abrir e ir a la IA.
+    //
+    // La acción delega en «Nuevo documento», que es el camino probado: al
+    // arrancar el documento, `dzDocInit` encuentra el rescate y pregunta. Se
+    // pregunta dos veces, sí, pero por un camino que ya está andando y probado.
+    const rescate = hayRescate();
+    if (rescate) {
+      const fila = caja.querySelector(".bien2d-rescate");
+      fila.hidden = false;
+      const boton = fila.querySelector('[data-a="rescate"]');
+      if (rescate.tipo === "documento") {
+        fila.querySelector("p").textContent = "Quedó trabajo sin guardar en «" +
+          soloElNombre(rescate.ruta) + "»" + cuandoFue(rescate.savedAt) + ".";
+        // `openDesign` es quien consume este rescate: compara el punto con el
+        // archivo del disco y pregunta cuál querés. Es el camino probado.
+        boton.onclick = () => global.openDesign?.(rescate.ruta);
+      } else {
+        fila.querySelector("p").textContent =
+          "Quedó una escena sin guardar de una sesión anterior" + cuandoFue(rescate.savedAt) + ".";
+        // El rescate de la escena lo consume `dzDocInit`, que corre al abrir un
+        // documento: se delega ahí y él pregunta.
+        boton.onclick = () => global.dzMenuAction?.("nuevo");
+      }
+    }
     lienzo.appendChild(caja);
     vigilar();
   }

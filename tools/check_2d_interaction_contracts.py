@@ -211,7 +211,8 @@ require("total ? w / total" in SCENE_WEIGHTS or "w / total" in SCENE_WEIGHTS,
         "los pesos de vertice dejaron de normalizarse: la pieza se encoge sola al posar")
 require("rigMeshSkinnedAt" in SCENE_MODEL and "rigBindMatrix" in SCENE_MODEL,
         "la malla dejo de deformarse con los huesos")
-require("rigMeshSkinnedAt(boneId, frame)" in SCENE_MODEL[SCENE_MODEL.index("rigMallaAt("):SCENE_MODEL.index("rigMallaAt(") + 900],
+require(re.search(r"this\.rigMeshSkinnedAt\(\s*boneId\s*,\s*frame(?:\s*,\s*overrides)?\s*\)",
+                  SCENE_MODEL[SCENE_MODEL.index("rigMallaAt("):SCENE_MODEL.index("rigMallaAt(") + 900]),
         "rigMallaAt volvio a ignorar el skinning")
 require("paintRigMeshWeight" in DOCUMENT and "actual[boneId] = 1" in DOCUMENT,
         "un vertice puede volver a quedarse sin ningun hueso al restar peso")
@@ -883,6 +884,53 @@ _vuelta = _vuelta[:_vuelta.index("function cerrarEl3D")]
 require("cerrarEl3D()" in _ida and "cerrarEl3D()" in _vuelta,
         "cambiar de pantalla dejo de cerrar el estudio 3D: #l3dView esta en "
         "z-index 62 y #designView en 61, asi que el 3D queda TAPANDO el dibujo")
+
+# ── A03: EL ALMACENAMIENTO DE LA INTERFAZ TIENE QUE SOBREVIVIR AL CIERRE ──
+#
+# pywebview 6.x trae `private_mode=True` —perfil efimero— y `http_port=None`,
+# asi que la interfaz se servia desde un puerto AL AZAR en cada arranque.
+# `localStorage` es por ORIGEN, asi que LOW estrenaba almacenamiento vacio cada
+# vez. Medido con una clave testigo: escrita en http://127.0.0.1:17446 y, tras
+# cerrar y reabrir, {testigo: null, claves: 0} en http://127.0.0.1:61150.
+#
+# Lo que se perdia en cada arranque: el rescate ante caida (probado en la app
+# real: trazo sin guardar + cierre forzado = nada al reabrir), los pinceles, la
+# disposicion de paneles y el espacio de trabajo activo. Esto es PERDIDA DE
+# DATOS, asi que tiene contrato.
+_MAIN_COD = re.sub(r"#.*$", "", MAIN, flags=re.M)
+require("private_mode=False" in _MAIN_COD,
+        "webview.start volvio a arrancar en modo privado: el perfil es efimero y "
+        "LOW pierde en cada cierre el rescate ante caida, los pinceles y la "
+        "disposicion de paneles")
+require("storage_path=perfil" in _MAIN_COD,
+        "webview.start dejo de recibir un storage_path propio: el almacenamiento "
+        "queda donde pywebview quiera y no es predecible")
+require("http_port=puerto" in _MAIN_COD and "LOW_UI_PORT" in _MAIN_COD,
+        "la interfaz volvio a servirse desde un puerto al azar: localStorage es "
+        "por origen, asi que cada arranque estrena almacenamiento vacio")
+require("_puerto_libre(LOW_UI_PORT)" in _MAIN_COD,
+        "el puerto fijo dejo de comprobarse antes de arrancar: si estuviera "
+        "ocupado, LOW no abriria")
+
+# Y el rescate se OFRECE al arrancar. El ofrecimiento vive dentro de dzDocInit,
+# que solo corre al crear o abrir un documento; desde que LOW abre SIN documento,
+# quien volvia despues de un cierre forzado veia un estudio vacio y ninguna senal
+# de que su trabajo estaba guardado.
+require("function hayRescate" in INICIAL_COD
+        and "low.document.recovery." in INICIAL_COD
+        and "sceneRecovery" in INICIAL_COD,
+        "la invitacion dejo de ofrecer el rescate ante caida, o dejo de mirar el "
+        "rescate del DOCUMENTO —que es el que se escribe cada 450 ms y el que "
+        "tiene los ultimos trazos; el de la escena se escribe en momentos mas "
+        "gruesos y medido traia el lienzo vacio")
+# Se pide el BOTON, no la mencion: el selector del handler contiene el mismo
+# texto, asi que buscarlo suelto pasa en verde con el boton borrado.
+require('<button type="button" data-a="rescate"' in INICIAL_COD
+        and "bien2d-rescate" in INICIAL_COD,
+        "se perdio la accion de recuperar en la invitacion")
+require("openDesign?.(rescate.ruta)" in INICIAL_COD,
+        "el rescate del documento dejo de abrirse por openDesign, que es quien lo "
+        "consume y quien pregunta que version se quiere")
 
 require("closeDesign" not in INICIAL_COD,
         "el boton a la IA volvio a usar closeDesign(), que CIERRA EL DOCUMENTO: "

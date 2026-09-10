@@ -50,6 +50,22 @@ LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
 LOW_VERSION = "4.31.0"
+# El puerto desde el que se sirve la interfaz. FIJO a propósito: `localStorage`
+# es por origen, y con un puerto al azar en cada arranque LOW estrenaba
+# almacenamiento vacío cada vez —se perdían el rescate ante caída, los pinceles
+# y la disposición de paneles—. Ver el bloque de `webview.start` al final.
+LOW_UI_PORT = 47141
+
+
+def _puerto_libre(puerto: int) -> bool:
+    """¿Se puede escuchar en ese puerto? Se pregunta ANTES de arrancar."""
+    import socket
+    with socket.socket() as s:
+        try:
+            s.bind(("127.0.0.1", puerto))
+            return True
+        except OSError:
+            return False
 # Hora en que empezó a correr ESTE proceso. Sirve para detectar que el
 # instalador reemplazó el .exe con LOW abierto: ver binario_reemplazado().
 _ARRANQUE = __import__("time").time()
@@ -5680,8 +5696,41 @@ def main():
     )
     api._window = window
     api._track_geometry(window, "main", store_name="windows")
+    # ── EL ALMACENAMIENTO DE LA INTERFAZ TIENE QUE SOBREVIVIR AL CIERRE ──────
+    #
+    # Y no sobrevivía. pywebview 6.x viene con `private_mode=True` —perfil
+    # efímero, se tira al cerrar— y con `http_port=None`, así que la interfaz se
+    # servía desde un puerto AL AZAR en cada arranque. `localStorage` es por
+    # ORIGEN, así que cada inicio estrenaba almacenamiento vacío.
+    #
+    # Medido con una clave testigo: escrita en http://127.0.0.1:17446 y, tras
+    # cerrar y reabrir, `{testigo: null, claves: 0}` en http://127.0.0.1:61150.
+    #
+    # Lo que se perdía en cada arranque, todo en localStorage:
+    #   · EL RESCATE ANTE CAÍDA. Probado en la app real: un trazo sin guardar,
+    #     matar el proceso, reabrir — no había documento, no había ofrecimiento
+    #     de recuperar, y las claves de recovery habían desaparecido.
+    #   · Los pinceles (`low.brushes.v1`), la disposición de paneles
+    #     (`low.2d.panelLayout`) y el espacio de trabajo activo.
+    #
+    # El puerto FIJO es lo que estabiliza el origen, y se comprueba ANTES de
+    # arrancar: si estuviera ocupado —otra instancia de LOW, u otro programa— se
+    # arranca sin fijarlo y se deja dicho en el log. Vale más abrir perdiendo la
+    # persistencia que no abrir. No se reintenta después de `webview.start`
+    # porque esa llamada bloquea hasta que se cierra la ventana: reintentar ahí
+    # abriría una segunda.
+    perfil = str(data_dir() / "webview")
     try:
-        webview.start(debug="--debug" in sys.argv)
+        os.makedirs(perfil, exist_ok=True)
+    except Exception as e:
+        log("no pude crear el perfil de la interfaz (%s): %s" % (perfil, e))
+    puerto = LOW_UI_PORT if _puerto_libre(LOW_UI_PORT) else None
+    if puerto is None:
+        log("el puerto %d esta ocupado: LOW arranca sin origen fijo y NO va a "
+            "conservar preferencias ni rescate entre arranques" % LOW_UI_PORT)
+    try:
+        webview.start(debug="--debug" in sys.argv, private_mode=False,
+                      storage_path=perfil, http_port=puerto)
     except Exception:
         import traceback
         log("webview.start fallo:\n" + traceback.format_exc())

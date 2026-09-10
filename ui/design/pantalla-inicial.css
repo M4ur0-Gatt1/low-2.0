@@ -37,6 +37,27 @@
 }
 .bien2d-agente:hover { color: var(--txt, #e9ebe8); }
 
+/* EL RESCATE ANTE CAÍDA. Se muestra sólo cuando hay algo de verdad que
+   recuperar, y se ve distinto de las dos acciones de arriba: no es «empezar»,
+   es «no perder lo de ayer». */
+.bien2d-rescate {
+  margin: 16px auto 0; max-width: 360px; padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent, #F0450E) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent, #F0450E) 8%, transparent);
+}
+.bien2d-rescate p {
+  margin: 0 0 8px; color: var(--txt, #e9ebe8);
+  font: 400 11.5px/1.45 Figtree, sans-serif;
+}
+.bien2d-rescate button {
+  width: 100%; padding: 7px 10px; border-radius: 7px; cursor: pointer;
+  background: var(--accent, #F0450E); border: 1px solid var(--accent, #F0450E);
+  color: #fff; font: 600 11.5px Figtree, sans-serif;
+}
+.bien2d-rescate button:hover { filter: brightness(1.08); }
+.bien2d-rescate button[disabled] { opacity: .45; cursor: default; filter: none; }
+
 /* MIENTRAS ARRANCA. La invitación se pinta a los ~100 ms para que no se vea la
    pantalla vieja —medido: el estudio aparecía a los 6.542 ms, esperando a que
    cargara el chat de la IA—, pero «Nuevo documento» necesita el puente de

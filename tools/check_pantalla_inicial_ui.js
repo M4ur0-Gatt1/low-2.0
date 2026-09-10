@@ -56,6 +56,18 @@ async function main() {
   // nada de la app: cuando el arranque termina ya no queda rastro de quien
   // pinto primero.
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `
+    // UN PUNTO DE RESCATE SEMBRADO, para probar que la invitación lo ofrece.
+    // El ofrecimiento vive dentro de dzDocInit, que sólo corre al crear o abrir
+    // un documento; desde que LOW abre SIN documento, quien volvía después de un
+    // cierre forzado veía un estudio vacío y ninguna señal de que su trabajo
+    // estaba guardado. Se siembra el rescate del DOCUMENTO, que es el que se
+    // escribe cada 450 ms y el que tiene los últimos trazos.
+    try {
+      localStorage.setItem("low.document.recovery.prueba", JSON.stringify({
+        path: "C:/prueba/dibujo-sin-guardar.svg",
+        content: "<svg xmlns='http://www.w3.org/2000/svg'><path d='M10 10 L90 90'/></svg>",
+        metadata: {}, savedAt: Date.now() - 120000 }));
+    } catch (e) { /* sin almacenamiento: la asercion del rescate lo dira */ }
     window.__inicio = Date.now(); window.__foto = null; window.__tTardio = null;
     const mirar = setInterval(() => {
       const caja = document.querySelector("#dzBienvenida2D");
@@ -109,6 +121,17 @@ async function main() {
       esOtroBoton:!!(bot && document.querySelector("#dzClose") && bot!==document.querySelector("#dzClose")),
       // y va ANTES del de cerrar, para que el de cerrar siga siendo el ultimo
       antesDelCerrar:!!(bot && (bot.compareDocumentPosition(document.querySelector("#dzClose"))&4)===4)};
+
+    // EL RESCATE ANTE CAIDA, ofrecido en la invitacion. Se mide ACA, con la
+    // invitacion todavia en pantalla: mas abajo el recorrido crea un documento y
+    // la invitacion se va, que es justo lo que tiene que pasar.
+    const rescate=(()=>{ if(!inv) return {sinInvitacion:true};
+      const fila=inv.querySelector(".bien2d-rescate");
+      const b=fila&&fila.querySelector('[data-a="rescate"]');
+      return { hayFila:!!fila, visible:!!(fila&&!fila.hidden),
+        dice:fila?((fila.querySelector("p")||{}).textContent||""):"",
+        habilitado:!!(b&&!b.disabled), hayHandler:!!(b&&typeof b.onclick==="function") };
+    })();
 
     // ── LA INVITACION SE USA CON EL PUNTERO, no llamando a su onclick. Esta
     //    distincion no es un detalle: la invitacion vive DENTRO de #dzCanvas,
@@ -191,7 +214,8 @@ async function main() {
       plumaSinMarca:!(document.querySelector("#abDesign")||{}).classList?.contains("vuelve-al-2d")};
 
     const temprano={foto:window.__foto, tTardio:window.__tTardio};
-    return {arranque,temprano,porElPuntero,conDocumento,clavada,trasIrALaIA,trasVolver,errs:errs.slice(0,4)};
+
+    return {arranque,temprano,rescate,porElPuntero,conDocumento,clavada,trasIrALaIA,trasVolver,errs:errs.slice(0,4)};
   })()`;
 
   const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -235,6 +259,23 @@ async function main() {
     mal("nada dice que LOW todavía está arrancando: los botones apagados sin " +
       "explicación se leen como una pantalla fallada", t);
   if (!v.conDocumento) mal("no se llegó a medir con documento", v);
+
+  const res = v.rescate || {};
+  if (res.sinInvitacion) mal("no hay invitación donde ofrecer el rescate", res);
+  if (!res.visible)
+    mal("con trabajo sin guardar en el almacén, la invitación NO ofrece recuperarlo: " +
+      "el ofrecimiento vive dentro de dzDocInit, que sólo corre al crear o abrir un " +
+      "documento, así que desde que LOW abre sin documento quien vuelve de un cierre " +
+      "forzado ve un estudio vacío y ninguna señal de que su trabajo está guardado", res);
+  if (!/sin guardar/i.test(res.dice || ""))
+    mal("la invitación no dice que hay trabajo sin guardar", res);
+  // Se pide que NOMBRE un archivo, no cual: el mock escribe sus propios puntos de
+  // rescate durante el arranque y el mas nuevo gana —que es lo correcto—.
+  if (!/«[^»]+\.(svg|low)»/i.test(res.dice || ""))
+    mal("la invitación no dice DE QUÉ archivo es el trabajo sin guardar: sin el " +
+      "nombre no se puede decidir si vale recuperarlo", res);
+  if (!res.habilitado || !res.hayHandler)
+    mal("la acción de recuperar está muerta: sin handler o deshabilitada", res);
 
   const pp = v.porElPuntero;
   if (!pp.clicLlegaAlBoton)
