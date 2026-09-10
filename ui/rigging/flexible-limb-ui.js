@@ -7,11 +7,28 @@
   function cancel() {
     if(!gesture)return;
     gesture.canvas.removeEventListener("pointerdown",pick,true);
+    gesture.canvas.removeEventListener("pointermove",preview,true);
     document.removeEventListener("keydown",escape,true);
     gesture.overlay.remove(); gesture=null;
     $id("rigLimbCancel").hidden=true;
   }
   function escape(e) { if(e.key==="Escape") { e.preventDefault(); e.stopImmediatePropagation(); cancel(); message("Articulación cancelada; el dibujo se conserva"); } }
+  function preview(e) {
+    const g=gesture;if(!g)return;
+    if(DZ.doc!==g.doc || DZ.doc.frame!==g.frame || !g.el.isConnected) {
+      cancel();message("Cambió el dibujo; volvé a elegir la pieza");return;
+    }
+    const matrix=g.el.ownerSVGElement.getScreenCTM();
+    const points=g.points.map(p=>new DOMPoint(p.x,p.y).matrixTransform(matrix));
+    points.push({x:e.clientX,y:e.clientY});
+    g.line.setAttribute("points",points.map(p=>`${p.x},${p.y}`).join(" "));
+    // The cutting plane extends across the drawing; show its actual direction.
+    if(g.kind==="cut" && points.length===2) {
+      const [a,b]=points,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
+      if(length>1){const reach=Math.hypot(innerWidth,innerHeight);g.line.setAttribute("points",`${a.x-dx/length*reach},${a.y-dy/length*reach} ${a.x+dx/length*reach},${a.y+dy/length*reach}`);}
+    }
+    g.cursor.setAttribute("cx",e.clientX);g.cursor.setAttribute("cy",e.clientY);
+  }
   function start(kind) {
     cancel();
     const el=DZ.sel;
@@ -24,9 +41,20 @@
       return message("La pieza ya está vinculada; elegí un dibujo sin rig");
     const canvas=$id("dzCanvas"), overlay=document.createElement("div");
     overlay.className="rig-limb-guide"; overlay.style.cssText="position:fixed;inset:0;pointer-events:none;z-index:10000";
+    const previewSvg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    previewSvg.style.cssText="position:absolute;width:100%;height:100%;overflow:hidden";
+    previewSvg.setAttribute("aria-hidden","true");
+    const line=document.createElementNS(previewSvg.namespaceURI,"polyline");
+    line.setAttribute("fill","none");line.setAttribute("stroke","#F0450E");line.setAttribute("stroke-width","3");line.setAttribute("stroke-dasharray","7 5");
+    line.style.filter="drop-shadow(0 1px 1px white)";
+    const cursor=document.createElementNS(previewSvg.namespaceURI,"circle");
+    cursor.setAttribute("r","6");cursor.setAttribute("fill","#F0450E");cursor.setAttribute("stroke","white");cursor.setAttribute("stroke-width","2");
+    cursor.setAttribute("cx","-20");cursor.setAttribute("cy","-20");
+    previewSvg.append(line,cursor);overlay.append(previewSvg);
     document.body.appendChild(overlay);
-    gesture={el,kind,canvas,overlay,points:[],doc:DZ.doc,frame:DZ.doc.frame};
+    gesture={el,kind,canvas,overlay,line,cursor,points:[],doc:DZ.doc,frame:DZ.doc.frame};
     canvas.addEventListener("pointerdown",pick,true); document.addEventListener("keydown",escape,true);
+    canvas.addEventListener("pointermove",preview,true);
     $id("rigLimbCancel").hidden=false;
     message(kind==="cut"?"1/2 · Marcá un lado de la línea de corte · Esc cancela":kind==="leg"?"1/3 · Marcá la cadera · Esc cancela":"1/3 · Marcá el hombro · Esc cancela");
   }
@@ -41,6 +69,7 @@
     const marker=document.createElement("b"); marker.textContent=String(g.points.length);
     marker.style.cssText=`position:absolute;left:${e.clientX-11}px;top:${e.clientY-11}px;background:#F0450E;color:white;border:2px solid white;border-radius:50%;width:22px;height:22px;text-align:center;line-height:18px`;
     g.overlay.appendChild(marker);
+    preview(e);
     if(g.kind==="cut") {
       if(g.points.length<2)return message("2/2 · Marcá el otro lado; el corte atraviesa la pieza");
       cancel();try{cut(g.el,g.points);}catch(error){message(error.message);}return;
