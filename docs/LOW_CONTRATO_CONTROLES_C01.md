@@ -84,12 +84,23 @@ estaba sólo en el borrado masivo. Y corrijo un análisis propio previo: `replac
 
 ## 5. Huecos que hereda C02
 
-- **No existe renombrar un control.** Las operaciones son `createRigControl`,
-  `removeRigControl`, `setRigControlRange` y `setRigControlValue`. Un editor visual
-  va a querer renombrar, y como el `id` es la referencia, renombrar de verdad exige
-  mover el canal `controls/<viejo>` → `controls/<nuevo>` y reapuntar cada
-  `action.driver.path`. Es la operación con más riesgo de la etapa C: conviene
-  implementarla con su propio repro antes de exponerla en la UI.
+- ~~**No existe renombrar un control.**~~ **Resuelto, y mi diagnóstico inicial
+  estaba exagerado.** Dije que renombrar era un prerrequisito riesgoso de C02 que
+  exigía migrar el canal y reapuntar los drivers. Es falso, y la razón está en
+  `app.js:9489`: el `id` es un **slug derivado del nombre al crear**
+  (`limpio.toLowerCase().replace(/\s+/g,"_")…`) y el panel muestra `c.name || id`.
+  El artista **nunca ve el id**. Cuando escribe mal un nombre, lo que necesita es
+  corregir el **rótulo**, y eso no arrastra ninguna referencia.
+
+  Agregado en su lugar: `setRigControlName(id, name)`, de una línea de efecto y
+  cero migración. La prueba (sección 4 del repro) verifica lo que importa: tras
+  renombrar, el dial **conserva sus claves de animación y el conductor de la
+  acción**. Borrar y recrear —la única salida anterior— perdía las dos cosas,
+  y eso sí está medido.
+
+  La migración de `id` queda como **no necesaria**: sólo haría falta si algún día
+  el id se expone al artista o si se quiere que los ids sigan siendo legibles para
+  intercambio de biblioteca. No bloquea C02.
 - **`group` no tiene consumidor.** La definición ya guarda `group: ""`, pero nada
   lo usa todavía. Es el gancho natural para los conjuntos reutilizables de C05
   (ojos, cejas, boca, manos).

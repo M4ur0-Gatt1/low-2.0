@@ -140,5 +140,46 @@ console.log("\n== 3. ¿Alguien LEE rig.controllers para decidir algo? ==");
     "la única lectura es el clonado de paso en replaceRig", { lecturas });
 }
 
-console.log("\n" + (fallas ? "FALLAS: " + fallas + " (esperado: 1, el defecto de clearRig)" : "sin fallas"));
+console.log("\n== 4. Renombrar el rótulo conserva animación y conductor ==");
+{
+  const doc = armar();
+  // Un dial con el nombre mal escrito, ya animado y conduciendo una acción.
+  doc.createRigControl("boca_abierat", { name: "boca abierat", min: 0, max: 1 });
+  doc.setRigControlValue("boca_abierat", 1, 0.4);
+  doc.setRigControlValue("boca_abierat", 12, 0.9);
+  doc.createRigAction("boca_flex", { name: "Boca", driverControl: "boca_abierat", min: 0, max: 1, length: 2 });
+
+  const rig = doc.scene.rig, ruta = "controls/boca_abierat";
+  const clavesAntes = Object.keys((rig.channels[ruta] || {}).keys || {}).length;
+  dice(clavesAntes === 2, "el dial arranca con 2 claves de animación", { claves: clavesAntes });
+  dice(rig.actions.boca_flex.driver.path === ruta, "la acción lo tiene como conductor");
+
+  // La operación que el artista necesita: corregir el rótulo.
+  dice(doc.setRigControlName("boca_abierat", "boca abierta") === true, "setRigControlName devuelve true");
+  dice(rig.controls.boca_abierat.name === "boca abierta", "el rótulo quedó corregido");
+  dice(doc.scene.rigControl("boca_abierat").name === "boca abierta", "la escena lo ve corregido");
+
+  // Lo que NO debe pasar: perder la animación o el conductor. Borrar y recrear
+  // (la única salida antes de esta operación) perdía las dos cosas.
+  const clavesDespues = Object.keys((rig.channels[ruta] || {}).keys || {}).length;
+  dice(clavesDespues === 2, "conserva las 2 claves de animación", { claves: clavesDespues });
+  dice(rig.actions.boca_flex.driver && rig.actions.boca_flex.driver.path === ruta,
+    "conserva el conductor de la acción", { driver: rig.actions.boca_flex.driver });
+
+  // El id NO cambia: es la referencia, y no se muestra en el panel.
+  dice(rig.controls.boca_abierat.id === "boca_abierat", "el id se mantiene (es la referencia interna)");
+
+  // Rechazos sensatos
+  dice(doc.setRigControlName("boca_abierat", "   ") === false, "rechaza un rótulo vacío");
+  dice(doc.setRigControlName("boca_abierat", "boca abierta") === false, "rechaza un rótulo idéntico (no ensucia el historial)");
+  dice(doc.setRigControlName("no_existe", "x") === false, "rechaza un control inexistente");
+
+  // Un solo Undo devuelve el rótulo viejo.
+  doc.setRigControlName("boca_abierat", "boca cerrada");
+  doc.history.undo();
+  dice(doc.scene.rigControl("boca_abierat").name === "boca abierta",
+    "un solo Undo revierte el renombrado", { name: doc.scene.rigControl("boca_abierat").name });
+}
+
+console.log("\n" + (fallas ? "FALLAS: " + fallas : "sin fallas"));
 process.exit(0);

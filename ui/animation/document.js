@@ -1545,6 +1545,22 @@
       });
     }
 
+    /** Cambiar el ROTULO de un control. Es la operación que el artista necesita
+     *  cuando escribió mal un nombre, y no arrastra nada: el `id` es la
+     *  referencia (va en la ruta del canal `controls/<id>` y en
+     *  `action.driver.path`), mientras `name` es sólo lo que se ve en el panel.
+     *  Por eso renombrar NO exige migrar el canal ni reapuntar los drivers. */
+    setRigControlName(id, name) {
+      return this._rigChange("Renombrar el control", (rig) => {
+        const control = rig.controls && rig.controls[id];
+        if (!control) return false;
+        const limpio = String(name || "").trim();
+        if (!limpio || limpio === control.name) return false;
+        control.name = limpio;
+        return true;
+      });
+    }
+
     /* ── SMART BONES: acciones conducidas por ángulo ──────────────────────
        Una acción guarda la CORRECCIÓN (cómo debería verse el codo doblado) y
        el driver la dosifica según el ángulo real. El artista la graba una vez
