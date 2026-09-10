@@ -181,5 +181,63 @@ console.log("\n== 4. Renombrar el rótulo conserva animación y conductor ==");
     "un solo Undo revierte el renombrado", { name: doc.scene.rigControl("boca_abierat").name });
 }
 
+console.log("\n== 5. El mando del control (kind/posicion/opciones) sobrevive guardar ==");
+{
+  const doc = armar();
+  doc.createRigControl("mano", { name: "mano", min: 0, max: 1 });
+  const rig = doc.scene.rig;
+
+  dice(rig.controls.mano.kind === "slider", "un control nace como deslizador", { kind: rig.controls.mano.kind });
+
+  // Colocarlo sobre el personaje.
+  dice(doc.setRigControlWidget("mano", { kind: "selector", x: 120, y: 40,
+    options: [{ label: "abierta", value: 0 }, { label: "cerrada", value: 1 }] }) === true,
+    "setRigControlWidget devuelve true");
+  const c = rig.controls.mano;
+  dice(c.kind === "selector", "quedo como selector");
+  dice(c.x === 120 && c.y === 40, "guardo su posicion sobre el personaje", { x: c.x, y: c.y });
+  dice((c.options || []).length === 2, "guardo las 2 opciones", { options: c.options });
+
+  // LA PUERTA: rigControlsData es una lista blanca. Si los campos nuevos no
+  // pasan por ella, se borran al normalizar el rig (que es lo que hace
+  // replaceRig al cargar un personaje de biblioteca).
+  doc.replaceRig(JSON.parse(JSON.stringify(rig)), "Round-trip de prueba");
+  const r = doc.scene.rig.controls.mano;
+  dice(!!r, "el control sobrevive el round-trip");
+  dice(r.kind === "selector", "sobrevive el kind", { kind: r.kind });
+  dice(r.x === 120 && r.y === 40, "sobrevive la posicion", { x: r.x, y: r.y });
+  dice((r.options || []).length === 2, "sobreviven las opciones", { options: r.options });
+}
+
+console.log("\n== 6. Rechazos y degradado del mando ==");
+{
+  const doc = armar();
+  doc.createRigControl("ceja", { name: "ceja", min: 0, max: 1 });
+
+  // Un selector sin opciones no se puede accionar: degrada a deslizador en vez
+  // de quedar como un mando muerto sobre el personaje.
+  doc.setRigControlWidget("ceja", { kind: "selector", options: [] });
+  dice(doc.scene.rig.controls.ceja.kind === "slider",
+    "un selector sin opciones degrada a deslizador", { kind: doc.scene.rig.controls.ceja.kind });
+
+  // Las opciones se recortan al recorrido del control.
+  doc.setRigControlWidget("ceja", { kind: "selector", options: [{ label: "fuera", value: 9 }] });
+  dice(doc.scene.rig.controls.ceja.options[0].value === 1,
+    "una opcion fuera de rango se recorta al maximo", { options: doc.scene.rig.controls.ceja.options });
+
+  // Un kind inventado no pasa.
+  doc.setRigControlWidget("ceja", { kind: "palanca_magica" });
+  dice(doc.scene.rig.controls.ceja.kind === "slider", "un kind desconocido cae a deslizador");
+
+  // Media posicion no es posicion.
+  doc.setRigControlWidget("ceja", { x: 10 });
+  const p = doc.scene.rig.controls.ceja;
+  dice(p.x === undefined && p.y === undefined, "una posicion incompleta no se guarda", { x: p.x, y: p.y });
+
+  dice(doc.setRigControlWidget("no_existe", { kind: "slider" }) === false, "rechaza un control inexistente");
+  dice(doc.setRigControlWidget("ceja", { kind: "slider" }) === false,
+    "sin cambio real no ensucia el historial");
+}
+
 console.log("\n" + (fallas ? "FALLAS: " + fallas : "sin fallas"));
 process.exit(0);

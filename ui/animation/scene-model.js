@@ -406,6 +406,36 @@
    *  conductor igual que toma el ángulo de un hueso. Un dial de cara animable
    *  sale, así, de piezas que ya estaban probadas. */
   const rigControlPath = (id) => `controls/${encodeURIComponent(id)}`;
+  /** Parte VISUAL de un control: qué forma tiene el mando y dónde se para
+   *  sobre el personaje. Vive en la misma definición porque es del control,
+   *  no de la escena, y así viaja con el personaje a la biblioteca.
+   *
+   *  Ojo: `rigControlsData` es una LISTA BLANCA. Todo campo nuevo tiene que
+   *  pasar por acá o se borra en silencio al normalizar el rig (que es lo que
+   *  hace `replaceRig` al cargar un personaje). */
+  const rigControlKinds = new Set(["slider", "point2d", "selector"]);
+  const rigControlWidget = (raw = {}, min = 0, max = 1) => {
+    const kind = rigControlKinds.has(raw.kind) ? raw.kind : "slider";
+    const out = { kind };
+    // Posición sobre el personaje, en unidades del SVG. Sin ella el mando
+    // todavía no fue colocado y sólo se maneja desde el panel.
+    if (Number.isFinite(+raw.x) && Number.isFinite(+raw.y)) { out.x = +raw.x; out.y = +raw.y; }
+    if (kind === "selector") {
+      const lo = Math.min(min, max), hi = Math.max(min, max);
+      const opciones = (Array.isArray(raw.options) ? raw.options : [])
+        .filter((o) => o && Number.isFinite(+o.value))
+        .map((o) => ({ label: String(o.label || o.value), value: Math.max(lo, Math.min(hi, +o.value)) }));
+      // Un selector sin opciones no es un selector: degrada a deslizador en vez
+      // de quedar como un mando que no se puede accionar.
+      if (opciones.length) out.options = opciones; else out.kind = "slider";
+    }
+    if (kind === "point2d" && raw.link && raw.link.partner) {
+      out.link = { partner: String(raw.link.partner),
+        axis: raw.link.axis === "y" ? "y" : "x" };
+    }
+    return out;
+  };
+
   const rigControlsData = (source = {}) => {
     const out = {};
     for (const [id, raw] of Object.entries(source || {})) {
@@ -416,7 +446,7 @@
       const inicial = Number.isFinite(+raw.default) ? +raw.default : min;
       out[id] = { id, name: raw.name || id, min, max,
         default: Math.max(Math.min(min, max), Math.min(Math.max(min, max), inicial)),
-        group: raw.group || "" };
+        group: raw.group || "", ...rigControlWidget(raw, min, max) };
     }
     return out;
   };
@@ -1652,6 +1682,7 @@
   animation.rigActionsData = rigActionsData;
   animation.rigControlsData = rigControlsData;
   animation.rigControlPath = rigControlPath;
+  animation.rigControlWidget = rigControlWidget;
   animation.rigActionPhase = rigActionPhase;
   animation.rigChannelValueDe = rigChannelValueDe;
   animation.rigNormalizeWeights = rigNormalizeWeights;

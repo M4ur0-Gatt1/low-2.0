@@ -1504,9 +1504,13 @@
       return this._rigChange("Crear control", (rig) => {
         rig.controls = rig.controls || {};
         if (rig.controls[clave]) return false;
+        // Pasa por el MISMO sanitizador que la persistencia para que un control
+        // recien creado sea identico a uno cargado de biblioteca. Sin esto nacia
+        // sin `kind` y lo ganaba recien al guardar y reabrir: la UI tendria que
+        // tratar dos formas del mismo objeto.
         rig.controls[clave] = { id: clave, name: data.name || clave, min, max,
           default: Number.isFinite(+data.default) ? +data.default : min,
-          group: data.group || "" };
+          group: data.group || "", ...animation.rigControlWidget(data, min, max) };
         return true;
       });
     }
@@ -1542,6 +1546,22 @@
         control.min = lo; control.max = hi;
         control.default = Math.max(Math.min(lo, hi), Math.min(Math.max(lo, hi), control.default));
         return true;
+      });
+    }
+
+    /** Parte VISUAL del control: forma del mando y su lugar sobre el personaje.
+     *  Reusa el mismo sanitizador que la persistencia, asi que lo que se guarda
+     *  aca es exactamente lo que sobrevive a guardar y reabrir. */
+    setRigControlWidget(id, data = {}) {
+      return this._rigChange("Cambiar el mando del control", (rig) => {
+        const control = rig.controls && rig.controls[id];
+        if (!control) return false;
+        const previo = JSON.stringify([control.kind, control.x, control.y, control.options, control.link]);
+        const widget = animation.rigControlWidget({ ...control, ...data }, control.min, control.max);
+        delete control.x; delete control.y; delete control.options; delete control.link;
+        Object.assign(control, widget);
+        // Sin cambio real no se ensucia el historial.
+        return JSON.stringify([control.kind, control.x, control.y, control.options, control.link]) !== previo;
       });
     }
 
