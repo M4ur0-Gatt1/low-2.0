@@ -152,5 +152,33 @@ const rest = grid();
     "una malla sin pesos devuelve exactamente la rejilla de siempre");
 }
 
+// Correctives reuse action channels and survive normalization/serialization.
+eval(fs.readFileSync(path.join(root,'ui/rigging/flexible-limb.js'),'utf8'));
+{
+  const doc=new A.LowDoc(),limb=LOW.rigging.flexibleLimb;
+  limb.create(doc,{id:'arm',points:[{x:0,y:0},{x:50,y:0},{x:100,y:0}],box:{x:0,y:-10,width:100,height:20}});
+  doc.setRigKey('arm:lower',1,{r:-60});
+  const base=doc.scene.rigMeshSkinnedAt('arm',1),edited=base.map(p=>({...p}));edited[5].y-=8;
+  const id=limb.corrective(doc,{meshId:'arm',driverId:'arm:lower',points:edited,frame:1});
+  ok(near(doc.scene.rigMeshSkinnedAt('arm',1)[5].y,edited[5].y),'correctivo coincide con la pose editada');
+  const copy=A.LowDoc.fromJSON(JSON.stringify(doc.toJSON()));
+  ok(near(copy.scene.rigMeshSkinnedAt('arm',1)[5].y,edited[5].y),'correctivo persiste');
+  copy.setRigKey('arm:lower',1,{r:0});
+  ok(copy.scene.rigMeshActionOffsets('arm',1,144).every(p=>near(p.x,0)&&near(p.y,0)),'reposo no recibe correctivo');
+  copy.setRigKey('arm:lower',1,{r:-30});
+  const half=copy.scene.rigMeshActionOffsets('arm',1,144)[5];
+  ok(near(Math.hypot(half.x,half.y),4),'rango negativo interpola a mitad');
+  copy.setRigKey('arm:lower',1,{r:30});
+  const opposite=copy.scene.rigMeshActionOffsets('arm',1,144)[5];
+  ok(near(Math.hypot(opposite.x,opposite.y),0),'lado opuesto no recibe correctivo');
+  const raw=doc.toJSON();
+  const other=A.LowDoc.fromJSON(JSON.stringify(raw));other.scene.rig.actions[id].enabled=false;
+  ok(near(other.scene.rigMeshSkinnedAt('arm',1)[5].y,base[5].y),'desactivar accion conserva skinning base');
+  const stable=JSON.stringify(doc.toJSON());let rejected=false;
+  try{limb.corrective(doc,{meshId:'arm',driverId:'arm:lower',points:[{x:NaN,y:0}]});}catch(_){rejected=true;}
+  ok(rejected&&JSON.stringify(doc.toJSON())===stable,'puntos invalidos no mutan documento');
+  doc.removeRigMesh('arm');
+  ok(!doc.scene.rig.actions[id],'quitar malla elimina correctivo propio');
+}
 console.log(`rig-mesh: ${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);

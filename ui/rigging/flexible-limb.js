@@ -74,5 +74,33 @@
       }return out;
     });
   }
-  rigging.flexibleLimb={plan,create,split};
+  function corrective(doc,{meshId,driverId,points,frame=doc.frame}) {
+    if(doc.history?.transaction)throw Error("Terminá el gesto actual antes de guardar el correctivo");
+    const scene=doc.scene,mesh=scene.rigMesh(meshId),driver=scene.rigNode(driverId);
+    if(!mesh||!driver)throw Error("La pieza o el hueso ya no existen");
+    if(!Array.isArray(points)||points.length!==mesh.rest.length||!points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)))throw Error("La corrección contiene puntos inválidos");
+    const driverPath=LOW.animation.rigChannelPath(driverId,"r");
+    const angle=scene.rigChannelValue(driverPath,frame,0);
+    if(Math.abs(angle)<1)throw Error("Doblá primero la articulación al menos un grado");
+    const base=scene.rigMeshSkinnedAt(meshId,frame),matrix=scene.rigWorldMatrix(driverId,frame);
+    const det=matrix[0]*matrix[3]-matrix[1]*matrix[2];
+    if(Math.abs(det)<1e-8)throw Error("La escala del hueso no permite guardar esta corrección");
+    const channels={};
+    points.forEach((p,i)=>{
+      const dx=p.x-base[i].x,dy=p.y-base[i].y;
+      const local={x:(matrix[3]*dx-matrix[2]*dy)/det,y:(matrix[0]*dy-matrix[1]*dx)/det};
+      for(const axis of ["x","y"])if(Math.abs(local[axis])>1e-6){
+        const path=`meshes/${encodeURIComponent(meshId)}/${i}/${axis}`;
+        channels[path]={path,interpolation:"linear",valueType:"number",keys:{1:0,2:local[axis]},ease:{}};
+      }
+    });
+    if(!Object.keys(channels).length)throw Error("Mové al menos un punto antes de guardar");
+    const id="corrective:"+meshId+":"+crypto.randomUUID();
+    doc._rigChange("Guardar corrección de articulación",rig=>{
+      rig.actions ||= {};rig.actions[id]={id,name:"Corrección · "+driver.name,enabled:true,length:2,
+        driver:{path:driverPath,min:0,max:angle},channels};return true;
+    });
+    return id;
+  }
+  rigging.flexibleLimb={plan,create,split,corrective};
 })(typeof window!=="undefined"?window:globalThis);

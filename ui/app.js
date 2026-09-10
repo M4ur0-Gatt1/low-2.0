@@ -8298,21 +8298,6 @@ function dzRigApplyLive(num, overrides = {}) {
   }
   dzPositionHandle();
 }
-function dzRigView(svgText, num) {
-  const ids = Object.keys(dzRigTracks()); if (!ids.length) return svgText;
-  const tmp = document.createElement("div"); tmp.innerHTML = svgText;
-  const svg = tmp.querySelector("svg"); if (!svg) return svgText;
-  for (const id of ids) {
-    const node = DZ.doc && DZ.doc.scene.rigNode(id);
-    // el export tiene que sacar el mismo dibujo que se ve en la mesa
-    const objetivo = node ? dzRigDibujoDe(node, num, svg) : id;
-    const el = svg.querySelector("#" + CSS.escape(objetivo)); if (!el) continue;
-    const chunk = node ? dzRigMatrixChunk(DZ.doc.scene.rigWorldMatrix(id, num)) : dzRigChunk(el, dzRigAt(id, num));
-    if (!chunk) continue;
-    const base = el.getAttribute("transform") || ""; el.setAttribute("transform", chunk + (base ? " " + base : ""));
-  }
-  return svg.outerHTML;
-}
 function dzRigSetKey(id, num, k) {
   if (DZ.doc) { DZ.doc.setRigKey(id, num, k); dzRigApplyLive(num); dzTimelineBadges(); dzRigPanelSync(); return; }
   DZ.scene = DZ.scene || {}; DZ.scene.rig = DZ.scene.rig || {}; DZ.scene.rig[id] = DZ.scene.rig[id] || {};

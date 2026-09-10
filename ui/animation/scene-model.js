@@ -1245,7 +1245,8 @@
       const m = this.rigMesh(boneId);
       if (!m || !Array.isArray(m.rest) || m.rest.length < 4) return null;
       const manual = rigInterpGrid(m.rest, m.keys || {}, frame);
-      if (!Array.isArray(m.weights) || !m.weights.length) return manual;
+      const corrections=this.rigMeshActionOffsets(boneId,frame,m.rest.length);
+      if (!Array.isArray(m.weights) || !m.weights.length) return manual.map((p,i)=>({x:p.x+corrections[i].x,y:p.y+corrections[i].y}));
       const cache = new Map();
       const delta = (id) => {
         if (cache.has(id)) return cache.get(id);
@@ -1267,8 +1268,34 @@
         }
         const base = total > 1e-6 ? { x: x / total, y: y / total } : { x: p.x, y: p.y };
         const corregido = manual[i] || p;
-        return { x: base.x + (corregido.x - p.x), y: base.y + (corregido.y - p.y) };
+        return { x: base.x + (corregido.x - p.x) + corrections[i].x, y: base.y + (corregido.y - p.y) + corrections[i].y };
       });
+    }
+
+    /** Mesh corrective channels share action time and persistence with Smart
+     * Bones. Offsets are stored in the driver bone's local vector space, so
+     * moving/rotating the character does not leave its correction behind. */
+    rigMeshActionOffsets(meshId,frame,count) {
+      const offsets=Array.from({length:count},()=>({x:0,y:0}));
+      const prefix=`meshes/${encodeURIComponent(meshId)}/`;
+      for(const action of Object.values(this.rig.actions||{})){
+        if(!action?.driver || action.enabled===false)continue;
+        const driver=/^bones\/([^/]+)\//.exec(action.driver.path);
+        if(!driver || !this.rigNode(decodeURIComponent(driver[1])))continue;
+        const value=this.rigChannelValue(action.driver.path,frame,0);
+        const af=1+rigActionPhase(action,value)*(action.length-1);
+        const matrix=this.rigWorldMatrix(decodeURIComponent(driver[1]),frame);
+        for(const [path,channel] of Object.entries(action.channels||{})){
+          if(!path.startsWith(prefix))continue;
+          const match=/^(\d+)\/(x|y)$/.exec(path.slice(prefix.length));if(!match)continue;
+          const index=Number(match[1]);if(index>=count)continue;
+          const start=rigChannelValueDe(channel,1,0);
+          const delta=rigChannelValueDe(channel,af,start)-start;
+          const axis=match[2]==='x'?0:2;
+          offsets[index].x+=matrix[axis]*delta;offsets[index].y+=matrix[axis+1]*delta;
+        }
+      }
+      return offsets;
     }
 
     /** El mapeador de la malla listo para deformar el dibujo en un cuadro, o
