@@ -174,9 +174,15 @@ eval(fs.readFileSync(path.join(root,'ui/rigging/flexible-limb.js'),'utf8'));
   const raw=doc.toJSON();
   const other=A.LowDoc.fromJSON(JSON.stringify(raw));other.scene.rig.actions[id].enabled=false;
   ok(near(other.scene.rigMeshSkinnedAt('arm',1)[5].y,base[5].y),'desactivar accion conserva skinning base');
-  const stable=JSON.stringify(doc.toJSON());let rejected=false;
+  // `toJSON()` estampa `savedAt` con la hora actual, asi que comparar el JSON
+  // completo solo daba igual si las dos llamadas caian en el mismo milisegundo:
+  // la prueba fallaba ~6 de cada 10 corridas por 2 ms de diferencia, no por una
+  // mutacion. Se compara el documento SIN los campos volatiles.
+  const sinVolatiles=(d)=>{const j=d.toJSON();delete j.savedAt;return JSON.stringify(j);};
+  const stable=sinVolatiles(doc);let rejected=false;
   try{limb.corrective(doc,{meshId:'arm',driverId:'arm:lower',points:[{x:NaN,y:0}]});}catch(_){rejected=true;}
-  ok(rejected&&JSON.stringify(doc.toJSON())===stable,'puntos invalidos no mutan documento');
+  ok(rejected,'puntos invalidos son rechazados');
+  ok(sinVolatiles(doc)===stable,'puntos invalidos no mutan documento');
   doc.removeRigMesh('arm');
   ok(!doc.scene.rig.actions[id],'quitar malla elimina correctivo propio');
 }
