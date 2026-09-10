@@ -13,7 +13,8 @@ function dzSmartNueva() {
   dzSmartPanelSync(id);
   dzSetStatus("Acción creada: doblá el hueso, acomodá las piezas y tocá «Grabar pose»");
 }
-function dzSmartGrabar() {
+function dzSmartGrabar(extremo = "max") {
+  dzSmartPreviewEnd();
   const id = dzSmartSeleccionada();
   if (!id || !DZ.doc) return dzSetStatus("Elegí una acción");
   // se graban las piezas seleccionadas; si no hay, todas menos el conductor
@@ -21,11 +22,11 @@ function dzSmartGrabar() {
   if (!accion?.driver) return dzSetStatus("Elegí un conductor para esta acción");
   const conductor = (accion.driver.path.match(/^bones\/([^/]+)\//) || [])[1];
   const elegidas = DZ.rigSelectedId && DZ.rigSelectedId !== decodeURIComponent(conductor || "")
-    ? [DZ.rigSelectedId] : null;
-  if (!DZ.doc.recordRigAction(id, elegidas, "max"))
+    ? [DZ.rigSelectedId] : Object.keys(DZ.doc.scene.rig.nodes).filter(b => b !== decodeURIComponent(conductor || ""));
+  if (!elegidas.length || !DZ.doc.recordRigAction(id, elegidas, extremo))
     return dzSetStatus("No había nada distinto del reposo para grabar");
   dzSmartPanelSync(id);
-  dzSetStatus("Pose grabada en el extremo del rango · movéle el ángulo al conductor para verla entrar");
+  dzSetStatus(extremo === "min" ? "Inicio grabado · acomodá la pieza y grabá el otro extremo" : "Extremo grabado · revisá la mezcla en Poses de referencia");
 }
 function dzSmartQuitar() {
   const id = dzSmartSeleccionada();
@@ -70,6 +71,7 @@ function dzSmartPanelSync(seleccionar) {
     const el = $("#" + k); if (el) el.disabled = k === "rigSmartRemove" ? !actual : !actual?.driver;
   });
   dzSmartLinksSync(actual);
+  dzSmartPoseTools(actual);
   const nuevo = $("#rigSmartNew");
   if (nuevo) nuevo.disabled = !(DZ.rigSelectedId || (DZ.sel && DZ.sel.id));
 }
@@ -116,4 +118,58 @@ function dzSmartLinksSync(action) {
     : result.warnings.some(e => e.code === 'action-cycle')
       ? 'Hay acciones que se conducen entre sí. Se leen las claves originales; sus efectos no se encadenan.'
       : mesh ? 'El correctivo conserva el hueso que orienta su deformación.' : '';
+}
+let dzSmartPreviewSession = null;
+function dzSmartPreviewEnd() {
+  if (!dzSmartPreviewSession) return;
+  clearInterval(dzSmartPreviewSession.timer);
+  dzSmartPreviewSession = null;
+  if (DZ.doc) dzRigApplyLive(dzRigCur());
+  const status = document.getElementById('rigSmartPreviewStatus');
+  if (status) status.textContent = 'Vista de la escena';
+}
+function dzSmartPreview(value) {
+  const doc = DZ.doc, id = dzSmartSeleccionada(), action = doc?.scene.rig.actions[id];
+  if (!action?.driver) return;
+  dzSmartPreviewEnd();
+  const frame = dzRigCur(), signature = JSON.stringify(doc.scene.rig);
+  // Detached evaluator: preview never writes channels, keys or undo entries.
+  const copy = new LOW.animation.Scene({rig: JSON.parse(signature)});
+  const path = action.driver.path, driverValue = action.driver.min +
+    Math.max(0, Math.min(1, Number(value))) * (action.driver.max - action.driver.min);
+  copy.rig.channels[path] = LOW.animation.rigChannelData(path, {keys:{[frame]:driverValue}});
+  const overrides = {};
+  for (const bone of Object.keys(copy.rig.nodes)) overrides[bone] = copy.rigPose(bone, frame);
+  dzRigApplyLive(frame, overrides);
+  document.getElementById('rigSmartPreviewStatus').textContent = 'Vista previa · ' + Math.round(value * 100) + '% · no modifica claves';
+  const session = {doc, frame, signature, id};
+  session.timer = setInterval(() => {
+    if (DZ.doc !== doc || dzRigCur() !== frame || dzSmartSeleccionada() !== id ||
+        JSON.stringify(doc.scene.rig) !== signature || !DZ.rigMode || !document.getElementById('l3dView')?.hidden)
+      dzSmartPreviewEnd();
+  }, 100);
+  dzSmartPreviewSession = session;
+}
+document.addEventListener('keydown', e => {if(e.key === 'Escape') dzSmartPreviewEnd();});
+function dzSmartPoseTools(action) {
+  let box = document.getElementById('rigSmartPoseTools');
+  if (!box) {
+    box = document.createElement('details'); box.id = 'rigSmartPoseTools';
+    const title = document.createElement('summary'); title.textContent = 'Poses de referencia y mezcla';
+    const help = document.createElement('p');
+    help.textContent = '1. Elegí el conductor. 2. Seleccioná y acomodá una pieza; grabá cada extremo. 3. Revisá la mezcla.';
+    const start = document.createElement('button'); start.id = 'rigSmartRecordMin'; start.textContent = 'Grabar inicio';
+    start.onclick = () => dzSmartGrabar('min');
+    const end = document.createElement('button'); end.id = 'rigSmartRecordMax'; end.textContent = 'Grabar extremo';
+    end.onclick = () => dzSmartGrabar('max');
+    const slider = document.createElement('input'); slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '.01';
+    slider.id = 'rigSmartPreview'; slider.setAttribute('aria-label','Previsualizar mezcla de poses');
+    slider.oninput = () => dzSmartPreview(slider.value);
+    const close = document.createElement('button'); close.textContent = 'Volver a la escena'; close.onclick = dzSmartPreviewEnd;
+    const status = document.createElement('p'); status.id = 'rigSmartPreviewStatus'; status.setAttribute('role','status'); status.textContent = 'Vista de la escena';
+    box.append(title, help, start, end, slider, close, status);
+    document.getElementById('rigSmartValidation').after(box);
+  }
+  const mesh = Object.keys(action?.channels || {}).some(p => p.startsWith('meshes/'));
+  box.querySelectorAll('input,button').forEach(el => el.disabled = !action?.driver || mesh);
 }

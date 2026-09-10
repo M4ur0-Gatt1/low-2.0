@@ -128,6 +128,17 @@ async function main() {
     DZ.doc.createRigAction('linktest',{driverBone:'codo'});dzSmartPanelSync('linktest');
     const conductor=document.querySelector('#rigSmartConductor');conductor.value='controls/boca_abierta';conductor.dispatchEvent(new Event('change'));
     if(DZ.doc.scene.rig.actions.linktest.driver.path!=='controls/boca_abierta')throw Error('No vincula el dial');
+    DZ.doc.setRigActionKey('linktest','bones/brazo/pose/y',1,0);
+    DZ.doc.setRigActionKey('linktest','bones/brazo/pose/y',2,40);
+    const previewBefore=JSON.stringify(DZ.doc.scene.toJSON()),previewUndo=DZ.history.undoStack.length;
+    const preview=document.querySelector('#rigSmartPreview');
+    preview.value='0';preview.dispatchEvent(new Event('input'));const at0=document.querySelector('#brazo').getAttribute('transform');
+    preview.value='1';preview.dispatchEvent(new Event('input'));const at1=document.querySelector('#brazo').getAttribute('transform');
+    preview.value='.5';preview.dispatchEvent(new Event('input'));const atHalf=document.querySelector('#brazo').getAttribute('transform');
+    if(at0===at1||atHalf===at0||atHalf===at1)throw Error('Mezcla no previsualiza los tres estados');
+    if(JSON.stringify(DZ.doc.scene.toJSON())!==previewBefore||DZ.history.undoStack.length!==previewUndo)throw Error('Mezcla modifica documento o Undo');
+    document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));
+    if(dzSmartPreviewSession)throw Error('Escape deja preview activa');
     DZ.doc.removeRigControl('boca_abierta');dzSmartPanelSync('linktest');
     if(!document.querySelector('#rigSmartRecord').disabled||!document.querySelector('#rigSmartValidation').textContent.includes('referencias'))throw Error('No explica conductor eliminado');
     return {vacio,creada,grabada,conduce,rango,sinHornear,persiste,quitada,
