@@ -388,7 +388,8 @@
       }
       out[boneId] = { id: (m && m.id) || `mesh:${boneId}`, boneId, type: "mesh",
         enabled: !(m && m.enabled === false), cols: nx, rows: ny, rest, keys,
-        weights: rigWeightsData(m && m.weights, rest.length) };
+        weights: rigWeightsData(m && m.weights, rest.length),
+        locked: Array.from({length:rest.length},(_,i)=>m?.locked?.[i]===true) };
     }
     return out;
   };
@@ -1271,16 +1272,16 @@
      *
      *  Sin pesos devuelve exactamente la rejilla de siempre, para que una malla
      *  hecha a mano siga comportándose igual que antes. */
-    rigMeshSkinnedAt(boneId, frame) {
+    rigMeshSkinnedAt(boneId, frame, overrides = {}) {
       const m = this.rigMesh(boneId);
       if (!m || !Array.isArray(m.rest) || m.rest.length < 4) return null;
       const manual = rigInterpGrid(m.rest, m.keys || {}, frame);
-      const corrections=this.rigMeshActionOffsets(boneId,frame,m.rest.length);
+      const corrections=this.rigMeshActionOffsets(boneId,frame,m.rest.length,overrides);
       if (!Array.isArray(m.weights) || !m.weights.length) return manual.map((p,i)=>({x:p.x+corrections[i].x,y:p.y+corrections[i].y}));
       const cache = new Map();
       const delta = (id) => {
         if (cache.has(id)) return cache.get(id);
-        const mundo = this.rigWorldMatrix(id, frame);
+        const mundo = this.rigWorldMatrix(id, frame, overrides);
         const bind = matInverse(this.rigBindMatrix(id));
         const d = bind ? matMul(mundo, bind) : matIdentity();
         cache.set(id, d);
@@ -1305,16 +1306,17 @@
     /** Mesh corrective channels share action time and persistence with Smart
      * Bones. Offsets are stored in the driver bone's local vector space, so
      * moving/rotating the character does not leave its correction behind. */
-    rigMeshActionOffsets(meshId,frame,count) {
+    rigMeshActionOffsets(meshId,frame,count,overrides = {}) {
       const offsets=Array.from({length:count},()=>({x:0,y:0}));
       const prefix=`meshes/${encodeURIComponent(meshId)}/`;
       for(const action of Object.values(this.rig.actions||{})){
         if(!action?.driver || action.enabled===false)continue;
         const driver=/^bones\/([^/]+)\//.exec(action.driver.path);
         if(!driver || !this.rigNode(decodeURIComponent(driver[1])))continue;
-        const value=this.rigChannelValue(action.driver.path,frame,0);
+        const driverId=decodeURIComponent(driver[1]),property=action.driver.path.split('/').at(-1);
+        const value=overrides[driverId]?.[property] ?? this.rigChannelValue(action.driver.path,frame,0);
         const af=1+rigActionPhase(action,value)*(action.length-1);
-        const matrix=this.rigWorldMatrix(decodeURIComponent(driver[1]),frame);
+        const matrix=this.rigWorldMatrix(driverId,frame,overrides);
         for(const [path,channel] of Object.entries(action.channels||{})){
           if(!path.startsWith(prefix))continue;
           const match=/^(\d+)\/(x|y)$/.exec(path.slice(prefix.length));if(!match)continue;
@@ -1331,10 +1333,10 @@
     /** El mapeador de la malla listo para deformar el dibujo en un cuadro, o
      *  null si no hay malla o está en reposo (así el dibujo no se reescribe al
      *  pedo). Devuelve { punto(p) } — mismo contrato que rigDeformadorAt. */
-    rigMallaAt(boneId, frame) {
+    rigMallaAt(boneId, frame, overrides = {}) {
       const m = this.rigMesh(boneId);
       if (!m || m.enabled === false) return null;
-      const posado = this.rigMeshSkinnedAt(boneId, frame);
+      const posado = this.rigMeshSkinnedAt(boneId, frame, overrides);
       if (!posado) return null;
       const quieto = m.rest.every((pt, i) =>
         Math.abs(pt.x - posado[i].x) < 1e-6 && Math.abs(pt.y - posado[i].y) < 1e-6);

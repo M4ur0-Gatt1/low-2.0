@@ -9,6 +9,7 @@ async function main(){
  const send=(method,params={})=>new Promise((resolve,reject)=>{const n=++id;const timer=setTimeout(()=>{pending.delete(n);reject(Error("Timeout "+method));},90000);pending.set(n,{resolve:v=>{clearTimeout(timer);resolve(v);},reject:e=>{clearTimeout(timer);reject(e);}});ws.send(JSON.stringify({id:n,method,params}));});
  try{
  await send("Page.enable");await send("Runtime.enable");await send("Network.enable");await send("Network.setCacheDisabled",{cacheDisabled:true});
+ await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:0,y:0,button:'left',clickCount:1});
  await send("Emulation.setDeviceMetricsOverride",{width:1366,height:768,deviceScaleFactor:1,mobile:false});
  await send("Emulation.setFocusEmulationEnabled",{enabled:true});
  if(!existing)await send("Page.navigate",{url});
@@ -84,6 +85,12 @@ async function main(){
  await wait(300);const pieces=[...document.querySelectorAll('#dzCanvas [id^="cuttest"]')];
  assert(pieces.length===2,"El corte no produce dos piezas");assert(pieces.every(p=>p.getBBox().width>95&&p.getBBox().width<105),"El corte altera el ancho de las piezas");
  assert(DZ.history.undoStack.length-cutBefore===1,"El corte requiere varios Undo");dzUndo();await wait(150);assert(DZ.doc.drawing.content===precut,"Undo no vuelve a unir el dibujo cortado");dzRedo();await wait(150);assert(document.querySelectorAll('#dzCanvas [id^="cuttest"]').length===2,"Redo pierde una pieza");
+ svg=document.querySelector('#dzCanvas > svg');const group=document.createElementNS(svg.namespaceURI,'g');group.id='complexLimb';group.setAttribute('transform','translate(1000 350)');group.setAttribute('fill','#b778bf');group.innerHTML='<g transform="scale(1 .7)"><path d="M0 0 Q150 -10 300 0 L300 40 Q150 50 0 40 Z"/><path d="M20 10L280 10" fill="none" stroke="#553360" stroke-width="3"/></g>';svg.append(group);dzDocCommit();
+ const groupBefore=DZ.doc.drawing.content;LOW.rigging.flexibleLimbUI.build(document.querySelector('#complexLimb'),[{x:1000,y:364},{x:1150,y:364},{x:1300,y:364}],'arm');
+ const complex=document.querySelector('#complexLimb');assert(complex.querySelectorAll('path').length===2&&!complex.hasAttribute('transform')&&!complex.querySelector('[transform]'),'Grupo transformado pierde trazos o conserva transformaciones duplicadas');
+ const groupBase=complex.querySelector('path').getAttribute('d');DZ.doc.setRigKey('complexLimb:lower',1,{r:45});dzRigApplyLive(1);
+ const groupLive=document.querySelector('#complexLimb path').getAttribute('d');assert(groupLive!==groupBase,'Grupo no se deforma');
+ const groupExport=new DOMParser().parseFromString(dzRigView(dzCuadroSvgTexto(1),1),'image/svg+xml');assert(groupExport.querySelector('#complexLimb path').getAttribute('d')===groupLive&&groupExport.querySelector('#complexLimb').getAttribute('fill')==='#b778bf','Export de grupo cambia geometría o estilo');
  return {vertices:mesh.rest.length,undo:1,visible:painted!==base,root,tip,persiste:true,rodilla:true,cancelar:true,corte:2};})()`});
  if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);
  console.log("E2E articulación flexible OK",JSON.stringify(result.result.value));
@@ -91,6 +98,7 @@ async function main(){
  await evalValue("closeL3d()");
  await send("Emulation.setFocusEmulationEnabled",{enabled:true});
  const pos=await evalValue(`(()=>{dzSelect(document.querySelector('#cuttest'));LOW.rigging.flexibleLimbUI.start('cut');window.__limbBefore={content:DZ.doc.drawing.content,undo:DZ.history.undoStack.length};const r=document.querySelector('#dzCanvas').getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+ if(existing)await evalValue(`window.__limbTrace=[];const oldPush=DZ.history.push;DZ.history.push=function(e){__limbTrace.push({label:e.label,stack:new Error().stack});return oldPush.call(this,e)};document.addEventListener('pointerdown',e=>__limbTrace.push({event:e.type,tag:e.target.tagName,id:e.target.id}),{capture:true});`);
  await send("Input.dispatchMouseEvent",{type:"mousePressed",...pos,button:"left",clickCount:1});
  await send("Input.dispatchMouseEvent",{type:"mouseReleased",...pos,button:"left",clickCount:1});
  const initialGuide=await evalValue("document.querySelector('.rig-limb-guide polyline').getAttribute('points')");
@@ -100,8 +108,37 @@ async function main(){
  if(!await evalValue(`(()=>{const p=document.querySelector('.rig-limb-guide polyline');return !!p&&p.getAttribute('points')?.split(' ').length===2;})()`))throw Error("La guía no responde al puntero físico");
  await send("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});
  await send("Input.dispatchKeyEvent",{type:"keyUp",key:"Escape",code:"Escape"});
- if(!await evalValue(`!document.querySelector('.rig-limb-guide')&&DZ.doc.drawing.content===__limbBefore.content&&DZ.history.undoStack.length===__limbBefore.undo`))throw Error("Cancelar físicamente altera el dibujo o deja la guía");
+ if(!await evalValue(`!document.querySelector('.rig-limb-guide')&&DZ.doc.drawing.content===__limbBefore.content&&DZ.history.undoStack.length===__limbBefore.undo`)){if(existing)console.log(await evalValue('JSON.stringify(__limbTrace)'));throw Error("Cancelar físicamente altera el dibujo o deja la guía");}
  console.log("Vista previa con puntero físico y Escape OK");
+ const poseDrag=await evalValue(`(()=>{dzRigSetMode('fk');dzRigSetTool('pose');dzRigSelectNode('limbtest:lower');dzRigApplyLive(1);const el=document.querySelector('.dz-rig-bone-tip[data-id="limbtest:lower"]');const r=el.getBoundingClientRect();const joint=document.querySelector('.dz-rig-joint[data-id="limbtest:lower"]').getBoundingClientRect();const x=r.x+r.width/2,y=r.y+r.height/2,cx=joint.x+joint.width/2,cy=joint.y+joint.height/2,a=-.3;window.__poseBefore={path:document.querySelector('#limbtest').getAttribute('d'),rig:JSON.stringify(DZ.doc.scene.rig),undo:DZ.history.undoStack.length};return{x,y,toX:cx+(x-cx)*Math.cos(a)-(y-cy)*Math.sin(a),toY:cy+(x-cx)*Math.sin(a)+(y-cy)*Math.cos(a)};})()`);
+ await send('Input.dispatchMouseEvent',{type:'mousePressed',x:poseDrag.x,y:poseDrag.y,button:'left',clickCount:1});
+ await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:poseDrag.toX,y:poseDrag.toY,button:'left',buttons:1});
+ await new Promise(r=>setTimeout(r,100));
+ if(!await evalValue(`document.querySelector('#limbtest').getAttribute('d')!==__poseBefore.path&&JSON.stringify(DZ.doc.scene.rig)===__poseBefore.rig`))throw Error('Posar no deforma la malla durante el arrastre sin hornear claves');
+ await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:poseDrag.toX,y:poseDrag.toY,button:'left',clickCount:1});
+ await new Promise(r=>setTimeout(r,100));
+ if(!await evalValue(`DZ.history.undoStack.length===__poseBefore.undo+1`))throw Error('Posar requiere mas de un Undo');
+ await evalValue('dzUndo();dzRigApplyLive(1)');
+ console.log('Pose física: deformación durante arrastre y un Undo OK');
+ const weightPoint=await evalValue(`(()=>{dzRigSelectNode('limbtest:lower');dzMeshPanelSync();if(dzMeshBoneId()!=='limbtest')throw Error('El codo no encuentra la malla portadora');if(!DZ.meshPaint)dzMeshPaintToggle();window.__weightsBefore={data:JSON.stringify(DZ.doc.scene.rigMesh('limbtest').weights),undo:DZ.history.undoStack.length};const el=document.querySelector('#dzMeshOverlay [data-i="5"]'),r=el.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+ await send('Input.dispatchMouseEvent',{type:'mousePressed',...weightPoint,button:'left',clickCount:1});
+ await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});
+ await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+ await send('Input.dispatchMouseEvent',{type:'mouseReleased',...weightPoint,button:'left',clickCount:1});
+ if(!await evalValue(`JSON.stringify(DZ.doc.scene.rigMesh('limbtest').weights)===__weightsBefore.data&&DZ.history.undoStack.length===__weightsBefore.undo`))throw Error('Cancelar pintura cambia pesos');
+ await send('Input.dispatchMouseEvent',{type:'mousePressed',...weightPoint,button:'left',clickCount:1});
+ await send('Input.dispatchMouseEvent',{type:'mouseReleased',...weightPoint,button:'left',clickCount:1});
+ if(!await evalValue(`(()=>{const weights=DZ.doc.scene.rigMesh('limbtest').weights,before=JSON.parse(__weightsBefore.data);return weights[5]['limbtest:lower']>before[5]['limbtest:lower']&&!weights[5].limbtest&&DZ.history.undoStack.length===__weightsBefore.undo+1;})()`))throw Error('Pintar no afecta el hueso influyente o crea peso en portador');
+ await evalValue("dzUndo();dzMeshOverlayRender();document.querySelector('#rigMeshOperation').value='lock'");
+ await send('Input.dispatchMouseEvent',{type:'mousePressed',...weightPoint,button:'left',clickCount:1});
+ await send('Input.dispatchMouseEvent',{type:'mouseReleased',...weightPoint,button:'left',clickCount:1});
+ if(!await evalValue("DZ.doc.scene.rigMesh('limbtest').locked[5]===true"))throw Error('El pincel no bloquea pesos');
+ await evalValue("window.__lockedWeights=JSON.stringify(DZ.doc.scene.rigMesh('limbtest').weights);document.querySelector('#rigMeshOperation').value='smooth'");
+ await send('Input.dispatchMouseEvent',{type:'mousePressed',...weightPoint,button:'left',clickCount:1});
+ await send('Input.dispatchMouseEvent',{type:'mouseReleased',...weightPoint,button:'left',clickCount:1});
+ if(!await evalValue("JSON.stringify(DZ.doc.scene.rigMesh('limbtest').weights)===__lockedWeights"))throw Error('Suavizar cambia pesos bloqueados');
+ await evalValue("dzUndo();document.querySelector('#rigMeshOperation').value='paint';DZ.meshPaint=false;dzMeshPanelSync();dzMeshOverlayRender();dzRigApplyLive(1)");
+ console.log('Pesos del codo: pintura física, cancelación e influencia correcta OK');
  await evalValue(`dzRigSetMode('fk');dzRigSelectNode('limbtest:lower');dzRigApplyLive(1);window.__correctionBefore={rig:JSON.stringify(DZ.doc.scene.rig),content:DZ.doc.drawing.content,undo:DZ.history.undoStack.length,path:document.querySelector('#limbtest').getAttribute('d')};LOW.rigging.limbCorrectiveUI.start()`);
  const dragPoint=async()=>{
    const p=await evalValue(`(()=>{const c=document.querySelector('.rig-corrective-overlay circle[data-vertex="5"]');if(!c)throw Error(document.querySelector('#rigCorrectiveHint').textContent);const r=c.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);
@@ -112,6 +149,7 @@ async function main(){
    await send("Input.dispatchMouseEvent",{type:"mouseReleased",x:p.x,y:p.y-24,button:"left",clickCount:1});
  };
  await dragPoint();
+ if(process.env.LOW_LIMB_EDITOR_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'});require('fs').writeFileSync(process.env.LOW_LIMB_EDITOR_SCREENSHOT,Buffer.from(shot.data,'base64'));}
  if(!await evalValue(`JSON.stringify(DZ.doc.scene.rig)===__correctionBefore.rig&&DZ.doc.drawing.content===__correctionBefore.content&&document.querySelector('#limbtest').getAttribute('d')!==__correctionBefore.path`))throw Error("Corregir no previsualiza o modifica estado antes de guardar");
  await send("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});
  await send("Input.dispatchKeyEvent",{type:"keyUp",key:"Escape",code:"Escape"});
@@ -170,6 +208,6 @@ async function main(){
  })()`);
  console.log('Guardar y reabrir por el flujo de LOW OK',JSON.stringify(savedProof));
  if(process.env.LOW_LIMB_SCREENSHOT){const shot=await send("Page.captureScreenshot",{format:"png"});require("fs").writeFileSync(process.env.LOW_LIMB_SCREENSHOT,Buffer.from(shot.data,"base64"));}
- }finally{ws.close();if(!existing)await fetch(endpoint+"/json/close/"+target.id);}
+ }finally{await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:0,y:0,button:'left',clickCount:1}).catch(()=>{});ws.close();if(!existing)await fetch(endpoint+"/json/close/"+target.id);}
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

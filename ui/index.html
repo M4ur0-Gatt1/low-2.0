@@ -740,7 +740,7 @@
             <span id="rigSmartDriver" class="rig2-smart-driver">—</span>
           </div>
         </section>
-        <section class="rig2-section rig2-mesh" data-rig-section="build" aria-label="Malla y pesos">
+        <section class="rig2-section rig2-mesh" data-rig-section="mesh" aria-label="Malla y pesos">
           <div class="rig2-title"><b>Malla y pesos</b><span id="rigMeshEstado">sin malla</span></div>
           <p class="rig2-hint">Para que una pieza se doble en vez de girar entera: creá la malla, repartí los
              pesos por distancia y corregí a mano lo que haga falta.</p>
@@ -750,6 +750,7 @@
             <button id="rigMeshPaint" title="Pintar la influencia del hueso seleccionado · Shift resta">Pintar pesos</button>
             <button id="rigMeshRemove" class="danger" title="Quitar la malla y volver a deformación rígida">Quitar</button>
           </div>
+          <label class="rig2-mesh-ctl">Operación<select id="rigMeshOperation" aria-label="Operación del pincel de pesos"><option value="paint">Pintar influencia</option><option value="smooth">Suavizar</option><option value="lock">Bloquear pesos</option><option value="unlock">Desbloquear pesos</option></select></label>
           <label class="rig2-mesh-ctl">Fuerza<input id="rigMeshForce" type="range" min="5" max="100" value="35"><output id="rigMeshForceVal">35%</output></label>
           <label class="rig2-mesh-ctl">Radio<input id="rigMeshRadius" type="range" min="8" max="160" value="48"><output id="rigMeshRadiusVal">48 px</output></label>
         </section>
@@ -1222,6 +1223,7 @@
 <script src="panels/colab-panel.js?v=4.31.0"></script>
 <script src="rigging/flexible-limb.js?v=4.31.0"></script>
 <script src="rigging/rig-export.js?v=4.31.0"></script>
+<script src="rigging/mesh-ui.js?v=4.31.0"></script>
 <script src="rigging/flexible-limb-ui.js?v=4.31.0"></script>
 <script src="rigging/limb-corrective-ui.js?v=4.31.0"></script>
 <script src="rigging/rig-control-ui.js?v=4.31.0"></script>

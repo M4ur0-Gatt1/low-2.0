@@ -41,6 +41,8 @@
     const reachLabel=document.createElement('label');reachLabel.textContent='Zona ';
     const reach=document.createElement('input');reach.type='range';reach.min='0';reach.max='3';reach.step='.5';reach.value='1.5';reach.style.width='70px';reach.setAttribute('aria-label','Influencia sobre puntos vecinos');reachLabel.append(reach);
     bar.append(label,reachLabel,interior,save,discard);overlay.append(bar);document.body.append(overlay);
+    for(const button of [interior,save,discard])button.style.cssText="padding:7px 10px;border:1px solid #ffffff30;border-radius:6px;background:#ffffff0c;color:inherit;font:inherit;cursor:pointer;white-space:nowrap";
+    save.style.background='#d84b25';save.style.borderColor='#ed764d';reach.style.accentColor='#f08052';
     const s=session={doc,frame,meshId,driverId:selected,mesh,el,svg,overlay,grid,points:doc.scene.rigMeshSkinnedAt(meshId,frame).map(p=>({...p})),rig:JSON.stringify(doc.scene.rig),content:doc.drawing.content,abort:new AbortController()};
     const signal=s.abort.signal;
     function draw(){

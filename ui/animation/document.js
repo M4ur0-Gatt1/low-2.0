@@ -1696,7 +1696,7 @@
       return this._rigChange("Pesos automáticos por distancia", (rig) => {
         const m = rig.meshes && rig.meshes[boneId];
         if (!m) return false;
-        m.weights = pesos.map((w) => ({ ...w }));
+        m.weights = pesos.map((w,i) => ({ ...(m.locked?.[i]?m.weights[i]:w) }));
         return true;
       });
     }
@@ -1717,7 +1717,7 @@
       const malla = this.scene.rigMesh(boneId);
       if (!malla || !huesoDestino || !this.scene.rigNode(huesoDestino)) return false;
       const puntos = [...new Set((indices || []).map((i) => i | 0))]
-        .filter((i) => i >= 0 && i < malla.rest.length);
+        .filter((i) => i >= 0 && i < malla.rest.length && !malla.locked?.[i]);
       if (!puntos.length) return false;
       const cantidad = Math.max(-1, Math.min(1, +delta || 0));
       if (!cantidad) return false;
@@ -1742,6 +1742,31 @@
       });
     }
 
+    setRigMeshLocks(boneId,indices,locked) {
+      return this._rigChange(locked?'Bloquear pesos':'Desbloquear pesos',rig=>{
+        const mesh=rig.meshes?.[boneId];if(!mesh)return false;
+        const points=[...new Set(indices||[])].filter(i=>Number.isInteger(i)&&i>=0&&i<mesh.rest.length);
+        if(!points.some(i=>!!mesh.locked?.[i]!==!!locked))return false;
+        mesh.locked ||= mesh.rest.map(()=>false);for(const i of points)mesh.locked[i]=!!locked;return true;
+      });
+    }
+    smoothRigMeshWeights(boneId,indices,strength=.5) {
+      return this._rigChange('Suavizar pesos',rig=>{
+        const mesh=rig.meshes?.[boneId];if(!mesh?.weights?.length)return false;
+        const source=mesh.weights.map(w=>({...w})),amount=Math.max(0,Math.min(1,Number(strength)||0));let changed=false;
+        for(const i of new Set(indices||[])){
+          if(!Number.isInteger(i)||i<0||i>=mesh.rest.length||mesh.locked?.[i])continue;
+          const row=Math.floor(i/mesh.cols),col=i%mesh.cols,neighbors=[i];
+          if(col>0)neighbors.push(i-1);if(col<mesh.cols-1)neighbors.push(i+1);
+          if(row>0)neighbors.push(i-mesh.cols);if(row<mesh.rows-1)neighbors.push(i+mesh.cols);
+          const result={};for(const n of neighbors)for(const [id,w] of Object.entries(source[n]||{}))result[id]=(result[id]||0)+w*amount/neighbors.length;
+          for(const [id,w] of Object.entries(source[i]||{}))result[id]=(result[id]||0)+w*(1-amount);
+          const normalized=animation.rigNormalizeWeights(result);
+          if(JSON.stringify(normalized)!==JSON.stringify(source[i])){mesh.weights[i]=normalized;changed=true;}
+        }
+        return changed;
+      });
+    }
     removeRigMesh(boneId) {
       return this._rigChange("Quitar la malla", (rig) => {
         if (!rig.meshes || !rig.meshes[boneId]) return false;

@@ -186,5 +186,20 @@ eval(fs.readFileSync(path.join(root,'ui/rigging/flexible-limb.js'),'utf8'));
   doc.removeRigMesh('arm');
   ok(!doc.scene.rig.actions[id],'quitar malla elimina correctivo propio');
 }
+{
+  const doc=new A.LowDoc();doc.ensureRigBones([{id:'a',head:{x:0,y:0},tail:{x:10,y:0}},{id:'b',head:{x:0,y:10},tail:{x:10,y:10}}]);
+  doc.createRigMesh('a',{cols:2,rows:2,box:{x:0,y:0,width:10,height:10}});
+  doc.setRigMeshWeights('a',[{a:1},{a:1},{b:1},{b:1}]);
+  doc.setRigMeshLocks('a',[0],true);
+  ok(!doc.paintRigMeshWeight('a',[0],'b',.8),'bloqueo impide pintar');
+  doc.smoothRigMeshWeights('a',[0,1],1);
+  ok(near(doc.scene.rigMesh('a').weights[1].b,1/3),'suavizado mezcla vecinos con snapshot estable');
+  ok(doc.scene.rigMesh('a').weights[0].a===1,'suavizado respeta bloqueo');
+  doc.autoRigMeshWeights('a');ok(doc.scene.rigMesh('a').weights[0].a===1,'auto-weight respeta bloqueo');
+  const copy=A.LowDoc.fromJSON(JSON.stringify(doc.toJSON()));ok(copy.scene.rigMesh('a').locked[0]===true,'bloqueo persiste');
+  copy.setRigMeshLocks('a',[0],false);copy.paintRigMeshWeight('a',[0],'b',.5);
+  ok(copy.scene.rigMesh('a').weights[0].b>0,'desbloquear permite editar');
+  ok(copy.scene.rigMesh('a').weights.every(w=>near(Object.values(w).reduce((sum,x)=>sum+x,0),1)),'operaciones conservan normalizacion');
+}
 console.log(`rig-mesh: ${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);
