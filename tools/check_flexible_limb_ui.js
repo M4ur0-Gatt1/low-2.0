@@ -96,9 +96,9 @@ async function main(){
  console.log("E2E articulación flexible OK",JSON.stringify(result.result.value));
  const evalValue=async expression=>{const r=await send("Runtime.evaluate",{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
  await evalValue("closeL3d()");
+ await evalValue(`(()=>{dzDocCommit();const content=DZ.doc.drawing.content,undo=DZ.history.undoStack.length;dzSelect(document.querySelector('#cuttest'));dzDocCommit();if(DZ.doc.drawing.content!==content||DZ.history.undoStack.length!==undo)throw Error('Seleccionar crea una edición fantasma');})()`);
  await send("Emulation.setFocusEmulationEnabled",{enabled:true});
  const pos=await evalValue(`(()=>{dzSelect(document.querySelector('#cuttest'));LOW.rigging.flexibleLimbUI.start('cut');window.__limbBefore={content:DZ.doc.drawing.content,undo:DZ.history.undoStack.length};const r=document.querySelector('#dzCanvas').getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);
- if(existing)await evalValue(`window.__limbTrace=[];const oldPush=DZ.history.push;DZ.history.push=function(e){__limbTrace.push({label:e.label,stack:new Error().stack});return oldPush.call(this,e)};document.addEventListener('pointerdown',e=>__limbTrace.push({event:e.type,tag:e.target.tagName,id:e.target.id}),{capture:true});`);
  await send("Input.dispatchMouseEvent",{type:"mousePressed",...pos,button:"left",clickCount:1});
  await send("Input.dispatchMouseEvent",{type:"mouseReleased",...pos,button:"left",clickCount:1});
  const initialGuide=await evalValue("document.querySelector('.rig-limb-guide polyline').getAttribute('points')");
@@ -108,7 +108,7 @@ async function main(){
  if(!await evalValue(`(()=>{const p=document.querySelector('.rig-limb-guide polyline');return !!p&&p.getAttribute('points')?.split(' ').length===2;})()`))throw Error("La guía no responde al puntero físico");
  await send("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});
  await send("Input.dispatchKeyEvent",{type:"keyUp",key:"Escape",code:"Escape"});
- if(!await evalValue(`!document.querySelector('.rig-limb-guide')&&DZ.doc.drawing.content===__limbBefore.content&&DZ.history.undoStack.length===__limbBefore.undo`)){if(existing)console.log(await evalValue('JSON.stringify(__limbTrace)'));throw Error("Cancelar físicamente altera el dibujo o deja la guía");}
+ if(!await evalValue(`!document.querySelector('.rig-limb-guide')&&DZ.doc.drawing.content===__limbBefore.content&&DZ.history.undoStack.length===__limbBefore.undo`)){throw Error("Cancelar físicamente altera el dibujo o deja la guía");}
  console.log("Vista previa con puntero físico y Escape OK");
  const poseDrag=await evalValue(`(()=>{dzRigSetMode('fk');dzRigSetTool('pose');dzRigSelectNode('limbtest:lower');dzRigApplyLive(1);const el=document.querySelector('.dz-rig-bone-tip[data-id="limbtest:lower"]');const r=el.getBoundingClientRect();const joint=document.querySelector('.dz-rig-joint[data-id="limbtest:lower"]').getBoundingClientRect();const x=r.x+r.width/2,y=r.y+r.height/2,cx=joint.x+joint.width/2,cy=joint.y+joint.height/2,a=-.3;window.__poseBefore={path:document.querySelector('#limbtest').getAttribute('d'),rig:JSON.stringify(DZ.doc.scene.rig),undo:DZ.history.undoStack.length};return{x,y,toX:cx+(x-cx)*Math.cos(a)-(y-cy)*Math.sin(a),toY:cy+(x-cx)*Math.sin(a)+(y-cy)*Math.cos(a)};})()`);
  await send('Input.dispatchMouseEvent',{type:'mousePressed',x:poseDrag.x,y:poseDrag.y,button:'left',clickCount:1});

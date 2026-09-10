@@ -16434,18 +16434,6 @@ function dzPalMount() {
 }
 
 /** Contenido dibujable del lienzo (lo de adentro del <svg>, sin el <svg>). */
-function dzCanvasInner() {
-  const svg = $("#dzCanvas").querySelector(":scope > svg");
-  if (!svg) return "";
-  // se excluye lo que es asistencia visual, no dibujo
-  const tmp = svg.cloneNode(true);
-  // La pose vive en Scene.rig. Guardar `data-rigbase` o la matriz de preview
-  // dentro del Drawing hornearía el muñeco y duplicaría la transformación al
-  // volver a abrirlo.
-  dzRigStrip(tmp);
-  tmp.querySelectorAll("g.dz-onion, g.dz-penui, style.dz-palcss").forEach((n) => n.remove());
-  return tmp.innerHTML;
-}
 
 function dzCanvasSet(contenido) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");

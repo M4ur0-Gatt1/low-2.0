@@ -39,3 +39,7 @@ Evidencia: flujo completo en Chromium y WebView2 propio, con ratón y Escape por
 Límites explícitos: correctivo directo para malla vectorial con un hueso conductor y portador sin transformación propia; no se añade soporte raster/máscaras. El editor rechaza un hueso que afecte varias mallas para no elegir una silenciosamente. Falta la evaluación artística de Mauro con su personaje y tableta; las pruebas técnicas no la sustituyen. B04 conserva los límites del IK existente; no se afirma cobertura de todas las combinaciones posibles.
 
 Coordinación: Claude cerró C01 y avanzó C02 en `adb0dbc`/`b2bb272`; no se reconstruye ese editor. A02 fue ampliada por Claude en `e791958`; A04 está publicada en v4.31.0. La prueba humana puede realizarla Mauro; medir descubrimiento sin ayuda sigue siendo una evidencia distinta.
+
+### B03 — cierre de regresión de selección, 2026-09-10
+
+La serialización del Drawing excluye `dz-sel` y normaliza atributos class vacíos, conservando las clases del dibujo. Seleccionar ya no genera un cambio de contenido ni un Undo fantasma cuando corre el guardado diferido. Se extrajo `dzCanvasInner` a un módulo propio. El recorrido flexible completo pasó en navegador y en LOW nativo (CDP 9225), incluido archivo real guardado/reabierto, cancelación física, pesos, correctivos y coincidencia de exportación. Contratos 2D y presupuesto de app.js pasan. Sigue pendiente la validación artística con tableta.
