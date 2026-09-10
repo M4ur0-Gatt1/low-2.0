@@ -1250,6 +1250,12 @@
         rig.slots = {}; rig.attachments = {}; rig.bindings = {};
         rig.meshes = {}; rig.deformers = {}; rig.constraints = {};
         rig.constraintOrder = []; rig.controllers = {}; rig.actions = {};
+        // `controls` es el store REAL de los diales (`controllers` es una clave
+        // heredada que nadie lee). Sin esta línea, borrar el esqueleto completo
+        // dejaba las definiciones de control vivas sin huesos ni canal, y como
+        // createRigControl rechaza un id existente, el artista no podía volver
+        // a crear un control con el mismo nombre. Ver tools/repro_c01_controles.js
+        rig.controls = {};
         rig.channels = {}; rig.switches = {}; rig.physics = {};
         return true;
       });
