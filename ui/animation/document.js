@@ -1710,6 +1710,12 @@
       return this._rigChange("Quitar la malla", (rig) => {
         if (!rig.meshes || !rig.meshes[boneId]) return false;
         delete rig.meshes[boneId];
+        const prefix=`meshes/${encodeURIComponent(boneId)}/`;
+        for(const [id,action] of Object.entries(rig.actions||{})){
+          const paths=Object.keys(action.channels||{}).filter(path=>path.startsWith(prefix));
+          for(const path of paths)delete action.channels[path];
+          if(paths.length&&!Object.keys(action.channels).length)delete rig.actions[id];
+        }
         const bone = rig.bones[boneId];
         if (bone && bone.binding && bone.binding.mode === "weightedMesh") bone.binding.mode = "rigid";
         return true;
