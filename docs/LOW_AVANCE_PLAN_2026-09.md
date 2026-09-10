@@ -43,3 +43,7 @@ Coordinación: Claude cerró C01 y avanzó C02 en `adb0dbc`/`b2bb272`; no se rec
 ### B03 — cierre de regresión de selección, 2026-09-10
 
 La serialización del Drawing excluye `dz-sel` y normaliza atributos class vacíos, conservando las clases del dibujo. Seleccionar ya no genera un cambio de contenido ni un Undo fantasma cuando corre el guardado diferido. Se extrajo `dzCanvasInner` a un módulo propio. El recorrido flexible completo pasó en navegador y en LOW nativo (CDP 9225), incluido archivo real guardado/reabierto, cancelación física, pesos, correctivos y coincidencia de exportación. Contratos 2D y presupuesto de app.js pasan. Sigue pendiente la validación artística con tableta.
+
+### C03 — vínculos de acciones, primera parte
+
+El panel permite elegir un hueso o dial conductor existente y usa el rango del dial. Al eliminar un conductor, muestra la referencia pendiente y deshabilita grabación/rango sin romper el panel. El diagnóstico detecta destinos y conductores inexistentes, referencias malformadas y ciclos entre acciones activas; estos últimos se explican como lectura de canales originales, sin propagación recursiva. Los correctivos de malla conservan su conductor hasta implementar un hueso de espacio independiente. Las funciones del panel se extrajeron de app.js. Validación: Smart Bones 57/57, malla 50/50, modelo 365/365, recorrido Smart Bones con vinculación y borrado de dial, contratos 2D. C03 sigue abierto: falta el asistente de poses de referencia y previsualización de mezcla.

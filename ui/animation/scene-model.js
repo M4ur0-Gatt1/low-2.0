@@ -636,6 +636,35 @@
       const attachment = rig.attachments?.[binding.attachmentId];
       claimArt(attachment?.elementId || binding.elementId, binding.boneId, id);
     }
+    // Actions read raw channels, so cycles do not recurse. Still report the
+    // dependency loop: artists otherwise expect chained actions to propagate.
+    const actionEdges = new Map();
+    const referenceExists = (path) => {
+      const match = /^(bones|controls|meshes)\/([^/]+)/.exec(path || '');
+      if (!match) return false;
+      let id; try { id = decodeURIComponent(match[2]); } catch (_) { return false; }
+      return !!(match[1] === 'bones' ? bones[id] : rig[match[1]]?.[id]);
+    };
+    for (const [id, action] of Object.entries(rig.actions || {})) {
+      const driver = action.driver?.path;
+      if (!referenceExists(driver)) errors.push({ code: 'missing-action-driver', id, ref: driver || '' });
+      for (const output of Object.keys(action.channels || {})) {
+        if (!referenceExists(output)) errors.push({ code: 'missing-action-target', id, ref: output });
+        if (driver && action.enabled !== false) {
+          if (!actionEdges.has(driver)) actionEdges.set(driver, new Set());
+          actionEdges.get(driver).add(output);
+        }
+      }
+    }
+    const visiting = new Set(), visited = new Set();
+    function visitAction(path) {
+      if (visiting.has(path)) return true;
+      if (visited.has(path)) return false;
+      visiting.add(path);
+      for (const next of actionEdges.get(path) || []) if (visitAction(next)) return true;
+      visiting.delete(path); visited.add(path); return false;
+    }
+    if ([...actionEdges.keys()].some(visitAction)) warnings.push({ code: 'action-cycle' });
     if (rigConstraintHasCycle(rig)) errors.push({ code: "constraint-cycle" });
     for (const id of rig.constraintOrder || [])
       if (!rig.constraints?.[id]) warnings.push({ code: "missing-ordered-constraint", id });

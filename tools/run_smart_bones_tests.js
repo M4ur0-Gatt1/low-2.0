@@ -201,5 +201,24 @@ function armar() {
   ok(Math.abs(doc.scene.rigPose("brazo", 10).y) < 1e-6, "y deja de aportar");
 }
 
+// Broken references and dependency loops must be visible to the setup flow.
+{
+  const doc = armar();
+  doc.createRigAction('a', {driverBone:'brazo'});
+  doc.setRigActionKey('a', 'bones/codo/pose/r', 2, 30);
+  ok(doc.scene.validateRig().valid, 'valid action references accepted');
+  doc.createRigAction('b', {driverBone:'codo'});
+  doc.setRigActionKey('b', 'bones/brazo/pose/r', 2, 20);
+  ok(doc.scene.validateRig().warnings.some(x=>x.code==='action-cycle'), 'cross-action loop diagnosed');
+  doc.scene.rig.actions.b.enabled=false;
+  ok(!doc.scene.validateRig().warnings.some(x=>x.code==='action-cycle'), 'disabled action breaks loop');
+  doc.scene.rig.actions.a.driver.path='controls/missing';
+  ok(doc.scene.validateRig().errors.some(x=>x.code==='missing-action-driver'), 'missing driver diagnosed');
+  doc.scene.rig.actions.a.channels['bones/missing/pose/x']={keys:{1:0,2:3}};
+  ok(doc.scene.validateRig().errors.some(x=>x.code==='missing-action-target'), 'missing target diagnosed');
+  doc.scene.rig.actions.a.driver.path='bones/%invalid/pose/r';
+  ok(!doc.scene.validateRig().valid, 'malformed reference diagnosed without throwing');
+}
+
 console.log(`smart-bones: ${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);

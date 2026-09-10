@@ -125,6 +125,11 @@ async function main() {
     const nombresCanal=[...document.querySelectorAll("#dzFnEditor .fn2-lista button span")].map(n=>n.textContent);
     const dialEnEditor=nombresCanal.some(n=>/dial/.test(n));
     dzFnToggle(); await wait(200);
+    DZ.doc.createRigAction('linktest',{driverBone:'codo'});dzSmartPanelSync('linktest');
+    const conductor=document.querySelector('#rigSmartConductor');conductor.value='controls/boca_abierta';conductor.dispatchEvent(new Event('change'));
+    if(DZ.doc.scene.rig.actions.linktest.driver.path!=='controls/boca_abierta')throw Error('No vincula el dial');
+    DZ.doc.removeRigControl('boca_abierta');dzSmartPanelSync('linktest');
+    if(!document.querySelector('#rigSmartRecord').disabled||!document.querySelector('#rigSmartValidation').textContent.includes('referencias'))throw Error('No explica conductor eliminado');
     return {vacio,creada,grabada,conduce,rango,sinHornear,persiste,quitada,
       dialAntes,dialCreado,dialMovido,dialEnEditor,
       errores:(window.__errs||[]).slice(0,3)};
