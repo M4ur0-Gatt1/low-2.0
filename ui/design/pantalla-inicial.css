@@ -68,6 +68,13 @@
 }
 .ibtn.dz-ir-agente:hover { color: var(--accent, #F0450E); }
 
+/* El botón al estudio 3D, al lado del de la IA. Se distingue por color: los dos
+   cambian de pantalla, pero a lugares distintos, y desde que el 2D es la
+   primera pantalla ESTE es la única puerta al 3D —la barra izquierda queda
+   tapada por #designView, que es position:fixed con inset:0—. */
+.ibtn.dz-ir-agente.dz-ir-3d:hover { color: var(--ok, #33B5E8); }
+.ibtn.dz-ir-agente.dz-ir-3d span { letter-spacing: .06em; }
+
 /* Al irse al agente, la pluma de la barra izquierda es el camino de vuelta:
    se marca para que se vea que hay un dibujo esperando. */
 .abtn.vuelve-al-2d { color: var(--accent, #F0450E); }

@@ -43,6 +43,7 @@
 
   const ID_INVITACION = "dzBienvenida2D";
   const ID_BOTON_IA = "dzIrAlAgente";
+  const ID_BOTON_3D = "dzIrAl3D";
 
   /* OJO CON ESTO: `DZ` se declara con `const` en app.js, así que NO existe como
      `window.DZ` — hay que nombrarlo suelto, que resuelve el binding léxico que
@@ -65,6 +66,7 @@
   /** Esconde el estudio SIN cerrar el documento, y deja el lado del agente a la
    *  vista. Volver es el botón de la pluma en la barra izquierda. */
   function dzIrAlAgente() {
+    cerrarEl3D();
     const vista = document.querySelector("#designView");
     if (vista) vista.hidden = true;
     const pluma = document.querySelector("#abDesign");
@@ -86,6 +88,7 @@
    *  Así que la vuelta primero MUESTRA lo que ya hay; sólo si de verdad no hay
    *  nada abierto delega en el camino de siempre. */
   function dzVolverAlEstudio() {
+    cerrarEl3D();
     const vista = document.querySelector("#designView");
     document.querySelector("#abDesign")?.classList.remove("vuelve-al-2d");
     if (hayTrabajoAbierto()) {
@@ -95,6 +98,42 @@
     }
     if (vista) { vista.hidden = false; pintarInvitacion(); return true; }
     return typeof global.designEntry === "function" ? global.designEntry() : false;
+  }
+
+  /** CAMBIAR DE PANTALLA CIERRA EL 3D, y esto no es por prolijidad.
+   *
+   *  `#l3dView` está en z-index 62 y `#designView` en 61, así que el estudio 3D
+   *  TAPA el 2D. Mostrar el 2D sin cerrar el 3D deja al dibujante pidiendo
+   *  volver al dibujo y mirando otra pantalla. Medido: al apretar la pluma con
+   *  el 3D abierto, `#designView` visible y `elementFromPoint` en el medio de la
+   *  mesa devolviendo `#l3dFrame`. */
+  function cerrarEl3D() {
+    const vista = document.querySelector("#l3dView");
+    if (!vista || vista.hidden) return false;
+    if (typeof global.closeL3d === "function") { global.closeL3d(); return true; }
+    vista.hidden = true;
+    return true;
+  }
+
+  /** DEL ESTUDIO 2D AL 3D, que si no no había manera.
+   *
+   *  La única puerta al estudio 3D es el botón de la barra izquierda, y esa
+   *  barra queda TAPADA por `#designView`, que es `position:fixed; inset:0`.
+   *  Medido: con el 2D abierto, `elementFromPoint` sobre la pluma y sobre el
+   *  botón del 3D devuelve el propio `#designView`. Mientras LOW abría en el
+   *  lado programador eso no se notaba —ahí la barra sí se alcanza—, pero desde
+   *  que el 2D es la primera pantalla el estudio 3D quedó sin entrada: había que
+   *  irse a la IA primero. Es un agujero que abrió la inversión de v4.28.0, así
+   *  que se tapa desde acá y con el mismo patrón que el botón a la IA. */
+  function dzIrAl3D() {
+    if (typeof global.openL3d !== "function") {
+      global.dzSetStatus?.("El estudio 3D no está disponible en esta ventana");
+      return false;
+    }
+    global.openL3d();
+    global.dzSetStatus?.("Estudio 3D — «Volver» arriba te devuelve al dibujo, " +
+      "y el documento 2D queda abierto");
+    return true;
   }
 
   /** El botón permanente del estudio. Va al lado del que cierra el documento,
@@ -110,6 +149,21 @@
       "El documento queda abierto: se vuelve con la pluma de la izquierda.";
     boton.innerHTML = '<svg class="ico"><use href="#i-sparkle"/></svg><span>IA</span>';
     boton.onclick = dzIrAlAgente;
+    cerrar.parentElement.insertBefore(boton, cerrar);
+    ponerBoton3D(cerrar);
+  }
+
+  /** El botón al estudio 3D, al lado del de la IA. */
+  function ponerBoton3D(cerrar) {
+    if (!cerrar || !cerrar.parentElement) return;
+    if (document.querySelector("#" + ID_BOTON_3D)) return;
+    const boton = document.createElement("button");
+    boton.className = "ibtn dz-ir-agente dz-ir-3d";
+    boton.id = ID_BOTON_3D;
+    boton.title = "LOW Estudio — dibujo 3D con guías. El documento 2D queda " +
+      "abierto: se vuelve con «Volver», arriba del estudio 3D.";
+    boton.innerHTML = '<svg class="ico"><use href="#i-cube-sketch"/></svg><span>3D</span>';
+    boton.onclick = dzIrAl3D;
     cerrar.parentElement.insertBefore(boton, cerrar);
   }
 
@@ -228,6 +282,7 @@
     document.addEventListener("DOMContentLoaded", dzPantallaInicialTemprano, { once: true });
   else dzPantallaInicialTemprano();
   global.dzIrAlAgente = dzIrAlAgente;
+  global.dzIrAl3D = dzIrAl3D;
   global.dzVolverAlEstudio = dzVolverAlEstudio;
   global.dzBienvenida2DPintar = pintarInvitacion;
   global.dzBienvenida2DQuitar = quitarInvitacion;

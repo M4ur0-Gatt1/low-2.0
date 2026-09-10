@@ -114,6 +114,7 @@ jobs:
           node tools/check_composition_z_ui.js
           node tools/check_prueba15_ui.js
           node tools/check_pantalla_inicial_ui.js
+          node tools/check_arranque_recorrido_ui.js
           node tools/check_xsheet_columnas_ui.js
           node tools/check_flexible_limb_ui.js
           node tools/check_3d_studio_ui.js

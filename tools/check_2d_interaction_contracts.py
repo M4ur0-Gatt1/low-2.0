@@ -859,6 +859,31 @@ require("designEntry" not in _cuerpo,
 require("designEntry" in INICIAL_COD,
         "se perdio el ultimo recurso de dzVolverAlEstudio para cuando no hay nada "
         "abierto")
+# A02 DEL PLAN MAESTRO: desde el estudio 2D tiene que haber puerta al 3D, y
+# cambiar de pantalla tiene que CERRAR el 3D.
+#
+# La unica entrada al estudio 3D es #abL3d en la barra izquierda, y esa barra
+# queda TAPADA por #designView (position:fixed; inset:0). Medido con
+# elementFromPoint: con el 2D abierto, el punto medio de la pluma y del boton 3D
+# devuelve #designView. Mientras LOW abria en el lado programador no se notaba;
+# desde que el 2D es la primera pantalla el 3D quedo sin entrada.
+# Se pide la LLAMADA en secuencia, no la mencion: dejar la funcion definida y
+# no llamarla es exactamente la regresion que hay que agarrar, y buscar el
+# nombre suelto encuentra su propia definicion.
+require("function dzIrAl3D" in INICIAL_COD and "openL3d" in INICIAL_COD
+        and re.search(r"insertBefore\(boton, cerrar\);\s*ponerBoton3D\(cerrar\);", INICIAL_COD),
+        "se perdio la puerta del estudio 2D al estudio 3D: la unica que queda es "
+        "el boton de la barra izquierda, y esa barra esta tapada por #designView")
+# Y el 3D esta en z-index 62 contra el 61 del 2D, asi que mostrar el 2D sin
+# cerrarlo deja al dibujante pidiendo volver al dibujo y mirando otra pantalla.
+_ida = INICIAL_COD[INICIAL_COD.index("function dzIrAlAgente"):]
+_ida = _ida[:_ida.index("function dzVolverAlEstudio")]
+_vuelta = INICIAL_COD[INICIAL_COD.index("function dzVolverAlEstudio"):]
+_vuelta = _vuelta[:_vuelta.index("function cerrarEl3D")]
+require("cerrarEl3D()" in _ida and "cerrarEl3D()" in _vuelta,
+        "cambiar de pantalla dejo de cerrar el estudio 3D: #l3dView esta en "
+        "z-index 62 y #designView en 61, asi que el 3D queda TAPANDO el dibujo")
+
 require("closeDesign" not in INICIAL_COD,
         "el boton a la IA volvio a usar closeDesign(), que CIERRA EL DOCUMENTO: "
         "cambiar de pantalla te haria perder el dibujo")
