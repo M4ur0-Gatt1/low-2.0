@@ -42,15 +42,16 @@ function dzBrushMotor(brush) {
  *  entintada se re-dibuja cuando se la deforma, y si en ese momento se leyera
  *  el pincel actual, deformar cambiaría el trazo por el que uno tenga elegido
  *  en ese momento. El trazo pertenece a la forma, no al estado de la barra. */
-function dzBrushFinalElement(points, color, opciones) {
+function dzBrushRenderElement(points, color, opciones) {
   const fijo = opciones && opciones.brushId
     ? (window.LOW?.drawing?.brushes?.get?.(opciones.brushId) || null) : null;
-  const preset = fijo || dzCurrentBrush(), engine = window.LOW?.drawing?.brushEngine;
+  const preset = opciones?.brush || fijo || dzCurrentBrush(), engine = window.LOW?.drawing?.brushEngine;
   const grosor = (opciones && opciones.size) || DZ.drawW || 6;
   if (!preset || !engine) return dzBrushRibbon(points, grosor, color);
   const samples = points.map(p => ({ x: p[0], y: p[1], pressure: p[2],
     tiltX: p[3] || 0, tiltY: p[4] || 0, twist: p[5] || 0, time: p[6] || 0 }));
-  const brush = { ...preset, size: grosor };
+  const fixed = opciones?.fixedWidth ?? (!opciones && !!DZ.anchoFijo);
+  const brush = { ...preset, size: grosor, ...(fixed ? {pressureSize:0, tiltSize:0, velocitySize:0} : {}) };
   if (dzBrushMotor(brush) === "raster") {
     const dabs = engine.buildRasterDabs(samples, brush);
     if (!dabs.length) return null;
@@ -137,3 +138,15 @@ function dzBrushBordeSuave(group, brush, color) {
 
 window.dzBrushFinalElement = dzBrushFinalElement;
 window.dzBrushMotor = dzBrushMotor;
+
+function dzBrushFinalElement(points, color, options) {
+  const result=dzBrushRenderElement(points,color,options);
+  if(result && !options) {
+    result.setAttribute('data-low-brush-points',JSON.stringify(points));
+    result.setAttribute('data-low-brush-config',JSON.stringify(dzCurrentBrush()));
+    result.setAttribute('data-low-brush-size',DZ.drawW||6);
+    result.setAttribute('data-low-brush-color',color);
+    result.setAttribute('data-low-brush-fixed',DZ.anchoFijo?'1':'0');
+  }
+  return result;
+}

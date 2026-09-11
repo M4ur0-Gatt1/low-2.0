@@ -179,6 +179,19 @@ async function main() {
     const cebolla={elegido:sel()};
 
     limpiar();
+    // Generated brush stamps remain one object, including inside art layers.
+    limpiar();
+    const layer=poner('g',{'data-low-art':'line'});
+    const outer=document.createElementNS(NS,'g');outer.setAttribute('data-low','forma-pincel');layer.appendChild(outer);
+    const brush=document.createElementNS(NS,'g');brush.setAttribute('data-low','raster-brush');outer.appendChild(brush);
+    const dab=document.createElementNS(NS,'circle');dab.setAttribute('cx','150');dab.setAttribute('cy','150');dab.setAttribute('r','12');brush.appendChild(dab);
+    const touch=pantalla(150,150);
+    if(dzHitTest(touch.x,touch.y)!==outer)throw Error('Hit selecciona una marca interna');
+    dzSetTool('direct');dzSelect(dab);
+    if(DZ.sel!==outer)throw Error('Flecha blanca desprende una marca de pincel');
+    outer.replaceWith(brush);dzSelect(dab);
+    if(DZ.sel!==brush)throw Error('Trazo suelto se desarma en círculos');
+
     return {sinRelleno,conRelleno,ordenDePintado,linea,arcoAbierto,marco,cebolla,
       errs:errs.slice(0,3)};
   })()`;

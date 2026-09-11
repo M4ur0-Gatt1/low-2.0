@@ -107,6 +107,15 @@ async function main() {
     const apagados=[...raiz.querySelectorAll(".bst-controls input[disabled]")].map(i=>i.dataset.p).sort();
     const conMotivo=[...raiz.querySelectorAll(".bst-controls label.inerte")].every(l=>(l.title||"").length>30);
 
+    DZ.brushPreset='clean-ink';DZ.anchoFijo=false;
+    const varying=[[0,0,.1,0,0,0,0],[50,0,1,45,0,0,10],[100,0,.2,0,0,0,100]];
+    const normal=dzBrushFinalElement(varying,'#111').getAttribute('d');
+    document.querySelector('#dzAnchoFijo').click();
+    const fixed=dzBrushFinalElement(varying,'#111').getAttribute('d');
+    const uniform=dzBrushFinalElement(varying.map(p=>[p[0],p[1],1,0,0,0,p[6]]),'#111').getAttribute('d');
+    if(!DZ.anchoFijo||fixed===normal||fixed!==uniform)throw Error('Ancho fijo no desactiva dinámica del ancho');
+    document.querySelector('#dzAnchoFijo').click();
+    if(dzBrushFinalElement(varying,'#111').getAttribute('d')!==normal)throw Error('No vuelve presión variable');
     return {control, sinDeclarar, motorSiempre, tabla,
       inertesVector:Object.keys(inertes.vector||{}).sort(), apagados, conMotivo,
       errs:errs.slice(0,3)};

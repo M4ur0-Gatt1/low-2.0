@@ -172,7 +172,7 @@ function dzHitTest(x, y) {
   for (let i = candidatos.length - 1; i >= 0; i--) {
     const n = candidatos[i];
     if ((n.tagName || "").toLowerCase() === "g") continue;   // los grupos no se prueban solos
-    if (dzHitTocado(n, punto, holgura)) return n;
+    if (dzHitTocado(n, punto, holgura)) return dzAtomicArtwork(n);
   }
   return null;
 }
@@ -225,3 +225,13 @@ window.dzHitTocado = dzHitTocado;
 window.dzHitCandidatos = dzHitCandidatos;
 window.dzHitSeleccionable = dzHitSeleccionable;
 window.dzHitCerrada = dzHitCerrada;
+
+// Generated dabs are rendering details, not independently editable objects.
+function dzAtomicArtwork(element) {
+  let target = element;
+  for (let node = element; node && node.tagName?.toLowerCase() !== 'svg'; node = node.parentElement) {
+    if (['forma-pincel','raster-brush','imported-brush','brush'].includes(node.getAttribute?.('data-low')))
+      target = node;
+  }
+  return target;
+}

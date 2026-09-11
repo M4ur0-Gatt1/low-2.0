@@ -84,7 +84,9 @@
       g.appendChild(p);
     }
     const color = g.getAttribute("data-trazo") || DZ.drawColor || "#F0450E";
-    const opciones = { brushId: g.getAttribute("data-pincel") || "",
+    let brush = null;
+    try { brush = JSON.parse(g.getAttribute('data-pincel-config') || 'null'); } catch (_) {}
+    const opciones = { brush, brushId: g.getAttribute("data-pincel") || "",
       size: +(g.getAttribute("data-grosor") || 0) || undefined };
     let puestos = 0;
     for (const pts of muestras(d, svg)) {
@@ -124,8 +126,20 @@
     g.setAttribute("data-trazo", el.getAttribute("stroke") || DZ.drawColor || "#F0450E");
     const grosor = +(el.getAttribute("stroke-width") || 0) || DZ.drawW || 6;
     g.setAttribute("data-grosor", grosor);
-    const preset = typeof dzCurrentBrush === "function" ? dzCurrentBrush() : null;
-    if (preset && preset.id) g.setAttribute("data-pincel", preset.id);
+    const preset = LOW.drawing.brushes.get(DZ.formaBrushPreset || "") || (typeof dzCurrentBrush === "function" ? dzCurrentBrush() : null);
+    if (preset && preset.id) {
+      g.setAttribute("data-pincel", preset.id);
+      g.setAttribute("data-pincel-config", JSON.stringify(preset));
+    }
+    for (const attr of el.attributes) {
+      if (['id','transform','class'].includes(attr.name) || attr.name.startsWith('data-') && !g.hasAttribute(attr.name))
+        g.setAttribute(attr.name, attr.value);
+    }
+    const corners = dzCornerInfo(el);
+    if (corners) {
+      g.setAttribute('data-low-rounded-rect', [corners.x,corners.y,corners.w,corners.h].join(' '));
+      g.setAttribute('data-low-corners', corners.r.join(' '));
+    }
     // El tipo de forma se conserva para que se pueda decir qué era, y para que
     // más adelante se la pueda volver a editar como forma y no como tinta.
     const tipo = el.getAttribute("data-forma") || el.tagName.toLowerCase();
@@ -166,3 +180,66 @@
   global.dzFormaPincelAplicar = dzFormaPincelAplicar;
   global.dzFormaPincelSeleccion = dzFormaPincelSeleccion;
 })(typeof window !== "undefined" ? window : globalThis);
+/* Editable outline properties belong to the selected shape. */
+function dzFormaPincelEditar(el, changes) {
+  if (!dzFormaPincelEs(el) || !el.isConnected || DZ.sel !== el) return false;
+  const candidate = el.cloneNode(true);
+  if (changes.brushId !== undefined) {
+    const brush = LOW.drawing.brushes.get(changes.brushId);
+    if (!brush) return false;
+    candidate.setAttribute('data-pincel', brush.id);
+    candidate.setAttribute('data-pincel-config', JSON.stringify(brush));
+  }
+  if (changes.size !== undefined) {
+    const size = Number(changes.size);
+    if (!Number.isFinite(size) || size <= 0 || size > 500) return false;
+    candidate.setAttribute('data-grosor', size);
+  }
+  if (changes.color !== undefined) candidate.setAttribute('data-trazo', changes.color);
+  if (changes.fill !== undefined) {
+    if (changes.fill !== 'none' && !CSS.supports('color', changes.fill)) return false;
+    candidate.setAttribute('data-relleno', changes.fill);
+  }
+  const attributes = ['data-pincel','data-pincel-config','data-grosor','data-trazo','data-relleno'];
+  if (attributes.every(a => candidate.getAttribute(a) === el.getAttribute(a))) return false;
+  if (!dzFormaPincelRender(candidate)) return false;
+  clearTimeout(DZ_DOC_TIMER);
+  dzDocCommit();
+  if (!DZ.doc) dzSnapshot();
+  for (const a of attributes) {
+    const value = candidate.getAttribute(a);
+    if (value == null) el.removeAttribute(a); else el.setAttribute(a, value);
+  }
+  el.replaceChildren(...candidate.childNodes);
+  dzDocCommit(); dzMarkDirty(); dzPositionHandle();
+  dzSetStatus('Contorno actualizado · la forma conserva su geometría · Ctrl+Z para deshacer');
+  return true;
+}
+function dzFormaPincelInspector(el, panel) {
+  if (!dzFormaPincelEs(el)) return;
+  // The generic SVG stroke/fill fields do not control the generated outline.
+  for (const id of ['dzFill','dzStroke','dzSW']) panel.querySelector('#'+id)?.closest('.dz-field')?.remove();
+  const box = document.createElement('section'); box.className = 'dz-shape-appearance';
+  box.addEventListener('focusin', e => e.stopPropagation());
+  const title = document.createElement('b'); title.textContent = 'Contorno de la forma';
+  const help = document.createElement('p'); help.textContent = 'Cambiá el pincel sin volver a dibujar.';
+  box.append(title, help);
+  const field = (text, input) => {
+    const label = document.createElement('label'); label.textContent = text;
+    label.appendChild(input); box.appendChild(label); return input;
+  };
+  const select = document.createElement('select'); select.id = 'dzShapeBrush';
+  for (const brush of LOW.drawing.brushes.all()) select.add(new Option(brush.name, brush.id));
+  const selected = el.getAttribute('data-pincel');
+  if (![...select.options].some(o => o.value === selected)) select.add(new Option('Pincel guardado en la forma', selected));
+  select.value = selected;
+  select.onchange = () => {if (!dzFormaPincelEditar(el,{brushId:select.value})) select.value=el.getAttribute('data-pincel');};
+  field('Pincel',select);
+  const size = document.createElement('input'); size.type='number'; size.id='dzShapeBrushSize'; size.min='.1'; size.max='500'; size.step='.5'; size.value=el.getAttribute('data-grosor');
+  size.onchange=()=>{dzFormaPincelEditar(el,{size:size.value});size.value=el.getAttribute('data-grosor');};field('Grosor',size);
+  const color = document.createElement('input');color.type='color';color.id='dzShapeBrushColor';color.value=dzHex(el.getAttribute('data-trazo'));
+  color.onchange=()=>dzFormaPincelEditar(el,{color:color.value});field('Color del contorno',color);
+  const fill = document.createElement('input');fill.type='text';fill.id='dzShapeBrushFill';fill.value=el.getAttribute('data-relleno')||'none';
+  fill.onchange=()=>{dzFormaPincelEditar(el,{fill:fill.value.trim()});fill.value=el.getAttribute('data-relleno');};field('Relleno (none = sin relleno)',fill);
+  panel.prepend(box);
+}

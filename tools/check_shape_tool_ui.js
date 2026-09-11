@@ -221,6 +221,35 @@ async function main() {
       aMano.undoDevuelveLaForma = !!uno("rect") && !uno('[data-low="forma-pincel"]');
     }
 
+    // An already-created brush shape can change appearance without changing geometry.
+    const raw=uno('rect');raw.id='editable-shape';raw.setAttribute('transform','translate(12 8)');
+    dzSelect(raw);dzFormaPincelSeleccion();await wait(400);
+    let editable=uno('#editable-shape');
+    if(!editable||!document.querySelector('#dzShapeBrush'))throw Error('No inspector editable de forma');
+    const geometry=editable.getAttribute('data-d'),transform=editable.getAttribute('transform'),beforeInk=editable.innerHTML;
+    const previousBrush=editable.getAttribute('data-pincel');
+    const other=LOW.drawing.brushes.all().find(b=>b.id!==previousBrush);
+    const undoBefore=DZ.history.undoStack.length;
+    const choice=document.querySelector('#dzShapeBrush');choice.value=other.id;choice.dispatchEvent(new Event('change',{bubbles:true}));await wait(400);
+    if(editable.getAttribute('data-pincel')!==other.id||editable.innerHTML===beforeInk)throw Error('Cambiar pincel no cambia tinta');
+    if(editable.getAttribute('data-d')!==geometry||editable.getAttribute('transform')!==transform||editable.getAttribute('data-relleno')!=='none')throw Error('Cambiar pincel altera forma, posición o relleno');
+    if(DZ.history.undoStack.length!==undoBefore+1)throw Error('Cambiar pincel no deja un solo Undo');
+    dzUndo();await wait(300);editable=uno('#editable-shape');
+    if(editable.getAttribute('data-pincel')!==previousBrush)throw Error('Undo no restaura pincel');
+    dzRedo();await wait(300);editable=uno('#editable-shape');dzSelect(editable);
+    const size=document.querySelector('#dzShapeBrushSize');size.value='18';size.dispatchEvent(new Event('change',{bubbles:true}));await wait(400);
+    if(editable.getAttribute('data-grosor')!=='18'||editable.getAttribute('data-d')!==geometry)throw Error('No edita grosor');
+    const saved=LOW.animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(DZ.doc.toJSON())));
+    if(!JSON.stringify(saved.toJSON()).includes('data-pincel-config'))throw Error('No persiste definición del pincel');
+    dzSetTool('direct');dzSelect(editable);dzPositionHandle();
+    if(!dzCornerInfo(editable)||![...document.querySelectorAll('.dz-corner-widget')].some(w=>!w.hidden))throw Error('Flecha blanca sin redondeadores');
+    dzCornerSet(editable,20,'tl',false);
+    if(editable.getAttribute('data-d')===geometry||editable.getAttribute('data-pincel')!==other.id)throw Error('Redondear no cambia geometría o cambia pincel');
+    // A legacy persisted fill preference must not turn fill on at startup.
+    document.querySelector('#dzShapeMenu').querySelectorAll('.dz-forma-relleno,.dz-forma-entintar').forEach(n=>n.remove());
+    localStorage.setItem('low.forma.relleno','1');dzFormaRellenoUI();
+    if(dzFormaRellena()||dzFormaCrear('rect').getAttribute('fill')!=='none')throw Error('Default de forma vuelve a tener relleno');
+
     return {armado,arrastre,conShift,conAlt,clicSimple,historial,escape,
       cambioHerramienta,contorno,interruptor,entintado,aMano,errs:errs.slice(0,3)};
   })()`;

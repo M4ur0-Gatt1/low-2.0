@@ -3522,7 +3522,7 @@ function dzZoomAt(factor, clientX, clientY) {
   dzApplyZoom();
 }
 
-function dzSelect(el) {
+function dzSelect(el) { el = dzAtomicArtwork(el);
   if (DZ.sel) DZ.sel.classList.remove("dz-sel");
   DZ.sel = el;
   // La multiselección tiene una sola representación: DZ.sel conserva el
@@ -3607,7 +3607,7 @@ function dzPositionHandle() {
           br:[width - info.r[2] / info.w * width, height - info.r[2] / info.h * height],
           bl:[info.r[3] / info.w * width, height - info.r[3] / info.h * height]
         };
-        widgets.forEach(w => { const p = pos[w.dataset.corner]; w.style.left = p[0] + "px"; w.style.top = p[1] + "px"; w.hidden = false; });
+        widgets.forEach(w => { const p = pos[w.dataset.corner]; w.style.left = Math.max(12,Math.min(width-12,p[0])) + "px"; w.style.top = Math.max(12,Math.min(height-12,p[1])) + "px"; w.hidden = false; });
       } else widgets.forEach(w => { w.hidden = true; });
     }
     // El globo de comentario permanente era el botón de «tres puntos» que
@@ -3621,73 +3621,6 @@ function dzPositionHandle() {
   } catch (e) { pin.hidden = true; if (rot) rot.hidden = true; if (box) box.hidden = true; }
 }
 
-function dzCornerInfo(el) {
-  if (!el) return null;
-  if (el.tagName.toLowerCase() === "rect") {
-    const x=+el.getAttribute("x")||0,y=+el.getAttribute("y")||0,w=Math.max(1,+el.getAttribute("width")||0),h=Math.max(1,+el.getAttribute("height")||0);
-    const r=Math.max(0,Math.min(w/2,h/2,+el.getAttribute("rx")||0)); return {x,y,w,h,r:[r,r,r,r]};
-  }
-  const geom=(el.getAttribute("data-low-rounded-rect")||"").split(/\s+/).map(Number);
-  const radii=(el.getAttribute("data-low-corners")||"").split(/\s+/).map(Number);
-  return geom.length===4&&radii.length===4 ? {x:geom[0],y:geom[1],w:geom[2],h:geom[3],r:radii} : null;
-}
-function dzRoundedRectD(i) {
-  const [tl,tr,br,bl]=i.r.map(v=>Math.max(0,Math.min(i.w/2,i.h/2,v||0))), x=i.x,y=i.y,w=i.w,h=i.h;
-  return `M ${x+tl} ${y} H ${x+w-tr} Q ${x+w} ${y} ${x+w} ${y+tr} V ${y+h-br} Q ${x+w} ${y+h} ${x+w-br} ${y+h} H ${x+bl} Q ${x} ${y+h} ${x} ${y+h-bl} V ${y+tl} Q ${x} ${y} ${x+tl} ${y} Z`;
-}
-function dzCornerAsPath(rect) {
-  if (rect.tagName.toLowerCase() !== "rect") return rect;
-  const info=dzCornerInfo(rect), path=document.createElementNS(SVGNS,"path");
-  [...rect.attributes].forEach(a => { if (!/^(x|y|width|height|rx|ry)$/.test(a.name)) path.setAttribute(a.name,a.value); });
-  path.setAttribute("data-low-rounded-rect",`${info.x} ${info.y} ${info.w} ${info.h}`);
-  path.setAttribute("data-low-corners",info.r.join(" ")); path.setAttribute("d",dzRoundedRectD(info));
-  rect.replaceWith(path); if (DZ.sel===rect) DZ.sel=path;
-  const mi=(DZ.multi||[]).indexOf(rect); if(mi>=0) DZ.multi[mi]=path;
-  path.classList.add("dz-sel"); return path;
-}
-function dzCornerSet(el, radius, corner, individual) {
-  const info=dzCornerInfo(el); if(!info) return el;
-  const r=Math.max(0,Math.min(info.w/2,info.h/2,Number(radius)||0));
-  if (individual) info.r[{tl:0,tr:1,br:2,bl:3}[corner]||0]=r; else info.r=[r,r,r,r];
-  if (el.tagName.toLowerCase()==="rect" && !individual) {
-    if(r<.01){el.removeAttribute("rx");el.removeAttribute("ry");}else{el.setAttribute("rx",r.toFixed(1));el.setAttribute("ry",r.toFixed(1));}
-  } else {
-    el.setAttribute("data-low-corners",info.r.map(v=>v.toFixed(1)).join(" ")); el.setAttribute("d",dzRoundedRectD(info));
-  }
-  dzPositionHandle(); dzBuildInspector(el);
-  return el;
-}
-function dzCornerDown(e) {
-  let el = DZ.sel;
-  if (!dzCornerInfo(el)) return;
-  e.preventDefault(); e.stopPropagation(); dzSnapshot();
-  const individual=e.altKey, corner=e.currentTarget.dataset.corner;
-  if(individual) el=dzCornerAsPath(el);
-  const pointerId = e.pointerId, info=dzCornerInfo(el), inv=el.getScreenCTM().inverse();
-  const local = ev => {
-    const p = el.ownerSVGElement.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
-    return p.matrixTransform(inv);
-  };
-  const move = ev => {
-    if (ev.pointerId !== pointerId) return;
-    const p=local(ev), d={tl:Math.min(p.x-info.x,p.y-info.y),tr:Math.min(info.x+info.w-p.x,p.y-info.y),br:Math.min(info.x+info.w-p.x,info.y+info.h-p.y),bl:Math.min(p.x-info.x,info.y+info.h-p.y)}[corner];
-    el=dzCornerSet(el,d,corner,individual);
-  };
-  const up = ev => {
-    if (ev.pointerId !== pointerId) return;
-    document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); document.removeEventListener("pointercancel", up);
-    dzMarkDirty();
-  };
-  document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", up);
-}
-async function dzCornerExact(e) {
-  e.preventDefault(); e.stopPropagation();
-  let el = DZ.sel; const info=dzCornerInfo(el); if (!info) return;
-  const corner=e.currentTarget.dataset.corner, individual=e.altKey;
-  const value = await dzPromptModal(individual?"Radio de esta esquina":"Radio de las cuatro esquinas", "radio en píxeles", String(info.r[{tl:0,tr:1,br:2,bl:3}[corner]||0]));
-  if (value == null || !isFinite(+value)) return;
-  dzSnapshot(); if(individual) el=dzCornerAsPath(el); dzCornerSet(el,+value,corner,individual); dzMarkDirty();
-}
 /* resize desde cualquiera de los 8 tiradores, anclado al tirador OPUESTO
    (transformación libre de Photoshop). hx,hy ∈ {-1,0,1}. */
 function dzBoxHandleDown(e, hx, hy) {
@@ -3945,7 +3878,7 @@ function dzPointerDown(e) {
   // clic dentro de un grupo real (<g> guardado): seleccionar el GRUPO (como
   // Illustrator); doble clic entraría al hijo — acá con Shift+clic alcanza
   const grp = el.closest && el.closest('#dzCanvas svg > g:not(.dz-onion):not([data-low-art])');
-  if (grp && DZ.tool !== "direct") el = grp;   // flecha blanca: pieza directa; Alt queda libre para duplicar
+  if (grp && DZ.tool !== "direct") el = grp; el = dzAtomicArtwork(el); // generated brush marks stay together
   e.preventDefault();
   dzCapturePointer(e);
   const pointerId = e.pointerId;
@@ -6083,29 +6016,6 @@ function dzFillRoot(content, vb) {
   root.innerHTML = content || "";
   return root;
 }
-function dzFillPrepareSvg(root, vb) {
-  const clean = root.cloneNode(true);
-  clean.setAttribute("xmlns", SVGNS); clean.setAttribute("viewBox", vb.join(" "));
-  // El SVG vivo lleva el zoom/pan del visor en `style`. Serializar ese estilo
-  // dentro del bitmap encogía o desplazaba también la geometría analizada.
-  clean.removeAttribute("style"); clean.removeAttribute("class");
-  clean.querySelectorAll('.dz-onion,.dz-penui,[data-dz3d],g[data-low-art="colour"],style.dz-palcss,[data-low="fill"]').forEach((n) => n.remove());
-  clean.querySelectorAll("image,text,foreignObject").forEach((n) => n.remove());
-  clean.querySelectorAll("path,rect,circle,ellipse,line,polyline,polygon").forEach((el) => {
-    if (el.closest("defs")) return;
-    const sw = parseFloat(el.getAttribute("stroke-width") || "0");
-    el.setAttribute("fill", "none"); el.setAttribute("stroke", "#000000");
-    el.setAttribute("stroke-width", String(Math.max(1.5, Number.isFinite(sw) ? sw : 1.5)));
-    el.setAttribute("opacity", "1");
-    if (el.style) { el.style.fill = "none"; el.style.stroke = "#000000"; el.style.opacity = "1"; }
-  });
-  const bg = document.createElementNS(SVGNS, "rect");
-  bg.setAttribute("x", vb[0]); bg.setAttribute("y", vb[1]);
-  bg.setAttribute("width", vb[2]); bg.setAttribute("height", vb[3]);
-  bg.setAttribute("fill", "#ffffff"); bg.setAttribute("stroke", "none");
-  clean.insertBefore(bg, clean.firstChild);
-  return clean;
-}
 function dzFillRegionSet(imgData, w, h, gap) {
   const px = imgData.data, total = w * h, raw = new Uint8Array(total);
   for (let i = 0; i < total; i++) {
@@ -6202,15 +6112,6 @@ function dzFillMask(analysis, region) {
   const mask = new Uint8Array(analysis.labels.length), label = region && region.label;
   for (let i = 0; i < mask.length; i++) if (analysis.labels[i] === label) mask[i] = 1;
   return mask;
-}
-function dzFillPathData(analysis, region, vb) {
-  const loops = dzTraceMaskJS(dzFillMask(analysis, region), analysis.width, analysis.height);
-  const sx = vb[2] / analysis.width, sy = vb[3] / analysis.height;
-  return loops.map((loop) => {
-    let pts = loop.slice(0, -1).map(([x, y]) => [vb[0] + x * sx, vb[1] + y * sy]);
-    pts = dzRDP(pts, Math.max(sx, sy) * 1.25);
-    return pts.length >= 3 ? dzSmoothPath(pts) + " Z" : "";
-  }).filter(Boolean).join(" ");
 }
 function dzFillStyleIndex(color) {
   if (!DZ.doc || !DZ.doc.palette) return null;
@@ -6570,7 +6471,7 @@ function dzVectorRestore(journal) {
   journal.forEach((values, el) => {
     if (!el?.isConnected) return;
     Object.entries(values).forEach(([a, value]) => {
-      if (value == null) el.removeAttribute(a); else el.setAttribute(a, value);
+      if(a === "__html") el.innerHTML=value; else if (value == null) el.removeAttribute(a); else el.setAttribute(a, value);
     });
   });
   dzPositionHandle(); dzBuildLayers();
@@ -6740,10 +6641,12 @@ function dzPickStroke(clientX, clientY, maxPx, acceptFilled = true) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return null;
   const el = document.elementFromPoint(clientX, clientY);
+  const atomic = dzAtomicArtwork(el);
+  if(atomic && svg.contains(atomic) && !atomic.closest('[data-locked],g.dz-onion') && dzBrushWidthState(atomic)) return atomic;
   if (el && el.closest && el.closest("#dzCanvas svg") && !el.closest("g.dz-onion")) {
     const s = el.closest("path,line,polyline,polygon,circle,ellipse,rect,text");
     if (s && s.tagName.toLowerCase() !== "svg" && (dzStroked(s) || (acceptFilled && dzEditableVector(s)))
-        && !s.closest("[data-locked]")) return s;
+        && !s.closest("[data-locked]")) return dzAtomicArtwork(s);
   }
   // nadie con trazo justo debajo  el más cercano por distancia (unidades usuario)
   const tol = maxPx || 16;
@@ -6762,7 +6665,7 @@ function dzPickStroke(clientX, clientY, maxPx, acceptFilled = true) {
       if (dist < bestD) { bestD = dist; best = c; }
     }
   });
-  return best;
+  return dzAtomicArtwork(best);
 }
 function dzHandlerDown(e) {
   e.preventDefault(); e.stopPropagation();
@@ -6771,9 +6674,11 @@ function dzHandlerDown(e) {
   if (!strokeEl) return dzSetStatus("📏 Acercate más a una línea para ajustar su grosor");
   dzSnapshot();
   const journal = new Map(); dzVectorRemember(strokeEl, journal);
+  const brushWidth = dzBrushWidthState(strokeEl);
+  if(brushWidth) journal.set(strokeEl,{...journal.get(strokeEl),__html:strokeEl.innerHTML,filter:strokeEl.getAttribute("filter"),'data-grosor':strokeEl.getAttribute('data-grosor'),'data-low-brush-size':strokeEl.getAttribute('data-low-brush-size')});
   // Los pinceles variables son cintas rellenas. Darles un contorno del mismo
   // color permite que la bomba ensanche/afine también esos trazos reales.
-  if (!dzStroked(strokeEl) && strokeEl.tagName.toLowerCase() === "path") {
+  if (!brushWidth && !dzStroked(strokeEl) && strokeEl.tagName.toLowerCase() === "path") {
     const colour = strokeEl.getAttribute("fill") || DZ.drawColor || "#111111";
     strokeEl.setAttribute("stroke", colour);
     strokeEl.setAttribute("stroke-linejoin", "round");
@@ -6782,7 +6687,7 @@ function dzHandlerDown(e) {
   }
   const sw = parseFloat(strokeEl.getAttribute("stroke-width") || getComputedStyle(strokeEl).strokeWidth || "2");
   HANDLER = dzVectorBegin("handler", e,
-    { el: strokeEl, startW: isNaN(sw) ? 2 : sw, startY: e.clientY, journal },
+    { el: strokeEl, brushWidth, startW: brushWidth?.size || (isNaN(sw) ? 2 : sw), startY: e.clientY, journal },
     () => { HANDLER = null; });
   dzSetStatus("📏 Manejador — arrastrá ↕ para engrosar/afinar el trazo");
 }
@@ -6803,7 +6708,7 @@ function dzHandlerGlobalMove(e) {
   if (!HANDLER?.el || !dzVectorAccept(HANDLER, e)) return;
   const dy = HANDLER.startY - e.clientY;
   const newW = Math.max(0.5, Math.min(200, HANDLER.startW + dy / dzVectorPrefs().pumpSensitivity));
-  HANDLER.el.setAttribute("stroke-width", newW.toFixed(1));
+  if(HANDLER.brushWidth) dzBrushWidthApply(HANDLER.el,HANDLER.brushWidth,newW); else HANDLER.el.setAttribute("stroke-width", newW.toFixed(1));
   dzSetStatus("📏 Grosor: " + newW.toFixed(1) + "px");
 }
 
@@ -10549,7 +10454,7 @@ function dzRigRepartirDibujo() {
 /** Pincel de ancho fijo: el trazo sale parejo de punta a punta. */
 function dzAnchoFijoToggle() {
   DZ.anchoFijo = !DZ.anchoFijo;
-  $("#dzAnchoFijo")?.classList.toggle("on", DZ.anchoFijo);
+  $("#dzAnchoFijo")?.classList.toggle("on", DZ.anchoFijo); $("#dzAnchoFijo")?.setAttribute("aria-pressed",String(DZ.anchoFijo));
   try { dzPrefsStorage().setItem("low.anchoFijo", DZ.anchoFijo ? "1" : "0"); } catch (_) { /* sin storage */ }
   dzSetStatus(DZ.anchoFijo
     ? "Pincel de ancho fijo: el trazo sale parejo, sin seguir la presi\u00f3n"
@@ -17051,94 +16956,6 @@ function dzField(label, id, value, type) {
   const v = (value == null ? "" : String(value)).replace(/"/g, "&quot;");
   return `<div class="dz-field"><label>${label}</label>` +
     `<input id="${id}" type="${type || "text"}" value="${v}"></div>`;
-}
-
-function dzBuildInspector(el) {
-  const tag = el.tagName.toLowerCase();
-  const P = $("#dzProps");
-  const isText = tag === "text" || tag === "tspan";
-  let html = `<div class="dz-tag">&lt;${tag}&gt;</div>`;
-  // alinear respecto del lienzo
-  html += `<div class="dz-field"><label>Alinear al lienzo</label><div class="dz-alignrow">` +
-    `<span class="dz-al" data-al="l" title="Izquierda">⇤</span>` +
-    `<span class="dz-al" data-al="ch" title="Centro horizontal">↔</span>` +
-    `<span class="dz-al" data-al="r" title="Derecha">⇥</span>` +
-    `<span class="dz-al" data-al="t" title="Arriba">⤒</span>` +
-    `<span class="dz-al" data-al="cv" title="Centro vertical">↕</span>` +
-    `<span class="dz-al" data-al="b" title="Abajo">⤓</span>` +
-    `</div></div>`;
-  html += `<div class="dz-field"><label>Voltear</label><div class="dz-alignrow">` +
-    `<span class="dz-al" data-flip="h" title="Voltear horizontal">⇋</span>` +
-    `<span class="dz-al" data-flip="v" title="Voltear vertical">⇵</span>` +
-    `</div></div>`;
-  if ((DZ.multi || []).length > 1) {
-    html += `<div class="dz-field"><label> Entre los ${DZ.multi.length} seleccionados</label><div class="dz-alignrow">` +
-      `<span class="dz-al" data-alsel="l" title="Izquierdas juntas">⇤</span>` +
-      `<span class="dz-al" data-alsel="ch" title="Centros verticales">↔</span>` +
-      `<span class="dz-al" data-alsel="r" title="Derechas juntas">⇥</span>` +
-      `<span class="dz-al" data-alsel="t" title="Arribas juntas">⤒</span>` +
-      `<span class="dz-al" data-alsel="cv" title="Centros horizontales">↕</span>` +
-      `<span class="dz-al" data-alsel="b" title="Abajos juntas">⤓</span>` +
-      `</div><div class="dz-alignrow" style="margin-top:4px">` +
-      `<span class="dz-al" data-dist="h" title="Distribuir horizontal (3+)">⇹</span>` +
-      `<span class="dz-al" data-dist="v" title="Distribuir vertical (3+)">⇳</span>` +
-      `</div></div>`;
-  }
-  // color de relleno y trazo (picker + texto para aceptar none/hex/nombre)
-  html += `<div class="dz-field"><label>Relleno (fill)</label><div class="dz-row">` +
-    `<input id="dzFillC" type="color" value="${dzHex(dzGet(el, "fill", "fill"))}" style="width:44px">` +
-    `<input id="dzFill" type="text" value="${dzGet(el, "fill", "fill")}" style="flex:1"></div></div>`;
-  html += `<div class="dz-field"><label>Trazo (stroke)</label><div class="dz-row">` +
-    `<input id="dzStrokeC" type="color" value="${dzHex(dzGet(el, "stroke", "stroke"))}" style="width:44px">` +
-    `<input id="dzStroke" type="text" value="${dzGet(el, "stroke", "stroke")}" style="flex:1"></div></div>`;
-  html += `<div class="dz-row">` +
-    dzField("Grosor trazo", "dzSW", dzGet(el, "stroke-width", ""), "number") +
-    dzField("Opacidad", "dzOp", dzGet(el, "opacity", "opacity"), "number") + `</div>`;
-  // multiplano: profundidad respecto de la cámara (0 = plano de acción,
-  // positivo = fondo lejano se mueve menos, negativo = primer plano más rápido)
-  html += `<div class="dz-row">` +
-    dzField("Profundidad Z 🎬", "dzZ", el.getAttribute("data-z") || "", "number") +
-    `<div class="dz-field"><label>&nbsp;</label><div class="dz-hint">0=acción · +lejos · −cerca</div></div></div>`;
-  if (isText) {
-    html += `<div class="dz-field"><label>Texto</label><input id="dzText" type="text" value="${(el.textContent || "").replace(/"/g, "&quot;")}"></div>`;
-    const fam = dzGet(el, "font-family", "fontFamily").replace(/["']/g, "");
-    html += `<div class="dz-field"><label>Tipografía</label><select id="dzFont">` +
-      DZ_FONTS.map(f => `<option ${fam.indexOf(f) === 0 ? "selected" : ""}>${f}</option>`).join("") +
-      `</select></div>`;
-    html += `<div class="dz-row">` +
-      dzField("Tamaño", "dzFS", parseFloat(dzGet(el, "font-size", "fontSize")) || "", "number") +
-      `<div class="dz-field"><label>Peso</label><select id="dzFW">` +
-      ["normal", "bold", "300", "400", "500", "600", "700", "800", "900"].map(w =>
-        `<option ${String(dzGet(el, "font-weight", "fontWeight")) === w ? "selected" : ""}>${w}</option>`).join("") +
-      `</select></div></div>`;
-    const anc = dzGet(el, "text-anchor", "") || "start";
-    html += `<div class="dz-field"><label>Alineación del texto</label><div class="dz-alignrow">` +
-      `<span class="dz-al${anc === "start" ? " on" : ""}" data-anchor="start" title="Izquierda">⤆</span>` +
-      `<span class="dz-al${anc === "middle" ? " on" : ""}" data-anchor="middle" title="Centrado">☰</span>` +
-      `<span class="dz-al${anc === "end" ? " on" : ""}" data-anchor="end" title="Derecha">⤇</span>` +
-      `<span class="dz-al${dzGet(el, "font-style", "") === "italic" ? " on" : ""}" data-italic="1" title="Cursiva"><i>I</i></span>` +
-      `</div></div>`;
-    html += `<div class="dz-field"><label>Pares sugeridos</label><div class="dz-suggest">` +
-      DZ_PAIRS.map((p, i) => `<span class="dz-chip" data-pair="${i}">${p[0]} / ${p[1]}</span>`).join("") +
-      `</div><div class="dz-hint">Aplica la tipografía de título al elemento.</div></div>`;
-  }
-  // posición: x/y (rect,text) o cx/cy (circle,ellipse)
-  if (el.hasAttribute("x") || el.hasAttribute("y"))
-    html += `<div class="dz-row">` + dzField("X", "dzX", dzGet(el, "x", ""), "number") +
-      dzField("Y", "dzY", dzGet(el, "y", ""), "number") + `</div>`;
-  else if (el.hasAttribute("cx") || el.hasAttribute("cy"))
-    html += `<div class="dz-row">` + dzField("Centro X", "dzCX", dzGet(el, "cx", ""), "number") +
-      dzField("Centro Y", "dzCY", dzGet(el, "cy", ""), "number") + `</div>`;
-  if (el.hasAttribute("width") || el.hasAttribute("height"))
-    html += `<div class="dz-row">` + dzField("Ancho", "dzW", dzGet(el, "width", ""), "number") +
-      dzField("Alto", "dzH", dzGet(el, "height", ""), "number") + `</div>`;
-  if (tag === "line")
-    html += `<div class="dz-row">` + dzField("X1", "dzX1", dzGet(el, "x1", ""), "number") +
-      dzField("Y1", "dzY1", dzGet(el, "y1", ""), "number") + `</div>` +
-      `<div class="dz-row">` + dzField("X2", "dzX2", dzGet(el, "x2", ""), "number") +
-      dzField("Y2", "dzY2", dzGet(el, "y2", ""), "number") + `</div>`;
-  P.innerHTML = html; P.hidden = false; $("#dzEmpty").hidden = true;
-  dzWire(el, isText);
 }
 
 // aplicar un atributo (o quitarlo si queda vacío) al elemento seleccionado

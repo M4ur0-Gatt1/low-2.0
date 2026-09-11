@@ -306,16 +306,7 @@ function dzAddShape(kind, punto) {
     dzSnapshot(); dzSelect(el); dzMarkDirty();
     return;
   }
-  dzSnapshot();
-  const el = document.createElementNS("http://www.w3.org/2000/svg", "text");
-  el.setAttribute("x", p.x); el.setAttribute("y", p.y);
-  el.setAttribute("text-anchor", "middle");
-  el.setAttribute("font-family", "Figtree");
-  el.setAttribute("font-size", Math.round(H * 0.06));
-  el.setAttribute("fill", DZ.fillColor || "#F0450E");
-  el.textContent = "Texto";
-  dzArtAppend(svg, el);
-  dzSelect(el); dzMarkDirty();
+  dzTextToolStart();
 }
 
 /* ── el interruptor de relleno, dentro del menú de formas ───────────────── */
@@ -325,14 +316,11 @@ const DZ_FORMA_RELLENO_LS = "low.forma.relleno";
 /** Pone la fila de «Rellenar» al pie del menú de formas.
  *
  *  Se arma desde acá y no desde `index.html` a propósito: la casilla es de la
- *  herramienta y vive con ella. Y la elección se recuerda, porque quien dibuja
- *  entintando trabaja siempre igual y no va a querer destildarla cada vez. */
+ *  herramienta y vive con ella. El relleno se activa explícitamente en la sesión. */
 function dzFormaRellenoUI() {
   const menu = document.getElementById("dzShapeMenu");
   if (!menu || menu.querySelector(".dz-forma-relleno")) return;
-  try {
-    if (localStorage.getItem(DZ_FORMA_RELLENO_LS) === "1") DZ.formaRelleno = true;
-  } catch (_) { /* sin almacenamiento: nace sin relleno, que es lo pedido */ }
+  DZ.formaRelleno = false; // Each session starts with outline only, even with an old saved preference.
   const fila = document.createElement("label");
   fila.className = "dz-forma-relleno";
   fila.title = "Con esto apagado la forma nace sólo con contorno, que es lo " +
@@ -344,7 +332,7 @@ function dzFormaRellenoUI() {
   caja.checked = dzFormaRellena();
   caja.onchange = () => {
     DZ.formaRelleno = caja.checked;
-    try { localStorage.setItem(DZ_FORMA_RELLENO_LS, caja.checked ? "1" : "0"); } catch (_) { }
+
     if (typeof dzSetStatus === "function")
       dzSetStatus(caja.checked
         ? "Las formas nuevas nacen rellenas"
@@ -391,6 +379,13 @@ function dzFormaPincelUI(menu) {
   texto.textContent = "Contorno con pincel";
   fila.append(caja, texto);
   menu.appendChild(fila);
+  const brushLabel = document.createElement('label'); brushLabel.className='dz-forma-relleno'; brushLabel.textContent='Pincel de las formas nuevas';
+  const brushSelect=document.createElement('select');brushSelect.id='dzFormaBrushPreset';
+  brushSelect.add(new Option('Usar el pincel activo',''));
+  for(const brush of LOW.drawing.brushes.all()) brushSelect.add(new Option(brush.name,brush.id));
+  brushSelect.value=DZ.formaBrushPreset||'';
+  brushSelect.onchange=()=>{DZ.formaBrushPreset=brushSelect.value;};
+  brushLabel.appendChild(brushSelect);menu.appendChild(brushLabel);
 
   const entintar = document.createElement("button");
   entintar.type = "button";
