@@ -11,11 +11,11 @@ parcial o no verificado». Esto no se armó leyendo los documentos viejos: se ar
 
 | qué | cuántos |
 |---|---|
-| Recorridos de navegador (`tools/check_*_ui.js`) | 37 |
+| Recorridos de navegador (`tools/check_*_ui.js`) | 38 |
 | Suites de modelo (`tools/run_*_tests.js`) | 12 |
-| Comprobaciones de puente en Python | 7 |
-| Contratos estáticos (`require(...)`) | 261 |
-| Filas de la matriz de regresiones | 61 |
+| Comprobaciones de puente en Python | 8 |
+| Contratos estáticos (`require(...)`) | 267 |
+| Filas de la matriz de regresiones | 64 |
 
 ## Los tres agujeros que encontró este inventario
 
@@ -29,7 +29,7 @@ Se buscó, para cada capacidad, **quién la prueba**. Tres respuestas fueron
 escribió en `b2bb272` y nunca se cableó, así que una regresión en los controles
 sobre el personaje no la agarraba la puerta. **Cableados los dos.**
 
-Comprobación permanente: hoy los 37 recorridos, las 12 suites y las 7
+Comprobación permanente: hoy los 38 recorridos, las 12 suites y las 8
 comprobaciones de puente están en `build.yml`. Si aparece uno huérfano otra vez,
 se ve con:
 
@@ -109,7 +109,7 @@ lo prueba.
 | Espacios de trabajo y Timeline | sí | sí | sí | — | `check_workspace_ui` | **funcional** |
 | Instrumento de la prueba §15 | sí | — | sí | — | `check_prueba15_ui` | **funcional** |
 | Exportación a Premiere (XML) | sí | sí | — | — | `run_premiere_xml_tests` (modelo) | **parcial**: falta recorrido |
-| Exportación de animación (MP4/PNG) | sí | — | — | — | ninguna | **sin verificar** |
+| Exportación de animación (MP4/PNG/GIF/spritesheet) | sí | sí | sí | — | `check_export_anim_ui` + `check_export_anim_backend` | **funcional** (v4.35.0) |
 | Motion capture | sí | sí | sí | sí | modelo y contratos; recorrido parcial | **parcial** — ver MOCAP-05 |
 | Biblioteca de personajes y poses | — | parcial | — | — | ninguna | **sin verificar** — es D02 |
 
@@ -122,6 +122,13 @@ lo prueba.
 - **No mide descubribilidad.** Ninguna prueba dice si una función se entiende sin
   explicación. El único probador humano de LOW es Mauro, que conoce el producto:
   para eso hace falta alguien que lo vea por primera vez, y eso sigue pendiente.
-- **La exportación de animación (MP4/PNG) no tiene ninguna prueba.** Es el
-  siguiente agujero a cerrar de esta lista, y es de los que se notan: si falla,
-  falla al final del trabajo.
+- ~~La exportación de animación (MP4/PNG) no tiene ninguna prueba.~~ **Cerrado
+  en v4.35.0**, y tenía tres defectos: los cuadros en blanco desaparecían del
+  export —adelantando un cuadro todo lo que sigue al hueco—, el relleno de
+  ceros de la secuencia se ordenaba mal a partir de los 1000 cuadros, y una
+  exportación corta dejaba los cuadros de la toma anterior en la carpeta. Los
+  tres eran de los que se notan al final del trabajo, que es cuando ya no se
+  puede revisar.
+- Lo que sigue sin prueba propia: el **editor de esquinas** y el **inspector de
+  elemento**, y la exportación a **Premiere** sigue **parcial** —modelo sí,
+  recorrido no—.

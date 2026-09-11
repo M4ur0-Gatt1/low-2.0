@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.34.0"
+LOW_VERSION = "4.35.0"
 # El puerto desde el que se sirve la interfaz. FIJO a propósito: `localStorage`
 # es por origen, y con un puerto al azar en cada arranque LOW estrenaba
 # almacenamiento vacío cada vez —se perdían el rescate ante caída, los pinceles
@@ -1221,8 +1221,22 @@ class Api:
                 b64 = du.split(",", 1)[1] if "," in du else du
                 imgs.append(base64.b64decode(b64))
             if kind == "png":
+                # El relleno de ceros se calcula por la CANTIDAD de cuadros, no
+                # fijo en 3: con 1000 cuadros --42 segundos a 24 fps-- `_1000.png`
+                # se ordena ANTES de `_999.png` y la secuencia entra desordenada
+                # al montaje. Tres digitos es el minimo, para no cambiarle el
+                # nombre a las exportaciones cortas de siempre.
+                ancho = max(3, len(str(len(imgs))))
+                # Se limpian los cuadros de la exportacion ANTERIOR de este mismo
+                # documento. Sin esto, exportar 1000 cuadros y despues 10 deja 990
+                # cuadros de la toma vieja en la carpeta, y el importador se lleva
+                # una secuencia de 1000 con 990 cuadros que no son de esta version.
+                # Se borra solo `{stem}_<numeros>.png`, que son los que escribe esto.
+                for previo in outdir.glob(f"{Path(stem).name}_*.png"):
+                    if re.fullmatch(r"\d+", previo.stem.rsplit("_", 1)[-1]):
+                        previo.unlink()
                 for i, raw in enumerate(imgs):
-                    (outdir / f"{Path(stem).name}_{i + 1:03d}.png").write_bytes(raw)
+                    (outdir / f"{Path(stem).name}_{i + 1:0{ancho}d}.png").write_bytes(raw)
                 s._push("ws", {"ws": s.ws, "tree": s._tree(), "branch": s._git_branch()})
                 return {"path": str(outdir), "n": len(imgs)}
             if kind == "sheet":                 # el frontend ya compuso la grilla

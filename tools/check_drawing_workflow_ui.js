@@ -12,11 +12,31 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  const point=async selector=>value(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);
  const screen=async(x,y)=>value(`(()=>{const p=new DOMPoint(${x},${y}).matrixTransform(document.querySelector('#dzCanvas > svg').getScreenCTM());return{x:p.x,y:p.y};})()`);
  const mouse=(type,p)=>send('Input.dispatchMouseEvent',{type,...p,button:type==='mouseMoved'?'none':'left',buttons:type==='mousePressed'?1:0,clickCount:1});
- const click=async p=>{await mouse('mousePressed',p);await mouse('mouseReleased',p);};
+ // El `mouseMoved` previo no es decorativo: sin el, Chromium entrega el
+ // `mousePressed` sin que el destino se haya enterado del puntero, y el clic
+ // aterriza de manera inconsistente —el foco no entra al cuadro de texto y el
+ // recorrido termina culpando al producto—. Aparecio como un fallo SOLO en CI.
+ const click=async p=>{await mouse('mouseMoved',p);await mouse('mousePressed',p);await mouse('mouseReleased',p);};
  const button=async s=>click(await point(s));
  // El boton de una herramienta secundaria vive en el cajon `#dzToolsDrawer`, que
  // nace cerrado (`display:none`): sin abrirlo con el `...` devuelve un rectangulo
  // de 0x0 y el clic termina en la barra de menu, no en la herramienta.
+ // CI es mas lenta que cualquier maquina de escritorio y este recorrido no
+ // esperaba en ningun paso: escribia el texto antes de que el cuadro de texto
+ // existiera y despues culpaba al producto con «Texto no se aplica».
+ const esperar=async(expresion,queCosa,vueltas=40)=>{
+  for(let i=0;i<vueltas;i++){ if(await value(expresion))return true; await wait(120); }
+  throw Error('no llego a tiempo: '+queCosa);
+ };
+ // `Input.insertText` escribe en el elemento ENFOCADO, asi que abrir el cuadro
+ // de texto y EXIGIR que el cursor quede adentro es parte de lo que se prueba:
+ // un cuadro de texto sin cursor es un cuadro donde teclear no hace nada.
+ const abrirTexto=async punto=>{
+  await button('#dzAddText'); await click(punto);
+  await esperar('!!DZ_TEXT_EDIT&&!!document.querySelector(".dz-text-editor textarea")','el cuadro de texto no se abrio');
+  await esperar('document.activeElement===document.querySelector(".dz-text-editor textarea")',
+    'el cuadro de texto abrio SIN el cursor adentro: teclear no escribiria en ninguna parte');
+ };
  const abrirCajon=async selector=>{
   for(let i=0;i<20;i++){
    const caja=await value(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});
@@ -36,12 +56,23 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  await send('Page.enable');await send('Network.enable');await send('Network.setCacheDisabled',{cacheDisabled:true});await send('Emulation.setDeviceMetricsOverride',{width:1366,height:900,deviceScaleFactor:1,mobile:false});await send('Emulation.setFocusEmulationEnabled',{enabled:true});await send('Page.navigate',{url});
  for(let i=0;i<80;i++){if(await value('typeof api!=="undefined"&&!!api&&typeof dzTextToolStart==="function"'))break;await wait(150);}
  await value(`(async()=>{await openDesign('mock.svg');await dzDocInit();closeL3d();LOW.workspace.workspaces.activate('drawing',dzWsAplicar);window.testSvg=document.querySelector('#dzCanvas > svg');testSvg.innerHTML='';dzDocCommit();})()`);
- await button('#dzAddText');await click(await screen(600,300));await send('Input.insertText',{text:'Texto editable'});
+ await abrirTexto(await screen(600,300));
+ await send('Input.insertText',{text:'Texto editable'});
+ // Se comprueba que lo tecleado LLEGO antes de apretar Aplicar. Sin esto, un
+ // insertText que no aterriza deja el textarea vacio, Aplicar no hace nada
+ // —porque no hay nada que aplicar— y el recorrido acusa al producto.
+ if(await value('document.querySelector(".dz-text-editor textarea")?.value')!=='Texto editable')
+  throw Error('lo tecleado no llego al cuadro de texto: '+JSON.stringify(await value('({valor:document.querySelector(".dz-text-editor textarea")?.value,foco:document.activeElement?.tagName})')));
  if(!await value('!!DZ_TEXT_EDIT&&!testSvg.querySelector("text")'))throw Error('Texto se escribe antes de Aplicar');
  await button('.dz-text-editor button');
+ await esperar('!!testSvg.querySelector("text")','Aplicar no dejo el texto en la hoja');
  if(!await value('testSvg.querySelector("text")?.textContent==="Texto editable"'))throw Error('Texto no se aplica');
  await value('dzUndo()');if(await value('!!document.querySelector("#dzCanvas text")'))throw Error('Texto no deshace');
- await button('#dzAddText');await click(await screen(600,300));await send('Input.insertText',{text:'Cancelar'});await key('Escape');
+ await abrirTexto(await screen(600,300));
+ await send('Input.insertText',{text:'Cancelar'});
+ if(await value('document.querySelector(".dz-text-editor textarea")?.value')!=='Cancelar')
+  throw Error('lo tecleado no llego al cuadro de texto la segunda vez');
+ await key('Escape');await wait(250);
  if(await value('!!testSvg.querySelector("text")||!!DZ_TEXT_EDIT'))throw Error('Texto cancelado deja contenido');
  console.log('Texto: clic, escritura, aplicar, Undo y Escape OK');
  await value(`(()=>{testSvg=document.querySelector('#dzCanvas > svg');DZ.brushPreset='dry-brush';DZ.drawW=20;const brush=dzBrushFinalElement([[600,500,1],[700,500,1],[800,500,1]],'#111');brush.id='test-brush';const layer=document.createElementNS(testSvg.namespaceURI,'g');layer.setAttribute('data-low-art','line');layer.append(brush);testSvg.append(layer);dzDocCommit();dzBienvenida2DPintar();dzSetTool('select');})()`);

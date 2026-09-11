@@ -7569,7 +7569,7 @@ async function dzDoExport(kind) {
     const r = await api.export_anim(DZ.path, pngs, fps, kind);
     const done = { mp4: " (MP4 a " + fps + " fps)", webm: " (WebM a " + fps + " fps)",
                    gif: " (GIF a " + fps + " fps)" }[kind] || " (" + pngs.length + " PNGs)";
-    dzSetStatus(r && r.error ? " " + r.error : " Exportado  " + ((r && r.path) || "export/") + done);
+    dzSetStatus(r && r.error ? " " + r.error : " Exportado  " + ((r && r.path) || "export/") + done + dzExportAvisoFaltantes(pngs.length, frames.length));
   }
   try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
 }
@@ -10180,7 +10180,7 @@ async function dzDoExportDoc(kind) {
   for (let i = 0; i < cuadros.length; i++) {
     const f = cuadros[i];
     let txt = dzCuadroSvgTexto(f);
-    if (!txt) continue;                       // cuadro vacio: se saltea
+    if (!txt) txt = dzExportCuadroEnBlanco(DZ.doc.scene);   // un cuadro en blanco es un cuadro: saltearlo ADELANTA todo lo que sigue
     txt = dzRigView(txt, f);                  // las poses del rig, aplicadas
     if (throughCam) txt = dzCamView(txt, dzCamAt(f));
     const du = await dzSvgToPng(txt, kind === "sheet" ? 512 : 1080);
@@ -10199,7 +10199,7 @@ async function dzDoExportDoc(kind) {
                     gif: " (GIF a " + fps + " fps)" }[kind] || " (" + pngs.length + " PNGs)";
   dzSetStatus(r && r.error ? r.error
     : "Exportado " + ((r && r.path) || "export/") + detalle + " \u00b7 " +
-      pngs.length + " cuadros (F" + cuadros[0] + " a F" + cuadros.at(-1) + ")");
+      pngs.length + " cuadros (F" + cuadros[0] + " a F" + cuadros.at(-1) + ")" + dzExportAvisoFaltantes(pngs.length, cuadros.length));
   try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
 }
 

@@ -1052,4 +1052,36 @@ require("#dzToolsDrawer button[title]" in AYUDA_HERRAMIENTAS,
         "herramientas sin ayuda serian justo las que nadie conoce de memoria "
         "—bomba, plancha, pinza, iman, inflador, pivote, espejo—")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla y UI flotante")
+
+# -- La exportacion de animacion no pierde cuadros ----------------------
+# El inventario de A01 dijo que esto no lo probaba nadie. Lo primero que
+# aparecio al probarlo: el exportador SALTEABA los cuadros vacios, asi que un
+# cuadro en blanco en el medio adelantaba un cuadro todo lo que venia despues y
+# la app informaba «4 cuadros (F1 a F5)», contradiciendose sola.
+EXPORT_CUADROS = (ROOT / "ui" / "animation" / "export-cuadros.js").read_text(encoding="utf-8")
+require('src="animation/export-cuadros.js' in INDEX,
+        "el modulo del cuadro en blanco no se carga: dzExportCuadroEnBlanco queda "
+        "sin definir y la exportacion tira ReferenceError en el primer cuadro vacio")
+_export_doc = APP[APP.index("async function dzDoExportDoc(kind)"):]
+_export_doc = _export_doc[:_export_doc.index("async function dzExportSpritesheet")]
+require("dzExportCuadroEnBlanco(DZ.doc.scene)" in _export_doc and "continue;" not in _export_doc,
+        "volvio el `continue` del cuadro vacio en dzDoExportDoc: un cuadro en blanco "
+        "es un cuadro, y saltearlo ADELANTA un cuadro todo lo que sigue al hueco. "
+        "El timing es la materia del oficio y se rompia en silencio, al final del trabajo")
+require("dzExportAvisoFaltantes(pngs.length, cuadros.length)" in APP,
+        "la exportacion volvio a informar como si todo hubiera salido bien cuando "
+        "salieron MENOS cuadros de los pedidos: el que exporta se entera en el montaje")
+require("dzIsCanvasBackground" in EXPORT_CUADROS,
+        "el cuadro en blanco dejo de tomar el papel del lienzo: si sale transparente, "
+        "en MP4 y GIF el codec lo rellena de negro y el hueco aparece como un fogonazo")
+require("ancho = max(3, len(str(len(imgs))))" in MAIN
+        and "_{i + 1:0{ancho}d}.png" in MAIN,
+        "el relleno de ceros de la secuencia PNG volvio a ser fijo: con 1000 cuadros "
+        "—42 segundos a 24 fps— `_1000.png` se ordena ANTES de `_999.png` y la "
+        "secuencia entra desordenada al montaje")
+require("for previo in outdir.glob(" in MAIN,
+        "la exportacion PNG dejo de limpiar la toma anterior: exportar 1000 cuadros y "
+        "despues 10 deja 990 cuadros viejos en la carpeta, y el importador se lleva "
+        "una secuencia mezclada de dos versiones")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante y exportacion")
