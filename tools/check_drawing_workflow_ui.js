@@ -26,7 +26,16 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  // existiera y despues culpaba al producto con «Texto no se aplica».
  const esperar=async(expresion,queCosa,vueltas=40)=>{
   for(let i=0;i<vueltas;i++){ if(await value(expresion))return true; await wait(120); }
-  throw Error('no llego a tiempo: '+queCosa);
+  // Con el estado a la vista: sin esto, un fallo que solo pasa en CI cuesta una
+  // vuelta entera de compilacion para saber cual de las dos cosas se rompio.
+  const estado=await value(`({sesion:!!DZ_TEXT_EDIT, caja:!!document.querySelector('.dz-text-editor'),
+    tecleado:document.querySelector('.dz-text-editor textarea')?.value,
+    foco:document.activeElement?.tagName, doc:!!DZ.doc, cuadro:DZ.doc?.frame,
+    mismoDoc:DZ_TEXT_EDIT?DZ_TEXT_EDIT.doc===DZ.doc:null,
+    hojaViva:!!document.querySelector('#dzCanvas > svg'),
+    textos:document.querySelectorAll('#dzCanvas > svg text').length,
+    aviso:(document.querySelector('#dzStatus')||{}).textContent?.trim().slice(0,120)})`).catch(()=>null);
+  throw Error('no llego a tiempo: '+queCosa+' :: '+JSON.stringify(estado));
  };
  // `Input.insertText` escribe en el elemento ENFOCADO, asi que abrir el cuadro
  // de texto y EXIGIR que el cursor quede adentro es parte de lo que se prueba:
@@ -75,6 +84,22 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  await key('Escape');await wait(250);
  if(await value('!!testSvg.querySelector("text")||!!DZ_TEXT_EDIT'))throw Error('Texto cancelado deja contenido');
  console.log('Texto: clic, escritura, aplicar, Undo y Escape OK');
+ // UN REPINTADO DEL LIENZO NO PUEDE LLEVARSE LO TECLEADO. Es la causa de fondo
+ // del fallo que este recorrido daba SOLO en CI: el lienzo se repinta solo —un
+ // cambio de contenido, la cebolla, un companero de equipo— y en cada repintado
+ // el nodo <svg> se REEMPLAZA. La sesion de texto se ataba a ese nodo, asi que
+ // la caja desaparecia a mitad de la frase y «Aplicar» no aplicaba nada.
+ await abrirTexto(await screen(500,420));
+ await send('Input.insertText',{text:'Sobrevive'});
+ await value('(()=>{const v=document.querySelector("#dzCanvas > svg");v.replaceWith(v.cloneNode(true));return true;})()');
+ await wait(350);
+ if(!await value('!!DZ_TEXT_EDIT&&!!document.querySelector(".dz-text-editor")'))
+  throw Error('un repintado del lienzo cerro la edicion de texto y se llevo lo tecleado, sin decir nada');
+ await button('.dz-text-editor button');
+ await esperar('document.querySelector("#dzCanvas > svg text")?.textContent==="Sobrevive"','aplicar despues de un repintado no dejo el texto en la hoja');
+ await value('dzUndo()');await wait(200);
+ console.log('Texto: sobrevive a un repintado del lienzo OK');
+
  await value(`(()=>{testSvg=document.querySelector('#dzCanvas > svg');DZ.brushPreset='dry-brush';DZ.drawW=20;const brush=dzBrushFinalElement([[600,500,1],[700,500,1],[800,500,1]],'#111');brush.id='test-brush';const layer=document.createElementNS(testSvg.namespaceURI,'g');layer.setAttribute('data-low-art','line');layer.append(brush);testSvg.append(layer);dzDocCommit();dzBienvenida2DPintar();dzSetTool('select');})()`);
  const dab=await point('#test-brush ellipse');await click(dab);
  if(!await value('DZ.sel?.id==="test-brush"'))throw Error('Seleccionó círculo interno '+JSON.stringify(await value('({selected:DZ.sel?.outerHTML?.slice(0,120),tool:DZ.tool,rect:document.querySelector("#test-brush").getBoundingClientRect().toJSON()})'))+' point '+JSON.stringify(dab));

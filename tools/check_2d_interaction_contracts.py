@@ -1084,4 +1084,19 @@ require("for previo in outdir.glob(" in MAIN,
         "despues 10 deja 990 cuadros viejos en la carpeta, y el importador se lleva "
         "una secuencia mezclada de dos versiones")
 
+
+# -- El texto sobrevive a un repintado del lienzo -----------------------
+# El lienzo se repinta solo y en cada repintado el nodo <svg> se REEMPLAZA. La
+# sesion de texto se ataba a ese nodo, asi que un repintado tiraba EN SILENCIO
+# todo lo tecleado. Aparecio como un fallo que solo daba en CI.
+TEXTO = re.sub(r"^\s*//.*$", "", (ROOT / "ui" / "drawing" / "text-tool.js").read_text(encoding="utf-8"), flags=re.M)
+require("session.svg" not in TEXTO,
+        "la edicion de texto volvio a atarse al nodo <svg> que tenia cuando se "
+        "abrio: el lienzo se repinta solo y reemplaza ese nodo, asi que un "
+        "repintado tira sin avisar todo lo que la persona estaba escribiendo")
+require("DZ.doc?.frame!==session.frame)dzTextEditFinish(false)" in TEXTO.replace(" ", ""),
+        "el vigilante de la edicion de texto dejo de mirar el cuadro, o volvio a "
+        "cancelar por repintado: lo que invalida un texto a medio escribir es "
+        "cambiar de documento o de cuadro, no que el lienzo se haya repintado")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante y exportacion")

@@ -125,3 +125,35 @@ Estable previa: `v4.33.0` (v4.34.0 no llegó a compilar). El arreglo del cuadro
 en blanco vive en `ui/animation/export-cuadros.js` y en dos líneas de
 `dzDoExportDoc`; el del orden y la limpieza de la secuencia, en `export_anim` de
 `main.py`.
+
+---
+
+## Apéndice — v4.35.1: por qué v4.35.0 tampoco compiló, y qué destapó
+
+v4.35.0 volvió a quedar en rojo en el mismo recorrido, ahora en otro punto:
+pasaba el tecleo —el arreglo del `mouseMoved` funcionó— y fallaba en «Aplicar no
+dejó el texto en la hoja», otra vez **sólo en CI**.
+
+Esta vez el que estaba mal era el producto, y el defecto es feo: **si el lienzo
+se repinta mientras estás escribiendo un texto, todo lo tecleado se tira sin
+decir nada.** La edición se ataba al nodo `<svg>` que había cuando se abrió la
+caja, y cada repintado —un cambio de contenido, el papel cebolla, un compañero
+de equipo— **reemplaza** ese nodo: el vigilante lo veía desconectado y cancelaba
+la edición a mitad de la frase.
+
+Reproducido acá reemplazando el nodo del lienzo: la caja desaparece y «Aplicar»
+no aplica nada. Arreglado en `ui/drawing/text-tool.js`: la hoja se resuelve
+**viva** al aplicar, y el vigilante cancela por lo que de verdad invalida un
+texto a medio escribir —cambiar de documento o de cuadro—, no por un repintado.
+Si se estaba editando un texto que ya existía y el repintado se llevó ese nodo,
+ahora **se avisa** en vez de perderlo en silencio.
+
+Queda cubierto por un paso nuevo del recorrido —verificado contra su violación—
+y por dos contratos. Y el recorrido informa el estado completo cuando algo no
+llega a tiempo, para no gastar una vuelta entera de compilación en adivinar cuál
+de las dos cosas se rompió.
+
+**Una última trampa, mía:** mi primer diagnóstico local dio «no se reproduce»
+porque el navegador estaba corriendo el módulo **viejo**. `Network.setCacheDisabled`
+no hace nada si antes no se llamó a `Network.enable`, y la sonda no lo llamaba.
+Es la trampa número uno del arnés y me la comí igual.
