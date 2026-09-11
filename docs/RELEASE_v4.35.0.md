@@ -157,3 +157,26 @@ de las dos cosas se rompió.
 porque el navegador estaba corriendo el módulo **viejo**. `Network.setCacheDisabled`
 no hace nada si antes no se llamó a `Network.enable`, y la sonda no lo llamaba.
 Es la trampa número uno del arnés y me la comí igual.
+
+## Apéndice — v4.35.2: la prueba miraba una hoja muerta
+
+El diagnóstico que se agregó en v4.35.1 contestó en la primera vuelta. La
+compilación falló otra vez en el mismo punto, pero informando el estado:
+
+```
+{"sesion":false,"caja":false,"doc":true,"cuadro":1,"hojaViva":true,
+ "textos":1,"aviso":"Texto aplicado · doble clic para editar · Ctrl+Z para deshacer"}
+```
+
+**`textos: 1` y «Texto aplicado»**: el producto había hecho su trabajo. Lo que
+estaba mal era la prueba, que guardaba el nodo `<svg>` del montaje en una
+variable y buscaba el texto ahí. Como CI **sí** repinta el lienzo —el nodo se
+reemplaza—, la prueba miraba una hoja muerta mientras el texto estaba en la
+viva.
+
+Eso confirma además que el arreglo de v4.35.1 era necesario y correcto: en el
+mismo entorno donde antes la edición moría, ahora sobrevivió al repintado y se
+aplicó.
+
+Ahora el recorrido resuelve la hoja **cada vez que la mira**, en vez de
+acordarse de cuál era.

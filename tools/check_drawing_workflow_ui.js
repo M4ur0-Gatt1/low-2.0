@@ -64,7 +64,7 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  try{
  await send('Page.enable');await send('Network.enable');await send('Network.setCacheDisabled',{cacheDisabled:true});await send('Emulation.setDeviceMetricsOverride',{width:1366,height:900,deviceScaleFactor:1,mobile:false});await send('Emulation.setFocusEmulationEnabled',{enabled:true});await send('Page.navigate',{url});
  for(let i=0;i<80;i++){if(await value('typeof api!=="undefined"&&!!api&&typeof dzTextToolStart==="function"'))break;await wait(150);}
- await value(`(async()=>{await openDesign('mock.svg');await dzDocInit();closeL3d();LOW.workspace.workspaces.activate('drawing',dzWsAplicar);window.testSvg=document.querySelector('#dzCanvas > svg');testSvg.innerHTML='';dzDocCommit();})()`);
+ await value(`(async()=>{await openDesign('mock.svg');await dzDocInit();closeL3d();LOW.workspace.workspaces.activate('drawing',dzWsAplicar);window.hoja=()=>document.querySelector('#dzCanvas > svg');hoja().innerHTML='';dzDocCommit();})()`);
  await abrirTexto(await screen(600,300));
  await send('Input.insertText',{text:'Texto editable'});
  // Se comprueba que lo tecleado LLEGO antes de apretar Aplicar. Sin esto, un
@@ -72,17 +72,17 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  // —porque no hay nada que aplicar— y el recorrido acusa al producto.
  if(await value('document.querySelector(".dz-text-editor textarea")?.value')!=='Texto editable')
   throw Error('lo tecleado no llego al cuadro de texto: '+JSON.stringify(await value('({valor:document.querySelector(".dz-text-editor textarea")?.value,foco:document.activeElement?.tagName})')));
- if(!await value('!!DZ_TEXT_EDIT&&!testSvg.querySelector("text")'))throw Error('Texto se escribe antes de Aplicar');
+ if(!await value('!!DZ_TEXT_EDIT&&!hoja().querySelector("text")'))throw Error('Texto se escribe antes de Aplicar');
  await button('.dz-text-editor button');
- await esperar('!!testSvg.querySelector("text")','Aplicar no dejo el texto en la hoja');
- if(!await value('testSvg.querySelector("text")?.textContent==="Texto editable"'))throw Error('Texto no se aplica');
+ await esperar('!!hoja().querySelector("text")','Aplicar no dejo el texto en la hoja');
+ if(!await value('hoja().querySelector("text")?.textContent==="Texto editable"'))throw Error('Texto no se aplica');
  await value('dzUndo()');if(await value('!!document.querySelector("#dzCanvas text")'))throw Error('Texto no deshace');
  await abrirTexto(await screen(600,300));
  await send('Input.insertText',{text:'Cancelar'});
  if(await value('document.querySelector(".dz-text-editor textarea")?.value')!=='Cancelar')
   throw Error('lo tecleado no llego al cuadro de texto la segunda vez');
  await key('Escape');await wait(250);
- if(await value('!!testSvg.querySelector("text")||!!DZ_TEXT_EDIT'))throw Error('Texto cancelado deja contenido');
+ if(await value('!!hoja().querySelector("text")||!!DZ_TEXT_EDIT'))throw Error('Texto cancelado deja contenido');
  console.log('Texto: clic, escritura, aplicar, Undo y Escape OK');
  // UN REPINTADO DEL LIENZO NO PUEDE LLEVARSE LO TECLEADO. Es la causa de fondo
  // del fallo que este recorrido daba SOLO en CI: el lienzo se repinta solo —un
@@ -100,7 +100,7 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  await value('dzUndo()');await wait(200);
  console.log('Texto: sobrevive a un repintado del lienzo OK');
 
- await value(`(()=>{testSvg=document.querySelector('#dzCanvas > svg');DZ.brushPreset='dry-brush';DZ.drawW=20;const brush=dzBrushFinalElement([[600,500,1],[700,500,1],[800,500,1]],'#111');brush.id='test-brush';const layer=document.createElementNS(testSvg.namespaceURI,'g');layer.setAttribute('data-low-art','line');layer.append(brush);testSvg.append(layer);dzDocCommit();dzBienvenida2DPintar();dzSetTool('select');})()`);
+ await value(`(()=>{const testSvg=hoja();DZ.brushPreset='dry-brush';DZ.drawW=20;const brush=dzBrushFinalElement([[600,500,1],[700,500,1],[800,500,1]],'#111');brush.id='test-brush';const layer=document.createElementNS(testSvg.namespaceURI,'g');layer.setAttribute('data-low-art','line');layer.append(brush);testSvg.append(layer);dzDocCommit();dzBienvenida2DPintar();dzSetTool('select');})()`);
  const dab=await point('#test-brush ellipse');await click(dab);
  if(!await value('DZ.sel?.id==="test-brush"'))throw Error('Seleccionó círculo interno '+JSON.stringify(await value('({selected:DZ.sel?.outerHTML?.slice(0,120),tool:DZ.tool,rect:document.querySelector("#test-brush").getBoundingClientRect().toJSON()})'))+' point '+JSON.stringify(dab));
  await abrirCajon('button[data-tool="handler"]');await button('button[data-tool="handler"]');
@@ -111,9 +111,9 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  if(!await value('+document.querySelector("#test-brush").getAttribute("data-low-brush-size")>20'))throw Error('Bomba no engrosa pincel');
  await value('dzUndo()');if(!await value('+document.querySelector("#test-brush").getAttribute("data-low-brush-size")===20'))throw Error('Bomba no deshace');
  console.log('Pincel texturado: selección atómica y bomba física con Undo OK');
- await value(`(()=>{testSvg=document.querySelector('#dzCanvas > svg');testSvg.innerHTML='<rect data-low-page="1" width="1920" height="1080" fill="white"/><rect x="600" y="200" width="200" height="180" fill="none" stroke="black" stroke-width="4"/>';dzDeselect();dzDocCommit();dzColoringPrefsSet('scope','drawing');DZ.fillColor='#b83232';dzSetTool('bucket');})()`);
+ await value(`(()=>{const testSvg=hoja();testSvg.innerHTML='<rect data-low-page="1" width="1920" height="1080" fill="white"/><rect x="600" y="200" width="200" height="180" fill="none" stroke="black" stroke-width="4"/>';dzDeselect();dzDocCommit();dzColoringPrefsSet('scope','drawing');DZ.fillColor='#b83232';dzSetTool('bucket');})()`);
  await click(await screen(650,250));for(let i=0;i<100;i++){if(!await value('!!DZ.coloringBusy'))break;await wait(100);}
- if(!await value(`(()=>{const p=testSvg.querySelector('[data-low="fill"]');if(!p)return false;const b=p.getBBox();return b.x>=598&&b.y>=198&&b.x+b.width<=802&&b.y+b.height<=382;})()`))throw Error('Relleno se sale del rectángulo');
+ if(!await value(`(()=>{const p=hoja().querySelector('[data-low="fill"]');if(!p)return false;const b=p.getBBox();return b.x>=598&&b.y>=198&&b.x+b.width<=802&&b.y+b.height<=382;})()`))throw Error('Relleno se sale del rectángulo');
  const before=await value('DZ.doc.drawing.content');await click(await screen(350,250));for(let i=0;i<100;i++){if(!await value('!!DZ.coloringBusy'))break;await wait(100);}
  if(await value('DZ.doc.drawing.content')!==before)throw Error('Balde llena exterior de la hoja');
  console.log('Balde: borde recto y exterior sin relleno OK');
