@@ -11,11 +11,11 @@ parcial o no verificado». Esto no se armó leyendo los documentos viejos: se ar
 
 | qué | cuántos |
 |---|---|
-| Recorridos de navegador (`tools/check_*_ui.js`) | 34 |
+| Recorridos de navegador (`tools/check_*_ui.js`) | 37 |
 | Suites de modelo (`tools/run_*_tests.js`) | 12 |
 | Comprobaciones de puente en Python | 7 |
-| Contratos estáticos (`require(...)`) | 256 |
-| Filas de la matriz de regresiones | 57 |
+| Contratos estáticos (`require(...)`) | 261 |
+| Filas de la matriz de regresiones | 61 |
 
 ## Los tres agujeros que encontró este inventario
 
@@ -29,7 +29,7 @@ Se buscó, para cada capacidad, **quién la prueba**. Tres respuestas fueron
 escribió en `b2bb272` y nunca se cableó, así que una regresión en los controles
 sobre el personaje no la agarraba la puerta. **Cableados los dos.**
 
-Comprobación permanente: hoy los 34 recorridos, las 12 suites y las 7
+Comprobación permanente: hoy los 37 recorridos, las 12 suites y las 7
 comprobaciones de puente están en `build.yml`. Si aparece uno huérfano otra vez,
 se ve con:
 
@@ -58,6 +58,17 @@ tenía guard, ni contrato, ni prueba de puente. Se escribieron dos:
 `dzExportPremiereDirecto`. Queda **parcial**: el archivo que sale está probado,
 el camino desde el menú no.
 
+### 4. La UI flotante del lienzo se comía el dibujo (encontrado en v4.34.0)
+
+El inventario dijo que la puntería de la selección estaba cubierta, y lo estaba.
+Lo que nadie probó nunca es qué pasa cuando **un overlay transparente queda
+encima del dibujo**. Medido: con el encuadre de cámara a la vista y el lápiz
+elegido, **ningún trazo entraba en toda la mesa** y cada intento corría el plano
+de la escena; y con un trazo seleccionado, los tiradores de la caja tapaban la
+línea y las herramientas vectoriales se negaban a trabajar diciendo «acercate
+más a una línea» estando justo encima. Cerrado con `check_camara_encuadre_ui`,
+cinco contratos y el recorrido de dibujo de Codex, que fue quien lo delató.
+
 ## Estado por capacidad
 
 Leyenda: **funcional** = hay recorrido de navegador con entrada real y
@@ -74,8 +85,12 @@ lo prueba.
 | Documentos múltiples y pestañas | sí | sí | sí | sí | `check_document_tabs_ui` | **funcional** |
 | Dibujo y pincel | sí | sí | sí | sí | `check_brush_params_ui`, `check_brush_vector_import_ui` | **funcional** |
 | Formas: contorno, pincel y deformación | sí | sí | sí | sí | `check_shape_tool_ui`, `check_warp_cage_ui` | **funcional** (v4.31.0) |
+| Texto en la hoja | sí | sí | sí | sí | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
+| Bomba de grosor sobre los tres tipos de trazo | sí | sí | sí | sí | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
+| Ayuda al pasar el puntero por la barra | sí | — | — | — | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
+| Editor de esquinas e inspector de elemento | sí | sí | sí | sí | ninguna | **sin verificar** — trabajo de Codex, sin recorrido propio |
 | Edición vectorial por nodos | sí | sí | sí | sí | `check_vector_nodes_ui` | **funcional** |
-| Puntería de la selección | sí | — | — | — | `check_hit_test_ui` | **funcional** |
+| Puntería de la selección y overlays | sí | — | — | — | `check_hit_test_ui`, `check_camara_encuadre_ui`, `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
 | Color Studio | sí | sí | sí | sí | `check_color_studio_ui` | **funcional** (recién cableado) |
 | Coloreo | sí | sí | sí | sí | `check_coloring_ui` | **funcional** |
 | Papel cebolla | sí | sí | sí | — | `check_version_onion_ui` | **funcional** |

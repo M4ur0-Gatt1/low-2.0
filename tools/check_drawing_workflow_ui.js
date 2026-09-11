@@ -14,6 +14,23 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  const mouse=(type,p)=>send('Input.dispatchMouseEvent',{type,...p,button:type==='mouseMoved'?'none':'left',buttons:type==='mousePressed'?1:0,clickCount:1});
  const click=async p=>{await mouse('mousePressed',p);await mouse('mouseReleased',p);};
  const button=async s=>click(await point(s));
+ // El boton de una herramienta secundaria vive en el cajon `#dzToolsDrawer`, que
+ // nace cerrado (`display:none`): sin abrirlo con el `...` devuelve un rectangulo
+ // de 0x0 y el clic termina en la barra de menu, no en la herramienta.
+ const abrirCajon=async selector=>{
+  for(let i=0;i<20;i++){
+   const caja=await value(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});
+     if(!n)return null;const r=n.getBoundingClientRect();
+     return{w:r.width,h:r.height,enCajon:!!n.closest('#dzToolsDrawer'),
+       cajonAbierto:!document.querySelector('#dzToolsDrawer')?.hidden};})()`);
+   if(!caja)throw Error('no existe '+selector);
+   if(caja.w&&caja.h)return;
+   if(!caja.enCajon)throw Error(selector+' no tiene caja y no esta en el cajon '+JSON.stringify(caja));
+   if(!caja.cajonAbierto)await button('#dzToolsMore');
+   await wait(120);
+  }
+  throw Error('el cajon de herramientas no se abrio para '+selector);
+ };
  const key=async key=>{await send('Input.dispatchKeyEvent',{type:'keyDown',key,code:key});await send('Input.dispatchKeyEvent',{type:'keyUp',key,code:key});};
  try{
  await send('Page.enable');await send('Network.enable');await send('Network.setCacheDisabled',{cacheDisabled:true});await send('Emulation.setDeviceMetricsOverride',{width:1366,height:900,deviceScaleFactor:1,mobile:false});await send('Emulation.setFocusEmulationEnabled',{enabled:true});await send('Page.navigate',{url});
@@ -28,9 +45,13 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  if(await value('!!testSvg.querySelector("text")||!!DZ_TEXT_EDIT'))throw Error('Texto cancelado deja contenido');
  console.log('Texto: clic, escritura, aplicar, Undo y Escape OK');
  await value(`(()=>{testSvg=document.querySelector('#dzCanvas > svg');DZ.brushPreset='dry-brush';DZ.drawW=20;const brush=dzBrushFinalElement([[600,500,1],[700,500,1],[800,500,1]],'#111');brush.id='test-brush';const layer=document.createElementNS(testSvg.namespaceURI,'g');layer.setAttribute('data-low-art','line');layer.append(brush);testSvg.append(layer);dzDocCommit();dzBienvenida2DPintar();dzSetTool('select');})()`);
- const dab=await point('#test-brush ellipse');console.log(await value(`({hit:dzHitTest(${dab.x},${dab.y})?.outerHTML?.slice(0,100),top:document.elementFromPoint(${dab.x},${dab.y})?.outerHTML?.slice(0,150),text:!!DZ_TEXT_EDIT})`));await click(dab);
+ const dab=await point('#test-brush ellipse');await click(dab);
  if(!await value('DZ.sel?.id==="test-brush"'))throw Error('Seleccionó círculo interno '+JSON.stringify(await value('({selected:DZ.sel?.outerHTML?.slice(0,120),tool:DZ.tool,rect:document.querySelector("#test-brush").getBoundingClientRect().toJSON()})'))+' point '+JSON.stringify(dab));
- console.log(await value(`(()=>{const n=document.querySelector('[data-tool="handler"]'),r=n.getBoundingClientRect();return{rect:r.toJSON(),css:getComputedStyle(n).display,top:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML?.slice(0,150)}})()`));await button('[data-tool="handler"]');await mouse('mousePressed',dab);console.log(await value('({tool:DZ.tool,handler:!!HANDLER,el:HANDLER?.el?.id,width:HANDLER?.startW,state:HANDLER?.brushWidth?.kind})'));await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:dab.x,y:dab.y-40,buttons:1});await mouse('mouseReleased',{x:dab.x,y:dab.y-40});await wait(400);
+ await abrirCajon('button[data-tool="handler"]');await button('button[data-tool="handler"]');
+ if(await value('DZ.tool')!=='handler')throw Error('apretar la bomba no cambio de herramienta');
+ await mouse('mousePressed',dab);
+ if(!await value('!!HANDLER&&HANDLER.el?.id==="test-brush"'))throw Error('la bomba no agarro el trazo apretado');
+ await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:dab.x,y:dab.y-40,buttons:1});await mouse('mouseReleased',{x:dab.x,y:dab.y-40});await wait(400);
  if(!await value('+document.querySelector("#test-brush").getAttribute("data-low-brush-size")>20'))throw Error('Bomba no engrosa pincel');
  await value('dzUndo()');if(!await value('+document.querySelector("#test-brush").getAttribute("data-low-brush-size")===20'))throw Error('Bomba no deshace');
  console.log('Pincel texturado: selección atómica y bomba física con Undo OK');
@@ -40,7 +61,7 @@ const url=process.argv[3]||'http://127.0.0.1:8791/ui/index.html?mock=1';
  const before=await value('DZ.doc.drawing.content');await click(await screen(350,250));for(let i=0;i<100;i++){if(!await value('!!DZ.coloringBusy'))break;await wait(100);}
  if(await value('DZ.doc.drawing.content')!==before)throw Error('Balde llena exterior de la hoja');
  console.log('Balde: borde recto y exterior sin relleno OK');
- await send('Input.dispatchMouseEvent',{type:'mouseMoved',...await point('[data-tool="handler"]')});await wait(250);
+ await abrirCajon('button[data-tool="handler"]');await send('Input.dispatchMouseEvent',{type:'mouseMoved',...await point('button[data-tool="handler"]')});await wait(250);
  if(!await value('!!document.querySelector(".dz-tool-tooltip")'))throw Error('Falta ayuda visible');
  console.log('Ayuda al pasar el puntero OK');
  if(process.env.LOW_DRAWING_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'});require('fs').writeFileSync(process.env.LOW_DRAWING_SCREENSHOT,Buffer.from(shot.data,'base64'));}

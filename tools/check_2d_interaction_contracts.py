@@ -1012,4 +1012,44 @@ require("vueltas" not in INICIAL_COD,
         "que el reloj sigue corriendo es exactamente el caso en que la invitacion "
         "todavia esta en pantalla, y rendirse ahi la deja pegada para siempre")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet y primera pantalla")
+
+# -- La UI flotante del lienzo no se come el dibujo ---------------------
+# De donde salio esto: arreglando una prueba ajena que decia «Bomba no engrosa
+# pincel». No era la bomba: con el trazo SELECCIONADO, un tirador de la caja de
+# seleccion tapaba la linea, y con el encuadre de camara a la vista NO SE PODIA
+# DIBUJAR en toda la mesa —el marco movia la camara en vez de dejar el trazo—.
+# Son overlays transparentes que se llevan el puntero, que es la familia de
+# defectos que Mauro reporta como «no anda nada».
+AYUDA_HERRAMIENTAS = re.sub(r"^\s*//.*$", "",
+    re.sub(r"/\*.*?\*/", "", (ROOT / "ui" / "panels" / "tool-help.js").read_text(encoding="utf-8"), flags=re.S),
+    flags=re.M)
+require('#dzCanvas:not([data-tool="camera"]) .dz-cam' in CSS
+        and re.search(r'#dzCanvas:not\(\[data-tool="camera"\]\) \.dz-cam \{[^}]*pointer-events:\s*none', CSS),
+        "el encuadre de camara volvio a agarrar el puntero fuera del modo camara: "
+        "es un div transparente que tapa toda la mesa, asi que con el encuadre a la "
+        "vista no se puede dibujar y cada intento MUEVE la camara y deja clave")
+_cam_toggle = APP[APP.index("function dzCamToggle()"):]
+_cam_toggle = _cam_toggle[:_cam_toggle.index("function dzCamCur()")]
+require('$("#dzCanvas").dataset.tool = DZ.tool' in _cam_toggle,
+        "dzCamToggle escribe DZ.tool a mano sin pasar por dzSetTool y ya no "
+        "sincroniza el atributo de #dzCanvas: el CSS decide con ESE atributo si el "
+        "encuadre agarra el puntero, asi que la camara queda inmovil")
+require(re.search(r'#dzCanvas\[data-tool="handler"\] \.dz-selbox \.dz-sh', CSS)
+        and re.search(r'#dzCanvas\[data-tool="(iron|pliers|magnet|inflator)"\] \.dz-selbox \.dz-sh', CSS),
+        "los tiradores de la caja de seleccion volvieron a comerse el puntero con "
+        "las herramientas que trabajan SOBRE el dibujo: apretar sobre un trazo "
+        "seleccionado redimensionaba la seleccion en vez de bombear, planchar, "
+        "cortar o deformar, y la herramienta pedia «acercate mas a una linea» "
+        "estando justo encima")
+require("elementsFromPoint" in APP
+        and re.search(r"const el = document\.elementsFromPoint\(clientX, clientY\)\.find\([^)]*DZ_UI_SEL\)", APP),
+        "dzPickStroke volvio a mirar solo el elemento de ARRIBA: cualquier overlay "
+        "flotante del lienzo —caja de seleccion, jaula de deformacion, encuadre— "
+        "deja a las herramientas vectoriales sin encontrar el trazo que tienen debajo")
+require("#dzToolsDrawer button[title]" in AYUDA_HERRAMIENTAS,
+        "la ayuda al pasar el puntero dejo de alcanzar el cajon de herramientas: "
+        "el cajon se cuelga del BODY y no de #designView, asi que las unicas "
+        "herramientas sin ayuda serian justo las que nadie conoce de memoria "
+        "—bomba, plancha, pinza, iman, inflador, pivote, espejo—")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla y UI flotante")

@@ -889,6 +889,15 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
   background: transparent; cursor: move; box-shadow: 0 0 0 1px rgba(0,0,0,.6);
 }
 .dz-cam[hidden] { display: none; }
+/* El encuadre se agarra SOLO cuando la camara es la herramienta activa.
+   Medido en el mock: con el encuadre puesto y el lapiz elegido, el marco
+   —un div transparente de 1011x569 con `cursor:move` y sin `pointer-events`—
+   se comia cada trazo dentro del cuadro: no dibujaba NADA y en vez de eso
+   MOVIA la camara, que encima deja clave en el cuadro. Es decir que intentar
+   dibujar con el encuadre a la vista corria el plano de la escena. Los
+   tiradores de zoom y rotacion son hijos sin `pointer-events` propio, asi que
+   se apagan con el padre, que es lo que corresponde fuera del modo camara. */
+#dzCanvas:not([data-tool="camera"]) .dz-cam { pointer-events: none; }
 .dz-cam-tag {
   position: absolute; top: -20px; left: -2px; font: 600 10.5px Figtree, sans-serif;
   color: var(--txt); background: #252421; border: 1px solid var(--line); border-radius: 3px; padding: 3px 7px;
@@ -1528,6 +1537,22 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 .dz-sh.s  { left: 50%; top: 100%;transform: translate(-50%,-50%); cursor: ns-resize; }
 .dz-sh.se { left: 100%;top: 100%;transform: translate(-50%,-50%); cursor: nwse-resize; }
 .dz-sh:hover { background: var(--cyan); }
+/* Los tiradores de la caja de seleccion NO pueden comerse el puntero cuando la
+   herramienta activa trabaja sobre el dibujo que esta debajo. Estas siete son
+   las que conservan la seleccion al activarse (ver dzSetTool), asi que son las
+   unicas en las que la caja sigue dibujada mientras se trabaja: apretar ahi
+   redimensionaba la seleccion en vez de bombear, planchar, cortar, deformar,
+   inflar, rellenar o tomar el color. Medido: con el trazo seleccionado, la bomba
+   se negaba a engrosarlo y encima pedia «acercate mas a una linea» estando
+   justo encima. Para seleccionar y editar por nodos los tiradores siguen vivos,
+   que es su razon de ser. */
+#dzCanvas[data-tool="handler"] .dz-selbox .dz-sh,
+#dzCanvas[data-tool="iron"] .dz-selbox .dz-sh,
+#dzCanvas[data-tool="pliers"] .dz-selbox .dz-sh,
+#dzCanvas[data-tool="magnet"] .dz-selbox .dz-sh,
+#dzCanvas[data-tool="inflator"] .dz-selbox .dz-sh,
+#dzCanvas[data-tool="bucket"] .dz-selbox .dz-sh,
+#dzCanvas[data-tool="dropper"] .dz-selbox .dz-sh { pointer-events: none; }
 .dz-corner-widget {
   position:absolute; width:8px; height:8px; pointer-events:auto;
   transform:translate(-50%,-50%); border:1px solid var(--cyan); border-radius:50%;

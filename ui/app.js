@@ -6640,7 +6640,7 @@ function dzEditableVector(el) {
 function dzPickStroke(clientX, clientY, maxPx, acceptFilled = true) {
   const svg = $("#dzCanvas").querySelector(":scope > svg");
   if (!svg) return null;
-  const el = document.elementFromPoint(clientX, clientY);
+  const el = document.elementsFromPoint(clientX, clientY).find(n => !n.closest?.(DZ_UI_SEL)) || null; // a TRAVES de la UI flotante: un tirador de la seleccion tapaba el trazo y la herramienta pedia acercarse
   const atomic = dzAtomicArtwork(el);
   if(atomic && svg.contains(atomic) && !atomic.closest('[data-locked],g.dz-onion') && dzBrushWidthState(atomic)) return atomic;
   if (el && el.closest && el.closest("#dzCanvas svg") && !el.closest("g.dz-onion")) {
@@ -7860,7 +7860,7 @@ function dzHasCam() { return Object.keys(dzCamKeys()).length > 0; }
    AUTO-KEY: cualquier edición deja una clave de cámara en el cuadro actual. */
 function dzCamToggle() {
   DZ.camMode = !DZ.camMode;
-  DZ.tool = DZ.camMode ? "camera" : "select";
+  DZ.tool = DZ.camMode ? "camera" : "select"; $("#dzCanvas").dataset.tool = DZ.tool;   // el CSS decide con esto si el encuadre agarra el puntero
   $("#dzCamBtn").classList.toggle("active", DZ.camMode);
   $("#tlCamKey").hidden = !DZ.camMode;
   if (DZ.camMode && !DZ.anim && !DZ.doc) { dzAnimToggle(); }   // la cámara vive en la timeline

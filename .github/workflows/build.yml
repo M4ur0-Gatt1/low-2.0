@@ -123,6 +123,8 @@ jobs:
           node tools/check_flexible_limb_ui.js
           node tools/check_3d_studio_ui.js
           node tools/check_safe_mode_ui.js
+          node tools/check_drawing_workflow_ui.js
+          node tools/check_camara_encuadre_ui.js
           node tools/check_perf_budgets.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools server
