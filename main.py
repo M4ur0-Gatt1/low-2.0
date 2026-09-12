@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.36.1"
+LOW_VERSION = "4.37.0"
 # El puerto desde el que se sirve la interfaz. FIJO a propósito: `localStorage`
 # es por origen, y con un puerto al azar en cada arranque LOW estrenaba
 # almacenamiento vacío cada vez —se perdían el rescate ante caída, los pinceles
@@ -2831,13 +2831,33 @@ class Api:
         """Genera un reporte de diagnóstico del sistema."""
         return s._self_improvement.get_diagnostic_report()
 
+    DIAG_LOG_TOPE = 2 * 1024 * 1024      # 2 MB: sobran para diagnosticar una sesion
+
     def save_tablet_log(s, text):
-        """Guarda el log de diagnóstico de tableta en un archivo."""
+        """Guarda el log de diagnostico de tableta, con un TOPE.
+
+        El diagnostico de tableta escribe un renglon por evento de puntero, y
+        esto solo hacia `append`. Medido en la maquina de Mauro: 23 MB desde
+        agosto, creciendo sin techo dentro de %APPDATA%. Un log que nadie vacia
+        deja de ser diagnostico y pasa a ser basura que ocupa disco, y abrirlo
+        para ver los ultimos eventos se vuelve incomodo.
+
+        Pasado el tope se conserva la ULTIMA mitad: para diagnosticar sirve lo
+        ultimo que paso, no lo de hace dos meses.
+        """
         import datetime
         p = data_dir() / 'diag-log.txt'
         ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            if p.exists() and p.stat().st_size > s.DIAG_LOG_TOPE:
+                cola = p.read_bytes()[-(s.DIAG_LOG_TOPE // 2):]
+                corte = cola.find(b"\n")
+                p.write_bytes(b"-- recortado: se conservan los ultimos eventos --\n"
+                              + (cola[corte + 1:] if corte >= 0 else cola))
+        except OSError:
+            pass                              # recortar es una mejora, no un requisito
         with open(p, 'a', encoding='utf-8') as f:
-            f.write(f"── {ts} ──\n{text}\n\n")
+            f.write(f"== {ts} ==\n{text}\n\n")
         return f"ok {p}"
 
     def open_tablet_diag(s):

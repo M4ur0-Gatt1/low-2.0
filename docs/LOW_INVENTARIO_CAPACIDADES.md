@@ -11,11 +11,11 @@ parcial o no verificado». Esto no se armó leyendo los documentos viejos: se ar
 
 | qué | cuántos |
 |---|---|
-| Recorridos de navegador (`tools/check_*_ui.js`) | 40 |
+| Recorridos de navegador (`tools/check_*_ui.js`) | 41 |
 | Suites de modelo (`tools/run_*_tests.js`) | 12 |
-| Comprobaciones de puente en Python | 9 |
-| Contratos estáticos (`require(...)`) | 276 |
-| Filas de la matriz de regresiones | 67 |
+| Comprobaciones de puente en Python | 11 |
+| Contratos estáticos (`require(...)`) | 279 |
+| Filas de la matriz de regresiones | 69 |
 
 ## Los tres agujeros que encontró este inventario
 
@@ -29,7 +29,7 @@ Se buscó, para cada capacidad, **quién la prueba**. Tres respuestas fueron
 escribió en `b2bb272` y nunca se cableó, así que una regresión en los controles
 sobre el personaje no la agarraba la puerta. **Cableados los dos.**
 
-Comprobación permanente: hoy los 40 recorridos, las 12 suites y las 9
+Comprobación permanente: hoy los 41 recorridos, las 12 suites y las 11
 comprobaciones de puente están en `build.yml`. Si aparece uno huérfano otra vez,
 se ve con:
 
@@ -54,9 +54,12 @@ tenía guard, ni contrato, ni prueba de puente. Se escribieron dos:
 
 ### 3. La exportación a Premiere tiene modelo y no tiene recorrido
 
-`run_premiere_xml_tests.js` cubre el XML; ningún recorrido de navegador toca
-`dzExportPremiereDirecto`. Queda **parcial**: el archivo que sale está probado,
-el camino desde el menú no.
+`run_premiere_xml_tests.js` cubre el XML; ningún recorrido de navegador tocaba
+`dzExportPremiereDirecto`. **Cerrado en v4.37.0**, y el recorrido destapó que el
+nombre de los cuadros lo calculaban **dos lados con reglas distintas**: con una
+escena «El Gato (final)» el XML pedía `El_Gato_final__0001.png` y el puente
+escribía `El_Gato_final_0001.png`, así que Premiere abría la secuencia con todos
+los cuadros perdidos —justo lo que ese código dice evitar—.
 
 ### 4. La UI flotante del lienzo se comía el dibujo (encontrado en v4.34.0)
 
@@ -119,7 +122,7 @@ lo prueba.
 | Modo seguro | sí | sí | sí | — | `check_safe_mode_ui` + puente | **funcional** |
 | Espacios de trabajo y Timeline | sí | sí | sí | — | `check_workspace_ui` | **funcional** |
 | Instrumento de la prueba §15 | sí | — | sí | — | `check_prueba15_ui` | **funcional** |
-| Exportación a Premiere (XML) | sí | sí | — | — | `run_premiere_xml_tests` (modelo) | **parcial**: falta recorrido |
+| Exportación a Premiere (XML) | sí | sí | sí | — | `run_premiere_xml_tests` + `check_export_premiere_ui` + `check_export_premiere_backend` | **funcional** (v4.37.0) |
 | Exportación de animación (MP4/PNG/GIF/spritesheet) | sí | sí | sí | — | `check_export_anim_ui` + `check_export_anim_backend` | **funcional** (v4.35.0) |
 | Motion capture | sí | sí | sí | sí | modelo y contratos; recorrido parcial | **parcial** — ver MOCAP-05 |
 | Biblioteca de personajes y poses | — | parcial | — | — | ninguna | **sin verificar** — es D02 |
@@ -141,5 +144,5 @@ lo prueba.
   tres eran de los que se notan al final del trabajo, que es cuando ya no se
   puede revisar.
 - Lo que sigue sin prueba propia: el **editor de esquinas** y el **inspector de
-  elemento**, y la exportación a **Premiere** sigue **parcial** —modelo sí,
-  recorrido no—.
+  elemento** de Codex. La exportación a **Premiere** dejó de ser parcial en
+  v4.37.0.

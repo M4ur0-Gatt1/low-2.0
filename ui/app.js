@@ -10138,7 +10138,7 @@ async function dzExportPremiere(pngs, fps, cuadros) {
   if (!api || !api.export_premiere)
     return dzSetStatus("Esta versión de LOW no puede escribir el XML — reiniciá la app");
   const escena = DZ.doc.scene;
-  const nombre = (escena.name || "secuencia").replace(/[^\w.-]+/g, "_") || "secuencia";
+  const nombre = (escena.name || "secuencia").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "secuencia";   // MISMA regla que export_premiere en main.py (que hace strip("_")): si divergen, el XML nombra archivos que no existen
   const archivos = pngs.map((_, i) => `${nombre}_${String(i + 1).padStart(4, "0")}.png`);
   const pista = DZ.doc.audio;
   let audio = null, wav = null;

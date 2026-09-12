@@ -1143,4 +1143,25 @@ require("const menu = ctxMenu; requestAnimationFrame(() => menu.querySelector" i
         "requestAnimationFrame: si el menu se cierra antes del cuadro siguiente —y se "
         "cierra solo— la variable esta en null y tira una excepcion no atrapada")
 
+
+# -- Premiere: el XML nombra archivos que existen -----------------------
+# El nombre de los cuadros lo calculan DOS lados: el frontend lo escribe dentro
+# del XML y `export_premiere` escribe los archivos. Tenian reglas distintas de
+# limpieza —el puente hacia strip("_") y el frontend no—, asi que con una escena
+# «El Gato (final)» el XML pedia El_Gato_final__0001.png y el puente escribia
+# El_Gato_final_0001.png: Premiere abre eso con TODOS los cuadros perdidos.
+require(r'.replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "")' in APP,
+        "el nombre de los cuadros para Premiere volvio a limpiarse con otra regla que "
+        "la del puente (que hace strip('_')): el XML nombraria archivos que no existen "
+        "y la secuencia abriria con los cuadros perdidos, pidiendo relinkear")
+require('.strip("_")' in MAIN.split("def export_premiere")[1][:900],
+        "export_premiere dejo de recortar los guiones bajos del nombre: la otra mitad "
+        "de la misma regla")
+
+# -- El log de diagnostico de tableta tiene tope ------------------------
+# Medido en la maquina de Mauro: 23 MB creciendo desde agosto dentro de %APPDATA%.
+require("DIAG_LOG_TOPE" in MAIN and "cola = p.read_bytes()[-(s.DIAG_LOG_TOPE // 2):]" in MAIN,
+        "el log de diagnostico de tableta volvio a crecer sin techo, o recorta "
+        "guardando el PRINCIPIO: para diagnosticar sirve lo ultimo que paso")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")
