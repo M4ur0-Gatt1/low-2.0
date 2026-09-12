@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.35.2"
+LOW_VERSION = "4.36.0"
 # El puerto desde el que se sirve la interfaz. FIJO a propósito: `localStorage`
 # es por origen, y con un puerto al azar en cada arranque LOW estrenaba
 # almacenamiento vacío cada vez —se perdían el rescate ante caída, los pinceles
@@ -2014,6 +2014,39 @@ class Api:
         d.mkdir(parents=True, exist_ok=True)
         fp = d / f"diseno_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.svg"
         fp.write_text(starter, encoding="utf-8")
+        s._push("ws", {"ws": s.ws, "tree": s._tree(), "branch": s._git_branch()})
+        return {"path": str(fp), "name": fp.name}
+
+    def new_scene(s, content):
+        """Crea en el disco un documento de escena `.low` y devuelve su ruta.
+
+        POR QUE EXISTE. Hasta la v4.35.2 «Nuevo documento» llamaba a
+        `new_design()`, que escribe un `disenos/diseno_<fecha>.svg`: un dibujo
+        suelto. La escena —capas, niveles, exposiciones, rig, camara— vivia solo
+        en memoria y unicamente se volcaba a `.low` si alguien apretaba Guardar y
+        pasaba por el dialogo. Medido en el workspace de Mauro: 157 SVG sueltos,
+        138 de ellos en blanco, y CERO archivos .low. O sea que el formato propio
+        del programa no lo estaba usando nadie.
+
+        El contenido lo arma el frontend (`LowDoc.toJSON`): el formato es del
+        modelo, no del puente. Aca solo se elige un nombre libre y se escribe.
+        """
+        if not content:
+            return {"error": "no hay escena que guardar"}
+        d = s._base() / "disenos"
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            fp = d / f"escena_{stamp}.low"
+            # Dos documentos creados dentro del mismo segundo no pueden pisarse:
+            # el segundo seria el primero, y el trabajo del primero se perderia.
+            n = 2
+            while fp.exists():
+                fp = d / f"escena_{stamp}_{n}.low"
+                n += 1
+            fp.write_text(content, encoding="utf-8")
+        except OSError as e:
+            return {"error": str(e)}
         s._push("ws", {"ws": s.ws, "tree": s._tree(), "branch": s._git_branch()})
         return {"path": str(fp), "name": fp.name}
 

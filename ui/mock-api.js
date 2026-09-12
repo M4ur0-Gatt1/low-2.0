@@ -82,6 +82,16 @@
     ollama_models: async () => [],
     refresh_tree: async () => ({ tree: [] }),
     new_design: async () => ({ path: "C:\\mock\\rig-test.svg" }),
+    // Guarda la escena escrita, no sólo la llamada: así un recorrido puede
+    // comprobar QUE se escribió el `.low` y con qué adentro.
+    new_scene: async (content) => {
+      const escritas = (window.__lowEscenas = window.__lowEscenas || []);
+      const path = "C:\\mock\\escena_" + (escritas.length + 1) + ".low";
+      const name = path.split("\\").pop();
+      escritas.push({ path, name, content });
+      (window.__lowFiles = window.__lowFiles || {})[path] = { path, name, content };
+      return { path, name };
+    },
     save_design: async () => ({ ok: true }),
     image_data: async path => ({ svg: SAMPLE_SVG, name: path || "mock.svg" }),
   };

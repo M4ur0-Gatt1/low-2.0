@@ -1099,4 +1099,37 @@ require("DZ.doc?.frame!==session.frame)dzTextEditFinish(false)" in TEXTO.replace
         "cancelar por repintado: lo que invalida un texto a medio escribir es "
         "cambiar de documento o de cuadro, no que el lienzo se haya repintado")
 
-print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante y exportacion")
+
+# -- Un documento nuevo es un archivo .low ------------------------------
+# Mauro pregunto si ya existian los .low. En su workspace habia 157 dibujos
+# sueltos —138 en blanco— y CERO .low: «Nuevo documento» escribia un SVG y la
+# escena se quedaba en memoria. Y al abrir un .low en frio el editor escribia el
+# dibujo en la hoja de ROTOSCOPIA, oculta, y el commit siguiente lo VACIABA.
+ESCENA_NUEVA = re.sub(r"^\s*//.*$", "",
+    re.sub(r"/\*.*?\*/", "", (ROOT / "ui" / "animation" / "escena-nueva.js").read_text(encoding="utf-8"), flags=re.S),
+    flags=re.M)
+require('src="animation/escena-nueva.js' in INDEX,
+        "el modulo del documento nuevo no se carga: dzEscenaNueva queda sin definir "
+        "y «Nuevo documento» tira ReferenceError")
+_doc_new = APP[APP.index("async function dzDocumentNew()"):]
+_doc_new = _doc_new[:_doc_new.index("async function dzDocumentClose()")]
+require("dzEscenaNueva()" in _doc_new and "new_design" not in _doc_new,
+        "«Nuevo documento» volvio a escribir un dibujo suelto con new_design(): la "
+        "escena se quedaria otra vez en memoria y cada arranque dejaria un SVG en "
+        "blanco en disenos/ —en el workspace de Mauro habia 138")
+require("dzHojaDeDibujoAsegurar(doc.scene)" in APP,
+        "dzDocUse dejo de asegurar la hoja del dibujo: dentro de #dzCanvas hay otros "
+        "<svg> hijos (rotoscopia, esqueleto, malla) que van ANTES en el HTML, asi que "
+        "el editor escribiria el dibujo en un overlay oculto y el primer commit "
+        "vaciaria el documento abierto")
+require('"dzRigOverlay", "dzMocapSheet", "dzMeshOverlay"' in ESCENA_NUEVA,
+        "la hoja del dibujo ya no distingue las hojas del editor: si alguna queda "
+        "primera, todo lo que se dibuje va a un overlay oculto")
+require("def new_scene(s, content)" in MAIN and '.low"' in MAIN.split("def new_scene")[1][:1400],
+        "el puente dejo de crear el documento de escena .low")
+require("while fp.exists():" in MAIN.split("def new_scene")[1][:1400],
+        "new_scene dejo de esquivar los nombres repetidos: dos documentos creados "
+        "dentro del mismo segundo irian al MISMO archivo y el segundo pisaria al "
+        "primero")
+
+print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")

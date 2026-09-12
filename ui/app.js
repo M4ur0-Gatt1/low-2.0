@@ -15822,20 +15822,10 @@ async function dzDocumentMayDiscard(action) {
 }
 
 async function dzDocumentNew() {
-  const r = await api.new_design();
-  if (!r?.path) return false;
-  const previous = dzDocumentTabPrepareNew();
-  const opened = await openDesign(r.path);
-  if (!opened || !DZ.activeDocumentTab) {
-    if (previous) await dzDocumentTabActivate(previous);
-    return false;
-  }
-  await dzDocInit();
-  await dzEnsureAnimationWorkspace();
-  DZ.doc.scene.name = (r.name || "Documento sin título").replace(/\.svg$/i, "");
-  DZ.doc.dirty = false;
-  dzSetStatus(" Documento nuevo · lienzo vacío");
-  return true;
+  // Un documento nuevo nace siendo un archivo `.low` (ui/animation/escena-nueva.js).
+  // Antes esto escribia un `diseno_<fecha>.svg` suelto y la escena se quedaba en
+  // memoria: en el workspace de Mauro habia 157 SVG —138 en blanco— y CERO .low.
+  return dzEscenaNueva();
 }
 
 async function dzDocumentClose() {
@@ -15949,7 +15939,7 @@ async function dzSceneOpen(ruta) {
 
 /** Pone un documento en uso y reengancha todo lo que depende de él. */
 function dzDocUse(doc) {
-  DZ.doc = doc;
+  DZ.doc = doc; dzHojaDeDibujoAsegurar(doc.scene);   // sin hoja de dibujo, el lienzo escribe en un overlay oculto y el commit siguiente VACIA el documento
   if (!DZ.history) DZ.history = new LOW.core.HistoryManager({ limit: 180 });
   else DZ.history.clear();
   doc.setHistory(DZ.history);

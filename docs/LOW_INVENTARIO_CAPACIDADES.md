@@ -11,11 +11,11 @@ parcial o no verificado». Esto no se armó leyendo los documentos viejos: se ar
 
 | qué | cuántos |
 |---|---|
-| Recorridos de navegador (`tools/check_*_ui.js`) | 38 |
+| Recorridos de navegador (`tools/check_*_ui.js`) | 39 |
 | Suites de modelo (`tools/run_*_tests.js`) | 12 |
-| Comprobaciones de puente en Python | 8 |
-| Contratos estáticos (`require(...)`) | 267 |
-| Filas de la matriz de regresiones | 64 |
+| Comprobaciones de puente en Python | 9 |
+| Contratos estáticos (`require(...)`) | 275 |
+| Filas de la matriz de regresiones | 66 |
 
 ## Los tres agujeros que encontró este inventario
 
@@ -29,7 +29,7 @@ Se buscó, para cada capacidad, **quién la prueba**. Tres respuestas fueron
 escribió en `b2bb272` y nunca se cableó, así que una regresión en los controles
 sobre el personaje no la agarraba la puerta. **Cableados los dos.**
 
-Comprobación permanente: hoy los 38 recorridos, las 12 suites y las 8
+Comprobación permanente: hoy los 39 recorridos, las 12 suites y las 9
 comprobaciones de puente están en `build.yml`. Si aparece uno huérfano otra vez,
 se ve con:
 
@@ -69,6 +69,16 @@ línea y las herramientas vectoriales se negaban a trabajar diciendo «acercate
 más a una línea» estando justo encima. Cerrado con `check_camara_encuadre_ui`,
 cinco contratos y el recorrido de dibujo de Codex, que fue quien lo delató.
 
+### 5. El formato propio del programa no lo usaba nadie (v4.36.0)
+
+Mauro preguntó si ya existían los archivos `.low`. Se midió su workspace:
+**157 dibujos sueltos `diseno_*.svg` —138 de ellos en blanco, de 323 bytes— y
+CERO `.low`**. Dos causas, las dos cerradas acá: «Nuevo documento» escribía un
+SVG suelto y dejaba la escena en memoria; y abrir un `.low` en frío **vaciaba el
+documento**, porque el dibujo se escribía en la hoja de rotoscopía y el commit
+siguiente copiaba ese vacío encima. Nadie probó nunca el ciclo completo del
+formato: crear, abrir, guardar.
+
 ## Estado por capacidad
 
 Leyenda: **funcional** = hay recorrido de navegador con entrada real y
@@ -82,6 +92,7 @@ lo prueba.
 | Almacenamiento de preferencias y rescate | sí | — | sí | — | 4 contratos + recorrido | **funcional** (v4.32.0) |
 | Papelera del proyecto | sí | — | sí | no aplica | `check_papelera_ui` + `check_papelera_backend` | **funcional** (hoy) |
 | Guardar / Guardar como / recuperación | sí | sí | sí | sí | `check_save_recovery_ui`, `check_document_recovery_tabs_ui` | **funcional** |
+| Documento de escena `.low`: crear, abrir y guardar | sí | sí | sí | sí | `check_escena_nueva_ui` + `check_escena_nueva_backend` | **funcional** (v4.36.0) |
 | Documentos múltiples y pestañas | sí | sí | sí | sí | `check_document_tabs_ui` | **funcional** |
 | Dibujo y pincel | sí | sí | sí | sí | `check_brush_params_ui`, `check_brush_vector_import_ui` | **funcional** |
 | Formas: contorno, pincel y deformación | sí | sí | sí | sí | `check_shape_tool_ui`, `check_warp_cage_ui` | **funcional** (v4.31.0) |
