@@ -11,11 +11,11 @@ parcial o no verificado». Esto no se armó leyendo los documentos viejos: se ar
 
 | qué | cuántos |
 |---|---|
-| Recorridos de navegador (`tools/check_*_ui.js`) | 39 |
+| Recorridos de navegador (`tools/check_*_ui.js`) | 40 |
 | Suites de modelo (`tools/run_*_tests.js`) | 12 |
 | Comprobaciones de puente en Python | 9 |
-| Contratos estáticos (`require(...)`) | 275 |
-| Filas de la matriz de regresiones | 66 |
+| Contratos estáticos (`require(...)`) | 276 |
+| Filas de la matriz de regresiones | 67 |
 
 ## Los tres agujeros que encontró este inventario
 
@@ -29,7 +29,7 @@ Se buscó, para cada capacidad, **quién la prueba**. Tres respuestas fueron
 escribió en `b2bb272` y nunca se cableó, así que una regresión en los controles
 sobre el personaje no la agarraba la puerta. **Cableados los dos.**
 
-Comprobación permanente: hoy los 39 recorridos, las 12 suites y las 9
+Comprobación permanente: hoy los 40 recorridos, las 12 suites y las 9
 comprobaciones de puente están en `build.yml`. Si aparece uno huérfano otra vez,
 se ve con:
 

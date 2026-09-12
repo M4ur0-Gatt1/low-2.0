@@ -129,6 +129,7 @@ jobs:
           node tools/check_camara_encuadre_ui.js
           node tools/check_export_anim_ui.js
           node tools/check_escena_nueva_ui.js
+          node tools/check_menu_contextual_ui.js
           node tools/check_perf_budgets.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools server

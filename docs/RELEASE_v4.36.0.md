@@ -99,3 +99,34 @@ nuevo.
 Estable previa: `v4.35.2`. Todo lo nuevo vive en `ui/animation/escena-nueva.js`
 y en el `new_scene` de `main.py`; en `app.js` son dos líneas: la delegación de
 `dzDocumentNew` y la llamada a `dzHojaDeDibujoAsegurar` dentro de `dzDocUse`.
+
+---
+
+## Apéndice — v4.36.1: el error que estaba en tu propio log
+
+Revisando `%APPDATA%\LOW\low.log` apareció un error real, del 10/9 a las 20:19,
+con la v4.33.0 instalada y una escena sin guardar abierta:
+
+```
+[js] Uncaught TypeError: Cannot read properties of null
+     (reading 'querySelector') @app.js?v=4.33.0:276
+```
+
+Es el menú «Copiar» del chat. La línea 276 pedía el foco del primer botón dentro
+de un `requestAnimationFrame`, leyendo la variable `ctxMenu`. Pero ese menú **se
+cierra solo**: `closeCtxMenu` está enganchado a `click`, a `scroll` en captura y
+a `blur`, y el chat **se autodesplaza cada vez que llega una respuesta**. Si el
+menú se cierra antes del cuadro siguiente, la variable ya es `null` y el callback
+revienta.
+
+Reproducido acá con el mismo mensaje antes de tocar nada. El arreglo es que el
+callback mire **su** menú —el que acaba de crear— y no la variable, que para
+entonces puede ser otra cosa.
+
+Queda cubierto por `check_menu_contextual_ui`, que prueba **las dos mitades**:
+que cerrarlo en el mismo cuadro no tire nada, y que abierto siga tomando el foco
+—porque sacar el `requestAnimationFrame` pasaría la primera prueba y rompería el
+teclado sin que nadie se entere—. Las dos verificadas contra su violación.
+
+LOW guarda estos errores solo: `%APPDATA%\LOW\low.log` y un reporte por fallo en
+`%APPDATA%\LOW\fallos\`, con la escena, la herramienta y el último comando.

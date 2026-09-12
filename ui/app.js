@@ -273,7 +273,7 @@ function showCtxMenu(e, items) {
   const box = ctxMenu.getBoundingClientRect(), gap = 8;
   ctxMenu.style.left = Math.max(gap, Math.min(e.clientX, innerWidth - box.width - gap)) + "px";
   ctxMenu.style.top = Math.max(gap, Math.min(e.clientY, innerHeight - box.height - gap)) + "px";
-  requestAnimationFrame(() => ctxMenu.querySelector("button:not(:disabled)")?.focus({ preventScroll:true }));
+  const menu = ctxMenu; requestAnimationFrame(() => menu.querySelector("button:not(:disabled)")?.focus({ preventScroll:true }));   // el menu se cierra SOLO (autoscroll del chat, blur, clic) y ctxMenu queda en null antes del cuadro siguiente
   return ctxMenu;
 }
 document.addEventListener("contextmenu", (e) => {

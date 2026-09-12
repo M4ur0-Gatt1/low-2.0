@@ -1132,4 +1132,15 @@ require("while fp.exists():" in MAIN.split("def new_scene")[1][:1400],
         "dentro del mismo segundo irian al MISMO archivo y el segundo pisaria al "
         "primero")
 
+
+# -- El menu «Copiar» del chat no revienta al cerrarse -------------------
+# Salio del low.log de Mauro: «Uncaught TypeError: Cannot read properties of
+# null (reading 'querySelector') @app.js:276». El menu se cierra SOLO —click,
+# scroll en captura, blur; y el chat se autodesplaza al llegar una respuesta— y
+# el callback del requestAnimationFrame leia la variable ya puesta en null.
+require("const menu = ctxMenu; requestAnimationFrame(() => menu.querySelector" in APP,
+        "el foco del menu contextual volvio a leer la variable `ctxMenu` dentro del "
+        "requestAnimationFrame: si el menu se cierra antes del cuadro siguiente —y se "
+        "cierra solo— la variable esta en null y tira una excepcion no atrapada")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")
