@@ -287,6 +287,9 @@
     }
     lienzo.appendChild(caja);
     vigilar();
+    if (puenteListo) habilitar();   // no es el arranque: el puente ya esta. VA
+                                    // DESPUES del appendChild: habilitar() busca
+                                    // la tarjeta en el DOM por su id.
   }
 
   /* EL RELOJ VIVE CON LA INVITACION, no con el arranque.
@@ -296,6 +299,15 @@
      arranque: una invitacion repintada al volver de la IA no la vigilaba nadie,
      y se volvia a clavar. Ahora se arma al pintarla y se apaga al quitarla. */
   let reloj = 0;
+  /* EL PUENTE SE PRENDE UNA VEZ, LA INVITACION SE PINTA MUCHAS. Las acciones
+     nacen apagadas porque al arrancar todavia no esta Python; `habilitar()`
+     corria UNA sola vez, al final del arranque. Pero la invitacion se vuelve a
+     pintar cada vez que la mesa queda vacia —al cerrar el documento, al volver
+     de la IA—, y esa copia nueva nacia apagada para siempre: «Nuevo documento»,
+     «Abrir documento» y hasta «Recuperar lo que quedo sin guardar» muertos, con
+     «Preparando LOW...» abajo. LOW quedaba inservible sin haberse roto nada.
+     Lo reporto Mauro: «lo cerre y lo volvi a abrir y quedo clavado». */
+  let puenteListo = false;
 
   function vigilar() {
     if (reloj) return;
@@ -312,6 +324,7 @@
      puente —solo esconde el estudio—, y si el arranque muriera seria la unica
      cosa clickeable de la pantalla. */
   function habilitar() {
+    puenteListo = true;             // y desde ahora TODA invitacion nace usable
     const caja = document.querySelector("#" + ID_INVITACION);
     if (!caja) return;
     caja.querySelectorAll("button[data-a]").forEach((b) => { b.disabled = false; b.hidden = false; });

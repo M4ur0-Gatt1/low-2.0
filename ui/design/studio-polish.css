@@ -436,6 +436,20 @@
 #designView .dz-tools .ibtn { width: 30px; height: 27px; border-radius: 6px; }
 #designView .dz-tools .hsep { margin: 3px 6px; }
 #designView .dz-tools-grip { font-size: 10px; opacity: .5; }
+/* RIEL DE DOS O TRES COLUMNAS. Con la ventana a media pantalla —y mas todavia
+   con la timeline abierta, que le come la mitad del alto— el riel mandaba las
+   herramientas al cajon «⋯» y quedaban SEIS a la vista: «cuando elijo el panel
+   de animacion no se ven las herramientas». En Photoshop, Moho y OpenToonz el
+   riel se parte en columnas antes de esconder nada; esto hace lo mismo. */
+#designView .dz-tools.dz-cols-2, #designView .dz-tools.dz-cols-3 {
+  flex-flow: row wrap; align-content: flex-start; justify-content: center; }
+#designView .dz-tools.dz-cols-2 { width: 74px; min-width: 74px; }
+#designView .dz-tools.dz-cols-3 { width: 110px; min-width: 110px; }
+/* el asa, los separadores y el «⋯» ocupan la fila entera, no una celda */
+#designView .dz-tools.dz-cols-2 > .dz-tools-grip, #designView .dz-tools.dz-cols-3 > .dz-tools-grip,
+#designView .dz-tools.dz-cols-2 > .hsep, #designView .dz-tools.dz-cols-3 > .hsep,
+#designView .dz-tools.dz-cols-2 > .dz-tools-more, #designView .dz-tools.dz-cols-3 > .dz-tools-more {
+  width: 100%; flex-basis: 100%; }
 
 /* la fila de opciones de la herramienta: aire justo, no de formulario web */
 #designView .dz-optionsbar { min-height: 30px; }

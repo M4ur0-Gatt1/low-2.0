@@ -1287,7 +1287,7 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
         : (e.key === "Enter" ? "enter" : null);
       const act = k && DZ.keyrev[k];
       // con la pluma abierta, Enter cierra el trazado: eso manda
-      if (act && !(k === "enter" && PEN)) { e.preventDefault(); dzRunAction(act); }
+      if (act && !(k === "enter" && PEN)) { e.preventDefault(); dzRunAction(act); if (DZ_KEY_LABELS[act]) dzSetStatus(DZ_KEY_LABELS[act] + " · lo pidio la tecla «" + k.toUpperCase() + "» (cambiala en Preferencias → atajos)"); }   /* DE DONDE VINO: «se activa sola una herramienta pincel sin que nadie la elija». Una tecla suelta cambia de herramienta, y las ExpressKeys de una tableta mandan teclas: si vino del teclado, que lo diga. */
     }
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "z") { e.preventDefault(); dzUndo(); }
     if (e.ctrlKey && (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))) { e.preventDefault(); dzRedo(); }
@@ -2860,8 +2860,8 @@ function dzToolsBarFit(rail, primarias, secundarias, more, drawer) {
     : rail.clientHeight;
   if (!alto) return;
   const util = alto - (grip ? grip.offsetHeight + 3 : 0) - paso - 10;   // grip + "⋯" + padding
-  let entran = Math.max(3, Math.floor(util / paso));
-  if (entran >= primarias.length) entran = primarias.length;
+  const porColumna = Math.max(3, Math.floor(util / paso)), columnas = rail.classList.contains("dz-tools-float") ? 1 : Math.min(3, Math.max(1, Math.ceil(primarias.length / porColumna)));   // ANTES DE ESCONDER, PARTIR EN COLUMNAS: con la ventana baja —o la timeline abierta, que come la mitad del alto— quedaban SEIS herramientas a la vista. Photoshop, Moho y OpenToonz parten el riel; esconder es el ultimo recurso.
+  rail.classList.toggle("dz-cols-2", columnas === 2); rail.classList.toggle("dz-cols-3", columnas >= 3); const entran = Math.min(primarias.length, porColumna * columnas);
   DZ_TOOLS_FITTING = true;
   // Lo que el usuario fijó va primero y no lo saca ningún cálculo; lo que
   // mandó al cajón no vuelve solo aunque sobre lugar.

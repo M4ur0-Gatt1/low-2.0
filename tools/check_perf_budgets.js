@@ -59,7 +59,10 @@ async function main() {
   await send("Emulation.setDeviceMetricsOverride", { width: 1366, height: 900, deviceScaleFactor: 1, mobile: false });
   await send("Page.navigate", { url: pageUrl });
   for (let i = 0; i < 80; i++) {
-    const r = await send("Runtime.evaluate", { expression: 'typeof dzDocInit==="function" && typeof dzSerialize==="function" && !!api', returnByValue: true });
+    const r = await send("Runtime.evaluate", { expression: // Esperar por CONDICION: mas abajo el recorrido usa LOW.workspace.workspaces,
+    // que se monta despues de las funciones sueltas. Bajo carga la prueba llegaba
+    // antes y moria con «Cannot read properties of undefined (reading 'activate')».
+    'typeof dzDocInit==="function" && typeof dzSerialize==="function" && !!api && !!window.LOW?.workspace?.workspaces', returnByValue: true });
     if (r.result?.value) break; await new Promise(r => setTimeout(r, 250));
   }
 

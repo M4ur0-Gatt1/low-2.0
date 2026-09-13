@@ -188,10 +188,19 @@ async function main() {
     DZ.doc=null; DZ.path=null; DZ.documentTabs.length=0; DZ.activeDocumentTab=null;
     dzBienvenida2DPintar(); await w(120);
     const repintada=!!document.querySelector("#dzBienvenida2D");
+    // LA TARJETA REPINTADA TIENE QUE SERVIR. habilitar() corria UNA vez, en el
+    // arranque; toda invitacion pintada despues —al cerrar el documento, al
+    // volver de la IA— nacia con Nuevo, Abrir y Recuperar APAGADOS y
+    // «Preparando LOW...» abajo, para siempre. LOW quedaba inservible sin
+    // haberse roto nada: «lo cerre y lo volvi a abrir y quedo clavado».
+    const repintadaSirve={
+      acciones:[...document.querySelectorAll("#dzBienvenida2D button[data-a]")]
+        .map(b=>b.dataset.a+":"+(b.disabled?"apagado":"prendido")),
+      dice:(document.querySelector("#dzBienvenida2D .bien2d-espera")||{}).textContent||null};
     DZ.documentTabs.push({id:"__prueba_clavada__", path:"diseno_prueba.svg",
       name:"diseno_prueba.svg"});
     await w(1500);   // el reloj mira cada 500 ms
-    const clavada={repintada,
+    const clavada={repintada, repintadaSirve,
       sigueTapandoElDocumento:!!document.querySelector("#dzBienvenida2D")};
     DZ.documentTabs.length=0; for(const t of tabsReales) DZ.documentTabs.push(t);
     DZ.doc=docReal; DZ.path=pathReal; DZ.activeDocumentTab=activaReal;
@@ -320,6 +329,13 @@ async function main() {
   if (!v.trasVolver.plumaSinMarca)
     mal("la pluma sigue marcada después de volver", v.trasVolver);
 
+
+  const muertas = (v.clavada?.repintadaSirve?.acciones || []).filter(a => /apagado/.test(a));
+  if (muertas.length || v.clavada?.repintadaSirve?.dice)
+    mal("la pantalla de inicio REPINTADA nace muerta: sus acciones no responden y " +
+      "sigue diciendo «Preparando LOW». Pasa al cerrar el documento o al volver de la " +
+      "IA, y deja el programa inservible —ni siquiera se puede recuperar el trabajo " +
+      "sin guardar— sin que se haya roto nada", v.clavada.repintadaSirve);
 
   if (v.errs?.length) throw Error("REGRESIÓN: excepciones en el arranque: " + v.errs.join(" | "));
   if (errores.length) throw Error("REGRESIÓN: excepciones: " + errores.slice(0, 3).join(" | "));

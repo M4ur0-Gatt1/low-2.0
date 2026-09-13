@@ -1298,4 +1298,30 @@ require("lejos.push(el.id)" in APP and "sin hueso: " in APP,
         "«Repartir» volvio a decir solo CUANTAS piezas quedaron sueltas: sin el nombre "
         "no se sabe cual acercar ni cual vincular a mano")
 
+
+# -- La pantalla de inicio repintada tiene que servir -------------------
+# «lo cerre y lo volvi a abrir y quedo clavado». `habilitar()` corria UNA vez,
+# al final del arranque; la invitacion se repinta cada vez que la mesa queda
+# vacia —al cerrar el documento, al volver de la IA— y esa copia nacia con
+# Nuevo, Abrir y Recuperar APAGADOS y «Preparando LOW...» para siempre. LOW
+# quedaba inservible sin haberse roto nada, y sin poder rescatar el trabajo.
+require("puenteListo = true" in INICIAL_COD and "if (puenteListo) habilitar()" in INICIAL_COD,
+        "la pantalla de inicio volvio a habilitar sus acciones UNA sola vez: toda "
+        "invitacion repintada nace muerta y el programa queda clavado")
+require(INICIAL_COD.index("lienzo.appendChild(caja)") < INICIAL_COD.index("if (puenteListo) habilitar()"),
+        "se habilita ANTES de meter la tarjeta en el DOM: habilitar() busca la tarjeta "
+        "por id, no la encuentra, y los botones quedan apagados igual")
+
+# -- El riel parte en columnas antes de esconder herramientas -----------
+# «cuando elijo el panel de animacion no se ven las herramientas»: con la
+# ventana a media pantalla la timeline le come la mitad del alto al riel, y de
+# once herramientas a la vista quedaban seis.
+require('rail.classList.toggle("dz-cols-2"' in APP and "porColumna * columnas" in APP,
+        "el riel volvio a repartir por alto sin partir en columnas: en una ventana baja "
+        "esconde la mayoria de las herramientas en el cajon")
+require(re.search(r"\.dz-tools\.dz-cols-2[^{]*\{[^}]*flex-flow: row wrap", POLISH)
+        and re.search(r"\.dz-tools\.dz-cols-3 \{[^}]*width:", POLISH),
+        "se perdio el CSS de las columnas del riel: la clase se pone y no cambia nada, "
+        "asi que las herramientas se apilan fuera de la vista")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")
