@@ -98,12 +98,50 @@ async function main() {
       mal("la toma PISÓ un dibujo que ya existía: una actuación se agrega atrás, " +
         "no reemplaza lo animado", { antes, despues });
 
+  // ── 2. LOS GENERADORES DE MOVIMIENTO, misma familia ─────────────────────
+  //       «recorrido», «caminata» y «rebote» insertaban cada cuadro con
+  //       api.insert_frame(DZ.path,...), que escribe archivos _fNNN.svg. Sin
+  //       DZ.path no podian generar NADA. Ahora los cuadros entran al documento
+  //       DESPUES del actual, corriendo lo que seguia (insertar de OpenToonz).
+  const antesTween = await ev(`(()=>{ const sc = DZ.doc.scene,
+      capa = DZ.doc.layer || sc.layers[0];
+    DZ.doc.goTo(2);
+    return { cuadro: DZ.doc.frame, celdas: capa.cells.slice(0, 6), ultimo: sc.lastFrame() }; })()`);
+  const tween = await ev(`(async()=>{
+    const base = dzSerialize(document.querySelector('#dzCanvas > svg'));
+    const primero = document.querySelector('#dzCanvas > svg rect');
+    if (!primero) return { error: "sin elemento que mover" };
+    // el "camino" es la lista de indices de hijo desde la raiz (ver dzElAt)
+    const elPath = (() => { const camino = []; let n = primero;
+      const raiz = document.querySelector('#dzCanvas > svg');
+      while (n && n !== raiz) { camino.unshift([...n.parentNode.children].indexOf(n)); n = n.parentNode; }
+      return camino; })();
+    const err = await dzTweenFrames(base, elPath, [[10,0],[20,0],[30,0]]);
+    return { err: err || null }; })()`);
+  if (tween.error) mal("el montaje del recorrido falló", tween);
+  if (tween.err)
+    mal("generar un recorrido con un documento nuevo falla: los cuadros se insertaban " +
+      "como archivos _fNNN.svg y un .low no los tiene", tween);
+  const despuesTween = await ev(`(()=>{ const sc = DZ.doc.scene,
+      capa = DZ.doc.layer || sc.layers[0];
+    return { celdas: capa.cells.slice(0, 8), ultimo: sc.lastFrame() }; })()`);
+  if (despuesTween.ultimo < antesTween.ultimo + 3)
+    mal("el recorrido no agregó sus tres cuadros al documento", { antesTween, despuesTween });
+  // y lo que estaba DESPUÉS del cuadro actual se corrió, no se pisó
+  if (despuesTween.celdas[1] !== antesTween.celdas[1])
+    mal("el recorrido pisó el cuadro donde estaba parado en vez de insertar después",
+      { antesTween, despuesTween });
+  if (despuesTween.celdas[5] !== antesTween.celdas[2])
+    mal("insertar cuadros no corrió los que seguían: se perdió lo que ya estaba animado",
+      { antesTween, despuesTween });
+
   ws.close();
   try { await fetch(endpoint + "/json/close/" + target.id); } catch (_) { }
   const graves = errores.filter(e => !/ResizeObserver/.test(String(e)));
   if (graves.length) mal("hubo excepciones durante el recorrido", graves.slice(0, 3));
 
   console.log("E2E titiritero OK " + JSON.stringify({
+    recorrido: antesTween.ultimo + "→" + despuesTween.ultimo,
     capturas: grabando.capturas,
     cuadros: antes.ultimoCuadro + "→" + despues.ultimoCuadro,
     dibujos: antes.dibujos.length + "→" + despues.dibujos.length

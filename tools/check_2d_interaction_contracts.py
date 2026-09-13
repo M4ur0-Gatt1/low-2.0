@@ -1383,6 +1383,12 @@ require('src="animation/toma-al-documento.js' in INDEX
         and "dzTomaAlDocumento(DZ.doc, snaps)" in APP,
         "la actuacion volvio a depender de archivos _fNNN.svg: con un documento nuevo "
         "el titiritero no puede guardar la toma")
+require("function dzCuadrosAlDocumento(doc, contenidos, despuesDe)" in TOMA
+        and "capa.cells.splice(desde - 1, 0," in TOMA
+        and "dzCuadrosAlDocumento(DZ.doc, nuevos" in APP,
+        "los generadores de movimiento (recorrido, caminata, rebote) volvieron a "
+        "insertar cuadros como archivos _fNNN.svg, o el splice dejo de INSERTAR y "
+        "empezo a pisar: con un .low no generan nada, o se come lo ya animado")
 require("sc.expose(capa.id, desde + i, numero + i)" in TOMA
         and "Math.max.apply(null, usados)" in TOMA,
         "la toma volvio a reusar numeros de dibujo o a pisar cuadros: reusar un numero "

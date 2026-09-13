@@ -11479,7 +11479,7 @@ async function dzTweenFrames(baseSvgText, elPath, offsets) {
   // genera un cuadro por offset [dx,dy,rot] (en orden) insertándolos tras el actual
   // pivote de rotación: bbox del elemento VIVO — los clones no están montados y
   // getBBox() en un árbol desmontado devuelve 0×0 (giraría sobre el origen)
-  let cx = 540, cy = 540;
+  let cx = 540, cy = 540; const alDoc = !DZ.path && !!DZ.doc, nuevos = [];   // en un .low los cuadros van al documento, no a archivos _fNNN.svg
   const live = dzElAt($("#dzCanvas").querySelector(":scope > svg"), elPath);
   if (live && live.getBBox) {
     try { const b = live.getBBox(); cx = b.x + b.width / 2; cy = b.y + b.height / 2; } catch (e) { /* sin render */ }
@@ -11495,10 +11495,10 @@ async function dzTweenFrames(baseSvgText, elPath, offsets) {
       el2.setAttribute("transform", (tr ? tr + " " : "")
         + `rotate(${offsets[k][2]} ${cx + offsets[k][0]} ${cy + offsets[k][1]})`);
     }
-    const r = await api.insert_frame(DZ.path, svg2.outerHTML);
+    if (alDoc) { nuevos.unshift(svg2.innerHTML); continue; }   const r = await api.insert_frame(DZ.path, svg2.outerHTML);
     if (r && r.error) return r.error;
   }
-  return null;
+  if (alDoc) { const t = dzCuadrosAlDocumento(DZ.doc, nuevos, DZ.doc.frame || 1); if (t && t.error) return t.error; dzDocGoTo(t.desde); }   return null;
 }
 async function dzMoveTween() {
   if (!DZ.anim) return sysMsg("🏃 Abrí la animación (🎞) primero");
