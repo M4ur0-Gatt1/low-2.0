@@ -1394,4 +1394,15 @@ require("sc.expose(capa.id, desde + i, numero + i)" in TOMA
         "la toma volvio a reusar numeros de dibujo o a pisar cuadros: reusar un numero "
         "cambia el dibujo en TODOS los cuadros donde ya estaba expuesto")
 
+
+# -- «Ver en el navegador» NUNCA con la ruta del documento -------------
+# preview_html ESCRIBE en la ruta que recibe (o en un temporal si no hay). El
+# boton estaba guardado tras `if (DZ.path)`, asi que con un .low no hacia nada;
+# pero pasarle la ruta del .low le encajaria el HTML del lienzo ENCIMA y se
+# perderia el documento entero. La salida correcta es el temporal.
+require("api.preview_html(DZ.path || null" in APP
+        and APP.count("api.preview_html(DZ.path,") == 0,
+        "«ver en el navegador» volvio a mandar una ruta: si es la del .low, el puente "
+        "le escribe el HTML del lienzo encima y se pierde el documento")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")

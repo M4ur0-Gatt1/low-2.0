@@ -113,8 +113,12 @@
       chat: true,
       panels: [
         { id: "canvas",   dock: "center" },
-        { id: "layers",   dock: "right" },
-        { id: "code",     dock: "right" },
+        // Composicion trae SU PROPIO outliner e inspector: los equivalentes del
+        // 2D se ocultan por CSS (`#designView.composition-3d`) para no aplastar
+        // el escenario con paneles dobles. Decir aca que se ven era mentira, y
+        // hacia imposible auditar «cada espacio muestra lo que promete».
+        { id: "layers",   hidden: true },
+        { id: "code",     hidden: true },
         { id: "timeline", dock: "bottom" },
         { id: "multiplane", dock: "right" },
         { id: "tools",    hidden: true },

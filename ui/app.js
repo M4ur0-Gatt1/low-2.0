@@ -597,7 +597,7 @@ function bind() {
     widget.addEventListener("pointerdown", dzCornerDown);
     widget.addEventListener("dblclick", dzCornerExact);
   });
-  $("#dzExt").onclick = () => { if (DZ.path) api.preview_html(DZ.path, $("#dzCanvas").innerHTML); };
+  $("#dzExt").onclick = () => api.preview_html(DZ.path || null, $("#dzCanvas").innerHTML);   // sin .svg, el puente usa un temporal. OJO: preview_html ESCRIBE en la ruta que recibe, asi que pasarle la del .low le encajaria el HTML encima y se perderia el documento.
   $("#dzZoomIn").onclick = () => dzZoom(0.15);
   $("#dzZoomOut").onclick = () => dzZoom(-0.15);
   $("#dzZoomFit").onclick = dzFitView;
@@ -11826,7 +11826,7 @@ function dzMenuAction(act) {
     importar: dzImportImage,
     exportar: dzExportModal, exportanim: dzExportModal,
     premiere: dzExportPremiereDirecto,
-    navegador: () => { if (DZ.path) api.preview_html(DZ.path, $("#dzCanvas").innerHTML); },
+    navegador: () => api.preview_html(DZ.path || null, $("#dzCanvas").innerHTML),   // idem: NUNCA la ruta del documento
     cerrar: () => closeDesign(),
     deshacer: dzUndo, rehacer: dzRedo, duplicar: dzDuplicate, borrar: dzDeleteSelected,
     agrupar: () => dzGroupSel(false), desagrupar: () => dzGroupSel(true),

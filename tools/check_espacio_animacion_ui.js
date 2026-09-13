@@ -125,6 +125,36 @@ async function main() {
     mal("se rompió el camino viejo: con un .svg abierto el espacio de Animación " +
       "tampoco enciende", viejo);
 
+  // ── 4. TODOS LOS ESPACIOS MUESTRAN LO QUE PROMETEN ──────────────────────
+  //       Cada espacio declara sus paneles. Que uno diga «layers visible» y el
+  //       CSS lo esconda no es un detalle: es lo que hace imposible auditar el
+  //       resto, y fue como se me escapo el de Animacion. Se recorren los siete
+  //       con un documento abierto y se exige que cada panel pedido SE VEA.
+  const pendientes = await ev(`[...document.querySelectorAll('#dzWorkspaces > *')].map(b=>b.textContent.trim())`);
+  const faltantes = [];
+  for (const nombre of pendientes) {
+    await ev(`(()=>{ const b = [...document.querySelectorAll('#dzWorkspaces > *')]
+      .find(x => x.textContent.trim() === ` + JSON.stringify(nombre) + `); if (b) b.click(); return true; })()`);
+    await w(1300);
+    const r = await ev(`(()=>{ const cat = LOW.workspace.PANEL_CATALOG;
+      const activa = LOW.workspace.workspaces.activeId;
+      const def = LOW.workspace.workspaces.get(activa);
+      const pedidos = (def?.panels || []).filter(p => !p.hidden).map(p => p.id);
+      const faltan = [];
+      for (const pid of pedidos) {
+        const meta = cat[pid]; if (!meta) { faltan.push(pid + "(sin catálogo)"); continue; }
+        const n = document.querySelector(meta.element);
+        if (!n) { faltan.push(pid + "(sin nodo)"); continue; }
+        const c = n.getBoundingClientRect();
+        if (n.hidden || c.width <= 0 || c.height <= 0) faltan.push(pid);
+      }
+      return { activa, pedidos: pedidos.length, faltan }; })()`);
+    if (r.faltan.length) faltantes.push({ espacio: r.activa, noSeVen: r.faltan });
+  }
+  if (faltantes.length)
+    mal("hay espacios que prometen paneles que NO se ven: o el espacio no los " +
+      "enciende, o su definición miente y hay que corregirla", faltantes);
+
   ws.close();
   try { await fetch(endpoint + "/json/close/" + target.id); } catch (_) { }
   const graves = errores.filter(e => !/ResizeObserver/.test(String(e)));
