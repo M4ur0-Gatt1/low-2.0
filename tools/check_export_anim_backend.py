@@ -71,6 +71,18 @@ def main():
                              png_de_un_color(30, 30, 220))
         cuadros = [data_url(rojo), data_url(verde), data_url(azul)]
 
+        # -- 0. SIN RUTA: error legible, no un TypeError. Un .low no tiene
+        #       DZ.path; cuando el frontend mandaba None, `Path(None)` reventaba
+        #       con «argument should be a str... not 'NoneType'» y del otro lado
+        #       se veia el programa colgado en «Guardando la secuencia...».
+        #       Medido en la app real: asi no salia NADA de LOW.
+        for vacia in (None, ""):
+            r = puente.export_anim(vacia, cuadros, 12, "png")
+            assert isinstance(r, dict) and "error" in r, ("sin ruta tiene que dar error", vacia, r)
+            assert "guarda" in r["error"].lower(), ("el error tiene que decir que hacer", r)
+            r = puente.export_premiere(vacia, cuadros, "<xml/>", None, "s")
+            assert isinstance(r, dict) and "error" in r, ("premiere sin ruta", vacia, r)
+
         # -- 1. SECUENCIA PNG: sale un archivo por cuadro, con los bytes
         #       intactos y en una carpeta `export` al lado del documento.
         r = puente.export_anim(str(doc), cuadros, 12, "png")

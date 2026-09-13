@@ -1348,4 +1348,44 @@ require("const sc = DZ.path ? await api.scene_get" in APP
         "el arranque viejo del .svg (persistir, make_frame, scene_get) volvio a "
         "correr sin DZ.path: revienta o deja la Timeline a medias con un .low")
 
+
+# -- Exportar desde un documento nuevo ---------------------------------
+# TODAS las salidas le mandaban `DZ.path` al puente —la ruta del .svg suelto—
+# y un .low la tiene en null. Medido en la app real: TypeError de Python
+# («not 'NoneType'») y el estado clavado en «Guardando la secuencia...». Con el
+# flujo por defecto del programa NO SALIA NADA de LOW.
+SALIDA = (ROOT / "ui" / "animation" / "ruta-de-salida.js").read_text(encoding="utf-8")
+require('src="animation/ruta-de-salida.js' in INDEX
+        and "function dzRutaDeSalida(estado)" in SALIDA
+        and "DZ.doc && DZ.doc.path" in SALIDA,
+        "se perdio la ruta de salida del documento: exportar desde un .low vuelve a "
+        "mandarle una ruta vacia al puente y no sale nada del programa")
+require("api.export_anim(DZ.path" not in APP and "api.export_premiere(DZ.path" not in APP,
+        "una salida volvio a mandar DZ.path: con un documento nuevo eso es null y la "
+        "exportacion revienta en Python")
+require(APP.count("dzRutaDeSalida(DZ)") >= 5,
+        "quedan salidas sin pasar por la ruta del documento: son cinco (MP4/WebM/GIF, "
+        "secuencia, hoja de sprites x2 y Premiere)")
+require(all(re.search(r"def " + nombre + r"\(s, path.*?if not path:.*?guarda el documento antes de exportar",
+                      MAIN, re.S) for nombre in ("export_anim", "export_premiere")),
+        "el puente volvio a hacer Path(None): revienta con un TypeError que del otro "
+        "lado se ve como el programa colgado, en vez de decir que hacer")
+
+
+# -- El titiritero graba adentro del documento -------------------------
+# Guardar la toma era escribir `nombre_fNNN.svg` al lado del diseno, por el
+# puente. Con un .low no hay DZ.path —y el puente ademas exige ese nombre—, asi
+# que con «Nuevo documento» el titiritero contestaba «abri un diseno primero» y
+# no se podia actuar nada. Misma familia que la exportacion sin ruta.
+TOMA = (ROOT / "ui" / "animation" / "toma-al-documento.js").read_text(encoding="utf-8")
+require('src="animation/toma-al-documento.js' in INDEX
+        and "function dzTomaAlDocumento(doc, contenidos)" in TOMA
+        and "dzTomaAlDocumento(DZ.doc, snaps)" in APP,
+        "la actuacion volvio a depender de archivos _fNNN.svg: con un documento nuevo "
+        "el titiritero no puede guardar la toma")
+require("sc.expose(capa.id, desde + i, numero + i)" in TOMA
+        and "Math.max.apply(null, usados)" in TOMA,
+        "la toma volvio a reusar numeros de dibujo o a pisar cuadros: reusar un numero "
+        "cambia el dibujo en TODOS los cuadros donde ya estaba expuesto")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")

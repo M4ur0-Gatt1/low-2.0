@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.41.3"
+LOW_VERSION = "4.42.0"
 # El puerto desde el que se sirve la interfaz. FIJO a propósito: `localStorage`
 # es por origen, y con un puerto al azar en cada arranque LOW estrenaba
 # almacenamiento vacío cada vez —se perdían el rescate ante caída, los pinceles
@@ -1114,6 +1114,8 @@ class Api:
 
     def list_frames(s, path):
         """Todos los cuadros hermanos de un cuadro dado, ordenados."""
+        if not path:
+            return {"error": "No se de donde sacar la carpeta de salida: guarda el documento antes de exportar"}
         p = Path(path)
         m = s._FRAME_RX.match(p.name)
         if not m:
@@ -1245,6 +1247,8 @@ class Api:
         """Escribe la carpeta que se importa en Premiere: los cuadros, el audio
         y el XML, TODO junto. Que vivan en la misma carpeta es lo que evita el
         cartel de «archivo perdido» pidiendo relinkear cuadro por cuadro."""
+        if not path:
+            return {"error": "No se de donde sacar la carpeta de salida: guarda el documento antes de exportar"}
         p = Path(path)
         limpio = re.sub(r"[^\w.-]+", "_", str(name or "secuencia")).strip("_") or "secuencia"
         outdir = p.parent / "export" / (limpio + "_premiere")
@@ -1268,6 +1272,11 @@ class Api:
         """Exporta la animación: el frontend rasteriza cada cuadro a PNG dataURL
         y acá se arma el archivo final. kind: 'gif' (Pillow) o 'png' (secuencia).
         Devuelve {path} del resultado o {error}."""
+        # SIN RUTA NO HAY DONDE ESCRIBIR, y `Path(None)` revienta con un
+        # TypeError que del otro lado se ve como el programa colgado en
+        # «Guardando la secuencia...». Un error legible es parte de la promesa.
+        if not path:
+            return {"error": "No se de donde sacar la carpeta de salida: guarda el documento antes de exportar"}
         p = Path(path)
         m = s._FRAME_RX.match(p.name)
         stem = m.group(1) if m else p.stem

@@ -7514,14 +7514,14 @@ async function dzDoExport(kind) {
     const ctx = c.getContext("2d");
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, c.width, c.height);
     ok.forEach((im, i) => ctx.drawImage(im, (i % cols) * fw, Math.floor(i / cols) * fh, fw, fh));
-    const r = await api.export_anim(DZ.path, [c.toDataURL("image/png")], 12, "sheet");
+    const r = await api.export_anim(dzRutaDeSalida(DZ), [c.toDataURL("image/png")], 12, "sheet");
     dzSetStatus(r && r.error ? " " + r.error : " Spritesheet exportado (" + cols + "×" + rows + ")  " + ((r && r.path) || "export/"));
   } else {
     const fps = Math.max(1, Math.min(60, +$("#tlFps").value || 12));
     const label = { mp4: " Codificando MP4 con ffmpeg…", webm: " Codificando WebM…",
                     gif: " Armando el GIF…" }[kind] || " Guardando la secuencia…";
     dzSetStatus(label);
-    const r = await api.export_anim(DZ.path, pngs, fps, kind);
+    const r = await api.export_anim(dzRutaDeSalida(DZ), pngs, fps, kind);
     const done = { mp4: " (MP4 a " + fps + " fps)", webm: " (WebM a " + fps + " fps)",
                    gif: " (GIF a " + fps + " fps)" }[kind] || " (" + pngs.length + " PNGs)";
     dzSetStatus(r && r.error ? " " + r.error : " Exportado  " + ((r && r.path) || "export/") + done + dzExportAvisoFaltantes(pngs.length, frames.length));
@@ -10111,7 +10111,7 @@ async function dzExportPremiere(pngs, fps, cuadros) {
     frames: archivos, audio,
   });
   dzSetStatus("Escribiendo la carpeta para Premiere…");
-  const r = await api.export_premiere(DZ.path, pngs, xml, wav, nombre);
+  const r = await api.export_premiere(dzRutaDeSalida(DZ), pngs, xml, wav, nombre);
   if (!r || r.error) return dzSetStatus("No pude escribir el XML: " + ((r && r.error) || ""));
   dzSetStatus(`XML listo en ${r.path} · ${r.frames} cuadros a ${fps} fps` +
     (r.audio ? " con audio" : " sin audio (la escena no tiene ninguno cargado)") +
@@ -10150,7 +10150,7 @@ async function dzDoExportDoc(kind) {
   if (kind === "premiere") return dzExportPremiere(pngs, fps, cuadros);
   dzSetStatus({ mp4: "Codificando MP4 con ffmpeg\u2026", webm: "Codificando WebM\u2026",
                 gif: "Armando el GIF\u2026" }[kind] || "Guardando la secuencia\u2026");
-  const r = await api.export_anim(DZ.path, pngs, fps, kind);
+  const r = await api.export_anim(dzRutaDeSalida(DZ), pngs, fps, kind);   // la del .low, no la del .svg suelto
   const detalle = { mp4: " (MP4 a " + fps + " fps)", webm: " (WebM a " + fps + " fps)",
                     gif: " (GIF a " + fps + " fps)" }[kind] || " (" + pngs.length + " PNGs)";
   dzSetStatus(r && r.error ? r.error
@@ -10172,7 +10172,7 @@ async function dzExportSpritesheet(pngs, fps) {
   const ctx = c.getContext("2d");
   ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, c.width, c.height);
   ok.forEach((im, i) => ctx.drawImage(im, (i % cols) * fw, Math.floor(i / cols) * fh, fw, fh));
-  const r = await api.export_anim(DZ.path, [c.toDataURL("image/png")], fps, "sheet");
+  const r = await api.export_anim(dzRutaDeSalida(DZ), [c.toDataURL("image/png")], fps, "sheet");
   dzSetStatus(r && r.error ? r.error
     : "Spritesheet exportado (" + cols + "\u00d7" + rows + ") \u00b7 " + ((r && r.path) || "export/"));
   try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
@@ -11608,7 +11608,7 @@ function dzPuppetToggle() {
   if (DZ.pup && DZ.pup.recording) { dzPuppetStop(); return; }
   if (DZ.pup && DZ.pup.counting) { return; }        // en cuenta regresiva
   if (!DZ.anim) { dzAnimToggle(); }                 // el titiritero vive en la timeline
-  if (!DZ.path) return sysMsg("🎞 Abrí un diseño primero (🖋).");
+  if (!DZ.path && !DZ.doc) return sysMsg("🎞 Abrí o creá un documento primero.");
   // cuenta regresiva 3·2·1 para que agarres el muñeco listo
   DZ.pup = { counting: true, recording: false, snaps: [] };
   dzPuppetHUD("preparate…");
@@ -11629,7 +11629,7 @@ function dzPuppetStart() {
   DZ.pup.timer = setInterval(() => {
     const svg = $("#dzCanvas").querySelector(":scope > svg");
     if (!svg) return;
-    DZ.pup.snaps.push(dzSerialize(svg));
+    DZ.pup.snaps.push(!DZ.path && DZ.doc ? dzCanvasInner() : dzSerialize(svg));   // en un .low la toma va ADENTRO del documento: se guarda el contenido de la mesa, no el <svg> entero
     const secs = ((performance.now() - DZ.pup.t0) / 1000).toFixed(1);
     dzPuppetHUD(" REC  " + secs + "s · " + DZ.pup.snaps.length + " cuadros");
   }, 1000 / fps);
@@ -11644,12 +11644,12 @@ async function dzPuppetStop() {
   const snaps = pup.snaps || [];
   if (snaps.length < 2) return dzSetStatus("🎞 Toma muy corta — apretá REC y movés el muñeco un rato antes de cortar.");
   dzSetStatus("🎞 Guardando la actuación (" + snaps.length + " cuadros)…");
-  const r = await api.record_take(DZ.path, snaps);
+  const r = (!DZ.path && DZ.doc) ? dzTomaAlDocumento(DZ.doc, snaps) : await api.record_take(DZ.path, snaps);
   if (r && r.error) return dzSetStatus(" " + r.error);
   DZ.anim.cache = {};
   try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
   await dzTimelineRefresh(); dzTimelineBadges();
-  if (r && r.path) { await dzGoFrame(DZ.anim.frames.indexOf(r.path)); }
+  if (r && r.path) { await dzGoFrame(DZ.anim.frames.indexOf(r.path)); } else if (r && r.desde && typeof dzDocGoTo === "function") dzDocGoTo(r.desde);
   dzSetStatus("🎞 ¡Actuación grabada! " + (r.n || snaps.length) + " cuadros a " + pup.fps + " fps — dale  para verla.");
 }
 /* HUD grande de grabación sobre el lienzo (texto o null para ocultar) */
