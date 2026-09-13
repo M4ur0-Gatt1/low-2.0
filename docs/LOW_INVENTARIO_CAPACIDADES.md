@@ -11,11 +11,11 @@ parcial o no verificado». Esto no se armó leyendo los documentos viejos: se ar
 
 | qué | cuántos |
 |---|---|
-| Recorridos de navegador (`tools/check_*_ui.js`) | 41 |
+| Recorridos de navegador (`tools/check_*_ui.js`) | 42 |
 | Suites de modelo (`tools/run_*_tests.js`) | 12 |
-| Comprobaciones de puente en Python | 11 |
-| Contratos estáticos (`require(...)`) | 279 |
-| Filas de la matriz de regresiones | 69 |
+| Comprobaciones de puente en Python | 12 |
+| Contratos estáticos (`require(...)`) | 284 |
+| Filas de la matriz de regresiones | 71 |
 
 ## Los tres agujeros que encontró este inventario
 
@@ -29,7 +29,7 @@ Se buscó, para cada capacidad, **quién la prueba**. Tres respuestas fueron
 escribió en `b2bb272` y nunca se cableó, así que una regresión en los controles
 sobre el personaje no la agarraba la puerta. **Cableados los dos.**
 
-Comprobación permanente: hoy los 41 recorridos, las 12 suites y las 11
+Comprobación permanente: hoy los 42 recorridos, las 12 suites y las 12
 comprobaciones de puente están en `build.yml`. Si aparece uno huérfano otra vez,
 se ve con:
 
@@ -98,7 +98,7 @@ lo prueba.
 | Documento de escena `.low`: crear, abrir y guardar | sí | sí | sí | sí | `check_escena_nueva_ui` + `check_escena_nueva_backend` | **funcional** (v4.36.0) |
 | Documentos múltiples y pestañas | sí | sí | sí | sí | `check_document_tabs_ui` | **funcional** |
 | Dibujo y pincel | sí | sí | sí | sí | `check_brush_params_ui`, `check_brush_vector_import_ui` | **funcional** |
-| Formas: contorno, pincel y deformación | sí | sí | sí | sí | `check_shape_tool_ui`, `check_warp_cage_ui` | **funcional** (v4.31.0) |
+| Formas: contorno, pincel y deformación | sí | sí | sí | sí | `check_shape_tool_ui`, `check_warp_cage_ui`, `check_escala_contorno_ui` | **funcional** (v4.38.0) |
 | Texto en la hoja | sí | sí | sí | sí | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
 | Bomba de grosor sobre los tres tipos de trazo | sí | sí | sí | sí | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
 | Ayuda al pasar el puntero por la barra | sí | — | — | — | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |

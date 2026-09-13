@@ -1164,4 +1164,39 @@ require("DIAG_LOG_TOPE" in MAIN and "cola = p.read_bytes()[-(s.DIAG_LOG_TOPE // 
         "el log de diagnostico de tableta volvio a crecer sin techo, o recorta "
         "guardando el PRINCIPIO: para diagnosticar sirve lo ultimo que paso")
 
+
+# -- Achicar o deformar no cambia el espesor del contorno ---------------
+# Reportado por Mauro con la v4.37.0 puesta. Redimensionar escribia una
+# `transform` con la escala, y en SVG eso escala TAMBIEN el trazo: con la
+# deformacion libre los lados verticales se pintaban con el factor X y los
+# horizontales con el factor Y. Medido: 0,32 px contra 4,52 px en la misma forma.
+ESCALA_GEO = re.sub(r"^\s*//.*$", "",
+    re.sub(r"/\*.*?\*/", "", (ROOT / "ui" / "vector" / "escala-geometrica.js").read_text(encoding="utf-8"), flags=re.S),
+    flags=re.M)
+require('src="vector/escala-geometrica.js' in INDEX,
+        "el modulo de escalado por geometria no se carga: dzEscalaGeometrica queda sin "
+        "definir y redimensionar tira ReferenceError")
+require(APP.count("dzEscalaGeometrica(") == 2,
+        "un camino de redimensionado volvio a escalar con `transform` en vez de escalar "
+        "la geometria: son dos —el tirador de una forma y el de la seleccion multiple— y "
+        "con transform el contorno cambia de espesor, distinto en cada lado")
+require("dzEscalaCapturar(el)" in APP and "dzEscalaCapturar(n)" in APP,
+        "el redimensionado dejo de capturar la geometria ORIGINAL al empezar el gesto: "
+        "escalar sobre lo ya escalado acumula redondeos y deforma el dibujo de a poco")
+require('stroke-width' not in ESCALA_GEO,
+        "el escalado por geometria empezo a tocar el `stroke-width`: el contorno tiene "
+        "que quedar EXACTAMENTE como estaba, y por eso este modulo no lo escribe nunca")
+
+
+# -- Una segunda instancia de LOW abre ----------------------------------
+# Fijar el perfil (v4.32.0) evito perder pinceles y rescate, pero WebView2 lo
+# toma EN EXCLUSIVA: con LOW abierto, una segunda instancia no abria ni mostraba
+# nada —solo 0x8007139F y una traza de .NET en el log—.
+require("_perfil_libre(str(data_dir()" in MAIN
+        and '"EBWebView", "lockfile"' in MAIN,
+        "el arranque volvio a usar el perfil fijo sin mirar si otra instancia lo tiene "
+        "tomado: con LOW ya abierto, la segunda instancia no abre en absoluto "
+        "(0x8007139F, sin ventana ni aviso). La señal es el candado del propio WebView2, "
+        "`EBWebView/lockfile`, que tambien delata a una instancia de una version anterior")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")

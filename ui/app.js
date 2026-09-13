@@ -3638,7 +3638,7 @@ function dzBoxHandleDown(e, hx, hy) {
     const p = el.ownerSVGElement.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
     return p.matrixTransform(inv);
   };
-  const start = local(e);
+  const start = local(e), geo = dzEscalaCapturar(el);   // se escala la GEOMETRIA, no el elemento: una transform escala tambien el trazo
   const w0 = Math.max(1, lb.width), h0 = Math.max(1, lb.height);
   const T = LOW.drawing.transforms;
   const consolidated = el.transform?.baseVal?.consolidate();
@@ -3656,7 +3656,7 @@ function dzBoxHandleDown(e, hx, hy) {
     let ky = hy ? Math.max(0.05, (h0 + dy) / h0) : 1;
     // esquina: proporcional por defecto; Shift = deformar libre
     if (corner && !ev.shiftKey) { const k = Math.max(kx, ky); kx = ky = k; }
-    el.setAttribute("transform", T.attr(T.rigidScale(base, kx, ky, anchorParent)));
+    if (!dzEscalaGeometrica(el, geo, kx, ky, axL, ayL)) el.setAttribute("transform", T.attr(T.rigidScale(base, kx, ky, anchorParent)));
     dzPositionHandle();
   };
   const up = (ev) => {
@@ -4061,14 +4061,14 @@ function dzMultiScaleDown(e, hx, hy, pack) {
     const parentCTM=n.parentElement?.getScreenCTM?.();
     if(!parentCTM)return null;
     const p=n.ownerSVGElement.createSVGPoint();p.x=anchorScreen.x;p.y=anchorScreen.y;
-    return {n,base,anchor:p.matrixTransform(parentCTM.inverse())};
+    return {n,base,anchor:p.matrixTransform(parentCTM.inverse()),geo:consolidated?null:dzEscalaCapturar(n)};
   }).filter(Boolean), corner=hx!==0&&hy!==0;
   const move=ev=>{
     if(ev.pointerId!==pointerId)return;
     let kx=hx?Math.max(.05,1+(ev.clientX-start.x)*hx/w):1;
     let ky=hy?Math.max(.05,1+(ev.clientY-start.y)*hy/h):1;
     if(corner&&!ev.shiftKey){const k=Math.max(kx,ky);kx=ky=k;}
-    bases.forEach(({n,base,anchor})=>n.setAttribute("transform",T.attr(T.rigidScale(base,kx,ky,anchor))));
+    bases.forEach(({n,base,anchor,geo})=>{ if(!dzEscalaGeometrica(n,geo,kx,ky,anchor.x,anchor.y)) n.setAttribute("transform",T.attr(T.rigidScale(base,kx,ky,anchor))); });
     dzPositionHandle();
   };
   const up=ev=>{if(ev.pointerId!==pointerId)return;document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);document.removeEventListener("pointercancel",up);dzMarkDirty();dzBuildLayers();};

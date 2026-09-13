@@ -61,6 +61,7 @@ jobs:
           python tools/check_escena_nueva_backend.py
           python tools/check_export_premiere_backend.py
           python tools/check_diag_log_backend.py
+          python tools/check_perfil_instancias_backend.py
       - name: Contratos críticos de interacción 2D
         run: python tools/check_2d_interaction_contracts.py
       - name: Recorridos reales — dibujo, rigging, composición y storyboard
@@ -133,6 +134,7 @@ jobs:
           node tools/check_escena_nueva_ui.js
           node tools/check_menu_contextual_ui.js
           node tools/check_export_premiere_ui.js
+          node tools/check_escala_contorno_ui.js
           node tools/check_perf_budgets.js
       - name: Validar sintaxis Python
         run: python -m compileall -q main.py animation_engine providers social tools server

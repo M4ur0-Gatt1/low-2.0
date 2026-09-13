@@ -49,7 +49,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.37.0"
+LOW_VERSION = "4.38.0"
 # El puerto desde el que se sirve la interfaz. FIJO a propósito: `localStorage`
 # es por origen, y con un puerto al azar en cada arranque LOW estrenaba
 # almacenamiento vacío cada vez —se perdían el rescate ante caída, los pinceles
@@ -66,6 +66,64 @@ def _puerto_libre(puerto: int) -> bool:
             return True
         except OSError:
             return False
+def _perfil_en_uso(ruta) -> bool:
+    """¿Hay otra instancia usando ese perfil de WebView2?
+
+    La señal es el propio candado de WebView2, `EBWebView/lockfile`, que el
+    proceso dueño mantiene abierto en exclusiva. Se mira ESE y no un candado
+    nuestro a propósito: así también se detecta una instancia de una versión
+    ANTERIOR de LOW, que es el caso real —Mauro trabajando con la versión
+    instalada mientras se abre otra—. Si el archivo no existe, el perfil está
+    fresco. Si el proceso dueño murió, Windows suelta el handle y vuelve a
+    abrirse: un candado viejo no deja el perfil inservible.
+    """
+    candado = os.path.join(ruta, "EBWebView", "lockfile")
+    if not os.path.exists(candado):
+        return False
+    try:
+        with open(candado, "r+b") as f:
+            # Dos candados distintos y los dos cuentan: WebView2 abre el archivo
+            # sin compartir —y entonces falla el `open`— y ademas toma el rango.
+            # Probar los dos deja la deteccion a salvo de como lo tome cada
+            # version, y es lo que hace verificable esta funcion.
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            return False
+    except OSError:
+        return True
+
+
+def _perfil_libre(base, maximo=8):
+    """El perfil de la interfaz que ESTE proceso puede usar.
+
+    Desde v4.32.0 el perfil es fijo para no perder pinceles, paneles ni rescate
+    entre arranques. El efecto que no se vio venir: WebView2 toma el perfil en
+    exclusiva, así que **una segunda instancia de LOW no abría en absoluto** —
+    moría con `0x8007139F` («el grupo o recurso no está en el estado correcto»)
+    y una traza de .NET en el log, sin ventana ni explicación. Abrir dos
+    proyectos a la vez es algo que uno hace.
+
+    Si el perfil de siempre está tomado, esta instancia usa `webview-2`,
+    `webview-3`… Abre y funciona; lo que no comparte son las preferencias con la
+    otra, y queda dicho en el log.
+    """
+    for n in range(1, maximo + 1):
+        ruta = base if n == 1 else base + "-" + str(n)
+        try:
+            os.makedirs(ruta, exist_ok=True)
+        except OSError:
+            continue
+        if not _perfil_en_uso(ruta):
+            return ruta, n
+    return base, 1
+
+
 # Hora en que empezó a correr ESTE proceso. Sirve para detectar que el
 # instalador reemplazó el .exe con LOW abierto: ver binario_reemplazado().
 _ARRANQUE = __import__("time").time()
@@ -5786,11 +5844,10 @@ def main():
     # persistencia que no abrir. No se reintenta después de `webview.start`
     # porque esa llamada bloquea hasta que se cierra la ventana: reintentar ahí
     # abriría una segunda.
-    perfil = str(data_dir() / "webview")
-    try:
-        os.makedirs(perfil, exist_ok=True)
-    except Exception as e:
-        log("no pude crear el perfil de la interfaz (%s): %s" % (perfil, e))
+    perfil, instancia = _perfil_libre(str(data_dir() / "webview"))
+    if instancia > 1:
+        log("ya hay otra instancia de LOW usando el perfil: esta abre con %s. "
+            "Funciona igual, pero no comparte preferencias con la otra" % perfil)
     puerto = LOW_UI_PORT if _puerto_libre(LOW_UI_PORT) else None
     if puerto is None:
         log("el puerto %d esta ocupado: LOW arranca sin origen fijo y NO va a "
