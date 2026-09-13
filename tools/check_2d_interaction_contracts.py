@@ -1324,4 +1324,19 @@ require(re.search(r"\.dz-tools\.dz-cols-2[^{]*\{[^}]*flex-flow: row wrap", POLIS
         "se perdio el CSS de las columnas del riel: la clase se pone y no cambia nada, "
         "asi que las herramientas se apilan fuera de la vista")
 
+
+# -- El espacio de Animacion enciende la Timeline con un .low ----------
+# «el panel de animacion no muestra nada». Entrar al espacio de Animacion llama
+# a dzAnimToggle(), que arrancaba con `if (!DZ.path) return sysMsg(...)`. Un
+# .low NO TIENE DZ.path —sus cuadros viven en el documento—, asi que el camino
+# nuevo de documento entraba y la Timeline no se encendia nunca: ni grilla, ni
+# X-sheet, ni tira de niveles. Solo quedaba la barra de transporte.
+require("if (!DZ.path && !DZ.doc) return sysMsg" in APP,
+        "dzAnimToggle volvio a exigir DZ.path: con un documento nuevo (.low) el "
+        "espacio de Animacion no muestra nada")
+require("const sc = DZ.path ? await api.scene_get" in APP
+        and "if (DZ.path) {" in APP,
+        "el arranque viejo del .svg (persistir, make_frame, scene_get) volvio a "
+        "correr sin DZ.path: revienta o deja la Timeline a medias con un .low")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")

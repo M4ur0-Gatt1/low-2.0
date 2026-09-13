@@ -6980,20 +6980,18 @@ async function dzAnimToggle() {
     if (DZ.camMode) { DZ.camMode = false; $("#dzCamBtn").classList.remove("active"); $("#dzCam").hidden = true; $("#tlCamKey").hidden = true; }
     return;
   }
-  if (!DZ.path) return sysMsg("Abrí un diseño primero (🖋 o un .svg del árbol).");
-  await dzPersist();
-  let r = await api.make_frame(DZ.path);
-  if (r && r.error) return sysMsg(" " + r.error);
-  if (r.path !== DZ.path) {
-    try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ }
-    await openDesign(r.path);
+  if (!DZ.path && !DZ.doc) return sysMsg("Abrí o creá un documento primero («Nuevo documento», 🖋, o un .svg del árbol).");
+  if (DZ.path) {   // UN .low NO TIENE DZ.path: sus cuadros viven en el documento. Persistir, make_frame y releer el arbol es el camino viejo del .svg suelto; con una escena abierta hay que saltearlo o la Timeline NO SE ENCIENDE y el espacio de Animacion no muestra nada —«el panel de animacion no muestra nada», lo vio Mauro con un documento nuevo—.
+    await dzPersist(); let r = await api.make_frame(DZ.path);
+    if (r && r.error) return sysMsg(" " + r.error);
+    if (r.path !== DZ.path) { try { S.tree = (await api.refresh_tree()).tree; renderTree(); } catch (e) { /* */ } await openDesign(r.path); }
   }
   DZ.anim = { frames: [], idx: 0, playing: false, onion: false, cache: {} };
   dzAnimationDock(true);
   $("#dzOnionPanel").hidden = true;
   $("#tlOnion").classList.remove("active");
   // cargar la escena (claves de cámara/dibujo, easing) que vive junto a los cuadros
-  const sc = await api.scene_get(DZ.path);
+  const sc = DZ.path ? await api.scene_get(DZ.path) : null;   // la escena de un .low ya esta en el documento
   DZ.scene = (sc && sc.scene) || {};
   DZ.sceneHistory = new LOW.animation.History(180);
   dzTimelineReveal();
