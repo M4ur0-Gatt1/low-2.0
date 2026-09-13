@@ -8263,7 +8263,7 @@ function dzRigDrawableElements() {
  * Mantiene el documento de dibujo, pero monta la Timeline y la X-sheet del
  * mismo LowDoc para que no haya que descubrir el botón de Animación a mano. */
 async function dzEnsureAnimationWorkspace() {
-  if (!DZ.path) return false;
+  if (!DZ.path && !DZ.doc) return false;   // un .low no tiene DZ.path: es el caso de «Nuevo documento», justo el que esta funcion existe para atender
   if (!DZ.anim) await dzAnimToggle();
   if (!DZ.anim) return false;
   const W = LOW.workspace?.workspaces;
@@ -16428,7 +16428,7 @@ function dzWsAplicar(ws) {
     if (id === "timeline") {
       // la timeline tiene su propio encendido (carga la escena): no basta con
       // mostrar el div, hay que pedirle al módulo que se abra o se cierre
-      const abierta = !el.hidden;
+      const abierta = !!DZ.anim;   // LA VERDAD ES DZ.anim, NO que el div se vea: la barra de transporte puede estar a la vista con la Timeline APAGADA, y entonces esto daba «ya esta abierta» y no la prendia nunca. Asi se veia el espacio de Animacion sin grilla, sin X-sheet y sin tira de niveles.
       if (!oculto && !abierta) dzAnimToggle();
       else if (oculto && abierta) dzAnimToggle();
       if (!oculto) dzTlMount();

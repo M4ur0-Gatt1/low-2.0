@@ -86,7 +86,33 @@ async function main() {
       mal("en el espacio de Animación no se ve «" + parte + "»: el panel de " +
         "animación tiene que mostrar la animación", nuevo);
 
-  // ── 2. EL CAMINO VIEJO (.svg suelto) sigue andando: es el que tapaba el
+  // ── 2. EL ESPACIO YA ERA ANIMACION AL CREAR EL DOCUMENTO. Este es el caso de
+  //       la app real, y el que el mock tapaba: LOW recuerda el ultimo espacio
+  //       usado, asi que quien trabaja en Animacion vuelve a entrar ahi. Con la
+  //       barra de transporte YA visible, dzWsAplicar decidia «la timeline ya
+  //       esta abierta» mirando si el div se ve —no si esta ENCENDIDA— y no la
+  //       prendia nunca. Medido en la app instalada: DZ.anim en false con la
+  //       barra de 1366x38 a la vista y todo lo demas oculto.
+  await ev(`(()=>{ try{ localStorage.setItem("low.workspace.active","animation"); }catch(e){} return true; })()`);
+  await send("Page.navigate", { url: pageUrl });
+  for (let i = 0; i < 90; i++) {
+    const listo = await ev('typeof dzMenuAction==="function" && !!api && !!window.LOW?.workspace?.workspaces').catch(() => false);
+    if (listo === true) break;
+    await w(400);
+  }
+  await ev(`dzMenuAction("nuevo")`);
+  await w(3000);
+  await ev('(()=>{ if (typeof closeL3d === "function") closeL3d(); return true; })()');
+  const recordado = await foto();
+  if (recordado.espacio !== "animation")
+    mal("el espacio recordado no se respetó: la prueba no está midiendo el caso", recordado);
+  if (!recordado.animEncendida || !recordado.grilla || !recordado.tiraNiveles)
+    mal("entrando a LOW con Animación como espacio recordado, la Timeline queda " +
+      "APAGADA con la barra de transporte a la vista: el espacio decide si prenderla " +
+      "mirando si el div se ve, no si está encendida. Es lo que Mauro ve: «el panel " +
+      "de animación no tiene el sidebar»", recordado);
+
+  // ── 3. EL CAMINO VIEJO (.svg suelto) sigue andando: es el que tapaba el
   //       agujero, y romperlo al arreglar el otro seria cambiar un defecto por otro.
   await ev(`(()=>{ const b = [...document.querySelectorAll('#dzWorkspaces > *')]
     .find(x => /Dibujo/i.test(x.textContent)); if (b) b.click(); return true; })()`);

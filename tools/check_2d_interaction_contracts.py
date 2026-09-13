@@ -1334,6 +1334,15 @@ require(re.search(r"\.dz-tools\.dz-cols-2[^{]*\{[^}]*flex-flow: row wrap", POLIS
 require("if (!DZ.path && !DZ.doc) return sysMsg" in APP,
         "dzAnimToggle volvio a exigir DZ.path: con un documento nuevo (.low) el "
         "espacio de Animacion no muestra nada")
+require("const abierta = !!DZ.anim;" in APP,
+        "el espacio de trabajo volvio a decidir si prende la Timeline mirando si el DIV "
+        "se ve: la barra de transporte puede estar a la vista con la Timeline apagada, y "
+        "entonces el espacio de Animacion se abre sin grilla, sin X-sheet y sin niveles")
+require(re.search(r"async function dzEnsureAnimationWorkspace\(\) {" + "\s*" +
+                  r"if \(!DZ\.path && !DZ\.doc\) return false;", APP),
+        "dzEnsureAnimationWorkspace volvio a exigir DZ.path: es la funcion que deja un "
+        "documento nuevo listo para animar, y un .low —que es lo que crea «Nuevo "
+        "documento»— no tiene DZ.path, asi que se iba sin hacer nada")
 require("const sc = DZ.path ? await api.scene_get" in APP
         and "if (DZ.path) {" in APP,
         "el arranque viejo del .svg (persistir, make_frame, scene_get) volvio a "
