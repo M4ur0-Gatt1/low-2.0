@@ -94,3 +94,17 @@ que está.
 Estable previa: `v4.37.0`. El escalado por geometría vive en
 `ui/vector/escala-geometrica.js` y son dos líneas en `app.js`; el reparto de
 perfiles, en `_perfil_libre` de `main.py`.
+
+---
+
+## Apéndice — v4.38.1: la prueba nueva no corría en Linux
+
+La compilación de la v4.38.0 se cayó, y no por el producto: mi prueba del
+reparto de perfiles importaba `msvcrt` sin condición para simular el candado de
+WebView2, y ese módulo **sólo existe en Windows**. CI compila también para Linux
+y macOS.
+
+Ahora toma el candado con el mecanismo de cada plataforma —`msvcrt` en Windows,
+`fcntl` en el resto—, que es lo mismo que ya hacía el código del producto.
+
+El código de LOW es idéntico al de la v4.38.0; lo único que cambió es la prueba.

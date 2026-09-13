@@ -45,10 +45,17 @@ def main():
         candado = Path(ruta1) / "EBWebView" / "lockfile"
         candado.parent.mkdir(parents=True, exist_ok=True)
         candado.write_bytes(b"x")
-        import msvcrt
+        # El candado se toma con el mecanismo de CADA plataforma: `msvcrt` no
+        # existe fuera de Windows y CI corre en Linux.
+        if os.name == "nt":
+            import msvcrt
+        else:
+            import fcntl
         with open(candado, "r+b") as tomado:
             if os.name == "nt":
                 msvcrt.locking(tomado.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                fcntl.flock(tomado.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             assert low._perfil_en_uso(ruta1),                 "no detecto que el perfil esta tomado: la ventana no abriria (0x8007139F)"
             ruta2, n2 = low._perfil_libre(base)
             assert ruta2 != ruta1, (
@@ -58,6 +65,8 @@ def main():
             assert Path(ruta2).is_dir(), "no creo la carpeta de la segunda instancia"
             if os.name == "nt":
                 msvcrt.locking(tomado.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(tomado.fileno(), fcntl.LOCK_UN)
 
         # -- 3. AL CERRARSE la otra instancia, el perfil de siempre vuelve a
         #       usarse: no se acumulan carpetas para siempre.
