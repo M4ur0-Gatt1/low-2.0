@@ -3277,7 +3277,7 @@ function dzApplyZoom() {
     (DZ.viewRot ? " · " + Math.round(DZ.viewRot) + "°" : "");
   dzPositionHandle();
   if (DZ.nodeEl && DZ.nodeEl.isConnected) dzNodesShow(DZ.nodeEl);   // reubicar nodos
-  if (DZ.camMode) dzCamOverlay();                                    // y el encuadre
+  if (DZ.camMode || dzCamGuiaActiva()) dzCamOverlay();               // el encuadre y la guia siguen al zoom
   if (DZ.rulers || DZ.grid || (DZ.guides && DZ.guides.length)) dzRulersRender();
   dzPivotMark();
   if (DZ.rigMode) dzRigOverlayRender();
@@ -3375,6 +3375,7 @@ function dzSyncCanvasDocument(fit = false) {
   if (!svg) return null;
   const size = dzNormalizeSvgDocument(svg, dzCurrentDocumentSize());
   if (fit) requestAnimationFrame(dzFitView);
+  if (typeof dzCamOverlay === "function") dzCamOverlay();   // la zona de camara, marcada desde que se abre el documento
   return size;
 }
 
@@ -6536,12 +6537,10 @@ function dzInflatorDown(e) {
 
 function dzInflatorAplicar(e) {
   INFLATOR.ultimo = dzInflarPasada(INFLATOR.el, e); INFLATOR.desinflo = !!e.altKey;
-  dzPositionHandle();
-}
+  if (INFLATOR.ultimo?.elemento) INFLATOR.el = INFLATOR.ultimo.elemento; dzPositionHandle(); }
 
 function dzInflatorMove(e) {
-  if (!INFLATOR?.el || !dzVectorAccept(INFLATOR, e)) return;
-  dzInflatorAplicar(e);
+  if (INFLATOR?.el && dzVectorAccept(INFLATOR, e)) dzInflatorAplicar(e);
 }
 
 function dzInflatorUp(e) {
@@ -6821,8 +6820,7 @@ function dzMagnetDown(e) {
   MAGNET = dzVectorBegin("magnet", e,
     { active: true, radius: dzVectorPrefs().magnetRadius / (DZ.zoom || 1), journal:new Map() },
     () => { MAGNET = null; });
-  // Sin ancla cerca, el iman no movia NADA y decia «Deformacion aplicada»: se
-  // agrega el punto que falta (ver ui/vector/puntos-linea.js).
+  // Sin ancla cerca no movia NADA y decia «Deformacion aplicada»: se agrega el punto que falta (ui/vector/puntos-linea.js).
   MAGNET.agrego = dzMagnetAsegurarAncla(dzPickStroke(e.clientX, e.clientY, 26, true), e, MAGNET);
   dzMagnetApply(e);
   dzSetStatus("🧲 Imán activo — arrastrá para deformar · soltá para terminar");
@@ -7831,7 +7829,8 @@ function dzCamToggle() {
 function dzCamCur() { return DZ.camDrag || dzCamAt(dzCamFrame()); }
 function dzCamOverlay() {
   const box = $("#dzCam");
-  if (!DZ.camMode || (!DZ.path && !DZ.doc) || !$("#dzCanvas").querySelector(":scope > svg")) { box.hidden = true; return; }
+  if ((!DZ.camMode && !dzCamGuiaActiva()) || (!DZ.path && !DZ.doc) || !$("#dzCanvas").querySelector(":scope > svg")) { box.hidden = true; return; }
+  box.classList.toggle("guia", !DZ.camMode);
   const cam = dzCamCur();
   const vb = dzVB();
   const h = cam.w * (vb[3] / vb[2]);
@@ -11839,7 +11838,7 @@ function dzMenuAction(act) {
     rotl: () => dzRotView(-15), rotr: () => dzRotView(15),
     enderezar: () => { DZ.viewRot = 0; dzApplyZoom(); },
     diorama: dzZPanelToggle, profundidad: dzZPanelToggle,
-    cebolla: dzOnionPanelToggle, deformar: () => window.dzWarpAlternar?.(),
+    cebolla: dzOnionPanelToggle, deformar: () => window.dzWarpAlternar?.(), "camara-guia": dzCamGuiaAlternar,
     xsheet: dzXsToggle, codigo: dzToggleCode,
     alfrente: () => { if (!DZ.sel) return dzSetStatus("Seleccioná un elemento primero");
       dzSnapshot(); DZ.sel.parentNode.appendChild(DZ.sel); dzMarkDirty(); dzBuildLayers(); },
@@ -12077,7 +12076,8 @@ function dzToolOptsRender() {
   } else {
     html += `<span class="dz-hint">clic selecciona · marco vacío selecciona varios · Shift suma · Alt+arrastrar duplica · flecha blanca entra al grupo</span>`;
   }
-  box.innerHTML = html;
+  box.innerHTML = html + (t === "inflator" && typeof dzInflarOpcionesHTML === "function" ? dzInflarOpcionesHTML() : "");
+  if (t === "inflator" && typeof dzInflarOpcionesWire === "function") dzInflarOpcionesWire();
   $("#toArtLine").onclick = () => dzArtSetMode("line");
   $("#toArtColour").onclick = () => dzArtSetMode("colour");
   const preset = $("#toBrushPreset"); if (preset) preset.onchange = e => {
@@ -15880,9 +15880,9 @@ async function dzSceneOpen(ruta) {
     const r = ruta ? await api.open_file(ruta) : await api.open_dialog();
     if (!r || r.error) { if (r && r.error) sysMsg(" " + r.error); return false; }
     if (!r.content) return false;
+    const doc = LOW.animation.LowDoc.fromJSON(r.content); if (!$("#dzWorkspaces")?.children.length) dzWsInit();   // las pestañas de espacios las montaba openDesign, y esto no pasa por ahi
     const existing = r.path && dzDocumentTabFind(r.path);
     if (existing) return dzDocumentTabActivate(existing.id);
-    const doc = LOW.animation.LowDoc.fromJSON(r.content);
     dzDocumentTabPrepareNew();
     doc.path = r.path || null;
     dzDocUse(doc);

@@ -105,6 +105,7 @@ async function dzEscenaNueva() {
   doc.path = respuesta.path;
   doc.scene.name = String(respuesta.name || "escena").replace(/\.low$/i, "");
   try {
+    if (typeof dzWsInit === "function") dzWsInit();   // las pestañas de espacios de trabajo las montaba openDesign
     dzDocUse(doc);
     DZ.path = null;                 // el documento es el .low; no hay svg suelto
     DZ.dirty = false;

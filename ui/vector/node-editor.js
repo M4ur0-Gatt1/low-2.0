@@ -190,6 +190,25 @@ function dzNodesClick(e) {   // misma puntería que la selección: ver drawing/h
   if (!el || !el.closest || !el.closest("#dzCanvas svg") || el.closest("g.dz-onion")) { dzNodesClear(); dzSetStatus(""); return; }
   const t = el.tagName.toLowerCase();
   if (["svg", "defs"].includes(t)) { dzNodesClear(); dzSetStatus(""); return; }
+  // UNA FORMA BÁSICA NO TIENE NODOS: un rectángulo son x/y/ancho/alto, no
+  // puntos, así que el editor decía «ese elemento no tiene nodos editables».
+  // Para poder DIBUJAR A PARTIR DE FORMAS y después editarlas —lo pidió Mauro—
+  // se convierte a trazado al tocarla con esta herramienta. Es una edición de
+  // verdad: entra en el historial, se avisa, y Ctrl+Z la deja como estaba.
+  if (["rect", "circle", "ellipse"].includes(t) && typeof dzFormaConvertir === "function") {
+    dzNodesHistoria(); dzSnapshot();
+    const nombre = t === "rect" ? "El rectángulo" : t === "circle" ? "El círculo" : "La elipse";
+    const path = dzFormaConvertir(el);
+    if (path) {
+      if (typeof DZ !== "undefined" && DZ.sel === el) DZ.sel = path;
+      dzNodesCerrarPaso();
+      dzNodesShow(path);
+      dzSetStatus(nombre + " pasó a trazado para editarlo por puntos · clic sobre la " +
+        "línea agrega un punto · Ctrl+Z lo deja como estaba");
+      return;
+    }
+    DZ.history?.commit?.();
+  }
   // SEGUNDO CLIC SOBRE LA MISMA LINEA: agrega un punto ahi. El primero elige
   // que linea se edita —si agregara de una, elegir una linea la modificaria—.
   // Esto es lo que faltaba para que las demas herramientas de vector sirvan:

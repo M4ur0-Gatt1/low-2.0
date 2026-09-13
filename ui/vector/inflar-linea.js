@@ -99,8 +99,93 @@ function dzInflarAviso(resultado, desinfla) {
  *  se agrega va en un módulo (biblia §12). */
 function dzInflarPasada(el, e) {
   const p = dzToUser(e.clientX, e.clientY);
-  const r = dzInflarLinea(el, p.x, p.y,
+  // POR TRAMO es el comportamiento por defecto: si la linea tiene un solo
+  // grosor, se la pasa a ancho variable UNA vez y desde ahi engorda el pedazo
+  // donde se pasa. «Toda la linea» quedo como opcion de la herramienta.
+  let sujeto = el;
+  if (dzInflarModo() === "tramo" && !el.hasAttribute("data-low-brush-points")
+      && !(typeof dzFormaPincelEs === "function" && dzFormaPincelEs(el))) {
+    const convertido = dzLineaAAnchoVariable(el);
+    if (convertido) sujeto = convertido;
+  }
+  const r = dzInflarLinea(sujeto, p.x, p.y,
     { radio: 60 / (DZ.zoom || 1), factor: e.altKey ? 0.94 : 1.06 });
   dzSetStatus(dzInflarAviso(r, !!e.altKey));
-  return r;
+  return { ...(r || {}), elemento: sujeto };
+}
+
+/* ── POR TRAMO, QUE ES EL COMPORTAMIENTO POR DEFECTO ─────────────────────
+   Mauro, después de probar la v4.39.0: «la idea es que infle por tramo entre un
+   punto y el otro, no que infle todo parejo. Quizá sirve lo de que infle
+   parejo, pero como una opción de la herramienta, no como comportamiento por
+   defecto».
+
+   El problema de fondo: un trazo de lápiz es un `path` con UN `stroke-width`
+   para toda la línea. Con un solo número no se puede tener un tramo más gordo
+   que otro, y por eso inflar sólo podía ser parejo.
+
+   Así que al inflar por tramo, la línea se convierte UNA VEZ en un trazo de
+   ancho variable —los mismos puntos, el mismo color, el mismo grosor de
+   partida, pero con presión por punto— y desde ahí el tramo engorda solo.
+   Es lo que hace OpenToonz por debajo: sus trazos siempre tienen ancho
+   variable, por eso el Pump puede modular. */
+
+/** Convierte un trazo de grosor único en uno de ancho variable, conservando
+ *  geometría, color y grosor. Devuelve el elemento nuevo, o null. */
+function dzLineaAAnchoVariable(el) {
+  if (!el || typeof dzBrushFinalElement !== "function") return null;
+  const tag = el.tagName.toLowerCase();
+  if (!["path", "polyline", "polygon", "line"].includes(tag)) return null;
+  const grosor = parseFloat(el.getAttribute("stroke-width") || "0");
+  if (!grosor) return null;
+  let largo = 0;
+  try { largo = el.getTotalLength(); } catch (_) { return null; }
+  if (!(largo > 0)) return null;
+  // un punto cada ~4 unidades: suficiente para modular sin inflar el archivo
+  const pasos = Math.max(8, Math.min(600, Math.round(largo / 4)));
+  const puntos = [];
+  for (let i = 0; i <= pasos; i++) {
+    const q = el.getPointAtLength(largo * i / pasos);
+    puntos.push([q.x, q.y, 1]);
+  }
+  const color = el.getAttribute("stroke") || (typeof DZ !== "undefined" && DZ.drawColor) || "#111111";
+  const pincel = (typeof dzCurrentBrush === "function" && dzCurrentBrush()) || null;
+  const nuevo = (typeof dzBrushRenderElement === "function")
+    ? dzBrushRenderElement(puntos, color, { size: grosor, fixedWidth: false, brush: pincel || undefined })
+    : null;
+  if (!nuevo) return null;
+  nuevo.setAttribute("data-low-brush-points", JSON.stringify(puntos));
+  if (pincel) nuevo.setAttribute("data-low-brush-config", JSON.stringify(pincel));
+  nuevo.setAttribute("data-low-brush-size", grosor);
+  nuevo.setAttribute("data-low-brush-color", color);
+  nuevo.setAttribute("data-low-brush-fixed", "0");
+  if (el.id) nuevo.id = el.id;
+  const capa = el.parentElement;
+  el.replaceWith(nuevo);
+  if (typeof DZ !== "undefined" && DZ && DZ.sel === el) DZ.sel = nuevo;
+  if (capa && typeof dzMarkDirty === "function") dzMarkDirty();
+  return nuevo;
+}
+
+/** El modo del inflador: "tramo" (por defecto) o "pareja". */
+function dzInflarModo() {
+  try { return localStorage.getItem("low.inflador.modo") === "pareja" ? "pareja" : "tramo"; }
+  catch (_) { return "tramo"; }
+}
+function dzInflarModoSet(modo) {
+  try { localStorage.setItem("low.inflador.modo", modo === "pareja" ? "pareja" : "tramo"); } catch (_) { }
+}
+
+/** La opción en la barra de la herramienta, al lado del resto. */
+function dzInflarOpcionesHTML() {
+  const modo = dzInflarModo();
+  return '<label title="Por tramo engorda sólo el pedazo donde pasás; parejo cambia el grosor de toda la línea">' +
+    'Inflar <select id="toInflarModo" class="langsel">' +
+    '<option value="tramo"' + (modo === "tramo" ? " selected" : "") + '>Por tramo</option>' +
+    '<option value="pareja"' + (modo === "pareja" ? " selected" : "") + '>Toda la línea</option>' +
+    '</select></label><span class="dz-hint">Alt desinfla</span>';
+}
+function dzInflarOpcionesWire() {
+  const sel = document.querySelector("#toInflarModo");
+  if (sel) sel.onchange = (e) => dzInflarModoSet(e.target.value);
 }

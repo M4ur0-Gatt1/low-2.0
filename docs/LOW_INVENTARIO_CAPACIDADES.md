@@ -11,11 +11,11 @@ parcial o no verificado». Esto no se armó leyendo los documentos viejos: se ar
 
 | qué | cuántos |
 |---|---|
-| Recorridos de navegador (`tools/check_*_ui.js`) | 43 |
+| Recorridos de navegador (`tools/check_*_ui.js`) | 44 |
 | Suites de modelo (`tools/run_*_tests.js`) | 12 |
 | Comprobaciones de puente en Python | 12 |
-| Contratos estáticos (`require(...)`) | 290 |
-| Filas de la matriz de regresiones | 74 |
+| Contratos estáticos (`require(...)`) | 295 |
+| Filas de la matriz de regresiones | 78 |
 
 ## Los tres agujeros que encontró este inventario
 
@@ -29,7 +29,7 @@ Se buscó, para cada capacidad, **quién la prueba**. Tres respuestas fueron
 escribió en `b2bb272` y nunca se cableó, así que una regresión en los controles
 sobre el personaje no la agarraba la puerta. **Cableados los dos.**
 
-Comprobación permanente: hoy los 43 recorridos, las 12 suites y las 12
+Comprobación permanente: hoy los 44 recorridos, las 12 suites y las 12
 comprobaciones de puente están en `build.yml`. Si aparece uno huérfano otra vez,
 se ve con:
 
@@ -121,7 +121,7 @@ lo prueba.
 | Trabajo en equipo (relé) | sí | sí | — | — | `check_colab_ui` + `check_relay_server` | **funcional** |
 | Estudio 3D | sí | — | sí | sí | `check_3d_studio_ui` | **funcional** |
 | Modo seguro | sí | sí | sí | — | `check_safe_mode_ui` + puente | **funcional** |
-| Espacios de trabajo y Timeline | sí | sí | sí | — | `check_workspace_ui` | **funcional** |
+| Espacios de trabajo y Timeline | sí | sí | sí | — | `check_workspace_ui`, `check_taller_vector_ui` | **funcional** (v4.40.0) |
 | Instrumento de la prueba §15 | sí | — | sí | — | `check_prueba15_ui` | **funcional** |
 | Exportación a Premiere (XML) | sí | sí | sí | — | `run_premiere_xml_tests` + `check_export_premiere_ui` + `check_export_premiere_backend` | **funcional** (v4.37.0) |
 | Exportación de animación (MP4/PNG/GIF/spritesheet) | sí | sí | sí | — | `check_export_anim_ui` + `check_export_anim_backend` | **funcional** (v4.35.0) |

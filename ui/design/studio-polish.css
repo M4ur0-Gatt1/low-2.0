@@ -316,3 +316,144 @@
 @media (prefers-reduced-motion: reduce) {
   #designView *, #designView *::before, #designView *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MANEJADORES CON OFICIO — v4.40.0
+
+   Mauro: «la interfaz, las gráficas, o sea las representaciones del software
+   todavía se ve un poco principiante; quiero una estética más profesional en
+   los marcos de las formas, en los manejadores de vectores, en los iconos de
+   las flechas». Referencias: Moho.
+
+   El criterio, mirando Moho y los programas del oficio:
+
+   1. EL MARCO NO COMPITE CON EL DIBUJO. Una línea de 1 px, fría y sobria, en
+      vez de una caja gruesa de color. Lo que tiene que saltar es el trazo del
+      dibujante, no la interfaz.
+   2. LOS TIRADORES SON CHICOS Y CUADRADOS, con relleno claro y borde fino, del
+      tamaño justo para agarrarlos con el mouse (8 px) sin tapar el dibujo. Los
+      de antes eran de 10-12 px con sombra marcada: se veían de juguete.
+   3. LOS NODOS SE DISTINGUEN DE LOS TIRADORES por forma, no sólo por color: el
+      nodo es un rombo (como en Moho y en Illustrator) y el tirador de escala un
+      cuadrado. Así se sabe qué se está por agarrar antes de agarrarlo.
+   4. LA SOMBRA ES UN CONTORNO, no un desenfoque. Un `box-shadow` de 1 px en
+      negro translúcido mantiene el tirador legible sobre un dibujo claro o uno
+      oscuro, sin el aire de botón de juguete.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* el marco de la selección: fino y sobrio */
+#designView .dz-selbox {
+  border: 1px solid rgba(120, 190, 230, .85);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+/* tiradores de escala: cuadrados chicos, claros, de borde fino */
+#designView .dz-sh {
+  width: 8px; height: 8px; border-radius: 1px;
+  background: #f7f9fa; border: 1px solid #3d6b85;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+#designView .dz-sh:hover { background: var(--cyan); border-color: #f7f9fa; }
+
+/* el tirador principal, mismo idioma que los otros */
+#designView .dz-handle {
+  width: 9px; height: 9px; border-radius: 1px;
+  border: 1px solid #f7f9fa; box-shadow: 0 0 0 1px rgba(0, 0, 0, .4);
+}
+/* la manija de rotación: círculo fino, sin sombra difusa */
+#designView .dz-rotate {
+  width: 15px; height: 15px;
+  background: rgba(24, 26, 28, .92); border: 1px solid rgba(120, 190, 230, .9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+#designView .dz-rotate::before { font-size: 11px; }
+
+/* nodos del trazado: ROMBO, para no confundirlos con los de escala */
+#designView .dz-node {
+  width: 8px; height: 8px; border-radius: 1px;
+  background: #f7f9fa; border: 1px solid #2b6d8f;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+#designView .dz-node:hover { background: var(--cyan); border-color: #f7f9fa; }
+
+/* ZONA DE CÁMARA como guía: se lee sin taparte el dibujo. En modo cámara
+   vuelve a ser sólida, porque ahí sí es el objeto que estás manipulando. */
+#designView .dz-cam.guia {
+  /* el CUADRO DE CÁMARA, como en una hoja de layout: línea fina y sobria, y el
+     dibujo de afuera se sigue viendo —ahí se dibuja el sobrante que la cámara
+     puede llegar a tomar en un paneo—. Referencias: hojas de Ghibli y
+     storyboards con cuadro exterior y zona segura adentro. */
+  border: 1px solid rgba(228, 96, 60, .85);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .30);
+  cursor: default;
+}
+#designView .dz-cam.guia .dz-cam-tag { opacity: .55; font-size: 9.5px; padding: 2px 5px; }
+#designView .dz-cam.guia .dz-cam-size,
+#designView .dz-cam.guia .dz-cam-rot { display: none; }
+/* LA ZONA SEGURA adentro: lo que entra seguro en cualquier reproductor. Es el
+   segundo rectángulo de las referencias, el de adentro. */
+#designView .dz-cam.guia .dz-cam-safe {
+  inset: 5%; border: 1px dashed rgba(120, 190, 230, .55);
+}
+/* MARCAS DE ESQUINA sobre el cuadro, que es lo que hace que se lea como una
+   hoja de layout y no como un borde de caja. */
+#designView .dz-cam.guia::before,
+#designView .dz-cam.guia::after {
+  content: ""; position: absolute; pointer-events: none;
+  width: 18px; height: 18px; border: 0 solid rgba(228, 96, 60, .95);
+}
+#designView .dz-cam.guia::before {
+  left: -1px; top: -1px; border-left-width: 2px; border-top-width: 2px;
+}
+#designView .dz-cam.guia::after {
+  right: -1px; bottom: -1px; border-right-width: 2px; border-bottom-width: 2px;
+}
+/* y el CENTRO marcado, que es de donde se encuadra */
+#designView .dz-cam.guia .dz-cam-center { opacity: .45; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PROPORCIONES DEL ESTUDIO — v4.40.0
+
+   Mauro: «hay un problema con las proporciones y los tamaños de los botones,
+   muchos están demasiado grandes y poco acordes a todo lo que le pedimos al
+   software que tenga».
+
+   Tiene razón, y el motivo es de origen: los controles heredaron el tamaño del
+   lado programador —un chat, donde un botón de 32 px está bien— y en una mesa
+   de dibujo compiten con el dibujo. En Moho, OpenToonz y Photoshop el icono de
+   herramienta vive entre 14 y 16 px dentro de un botón de 26 a 28: la barra
+   ocupa poco y entran muchas herramientas a la vista, que es lo que hace falta
+   cuando el programa tiene tantas.
+
+   Se toca SÓLO el estudio (`#designView`): el lado de la IA es un chat y ahí
+   el tamaño grande está bien.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+#designView .ibtn { width: 27px; height: 27px; border-radius: 7px; }
+#designView .ibtn .ico { width: 15px; height: 15px; stroke-width: 1.7; }
+
+/* la barra de herramientas: más angosta, y entran más a la vista */
+#designView .dz-tools { width: 38px; min-width: 38px; }
+#designView .dz-tools .ibtn { width: 30px; height: 27px; border-radius: 6px; }
+#designView .dz-tools .hsep { margin: 3px 6px; }
+#designView .dz-tools-grip { font-size: 10px; opacity: .5; }
+
+/* la fila de opciones de la herramienta: aire justo, no de formulario web */
+#designView .dz-optionsbar { min-height: 30px; }
+#designView .dz-toolopts { gap: 8px; font-size: 11.5px; }
+#designView .dz-toolopts input[type="number"],
+#designView .dz-toolopts select { height: 22px; font-size: 11.5px; }
+#designView .dz-toolopts input[type="color"] { width: 24px; height: 20px; }
+#designView .dz-toolopts .dz-to-name { font-size: 11.5px; letter-spacing: .2px; }
+
+/* pestañas de espacios de trabajo y de documentos: del mismo tamaño que el
+   resto, no más altas que la barra que las contiene */
+#designView .dz-ws-tab { padding: 0 9px; font-size: 11.5px; }
+
+/* los tiradores de RADIO DE ESQUINA eran puntos negros gruesos: gritaban más
+   que el dibujo. Mismo idioma que el resto: chicos, claros, borde fino. */
+#designView .dz-corner-widget {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #f7f9fa; border: 1px solid #3d6b85;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+#designView .dz-corner-widget:hover { background: var(--cyan); border-color: #f7f9fa; }

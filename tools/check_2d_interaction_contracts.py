@@ -1235,4 +1235,29 @@ require("dzPathBuild" not in _inflador and "setAttribute(\"points\"" not in _inf
         "el inflador volvio a escalar la GEOMETRIA como un globo: lo que tiene que "
         "inflar es la linea, no la forma")
 
+
+# -- El taller: espacios, inflar por tramo, formas y zona de camara -----
+# Cuatro pedidos de Mauro sobre la v4.39.0. El primero era una REGRESION MIA:
+# el flujo nuevo de documento (v4.36.0) no pasa por openDesign, que era quien
+# montaba las pestañas de espacios de trabajo.
+CAMARA_GUIA = (ROOT / "ui" / "animation" / "camara-guia.js").read_text(encoding="utf-8")
+require("dzWsInit()" in ESCENA_NUEVA and 'dzWsInit();' in APP,
+        "el documento nuevo volvio a abrir SIN las pestañas de espacios de trabajo: "
+        "las montaba openDesign y estos caminos no pasan por ahi. Mauro las llamo "
+        "«fundamental»")
+require('localStorage.getItem("low.inflador.modo") === "pareja" ? "pareja" : "tramo"' in INFLAR,
+        "el inflador dejo de arrancar POR TRAMO: se pidio que inflar parejo sea una "
+        "opcion de la herramienta y no el comportamiento por defecto")
+require("function dzLineaAAnchoVariable(" in INFLAR
+        and "dzLineaAAnchoVariable(el)" in INFLAR and "toInflarModo" in INFLAR,
+        "se perdio el paso a ancho variable o la opcion de la herramienta: un trazo "
+        "con un solo grosor no puede tener un tramo mas gordo que otro")
+require('["rect", "circle", "ellipse"].includes(t) && typeof dzFormaConvertir' in NODOS,
+        "una forma basica volvio a no tener nodos editables: no se puede dibujar a "
+        "partir de formas basicas y despues ajustarlas")
+require('src="animation/camara-guia.js' in INDEX and "dzCamGuiaActiva" in CAMARA_GUIA
+        and "dzCamGuiaActiva()" in APP,
+        "la zona de camara dejo de marcarse en pantalla: sin eso no se sabe que entra "
+        "en el plano hasta exportar, que es tarde")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")

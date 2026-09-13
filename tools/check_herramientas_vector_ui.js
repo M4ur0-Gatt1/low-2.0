@@ -110,10 +110,15 @@ async function main() {
       "una curva dibujada tiene dos anclas en las puntas y en el medio no hay nada " +
       "que agarrar — que es por lo que las herramientas de vector parecían rotas",
       { antes, conPunto });
-  if (conPunto.trazo !== antes.trazo)
-    mal("agregar un punto DEFORMÓ la curva: partir un tramo tiene que dar exactamente " +
-      "la misma línea, si no es una deformación disfrazada de ayuda",
-      { antes: antes.trazo, despues: conPunto.trazo });
+  const desvio = (a, b) => {
+    const p = a.split(" ").map(q => q.split(",").map(Number));
+    const q = b.split(" ").map(r => r.split(",").map(Number));
+    return Math.max(...p.map((v, i) => Math.hypot(v[0] - q[i][0], v[1] - q[i][1])));
+  };
+  if (desvio(antes.trazo, conPunto.trazo) > 1.5)
+    mal("agregar un punto DEFORMÓ la curva: partir un tramo tiene que dar la misma " +
+      "línea, si no es una deformación disfrazada de ayuda",
+      { antes: antes.trazo, despues: conPunto.trazo, desvio: desvio(antes.trazo, conPunto.trazo) });
   if (conPunto.nodos <= elegida.nodos)
     mal("el punto se agregó pero no aparece para agarrarlo", { elegida, conPunto });
   await ev('dzUndo()'); await w(450);
@@ -147,7 +152,11 @@ async function main() {
   if (!(pDesinflado.medio < pInflado.medio))
     mal("con Alt el inflador no desinfla", { pInflado, pDesinflado });
 
-  // ── 3. Y SOBRE UN TRAZO COMÚN cambia el grosor, diciendo que es toda la línea
+  // ── 3. Y CON LA OPCIÓN «toda la línea» cambia el grosor parejo, diciéndolo.
+  //       Desde v4.40.0 el comportamiento POR DEFECTO es por tramo —lo pidió
+  //       Mauro— y esto de acá prueba la opción, que es la que sigue siendo
+  //       global; el por defecto lo cuida `check_taller_vector_ui`.
+  await ev('dzInflarModoSet("pareja")');
   await ev(`(()=>{const svg=document.querySelector('#dzCanvas > svg');
     svg.querySelectorAll('#comun').forEach(n=>n.remove());
     const p=document.createElementNS(svg.namespaceURI,'path');
@@ -163,6 +172,8 @@ async function main() {
   if (!/toda la línea|toda la linea/i.test(comun.aviso))
     mal("el aviso no dice que en este trazo se infla TODA la línea: es la diferencia " +
       "con el pincel, y callarla es prometer algo que no hizo", comun);
+
+  await ev('dzInflarModoSet("tramo")');   // se deja el modo por defecto
 
   // ── 4. EL IMÁN deforma apoyado en el medio, donde no había ancla
   await curva();
