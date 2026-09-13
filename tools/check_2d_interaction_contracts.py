@@ -1199,4 +1199,40 @@ require("_perfil_libre(str(data_dir()" in MAIN
         "(0x8007139F, sin ventana ni aviso). La señal es el candado del propio WebView2, "
         "`EBWebView/lockfile`, que tambien delata a una instancia de una version anterior")
 
+
+# -- Las herramientas de vector tienen de donde agarrar -----------------
+# Reportado por Mauro: «las herramientas de vector no funcionan en general».
+# Midiendo aparecio la causa comun: una curva recien dibujada tiene DOS anclas,
+# las dos en las puntas, y todas trabajan sobre anclas. El iman decia
+# «Deformacion aplicada» sin mover nada y los nodos no daban donde tocar.
+PUNTOS_LINEA = (ROOT / "ui" / "vector" / "puntos-linea.js").read_text(encoding="utf-8")
+INFLAR = re.sub(r"^\s*//.*$", "",
+    re.sub(r"/\*.*?\*/", "", (ROOT / "ui" / "vector" / "inflar-linea.js").read_text(encoding="utf-8"), flags=re.S),
+    flags=re.M)
+NODOS = re.sub(r"^\s*//.*$", "",
+    re.sub(r"/\*.*?\*/", "", (ROOT / "ui" / "vector" / "node-editor.js").read_text(encoding="utf-8"), flags=re.S),
+    flags=re.M)
+require('src="vector/puntos-linea.js' in INDEX and 'src="vector/inflar-linea.js' in INDEX,
+        "los modulos de puntos e inflado no se cargan: agregar un punto y el inflador "
+        "tiran ReferenceError")
+require("dzPuntoAgregar(el" in NODOS,
+        "la herramienta de nodos dejo de poder AGREGAR un punto sobre la linea: sin eso "
+        "una curva dibujada tiene dos anclas en las puntas y en el medio no hay nada que "
+        "agarrar, que es por lo que las herramientas de vector parecian rotas")
+require("function dzCubicaPartir(" in PUNTOS_LINEA
+        and "dzCubicaPartir(desde," in PUNTOS_LINEA,
+        "el punto nuevo dejo de insertarse partiendo la curva (De Casteljau): agregar un "
+        "punto deformaria el dibujo, que es una deformacion disfrazada de ayuda")
+require("dzMagnetAsegurarAncla(" in APP,
+        "el iman volvio a tirar solo de las anclas que ya existen: apoyado en el medio de "
+        "una curva no mueve NADA y encima avisa «Deformacion aplicada»")
+require("data-low-brush-points" in INFLAR and "altKey ? 0.94" in APP + INFLAR,
+        "el inflador dejo de inflar la LINEA punto por punto o perdio el Alt para "
+        "desinflar: se pidio que sea como el Pump de OpenToonz")
+_inflador = APP[APP.index("function dzInflatorDown(e)"):]
+_inflador = _inflador[:_inflador.index("function dzHandlerDown(e)")]
+require("dzPathBuild" not in _inflador and "setAttribute(\"points\"" not in _inflador,
+        "el inflador volvio a escalar la GEOMETRIA como un globo: lo que tiene que "
+        "inflar es la linea, no la forma")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")

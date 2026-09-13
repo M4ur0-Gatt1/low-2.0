@@ -6519,82 +6519,38 @@ function dzPointInElement(el, clientX, clientY) {
   } catch (_) { return dzToUser(clientX, clientY); }
 }
 
+/* EL INFLADOR infla la LINEA —el Pump de OpenToonz—, no la forma: lo pidio
+   Mauro. La cuenta y el porque, en ui/vector/inflar-linea.js. */
 function dzInflatorDown(e) {
   e.preventDefault(); e.stopPropagation();
-  const el = DZ.sel || DZ.multi?.[0] || dzVectorElementAt(e, true);
-  if (!el) return dzSetStatus(" Seleccioná una forma primero para inflar/desinflar");
-  const tag = el.tagName.toLowerCase();
-  if (!["path", "rect", "circle", "ellipse", "polygon", "polyline"].includes(tag))
-    return dzSetStatus(" El inflador funciona sobre formas (path, rect, círculo…)");
+  const el = dzPickStroke(e.clientX, e.clientY, 26, true) || DZ.sel || DZ.multi?.[0];
+  if (!el) return dzSetStatus("🎈 El inflador trabaja sobre una linea: acercate a un trazo");
   dzSnapshot();
-  if (el !== DZ.sel) dzSelect(el);
-  const bbox = el.getBBox();
-  const centerScreen = (() => {
-    const p = el.ownerSVGElement.createSVGPoint(); p.x = bbox.x + bbox.width / 2; p.y = bbox.y + bbox.height / 2;
-    return p.matrixTransform(el.getScreenCTM());
-  })();
-  const original = tag === "path" ? dzPathParse(el.getAttribute("d") || "")
-    : tag === "polygon" || tag === "polyline" ? (el.getAttribute("points") || "").trim().split(/[\s,]+/).map(Number)
-    : Object.fromEntries(["x","y","width","height","cx","cy","r","rx","ry"].map(a => [a, +el.getAttribute(a) || 0]));
   const journal = new Map(); dzVectorRemember(el, journal);
-  INFLATOR = dzVectorBegin("inflator", e, {
-    el, cx: bbox.x + bbox.width / 2, cy: bbox.y + bbox.height / 2,
-    startR: Math.max(1, Math.max(bbox.width, bbox.height) / 2),
-    screenR: Math.max(24, Math.max(el.getBoundingClientRect().width, el.getBoundingClientRect().height) / 2),
-    centerScreen, original,
-    startDist: Math.max(1, Math.hypot(e.clientX - centerScreen.x, e.clientY - centerScreen.y)),
-    dir: e.shiftKey ? -1 : 1, journal
-  }, () => { INFLATOR = null; });
-  dzSetStatus("🎈 Inflando — soltá para aplicar · Shift desinfla");
+  if (el.hasAttribute("data-low-brush-points"))
+    journal.set(el, { ...journal.get(el), __html: el.innerHTML,
+      "data-low-brush-points": el.getAttribute("data-low-brush-points") });
+  INFLATOR = dzVectorBegin("inflator", e, { el, journal }, () => { INFLATOR = null; });
+  dzInflatorAplicar(e);
+}
+
+function dzInflatorAplicar(e) {
+  INFLATOR.ultimo = dzInflarPasada(INFLATOR.el, e); INFLATOR.desinflo = !!e.altKey;
+  dzPositionHandle();
 }
 
 function dzInflatorMove(e) {
   if (!INFLATOR?.el || !dzVectorAccept(INFLATOR, e)) return;
-  const dist = Math.hypot(e.clientX - INFLATOR.centerScreen.x, e.clientY - INFLATOR.centerScreen.y);
-  // factor: 1.0 en startDist, crece/decrece al alejarse/acercarse
-  const delta = (dist - INFLATOR.startDist) / INFLATOR.screenR;
-  const factor = Math.max(0.05, 1 + delta * INFLATOR.dir);
-  const el = INFLATOR.el, tag = el.tagName.toLowerCase();
-  if (tag === "rect") {
-    const { width:w, height:h } = INFLATOR.original;
-    const nw = w * factor, nh = h * factor;
-    el.setAttribute("x", INFLATOR.cx - nw / 2);
-    el.setAttribute("y", INFLATOR.cy - nh / 2);
-    el.setAttribute("width", nw); el.setAttribute("height", nh);
-  } else if (tag === "circle") {
-    el.setAttribute("r", Math.max(0.5, INFLATOR.original.r * factor));
-  } else if (tag === "ellipse") {
-    const rx = INFLATOR.original.rx, ry = INFLATOR.original.ry;
-    el.setAttribute("rx", Math.max(0.5, rx * factor));
-    el.setAttribute("ry", Math.max(0.5, ry * factor));
-  } else if (tag === "polygon" || tag === "polyline") {
-    const pts = INFLATOR.original;
-    const out = [];
-    for (let i = 0; i < pts.length; i += 2) {
-      out.push(INFLATOR.cx + (pts[i] - INFLATOR.cx) * factor);
-      out.push(INFLATOR.cy + (pts[i + 1] - INFLATOR.cy) * factor);
-    }
-    el.setAttribute("points", out.map(v => Math.round(v * 100) / 100).join(" "));
-  } else if (tag === "path") {
-    // escalar cada comando del path
-    const cmds = INFLATOR.original?.map(s => ({ c:s.c, n:s.n.slice() }));
-    if (cmds) {
-      for (const s of cmds) {
-        for (let i = 0; i + 1 < s.n.length; i += 2) {
-          s.n[i] = INFLATOR.cx + (s.n[i] - INFLATOR.cx) * factor;
-          s.n[i + 1] = INFLATOR.cy + (s.n[i + 1] - INFLATOR.cy) * factor;
-        }
-      }
-      el.setAttribute("d", dzPathBuild(cmds));
-    }
-  }
-  dzPositionHandle();
+  dzInflatorAplicar(e);
 }
 
 function dzInflatorUp(e) {
   if (e?.type === "pointercancel") { dzVectorGestureCancel("pointercancel"); return; }
   if (!INFLATOR?.el || !dzVectorFinish(INFLATOR, e)) return;
-  dzMarkDirty(); dzBuildLayers(); dzSetStatus("🎈 Inflado aplicado");
+  dzMarkDirty(); dzBuildLayers();
+  dzSetStatus(INFLATOR.ultimo && INFLATOR.ultimo.tipo === "local"
+    ? "🎈 Lista: la linea quedo " + (INFLATOR.desinflo ? "mas fina" : "mas gruesa") + " donde pasaste"
+    : "🎈 Lista: cambio el grosor de toda la linea");
   INFLATOR = null;
 }
 
@@ -6865,6 +6821,9 @@ function dzMagnetDown(e) {
   MAGNET = dzVectorBegin("magnet", e,
     { active: true, radius: dzVectorPrefs().magnetRadius / (DZ.zoom || 1), journal:new Map() },
     () => { MAGNET = null; });
+  // Sin ancla cerca, el iman no movia NADA y decia «Deformacion aplicada»: se
+  // agrega el punto que falta (ver ui/vector/puntos-linea.js).
+  MAGNET.agrego = dzMagnetAsegurarAncla(dzPickStroke(e.clientX, e.clientY, 26, true), e, MAGNET);
   dzMagnetApply(e);
   dzSetStatus("🧲 Imán activo — arrastrá para deformar · soltá para terminar");
 }

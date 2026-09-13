@@ -190,6 +190,24 @@ function dzNodesClick(e) {   // misma puntería que la selección: ver drawing/h
   if (!el || !el.closest || !el.closest("#dzCanvas svg") || el.closest("g.dz-onion")) { dzNodesClear(); dzSetStatus(""); return; }
   const t = el.tagName.toLowerCase();
   if (["svg", "defs"].includes(t)) { dzNodesClear(); dzSetStatus(""); return; }
+  // SEGUNDO CLIC SOBRE LA MISMA LINEA: agrega un punto ahi. El primero elige
+  // que linea se edita —si agregara de una, elegir una linea la modificaria—.
+  // Esto es lo que faltaba para que las demas herramientas de vector sirvan:
+  // una curva recien dibujada tiene DOS anclas, las dos en las puntas, y todo
+  // lo que trabaja sobre anclas no tenia de donde agarrar en el medio.
+  if (DZ.nodeEl === el && typeof dzPuntoAgregar === "function") {
+    const p = dzToUser(e.clientX, e.clientY);
+    const tolerancia = 24 / (DZ.zoom || 1);
+    dzNodesHistoria(); dzSnapshot();
+    const puesto = dzPuntoAgregar(el, p.x, p.y, tolerancia);
+    if (puesto) {
+      dzNodesCerrarPaso();
+      dzNodesShow(puesto.elemento || el);
+      dzSetStatus("⬦ Punto agregado · arrastralo para curvar · Ctrl+Z lo saca");
+      return;
+    }
+    DZ.history?.commit?.();      // no se agrego nada: no dejar la transaccion abierta
+  }
   dzNodesShow(el);
 }
 

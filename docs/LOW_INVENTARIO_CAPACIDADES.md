@@ -11,11 +11,11 @@ parcial o no verificado». Esto no se armó leyendo los documentos viejos: se ar
 
 | qué | cuántos |
 |---|---|
-| Recorridos de navegador (`tools/check_*_ui.js`) | 42 |
+| Recorridos de navegador (`tools/check_*_ui.js`) | 43 |
 | Suites de modelo (`tools/run_*_tests.js`) | 12 |
 | Comprobaciones de puente en Python | 12 |
-| Contratos estáticos (`require(...)`) | 284 |
-| Filas de la matriz de regresiones | 71 |
+| Contratos estáticos (`require(...)`) | 290 |
+| Filas de la matriz de regresiones | 74 |
 
 ## Los tres agujeros que encontró este inventario
 
@@ -29,7 +29,7 @@ Se buscó, para cada capacidad, **quién la prueba**. Tres respuestas fueron
 escribió en `b2bb272` y nunca se cableó, así que una regresión en los controles
 sobre el personaje no la agarraba la puerta. **Cableados los dos.**
 
-Comprobación permanente: hoy los 42 recorridos, las 12 suites y las 12
+Comprobación permanente: hoy los 43 recorridos, las 12 suites y las 12
 comprobaciones de puente están en `build.yml`. Si aparece uno huérfano otra vez,
 se ve con:
 
@@ -103,7 +103,8 @@ lo prueba.
 | Bomba de grosor sobre los tres tipos de trazo | sí | sí | sí | sí | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
 | Ayuda al pasar el puntero por la barra | sí | — | — | — | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
 | Editor de esquinas e inspector de elemento | sí | sí | sí | sí | ninguna | **sin verificar** — trabajo de Codex, sin recorrido propio |
-| Edición vectorial por nodos | sí | sí | sí | sí | `check_vector_nodes_ui` | **funcional** |
+| Edición vectorial por nodos | sí | sí | sí | sí | `check_vector_nodes_ui`, `check_herramientas_vector_ui` | **funcional** (v4.39.0) |
+| Herramientas de vector: agregar punto, inflador, imán | sí | sí | sí | sí | `check_herramientas_vector_ui` | **funcional** (v4.39.0) |
 | Puntería de la selección y overlays | sí | — | — | — | `check_hit_test_ui`, `check_camara_encuadre_ui`, `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
 | Color Studio | sí | sí | sí | sí | `check_color_studio_ui` | **funcional** (recién cableado) |
 | Coloreo | sí | sí | sí | sí | `check_coloring_ui` | **funcional** |

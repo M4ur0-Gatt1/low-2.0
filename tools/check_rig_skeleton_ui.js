@@ -76,16 +76,22 @@ async function main() {
     const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");
     rect.setAttribute("x","100"); rect.setAttribute("y","100");
     rect.setAttribute("width","120"); rect.setAttribute("height","80");
-    rect.setAttribute("fill","#e5322d"); svg.appendChild(rect); dzSelect(rect);
+    // El inflador infla la LINEA desde v4.39.0 —lo pidio Mauro: «lo que debe
+    // inflar es la linea, el contorno»—, asi que el sujeto necesita contorno.
+    // Lo que este tramo prueba sigue siendo lo mismo: que un gesto vectorial
+    // cambie algo y que cancelarlo lo devuelva EXACTO.
+    rect.setAttribute("fill","#e5322d"); rect.setAttribute("stroke","#111");
+    rect.setAttribute("stroke-width","6"); svg.appendChild(rect); dzSelect(rect);
     const box=rect.getBoundingClientRect(), cx=box.left+box.width/2, cy=box.top+box.height/2;
     const event=(type,x,y)=>({type,clientX:x,clientY:y,pointerId:71,shiftKey:false,
       target:rect,preventDefault(){},stopPropagation(){}});
     const original=rect.getAttribute("width");
+    const contorno=rect.getAttribute("stroke-width");
     dzInflatorDown(event("pointerdown",box.right,cy));
     dzInflatorMove(event("pointermove",box.right+80,cy));
-    const changed=rect.getAttribute("width")!==original;
+    const changed=rect.getAttribute("stroke-width")!==contorno;
     const cancelled=dzVectorGestureCancel("e2e");
-    const vector={changed,cancelled,restored:rect.getAttribute("width")===original,
+    const vector={changed,cancelled,restored:rect.getAttribute("stroke-width")===contorno,
       idle:!window.LOW.input.pointerController.active};
     // Flujo real del cuadro delimitador: rotar y luego escalar. La geometría
     // SVG debe permanecer intacta y ambos gestos deben seguir al puntero.
