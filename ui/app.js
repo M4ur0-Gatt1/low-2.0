@@ -2854,12 +2854,12 @@ let DZ_TOOLS_FITTING = false;
 function dzToolsBarFit(rail, primarias, secundarias, more, drawer) {
   if (!rail || rail.hidden || DZ_TOOLS_FITTING) return;
   const grip = rail.querySelector(".dz-tools-grip");
+  const paso = Math.max(18, (rail.querySelector(".ibtn")?.offsetHeight || 27) + 3);   // se MIDE: al achicar los botones a 27 px un 33 fijo mandaba al cajon herramientas que entraban
   const alto = rail.classList.contains("dz-tools-float")
-    ? Math.min(innerHeight - 120, 33 * (primarias.length + 1) + 24)
+    ? Math.min(innerHeight - 120, paso * (primarias.length + 1) + 24)
     : rail.clientHeight;
   if (!alto) return;
-  const util = alto - (grip ? grip.offsetHeight + 3 : 0) - 33 - 10;   // grip + "⋯" + padding
-  const paso = 33;
+  const util = alto - (grip ? grip.offsetHeight + 3 : 0) - paso - 10;   // grip + "⋯" + padding
   let entran = Math.max(3, Math.floor(util / paso));
   if (entran >= primarias.length) entran = primarias.length;
   DZ_TOOLS_FITTING = true;
@@ -3597,7 +3597,7 @@ function dzPositionHandle() {
       box.style.left = left + "px"; box.style.top = top + "px";
       box.style.width = width + "px"; box.style.height = height + "px";
       box.style.transformOrigin = "0 0";
-      box.style.transform = angle ? `rotate(${angle}deg)` : "none";
+      box.style.transform = angle ? `rotate(${angle}deg)` : "none"; dzCursoresDeCaja(box, angle);   // la flecha gira con la forma
       box.hidden = false;
       const info = pack.length === 1 ? dzCornerInfo(pack[0]) : null;
       const widgets = [...document.querySelectorAll("#dzSelBox .dz-corner-widget")];
@@ -8355,14 +8355,14 @@ function dzRigLibraryAdd(keyArg) {
   const key=typeof keyArg==="string"&&keyArg ? keyArg : ($("#rigLibrary")?.value||"human_standard"), svg=$("#dzCanvas")?.querySelector(":scope > svg");
   if(!svg)return dzSetStatus("No hay lienzo donde colocar el esqueleto");
   const vb=svg.viewBox?.baseVal, width=(vb?.width||+svg.getAttribute("width")||1000), height=(vb?.height||+svg.getAttribute("height")||1000);
-  const x=vb?.x||0,y=vb?.y||0, padX=width*.12,padY=height*.07;
+  const x=vb?.x||0,y=vb?.y||0, padX=width*.12,padY=height*.07, sobreElDibujo=(typeof dzRigCajaDelDibujo==="function")&&dzRigCajaDelDibujo(svg), caja=sobreElDibujo||{x:x+padX,y:y+padY,width:width-padX*2,height:height-padY*2};
   const prefix=`${key}_${Date.now().toString(36).slice(-5)}`;
   dzSnapshot();
-  const ids=LOW.animation.rigLibrary.apply(DZ.doc,key,{x:x+padX,y:y+padY,width:width-padX*2,height:height-padY*2},prefix);
+  const ids=LOW.animation.rigLibrary.apply(DZ.doc,key,caja,prefix);   // el esqueleto se mide SOBRE el dibujo
   if(!ids.length)return dzSetStatus("No se pudo colocar esa plantilla");
   DZ.rigSelectedId=ids[0]; dzRigSetMode("build"); dzRigSetTool("edit");
   dzRigPanelSync(); dzRigOverlayRender(); dzTimelineBadges(); dzMarkDirty();
-  dzSetStatus(`${ids.length} huesos colocados · ajustá articulaciones y tocá Repartir para pegarlos al personaje`);
+  dzSetStatus(`${ids.length} huesos colocados ${sobreElDibujo?"encima del dibujo":"en el centro de la hoja (no hay dibujo que medir)"} · ajustá articulaciones y tocá Repartir para pegarlos al personaje`);
 }
 
 const DZ_CHARACTER_LIBRARY_KEY = "low.2d.characters.v1";
@@ -10335,7 +10335,7 @@ function dzPuntosDeMuestra(el) {
  *  le pasa más cerca. Es la operación que convierte un alambre en un rig. */
 function dzRigRepartirDibujo() {
   if (!DZ.doc) return dzSetStatus("Abr\u00ed una animaci\u00f3n primero");
-  const sc = DZ.doc.scene;
+  const sc = DZ.doc.scene; if (typeof dzRigAlambreDerivar === "function") dzRigAlambreDerivar(DZ.doc);
   const huesos = Object.values(sc.rig.nodes).filter(n => n.head && n.tail);
   if (!huesos.length) return dzSetStatus(
     "Primero dibuj\u00e1 el alambre: Construir \u2192 Crear hueso, y arrastr\u00e1 desde cada articulaci\u00f3n");
@@ -10364,7 +10364,7 @@ function dzRigRepartirDibujo() {
     s + Math.hypot(n.tail.x - n.head.x, n.tail.y - n.head.y), 0);
   const alcance = Math.max(40, (largoTotal / huesos.length) * 1.6);
 
-  let asignadas = 0, lejos = 0;
+  let asignadas = 0; const lejos = [];    // con nombre: <<quedaron 3>> no dice cual
   const reparto = [];
   const candidatos = [];
   for (const el of piezas) {
@@ -10384,7 +10384,7 @@ function dzRigRepartirDibujo() {
       mejorD = Math.min(mejorD, d);
       if (d <= alcance) candidatos.push({ el, hueso:n, distancia:d });
     }
-    if (mejorD > alcance) { lejos++; continue; }
+    if (mejorD > alcance) { lejos.push(el.id); continue; }
   }
 
   // Emparejamiento voraz global: primero se asegura la pareja más clara de
@@ -10399,12 +10399,12 @@ function dzRigRepartirDibujo() {
   }
 
   dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender(); dzMarkDirty();
-  if (!asignadas) return dzSetStatus(lejos
-    ? "Ninguna pieza cay\u00f3 cerca del alambre \u00b7 dibujalo ENCIMA del personaje"
+  if (!asignadas) return dzSetStatus(lejos.length
+    ? "Ninguna pieza cay\u00f3 cerca del alambre \u00b7 mov\u00e9 los huesos encima del personaje (Construir \u2192 Editar) y volv\u00e9 a Repartir"
     : "Todas las piezas ya ten\u00edan hueso");
   dzSetStatus(asignadas + (asignadas === 1 ? " pieza repartida" : " piezas repartidas") +
     " entre " + huesos.length + " huesos, sin reemplazar vínculos" +
-    (lejos ? " \u00b7 " + lejos + " quedaron lejos del alambre y sin asignar" : "") +
+    (lejos.length ? " \u00b7 sin hueso: " + lejos.slice(0, 3).join(", ") + (lejos.length > 3 ? " y " + (lejos.length - 3) + " m\u00e1s" : "") + " \u00b7 acercales un hueso, o eleg\u00ed la pieza y el hueso y toc\u00e1 Vincular" : "") +
     " \u00b7 pas\u00e1 a Probar antes de animar");
   return reparto;
 }
@@ -11127,7 +11127,7 @@ async function dzRigEjemplo() {
     DZ.doc.setRigPivot(id, { x: px, y: py });
     if (padre) DZ.doc.setRigParent(id, padre);
   }
-  DZ.doc.setRigPinned("pelvis", true);
+  DZ.doc.setRigPinned("pelvis", true); dzRigAlambreDerivar(DZ.doc, "Personaje de ejemplo");
   // El ejemplo va SIN topes: es para aprender a animar, y encontrarse con un
   // codo que frena parece una falla del programa antes que una restriccion
   // puesta a proposito. Los topes se explican en el tutorial.
@@ -11312,7 +11312,7 @@ async function dzRigOpen() {
   if (!DZ.anim && !DZ.doc) await dzAnimToggle();
   if (!DZ.anim && !DZ.doc) return;
   if (!DZ.rigMode) { dzRigToggle(); return; }
-  $("#dzRigPanel").hidden = false;
+  $("#dzRigPanel").hidden = false; if (typeof dzRigAlambreDerivar === "function") dzRigAlambreDerivar(DZ.doc);
   $("#dzRigBtn").classList.add("active"); $("#tlRigOpen")?.classList.add("active");
   dzRigApplyLive(dzRigCur()); dzRigPanelSync(); dzRigOverlayRender();
 }

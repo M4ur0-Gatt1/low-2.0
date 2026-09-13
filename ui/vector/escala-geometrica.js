@@ -130,3 +130,40 @@ function dzEscalaGeometrica(el, snap, kx, ky, ax, ay) {
   }
   return false;
 }
+
+/* ── LA FLECHA DEL TIRADOR GIRA CON LA FORMA ─────────────────────────────
+   Reportado por Mauro: «hay un error ahí en la flecha de dirección de la
+   edición: se muestra en vertical en un movimiento horizontal, y la otra lo
+   opuesto; supongo que se dio al girar la forma».
+
+   Tenía razón y es exactamente eso. La caja de selección gira con un
+   `transform: rotate(...)`, así que los tiradores se ven girados — pero el
+   cursor de cada uno está escrito en el CSS (`.dz-sh.n { cursor: ns-resize }`)
+   y ésos NO giran. Con la forma a 90°, el tirador que estira a lo ancho mostraba
+   la flecha vertical: la flecha decía una cosa y el arrastre hacía otra.
+
+   Ahora el cursor sale de la dirección REAL del tirador en pantalla: su ángulo
+   propio más el de la forma, redondeado a los cuatro cursores que existen. */
+
+/** El cursor que corresponde a una dirección en pantalla, en grados. */
+function dzCursorPorAngulo(grados) {
+  const g = ((grados % 180) + 180) % 180;        // 0..179: la flecha es simétrica
+  if (g < 22.5 || g >= 157.5) return "ew-resize";
+  if (g < 67.5) return "nwse-resize";
+  if (g < 112.5) return "ns-resize";
+  return "nesw-resize";
+}
+
+/** Pone en cada tirador de la caja la flecha que de verdad le toca. */
+function dzCursoresDeCaja(caja, anguloCaja) {
+  if (!caja) return 0;
+  let puestos = 0;
+  for (const t of caja.querySelectorAll(".dz-sh")) {
+    const hx = +t.dataset.hx || 0, hy = +t.dataset.hy || 0;
+    if (!hx && !hy) continue;
+    const propio = Math.atan2(hy, hx) * 180 / Math.PI;
+    t.style.cursor = dzCursorPorAngulo(propio + (anguloCaja || 0));
+    puestos++;
+  }
+  return puestos;
+}

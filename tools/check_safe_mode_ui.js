@@ -33,7 +33,11 @@ async function main() {
   await send("Page.navigate", { url: pageUrl });
   for (let attempt = 0; attempt < 80; attempt++) {
     const ready = await send("Runtime.evaluate", { returnByValue: true, expression:
-      `typeof dzConfigResetModal==="function" && !!window.LOW?.safeMode && !!document.querySelector("#ver")` });
+      // Esperar por CONDICION, no por existir: bajo carga el arranque seguro ya
+      // esta activo pero la etiqueta de version y S.safeMode se escriben despues,
+      // y la prueba acusaba «no entro en modo seguro» leyendo un estado a medias.
+      `typeof dzConfigResetModal==="function" && !!window.LOW?.safeMode && S?.safeMode === true
+        && !!document.querySelector("#ver")?.textContent.includes("MODO SEGURO")` });
     if (ready.result?.value) break;
     if (attempt === 79) throw Error("LOW no terminó de iniciar");
     await new Promise(resolve => setTimeout(resolve, 250));

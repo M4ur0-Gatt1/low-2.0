@@ -159,8 +159,15 @@ async function main() {
   await clic(borde);
   const convertida = await ev(`(()=>{const el=document.querySelector('#caja');
     return { tag:el.tagName, nodos:document.querySelectorAll('.dz-node').length,
-      sw:el.getAttribute('stroke-width'),
+      sw:el.getAttribute('stroke-width'), seleccionada: DZ.sel === el,
       aviso:(document.querySelector('#dzStatus')||{}).textContent||"" };})()`);
+  // LO QUE SE EDITA ES LO QUE ESTÁ SELECCIONADO. Sin esto la caja de selección
+  // marca una forma y los nodos están sobre otra, y todo lo que trabaja sobre
+  // la selección actúa sobre la que no es. Lo reportó Mauro: «a veces
+  // selecciona la última forma editada aunque esté trabajando sobre otra».
+  if (!convertida.seleccionada)
+    mal("editar los puntos de una forma deja la selección en OTRA: la caja marca una " +
+      "cosa y los nodos están sobre otra", convertida);
   if (convertida.nodos < 4)
     mal("una forma básica sigue sin poder editarse por puntos: no se puede dibujar a " +
       "partir de formas y después ajustarlas", { antesForma, convertida });

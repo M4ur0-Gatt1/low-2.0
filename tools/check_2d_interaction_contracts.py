@@ -1260,4 +1260,42 @@ require('src="animation/camara-guia.js' in INDEX and "dzCamGuiaActiva" in CAMARA
         "la zona de camara dejo de marcarse en pantalla: sin eso no se sabe que entra "
         "en el plano hasta exportar, que es tarde")
 
+
+# -- La flecha del tirador gira con la forma ----------------------------
+# La caja de seleccion gira con un `transform`, pero el cursor de cada tirador
+# esta escrito en el CSS y esos no giran: con la forma a 90 grados, el tirador
+# que estira a lo ancho mostraba la flecha VERTICAL. Lo reporto Mauro.
+require("dzCursoresDeCaja(box, angle)" in APP
+        and "function dzCursoresDeCaja(" in ESCALA_GEO,
+        "la flecha del tirador volvio a quedar fija: con la forma girada dice una cosa "
+        "y el arrastre hace otra")
+
+
+# -- El esqueleto se edita, y se le pega el dibujo ----------------------
+# «el flujo para unir un esqueleto a un dibujo no esta andando, no se puede
+# editar el esqueleto de ejemplo». La causa: un esqueleto puede tener PIVOTES y
+# no tener COLA. En la mesa se ve entero, pero para el programa no hay hueso:
+# «Editar» cae en «elegir», no hay punta que arrastrar y «Repartir» contesta
+# «primero dibuja el alambre» con el esqueleto puesto encima del personaje.
+ALAMBRE = (ROOT / "ui" / "rigging" / "alambre-desde-pivotes.js").read_text(encoding="utf-8")
+require('src="rigging/alambre-desde-pivotes.js' in INDEX
+        and "function dzRigAlambreDerivar(" in ALAMBRE
+        and "setRigBoneGeometries(cambios" in ALAMBRE,
+        "se perdio la deduccion del alambre: un esqueleto con pivotes y sin cola no "
+        "se puede editar ni repartir, y es como nace el personaje de ejemplo")
+require(APP.count("dzRigAlambreDerivar(DZ.doc") >= 3,
+        "alguno de los tres caminos dejo de deducir el alambre (el ejemplo, abrir el "
+        "modo rig, y Repartir): ahi vuelve el esqueleto que no se puede tocar")
+require("pivot || n.head" in ALAMBRE and "bone.head" not in ALAMBRE,
+        "la deduccion empezo a MOVER el pivote: las poses y las claves ya grabadas "
+        "giran alrededor del pivote, moverlo deforma lo animado")
+require("function dzRigCajaDelDibujo(" in ALAMBRE
+        and "rigLibrary.apply(DZ.doc,key,caja,prefix)" in APP,
+        "«Colocar» volvio a medir la HOJA en vez del DIBUJO: el esqueleto cae en el "
+        "centro de la pagina con el personaje al costado, y despues Repartir ata la "
+        "pierna del dibujo a la mano del esqueleto")
+require("lejos.push(el.id)" in APP and "sin hueso: " in APP,
+        "«Repartir» volvio a decir solo CUANTAS piezas quedaron sueltas: sin el nombre "
+        "no se sabe cual acercar ni cual vincular a mano")
+
 print("CONTRATOS 2D OK: Escape, rueda, modos, rig, vectores, tableta, espejo, lipsync, equipo, arcos, punteria, pincel, nodos, version, composicion, prueba maestra, X-sheet, primera pantalla, UI flotante, exportacion y documento nuevo")

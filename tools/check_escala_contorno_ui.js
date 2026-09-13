@@ -141,6 +141,33 @@ async function main() {
   if (!trasUndo || Math.abs(trasUndo.ancho - antesProp.ancho) > 5)
     mal("Ctrl+Z no devolvió la forma al tamaño anterior", { antesProp, trasUndo });
 
+  // ── 3b. LA FLECHA DEL TIRADOR GIRA CON LA FORMA. La caja de selección gira
+  //        con un `transform`, pero el cursor de cada tirador está escrito en el
+  //        CSS y ésos no giran: con la forma a 90° el tirador que estira a lo
+  //        ancho mostraba la flecha VERTICAL. La flecha decía una cosa y el
+  //        arrastre hacía otra. Lo reportó Mauro.
+  const flechas = (giro) => ev(`(()=>{
+    const svg=document.querySelector('#dzCanvas > svg');
+    svg.querySelectorAll('#giro').forEach(n=>n.remove());
+    const r=document.createElementNS(svg.namespaceURI,'rect'); r.id='giro';
+    r.setAttribute('x',600); r.setAttribute('y',400);
+    r.setAttribute('width',500); r.setAttribute('height',200);
+    r.setAttribute('fill','none'); r.setAttribute('stroke','#111111'); r.setAttribute('stroke-width','6');
+    ${giro ? "r.setAttribute('transform','rotate(" + giro + " 850 500)');" : ""}
+    dzArtAppend(svg,r); dzSetTool('select'); dzSelect(r); dzPositionHandle();
+    const caja=document.querySelector('#dzSelBox');
+    const lee=(c)=>{const n=caja.querySelector('.dz-sh.'+c); return n?getComputedStyle(n).cursor:null;};
+    return { e:lee('e'), n:lee('n'), ne:lee('ne') };})()`);
+  const derecha = await flechas(0), girada = await flechas(90);
+  if (derecha.e !== "ew-resize" || derecha.n !== "ns-resize")
+    mal("sin girar, la flecha del tirador ya no corresponde a lo que estira", derecha);
+  if (girada.e !== "ns-resize" || girada.n !== "ew-resize")
+    mal("con la forma girada 90°, la flecha del tirador NO gira con ella: el que estira " +
+      "a lo ancho muestra la flecha vertical y el otro al revés, así que la flecha dice " +
+      "una cosa y el arrastre hace otra", { derecha, girada });
+  if (girada.ne !== "nwse-resize")
+    mal("la flecha de la esquina no acompaña el giro", girada);
+
   // ── 4. UNA FORMA ENTINTADA conserva su grosor de pincel
   const entintada = await ev(`(()=>{
     const svg=document.querySelector('#dzCanvas > svg');

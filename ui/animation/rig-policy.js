@@ -25,8 +25,12 @@
       detail: `${r.boundBoneCount} hueso(s) vinculados` +
         (loose ? ` · ${loose} pieza(s) todavía sueltas` : " · todas las piezas detectadas están vinculadas")
     };
+    // Con dibujo en la mesa, «podés vincular después» es un consejo que deja al
+    // dibujante mirando el panel: lo que falta es UN paso y hay que nombrarlo.
     if (access.animate) return { state: "skeleton", title: "Esqueleto animable",
-      detail: `${r.boneCount || 0} hueso(s) · podés crear movimiento ahora y vincular el personaje después` };
+      detail: artCount
+        ? `${r.boneCount || 0} hueso(s) todavía sin dibujo · acomodá el alambre sobre el personaje y tocá Repartir para pegárselo`
+        : `${r.boneCount || 0} hueso(s) · podés crear movimiento ahora y vincular el personaje después` };
     if (artCount) return { state: "warning", title: "Arte sin esqueleto",
       detail: `${artCount} pieza(s) detectadas · colocá una plantilla o dibujá el alambre.` };
     return { state: "empty", title: "Rig sin preparar", detail: "Importá piezas o colocá un esqueleto." };

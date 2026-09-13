@@ -133,7 +133,14 @@ function dzNodesShow(el) {
   dzNodesClear();
   const info = dzNodesFor(el);
   if (!info) { dzSetStatus("⬦ Ese elemento no tiene nodos editables (probá con un trazado, polígono o línea)"); return; }
-  DZ.nodeEl = el;
+  // LO QUE SE EDITA ES LO QUE ESTÁ SELECCIONADO. Sin esto, editar los puntos de
+  // una forma dejaba la selección en la ANTERIOR: la caja de selección marcaba
+  // una forma y los nodos estaban sobre otra, y todo lo que trabaja sobre la
+  // selección —borrar, color, el inflador cuando no hay nada bajo el cursor—
+  // actuaba sobre la que no era. Mauro lo reportó como «a veces selecciona la
+  // última forma editada aunque esté trabajando sobre otra».
+  if (typeof dzSelect === "function" && DZ.sel !== el) dzSelect(el);
+  DZ.nodeEl = el;   // DESPUES de seleccionar: dzSelect limpia los nodos
   const cv = $("#dzCanvas");
   info.anchors.forEach(a => {
     const n = document.createElement("div");

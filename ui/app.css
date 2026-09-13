@@ -1544,7 +1544,7 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
    redimensionaba la seleccion en vez de bombear, planchar, cortar, deformar,
    inflar, rellenar o tomar el color. Medido: con el trazo seleccionado, la bomba
    se negaba a engrosarlo y encima pedia «acercate mas a una linea» estando
-   justo encima. Para seleccionar y editar por nodos los tiradores siguen vivos,
+   justo encima. Con la flecha negra —seleccionar— los tiradores siguen vivos,
    que es su razon de ser. */
 #dzCanvas[data-tool="handler"] .dz-selbox .dz-sh,
 #dzCanvas[data-tool="iron"] .dz-selbox .dz-sh,
@@ -1552,7 +1552,12 @@ body:not(.light) .dz3d-coords { color: #F4F4F2; }
 #dzCanvas[data-tool="magnet"] .dz-selbox .dz-sh,
 #dzCanvas[data-tool="inflator"] .dz-selbox .dz-sh,
 #dzCanvas[data-tool="bucket"] .dz-selbox .dz-sh,
-#dzCanvas[data-tool="dropper"] .dz-selbox .dz-sh { pointer-events: none; }
+#dzCanvas[data-tool="dropper"] .dz-selbox .dz-sh,
+/* NODOS: desde que editar por puntos deja seleccionado lo que se edita, la caja
+   quedaba ENCIMA del trazado y sus tiradores se comian el clic que agrega un
+   punto —el segundo clic redimensionaba en vez de agregar—. En un editor de
+   nodos no se escala: se editan puntos, como la flecha blanca de Illustrator. */
+#dzCanvas[data-tool="nodes"] .dz-selbox .dz-sh { pointer-events: none; }
 .dz-corner-widget {
   position:absolute; width:8px; height:8px; pointer-events:auto;
   transform:translate(-50%,-50%); border:1px solid var(--cyan); border-radius:50%;

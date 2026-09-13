@@ -18,9 +18,23 @@ async function main() {
     ws.send(JSON.stringify({ id: n, method, params }));
   });
   await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
-  await send("Network.setCacheDisabled", { cacheDisabled: true }); await send("Page.navigate", { url: pageUrl });
-  for (let i = 0; i < 60; i++) { const ready = await send("Runtime.evaluate", { expression: 'typeof dzDocumentTabActivate==="function" && !!api', returnByValue: true });
-    if (ready.result?.value) break; await new Promise(resolve => setTimeout(resolve, 250)); }
+  await send("Network.setCacheDisabled", { cacheDisabled: true });
+  // VIEWPORT FIJO: el riel reparte herramientas segun el alto REAL de la
+  // ventana. Sin fijarlo, la misma prueba dice que el cuentagotas y la pluma
+  // "desaparecieron" segun con que tamano haya arrancado el navegador.
+  await send("Emulation.setDeviceMetricsOverride", { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
+  await send("Page.navigate", { url: pageUrl });
+  const esperarApp = async () => { for (let i = 0; i < 60; i++) {
+    const ready = await send("Runtime.evaluate", { expression: 'typeof dzDocumentTabActivate==="function" && !!api', returnByValue: true });
+    if (ready.result?.value) return; await new Promise(resolve => setTimeout(resolve, 250)); } };
+  await esperarApp();
+  // AISLAMIENTO: los recorridos comparten el navegador y por lo tanto el
+  // localStorage. El riel de herramientas RECUERDA lo que el usuario mando al
+  // cajon, asi que un recorrido anterior que lo tocara dejaba a este acusando
+  // que el cuentagotas y la pluma "desaparecieron" del riel. Se arranca limpio.
+  await send("Runtime.evaluate", { expression: 'try{localStorage.clear()}catch(e){}' });
+  await send("Page.navigate", { url: pageUrl });
+  await esperarApp();
   const expression = `(async()=>{
     await openDesign("C:\\mock\\personaje-a.svg");
     const first=DZ.activeDocumentTab,svg=document.querySelector('#dzCanvas > svg');
