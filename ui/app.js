@@ -127,6 +127,7 @@ window.addEventListener("unhandledrejection", e => {
 Object.assign((window.LOW = window.LOW || {}), {
   onPy(m) {
     try {
+      window.LOW.Workbench?.event(m);
       if (m.event === "propose") propose(m.data.code);
       if (m.event === "status") setStatus(m.data);
       if (m.event === "sys") { sysMsg(m.data); persist("system", m.data); }
@@ -445,7 +446,7 @@ function applyState(st) {
 
 function updApis(st) {
   const n = st.apis;
-  $("#apiTxt").textContent = `${n} API${n === 1 ? "" : "s"} conectada${n === 1 ? "" : "s"}`;
+  $("#apiTxt").textContent = `${n} clave${n === 1 ? "" : "s"} API guardada${n === 1 ? "" : "s"}`;
   $("#apiDot").classList.toggle("off", !n);
   const p = S.providers.find(x => x.name === providerName($("#selProv").value));
   const ok = p && (p.has_key || p.name === "custom");
@@ -1804,15 +1805,17 @@ async function send() {
   persist("user", msg || "(imagen adjunta)", sid);
   clearAttachedImage();
   const p = S.providers.find(x => x.name === $("#selProv").value);
-  if (!p || (!p.has_key && p.name !== "custom")) {
+  if (!p || (!p.has_key && p.name !== "custom" && !p.name.startsWith("custom_"))) {
     agentMsg("Configura la API key () para empezar");
     return;
   }
   startThinking();
   setBusy(true);
+  window.LOW.Workbench?.start();
   S.plan = null;
   try {
     const r = await api.send_chat(msg, cm.getValue(), effectiveLang(), img);
+    window.LOW.Workbench?.finish(!!r?.error);
     stopThinking();
     planDone();
     // si vino por streaming, la burbuja ya se armó con los eventos agent_*
@@ -1825,6 +1828,7 @@ async function send() {
     S.streamEl = null; S.thinkEl = null;
     agentMsg(" Falló la llamada: " + (e.message || e));
     reportErr("send_chat: " + (e.message || e));
+    window.LOW.Workbench?.finish(true);
     setStatus("Error");
   } finally {
     setBusy(false);
@@ -2181,10 +2185,7 @@ async function compare(models, task, expected) {
 
 /* ── config de APIs ── */
 function modalKeys() {
-  const rows = S.providers.map(p =>
-    `<div class="krow"><label>${p.name}</label>` +
-    `<input type="password" value="${(p.key || "").replace(/"/g, "&quot;")}" data-p="${p.name}" spellcheck="false">` +
-    `<input type="text" value="${(p.base_url || "").replace(/"/g, "&quot;")}" data-base-p="${p.name}" spellcheck="false" placeholder="Base URL opcional"></div>`).join("");
+  const rows = window.LOW.ProviderSettings.render(S.providers);
   openModal(`
     <h2>API Keys</h2>
     <div class="sub" id="cfgPath"></div>
@@ -2225,6 +2226,7 @@ function modalKeys() {
       <button class="primary" id="mSave">Guardar</button>
     </div>`);
   api.config_path().then(p => { $("#cfgPath").textContent = "Se guardan en " + p; });
+  window.LOW.ProviderSettings.bind(name => api.check_provider(name));
   renderSocialCfg(true);
   $("#sysP").value = S.sysPrompt || "";
   $("#sysP").placeholder = S.defaultSp || "";
@@ -2235,15 +2237,9 @@ function modalKeys() {
   $("#agDesign").checked = S.agent.verify_design === true;     // default: apagado (opt-in)
   $("#mCancel").onclick = closeModal;
   $("#mSave").onclick = async () => {
-    const keys = {};
-    document.querySelectorAll('#modal input[type="password"]').forEach(i => {
-      keys[i.dataset.p] = { api_key: i.value.trim(), base_url: "" };
-    });
-    document.querySelectorAll('#modal input[data-base-p]').forEach(i => {
-      const p = i.dataset.baseP;
-      keys[p] = keys[p] || { api_key: "", base_url: "" };
-      keys[p].base_url = i.value.trim();
-    });
+    let keys;
+    try { keys = window.LOW.ProviderSettings.collect(); }
+    catch (error) { alert(error.message); return; }
     S.sysPrompt = $("#sysP").value.trim();
     await api.save_system_prompt(S.sysPrompt);
     const bj = $("#brandJson").value.trim();

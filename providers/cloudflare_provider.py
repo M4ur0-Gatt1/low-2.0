@@ -12,7 +12,7 @@ from providers.base import OpenAICompatProvider
 
 
 class CloudflareProvider(OpenAICompatProvider):
-    BASE_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run"
+    BASE_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
     MODELS = [
         "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
         "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
@@ -31,9 +31,14 @@ class CloudflareProvider(OpenAICompatProvider):
         account_id = kwargs.pop("account_id", "")
         base_url = kwargs.pop("base_url", "")
         if not base_url and account_id:
-            base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run"
+            base_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
         elif not base_url:
             base_url = self.BASE_URL
+        base_url = base_url.replace("{account_id}", account_id)
+        if base_url.rstrip("/").endswith("/ai/run"):
+            base_url = base_url.rstrip("/")[:-len("/run")] + "/v1"
+        if not account_id and ("/accounts//" in base_url or "{account_id}" in base_url):
+            raise ValueError("Cloudflare necesita account_id o una Base URL completa")
         super().__init__(api_key=api_key, base_url=base_url, **kwargs)
 
     @staticmethod

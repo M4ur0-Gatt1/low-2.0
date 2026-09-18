@@ -73,8 +73,9 @@ def _msgs_to_anthropic(messages):
 class AnthropicProvider(AIProvider):
 
     def __init__(self, api_key: str = None, **kwargs):
+        base_url = (kwargs.pop("base_url", "") or "https://api.anthropic.com/v1").rstrip("/")
         super().__init__(api_key=api_key,
-                         model=kwargs.pop("model", None) or self.default_model(), **kwargs)
+                         base_url=base_url, model=kwargs.pop("model", None) or self.default_model(), **kwargs)
 
     @staticmethod
     def provider_name(): return "Anthropic"
@@ -92,7 +93,7 @@ class AnthropicProvider(AIProvider):
         resp = None
         for attempt in range(3):
             resp = requests.post(
-                "https://api.anthropic.com/v1/messages",
+                self.base_url + "/messages",
                 headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01",
                          "Content-Type": "application/json"},
                 json=body, timeout=120)
@@ -118,5 +119,15 @@ class AnthropicProvider(AIProvider):
                           cost=calc_cost(self.model, inp, out), raw=raw)
 
     def list_models(self):
+        if self.api_key:
+            try:
+                response = requests.get(self.base_url + "/models", headers={
+                    "x-api-key": self.api_key, "anthropic-version": "2023-06-01"}, timeout=8)
+                response.raise_for_status()
+                models = [item["id"] for item in response.json().get("data", [])]
+                if models:
+                    return models
+            except (requests.RequestException, ValueError, KeyError):
+                pass
         return ["claude-sonnet-4-5", "claude-opus-4-1",
                 "claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"]

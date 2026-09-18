@@ -26,8 +26,10 @@ from providers.together_provider import TogetherProvider
 from providers.fireworks_provider import FireworksProvider
 from providers.cerebras_provider import CerebrasProvider
 from providers.cloudflare_provider import CloudflareProvider
+from providers.media_gateway import HiggsfieldProvider, ReplicateMediaProvider
 
 PROVIDERS = {
+    "higgsfield": HiggsfieldProvider, "replicate": ReplicateMediaProvider,
     "groq": GroqProvider, "openai": OpenAIProvider, "anthropic": AnthropicProvider,
     "deepseek": DeepSeekProvider, "qwen": QwenProvider, "glm": GLMProvider,
     "xai": XAIProvider, "nvidia": NVIDIAProvider, "siliconflow": SiliconFlowProvider,
@@ -42,7 +44,12 @@ PROVIDERS = {
 }
 
 def get_provider(name, api_key=None, **kwargs):
-    cls = PROVIDERS.get(name)
+    cls = PROVIDERS.get(name) or (CustomProvider if is_custom_provider(name) else None)
     if not cls:
         raise ValueError(f"Provider '{name}' not found. Available: {list(PROVIDERS.keys())}")
     return cls(api_key=api_key, **kwargs)
+
+
+def is_custom_provider(name):
+    import re
+    return isinstance(name, str) and bool(re.fullmatch(r"custom_[a-z0-9_]{1,48}", name))

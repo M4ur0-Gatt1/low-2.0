@@ -29,7 +29,9 @@ import webview
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import Config, data_dir
-from providers import get_provider, PROVIDERS
+from providers import get_provider, PROVIDERS, is_custom_provider
+from providers.media_gateway import generate as generate_media
+from code_runner.agent_plan import TOOL as PLAN_TOOL, validate as validate_plan
 from code_runner import CodeRunner
 try:
     from low_anim import AnimationAPI
@@ -49,7 +51,7 @@ ASSET_EXT = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 LANG_BY_EXT = {".py": "python", ".js": "javascript", ".ts": "javascript",
                ".sh": "bash", ".ps1": "powershell"}
 
-LOW_VERSION = "4.42.2"
+LOW_VERSION = "4.43.0"
 # El puerto desde el que se sirve la interfaz. FIJO a propósito: `localStorage`
 # es por origen, y con un puerto al azar en cada arranque LOW estrenaba
 # almacenamiento vacío cada vez —se perdían el rescate ante caída, los pinceles
@@ -929,6 +931,8 @@ class Api:
         bu = s.cfg.data.get("providers", {}).get(n, {}).get("base_url", "")
         if bu:
             kw["base_url"] = bu
+        if n == "cloudflare":
+            kw["account_id"] = s.cfg.data.get("providers", {}).get(n, {}).get("account_id", "")
         try:
             s.prov = get_provider(n, api_key=s.cfg.get_api_key(n), **kw)
         except Exception as e:
@@ -941,6 +945,8 @@ class Api:
             bu = s.cfg.data.get("providers", {}).get(name, {}).get("base_url", "")
             if bu:
                 kw["base_url"] = bu
+            if name == "cloudflare":
+                kw["account_id"] = s.cfg.data.get("providers", {}).get(name, {}).get("account_id", "")
             return get_provider(name, api_key=s.cfg.get_api_key(name) or "x", **kw).list_models()
         except Exception as e:
             log(f"Error obteniendo modelos para {name}: {e}")
@@ -953,6 +959,10 @@ class Api:
             "providers": [{"name": k, "has_key": bool(d.get("api_key")),
                            "key": d.get("api_key", ""), "model": d.get("model", ""),
                            "base_url": d.get("base_url", ""),
+                           "account_id": d.get("account_id", ""),
+                           "image_model": d.get("image_model", ""),
+                           "video_params": d.get("video_params", {}),
+                           "image_params": d.get("image_params", {}),
                            "media_only": k in s.MEDIA_ONLY}
                           for k, d in provs.items()],
         }
@@ -2241,7 +2251,7 @@ class Api:
 
     def save_keys(s, keys):
         for p, v in (keys or {}).items():
-            if p not in PROVIDERS:
+            if p not in PROVIDERS and not is_custom_provider(p):
                 log(f"save_keys ignora provider desconocido: {p!r}")
                 continue
             if isinstance(v, dict):
@@ -2249,11 +2259,44 @@ class Api:
                     s.cfg.data.setdefault("providers", {}).setdefault(p, {})["api_key"] = (v.get("api_key") or "").strip()
                 if "base_url" in v:
                     s.cfg.data.setdefault("providers", {}).setdefault(p, {})["base_url"] = (v.get("base_url") or "").strip()
+                for field in ("model", "image_model", "account_id"):
+                    if field in v and isinstance(v[field], str):
+                        s.cfg.data.setdefault("providers", {}).setdefault(p, {})[field] = v[field].strip()
+                for field in ("video_params", "image_params"):
+                    if field in v and isinstance(v[field], dict):
+                        s.cfg.data.setdefault("providers", {}).setdefault(p, {})[field] = v[field]
                 s.cfg.save()
             else:
                 s.cfg.set_api_key(p, v)
         s._initp()
-        return s._apis_state()
+        active = s.cfg.get_active_provider()
+        model = s.cfg.get_model(active)
+        return {**s._apis_state(), "provider": active, "model": model,
+                "models": [model] if model else []}
+
+    def check_provider(s, name):
+        """Read the real catalog, never a static fallback or another provider."""
+        if name not in s.cfg.data.get("providers", {}):
+            return {"status": "unverified", "message": "Guardá primero la configuración del proveedor."}
+        if name in s.MEDIA_ONLY:
+            return {"status": "unverified", "message": "La conexión de medios se verifica al generar; esta comprobación no genera contenido."}
+        try:
+            provider = s._mk_provider(name)
+            headers = {"Authorization": f"Bearer {provider.api_key or 'na'}"}
+            if name == "anthropic":
+                headers = {"x-api-key": provider.api_key or "", "anthropic-version": "2023-06-01"}
+            response = requests.get(provider.base_url.rstrip("/") + "/models",
+                                    headers=headers, timeout=(5, 10), allow_redirects=False)
+            if response.status_code != 200:
+                return {"status": "error", "message": f"HTTP {response.status_code}: no se pudo verificar el catálogo. Algunos servicios no ofrecen /models."}
+            models = [item["id"] for item in response.json().get("data", []) if isinstance(item, dict) and isinstance(item.get("id"), str)]
+            available = provider.model in models
+            return {"status": "catalog_ok", "models": models,
+                    "message": f"Catálogo accesible: {len(models)} modelos. " +
+                    ("Modelo elegido presente." if available else "El modelo elegido no aparece; elegí uno del catálogo.") +
+                    " Esto no verifica saldo ni generación."}
+        except Exception as error:
+            return {"status": "error", "message": "No se pudo conectar: " + type(error).__name__}
 
     # ── workspace / archivos ──────────────────────────────
     def _git_branch(s):
@@ -2501,7 +2544,7 @@ class Api:
     # lentos como glm-5.2 al saltar: queremos que responda YA, no que piense 40s)
     # proveedores que NO son de chat (solo medios): nunca entran en la cadena
     # de failover ni se ofrecen como modelo del agente
-    MEDIA_ONLY = {"ltx", "fal"}
+    MEDIA_ONLY = {"ltx", "fal", "higgsfield", "replicate"}
 
     FAST_MODEL = {
         "groq": "openai/gpt-oss-120b",
@@ -2557,7 +2600,7 @@ class Api:
                 # para que el error sea claro ("Ollama no responde").
                 if not ollama_up and i != 0:
                     continue
-            elif not d.get("api_key"):
+            elif not d.get("api_key") and not (i == 0 and is_custom_provider(name)):
                 continue
             if i == 0:
                 model = d.get("model") or None            # respeta la elección del usuario
@@ -2565,7 +2608,7 @@ class Api:
                 # Ollama local: usar un modelo REALMENTE instalado (detectado)
                 model = (s._ollama[0] if s._ollama else None) or d.get("model") or None
             else:
-                model = s.FAST_MODEL.get(name) or d.get("model") or None
+                model = d.get("model") or s.FAST_MODEL.get(name) or None
             chain.append((name, model))
         return chain
 
@@ -2574,6 +2617,8 @@ class Api:
         kw = {"model": model or d.get("model") or None}
         if d.get("base_url"):
             kw["base_url"] = d["base_url"]
+        if name == "cloudflare":
+            kw["account_id"] = d.get("account_id", "")
         return get_provider(name, api_key=d.get("api_key", ""), **kw)
 
     def _ask_model(s, provider, prompt, model="", image=""):
@@ -3086,6 +3131,7 @@ class Api:
     # ── agente ────────────────────────────────────────────
     def _get_tools(s):
         return [
+            PLAN_TOOL,
             {"type": "function", "function": {"name": "read_file", "description": "Lee un archivo (ruta relativa al workspace O absoluta). Para archivos grandes leelo por partes con start_line y max_lines; si la salida avisa que hay mas, segui desde el start_line que indica.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "start_line": {"type": "integer", "description": "linea inicial, 1 = principio"}, "max_lines": {"type": "integer", "description": "cuantas lineas leer; 0 = hasta el final o el tope"}}, "required": ["path"]}}},
             {"type": "function", "function": {"name": "write_file", "description": "Escribe archivo COMPLETO (crea o reemplaza todo el contenido). Para archivos existentes grandes preferi edit_file.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
             {"type": "function", "function": {"name": "edit_file", "description": "Reemplaza un fragmento de un archivo existente sin reescribir el resto (PREFERILO sobre write_file en archivos que ya existen). old_text tiene que identificar UNA SOLA parte del archivo; copialo de un read_file previo — la indentación exacta ayuda pero se tolera alguna diferencia de espacios. Para varios cambios en el mismo archivo, mandá edits:[{old_text,new_text},...] en UNA sola llamada en vez de muchas. Si da ' No encontré ese texto', te devuelve las líneas reales del archivo: copiá el old_text de ahí, no reintentes a ciegas.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "old_text": {"type": "string"}, "new_text": {"type": "string"}, "edits": {"type": "array", "description": "opcional: varios reemplazos en este archivo, cada uno {old_text,new_text}", "items": {"type": "object", "properties": {"old_text": {"type": "string"}, "new_text": {"type": "string"}}}}}, "required": ["path"]}}},
@@ -3263,6 +3309,10 @@ class Api:
 
     def _exec_tool(s, name, args, code, lang):
         try:
+            if name == "update_plan":
+                steps = validate_plan(args.get("steps"))
+                s._push("agent_plan", {"steps": steps})
+                return "Plan actualizado en la interfaz"
             if name == "read_file":
                 rel = s._arg_path(args)
                 if not rel:
@@ -3989,11 +4039,28 @@ class Api:
                 pass
         return s._fal_run(model, body, "image")
 
+    def _gateway_media(s, provider, kind, prompt):
+        try:
+            data = generate_media(provider, s.cfg.data["providers"][provider], kind, prompt,
+                                  cancelled=lambda: bool(s._cancel),
+                                  progress=lambda message: s._push("sys", message))
+            return data, provider, None
+        except Exception as exc:
+            # Keys, request bodies and signed download URLs never enter logs.
+            message = str(exc) if isinstance(exc, (ValueError, RuntimeError)) else type(exc).__name__
+            return None, None, f"{provider}: {message}"
+
     def _gen_video_any(s, prompt, image_path=None):
         """Despachador de video: fal.ai (Seedance, universal) primero si hay key;
         luego LTX (rápido, con audio) y por último Wan en SiliconFlow. Devuelve
         (bytes, proveedor_usado, error)."""
         errs = []
+        # Explicitly configured gateways take precedence. Do not silently submit
+        # another paid request after a timeout or moderation rejection.
+        for gateway in ("higgsfield", "replicate"):
+            cfg = s.cfg.data.get("providers", {}).get(gateway, {})
+            if cfg.get("api_key") and cfg.get("model") and not image_path:
+                return s._gateway_media(gateway, "video", prompt)
         if s.cfg.get_api_key("fal"):
             data, err = s._fal_video(prompt, image_path=image_path)
             if data:
@@ -4088,6 +4155,10 @@ class Api:
         """Genera una imagen con la primera API disponible: OpenAI (dall-e-3)
         y si no hay key, SiliconFlow (con fallback dinámico al catálogo en vivo).
         Devuelve (bytes, proveedor_usado, error) — uno de (bytes, error) es no-None."""
+        for gateway in ("higgsfield", "replicate"):
+            cfg = s.cfg.data.get("providers", {}).get(gateway, {})
+            if cfg.get("api_key") and cfg.get("image_model"):
+                return s._gateway_media(gateway, "image", prompt)
         err_fal = err_openai = err_sf = None
         # fal.ai primero si hay key (universal: Flux/Seedream/etc.)
         if s.cfg.get_api_key("fal"):
@@ -5012,6 +5083,7 @@ class Api:
                                    "este turno — el resultado va a ser igual. No la repitas: "
                                    "cambia de enfoque o responde con lo que ya tenes.")
                         else:
+                            s._push("tool_start", {"name": fn})
                             res = s._exec_tool(fn, args, code, lang)
                             ran_any = True
                         # avance REAL = la tool no devolvió error. Un  (típico:
@@ -5041,7 +5113,7 @@ class Api:
                                        "edit_file. Si igual no entra, reescribí el archivo con "
                                        "write_file (contenido completo)."})
                         # Enviar detalles más específicos de la herramienta
-                        tool_info = {"name": fn, "res": str(res)[:150]}
+                        tool_info = {"name": fn, "res": str(res)[:150], "error": bool(err)}
                         if fn in ("write_file", "edit_file", "read_file") and "path" in args:
                             tool_info["file"] = args["path"]
                         s._push("tool", tool_info)
@@ -5245,10 +5317,7 @@ class Api:
                    "tokens": 0, "costo": 0.0, "sintaxis": False, "corre": False,
                    "salida_ok": None, "detalle": "", "icon": ""}
             try:
-                kw = {"model": provs[pn].get("model", "") or None}
-                if provs[pn].get("base_url"):
-                    kw["base_url"] = provs[pn]["base_url"]
-                p = get_provider(pn, api_key=provs[pn].get("api_key", ""), **kw)
+                p = s._mk_provider(pn)
                 t0 = time.time()
                 r = p.chat([{"role": "user", "content": task +
                              "\nResponde UNICAMENTE con un bloque de codigo Python completo."}],

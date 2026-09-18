@@ -51,6 +51,7 @@ jobs:
           node tools/run_collab_transport_tests.js
       - name: Puentes de guardado e importación
         run: |
+          python tools/check_provider_contracts.py
           python tools/check_multiplane_backend.py
           python tools/check_asset_import_backend.py
           python tools/check_relay_server.py
@@ -93,6 +94,7 @@ jobs:
             cat /tmp/low-chrome.log
             exit 1
           fi
+          node tools/check_provider_workbench_ui.js
           node tools/check_rig_skeleton_ui.js
           node tools/check_rig_ik_ui.js
           node tools/check_coloring_ui.js

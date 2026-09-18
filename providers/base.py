@@ -92,6 +92,7 @@ class OpenAICompatProvider(AIProvider):
         base_url = kwargs.pop("base_url", "") or self.BASE_URL
         super().__init__(api_key=api_key, base_url=base_url,
                          model=kwargs.pop("model", None) or self.default_model(), **kwargs)
+        self.base_url = self.base_url.rstrip("/")
         self.t = Transport(self.base_url, api_key or "na")
 
     @staticmethod

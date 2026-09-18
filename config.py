@@ -5,6 +5,7 @@ Windows %APPDATA%/LOW · macOS ~/Library/Application Support/LOW ·
 Linux ~/.config/LOW.
 """
 import json
+import copy
 import os
 import sys
 from pathlib import Path
@@ -62,6 +63,11 @@ DEFAULT_CONFIG = {
     # [{"name": "yungas", "user": "root", "host": "1.2.3.4", "port": "", "key": ""}]
     "ssh_hosts": [],
     "providers": {
+        "higgsfield": {"api_key": "", "model": "bytedance/seedance-2.0/text-to-video",
+                      "image_model": "higgsfield-ai/soul/v2/standard", "base_url": "",
+                      "video_params": {}, "image_params": {}},
+        "replicate": {"api_key": "", "model": "", "image_model": "black-forest-labs/flux-schnell",
+                      "base_url": "", "video_params": {}, "image_params": {}},
         "deepseek": {"api_key": "", "model": "deepseek-chat", "base_url": ""},
         "nvidia": {"api_key": "", "model": "meta/llama-3.3-70b-instruct", "base_url": ""},
         "groq": {"api_key": "", "model": "llama-3.3-70b-versatile", "base_url": ""},
@@ -77,7 +83,7 @@ DEFAULT_CONFIG = {
         "kimi": {"api_key": "", "model": "kimi-k3", "base_url": ""},
         # Perplexity — multi-provider con búsqueda web integrada y citas
         # Key: https://console.perplexity.ai/group/keys
-        "perplexity": {"api_key": "", "model": "sonar-medium-online", "base_url": ""},
+        "perplexity": {"api_key": "", "model": "sonar", "base_url": ""},
         # Agnes AI — OpenAI-compatible (https://platform.agnes-ai.com)
         # Key: https://platform.agnes-ai.com/settings/apiKeys
         "agnes": {"api_key": "", "model": "gpt-4o", "base_url": "https://api.agnes-ai.com/api/v1"},
@@ -144,12 +150,13 @@ class Config:
             # utf-8-sig tolera BOM (editores/PowerShell suelen agregarlo)
             with open(self.path, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
-            merged = DEFAULT_CONFIG.copy()
+            merged = copy.deepcopy(DEFAULT_CONFIG)
             merged.update(data)
             # providers se mergea por clave: un config.json viejo no debe
             # ocultar providers agregados después en DEFAULT_CONFIG
-            merged["providers"] = {**DEFAULT_CONFIG["providers"],
-                                   **data.get("providers", {})}
+            merged["providers"] = {
+                key: {**DEFAULT_CONFIG["providers"].get(key, {}), **value}
+                for key, value in {**copy.deepcopy(DEFAULT_CONFIG["providers"]), **data.get("providers", {})}.items()}
             if self._migrate(merged):
                 try:
                     with open(self.path, "w", encoding="utf-8") as f:
@@ -157,10 +164,11 @@ class Config:
                 except OSError:
                     pass
             return merged
-        return DEFAULT_CONFIG.copy()
+        return copy.deepcopy(DEFAULT_CONFIG)
 
     # endpoints viejos que quedaron guardados en config.json y hay que corregir
     _OBSOLETE_BASE_URLS = {
+        "perplexity": ({"https://api.perplexity.ai/v1"}, "https://api.perplexity.ai"),
         "digitalocean": ({"https://api.paperspace.io/v1",
                           "https://gateway.digitalocean.ai/v1",
                           "https://api.paperspace.io", ""},
@@ -179,6 +187,7 @@ class Config:
     # reescriben a un modelo ABIERTO que sí funciona. OJO: NO incluimos
     # 'llama3.3-70b-instruct' acá porque ES un ID válido y abierto que anda.
     _OBSOLETE_MODELS = {
+        "perplexity": ({"sonar-medium-online", "sonar-small-online", "sonar-medium-chat", "sonar-small-chat"}, "sonar"),
         "digitalocean": ({"llama-3.3-70b-instruct", "llama-3.1-8b-instruct",
                           "mixtral-8x7b-instruct", "openai-gpt-4o-mini",
                           "openai-gpt-4o"},
@@ -194,7 +203,8 @@ class Config:
         # Configs viejos de la UI llegaron a guardar claves como "undefined".
         # Si quedan, confunden el conteo de APIs y el failover.
         for name in list(provs.keys()):
-            if name not in DEFAULT_CONFIG["providers"]:
+            from providers import is_custom_provider
+            if name not in DEFAULT_CONFIG["providers"] and not is_custom_provider(name):
                 provs.pop(name, None)
                 changed = True
         for name, (olds, new) in self._OBSOLETE_BASE_URLS.items():
