@@ -138,6 +138,7 @@ jobs:
           node tools/check_export_premiere_ui.js
           node tools/check_escala_contorno_ui.js
           node tools/check_herramientas_vector_ui.js
+          node tools/check_inspector_corners_ui.js
           node tools/check_taller_vector_ui.js
           node tools/check_rig_flujo_ui.js
           node tools/check_riel_herramientas_ui.js

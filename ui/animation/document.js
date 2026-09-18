@@ -86,11 +86,18 @@
     }
 
     /** Registra un cambio de CONTENIDO de un dibujo. */
-    _histDrawing(label, levelId, number, antes, despues) {
+    _histDrawing(label, levelId, number, antes, despues, coalesce = null) {
       if (!this.history || antes === despues) return;
       const doc = this;
+      const drawing = this.scene.level(levelId)?.byNumber(number);
+      if (coalesce && coalesce.drawingTarget === drawing &&
+          this.history.undoStack.at(-1) === coalesce && !this.history.redoStack.length) {
+        coalesce.after = despues;
+        this.history.emit();
+        return;
+      }
       this.history.push({
-        label, domain: "anim", before: antes, after: despues,
+        label, domain: "anim", before: antes, after: despues, drawingTarget: drawing,
         apply: (_dir, valor) => {
           const lv = doc.scene.level(levelId);
           const d = lv && lv.byNumber(number);
@@ -344,7 +351,7 @@
       return lv.byNumber(num);
     }
     /** Guarda el contenido dibujado en el dibujo actual. */
-    writeDrawing(contenido) {
+    writeDrawing(contenido, { label = "Dibujar", coalesce = null } = {}) {
       const lyAntes = this.layer ? this.layer.cells.slice() : null;
       const habia = this.cell != null;
       const d = this.ensureDrawing();
@@ -356,7 +363,7 @@
       // si la celda estaba vacía, el dibujo se acaba de crear: eso también
       // tiene que poder deshacerse
       if (!habia && lyAntes) this._histCells("Dibujar en un frame vacío", this.layerId, lyAntes);
-      this._histDrawing("Dibujar", this.layer && this.layer.levelId, d.number, antes, d.content);
+      this._histDrawing(label, this.layer && this.layer.levelId, d.number, antes, d.content, coalesce);
       return true;
     }
     /** Expone un número de dibujo en la celda (escribirlo en la xsheet). */

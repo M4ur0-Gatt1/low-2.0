@@ -619,6 +619,17 @@ el sentido que pide esta biblia.
 
 ## 14. Definición de terminado
 
+Avance del 2026-09-18 — inspector y esquinas (§3/§5/§12): se reprodujeron y
+corrigieron el Undo creado sólo por enfocar una propiedad, los campos que no
+notificaban el guardado y el arrastre de esquina que se confirmaba al cancelar.
+Los cambios ahora entran por `LowDoc.writeDrawing`, agrupados por intención;
+la previsualización se descarta antes de cambiar de cuadro o guardar la escena.
+`check_inspector_corners_ui` verifica interacción, cancelación, Undo/Redo,
+radio exacto y reapertura con puente simulado. `dzWire` salió de `app.js` hacia
+el módulo del inspector: el archivo principal baja de 17.117 a 17.075 líneas.
+Esto no cierra §14: falta probar tableta, ejecutable empaquetado y el recorrido
+completo de alineación/distribución del inspector.
+
 Una tarea está terminada solamente cuando:
 
 - cumple una necesidad concreta del artista;

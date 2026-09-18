@@ -672,7 +672,6 @@ $("#dzDiscBtn").onclick = () => dzDiscToggle();
   $("#dzColor").onclick = dzColorize;
   $("#dzBg").onclick = dzGenBg;
   $("#dzVec").onclick = dzVectorize;
-  $("#dzProps").addEventListener("focusin", () => dzSnapshot());
   $("#dzCanvas").addEventListener("pointerdown", dzDrawDown);
   $("#dzCanvas").addEventListener("pointermove", dzDrawMove);
   $("#dzCanvas").addEventListener("pointerup", dzDrawUp);
@@ -16227,6 +16226,7 @@ function dzCanvasSet(contenido) {
 /** Guarda lo que hay en el lienzo dentro del dibujo actual del documento. */
 function dzDocCommit() {
   if (!DZ.doc) return;
+  if (DZPointerController?.owns('vector:corners')) DZPointerController.cancel('document-commit');
   DZ.doc.writeDrawing(dzCanvasInner());
 }
 
@@ -16906,48 +16906,6 @@ function dzSet(el, attr, val) {
   if (val === "" || val == null) el.removeAttribute(attr);
   else el.setAttribute(attr, val);
 }
-function dzWire(el, isText) {
-  const on = (id, fn) => { const e = $("#" + id); if (e) e.addEventListener("input", fn); };
-  on("dzFill", e => { dzSet(el, "fill", e.target.value); const c = $("#dzFillC"); if (c) c.value = dzHex(e.target.value); });
-  on("dzFillC", e => { dzSet(el, "fill", e.target.value); $("#dzFill").value = e.target.value; });
-  on("dzStroke", e => { dzSet(el, "stroke", e.target.value); const c = $("#dzStrokeC"); if (c) c.value = dzHex(e.target.value); });
-  on("dzStrokeC", e => { dzSet(el, "stroke", e.target.value); $("#dzStroke").value = e.target.value; });
-  on("dzSW", e => dzSet(el, "stroke-width", e.target.value));
-  on("dzOp", e => dzSet(el, "opacity", e.target.value));
-  on("dzZ", e => dzSet(el, "data-z", e.target.value));
-  on("dzX", e => dzSet(el, "x", e.target.value));
-  on("dzY", e => dzSet(el, "y", e.target.value));
-  on("dzCX", e => dzSet(el, "cx", e.target.value));
-  on("dzCY", e => dzSet(el, "cy", e.target.value));
-  on("dzW", e => dzSet(el, "width", e.target.value));
-  on("dzH", e => dzSet(el, "height", e.target.value));
-  on("dzX1", e => dzSet(el, "x1", e.target.value));
-  on("dzY1", e => dzSet(el, "y1", e.target.value));
-  on("dzX2", e => dzSet(el, "x2", e.target.value));
-  on("dzY2", e => dzSet(el, "y2", e.target.value));
-  document.querySelectorAll("#dzProps .dz-al").forEach(b => b.onclick = () => {
-    if (b.dataset.al) dzAlign(b.dataset.al);
-    else if (b.dataset.flip) dzFlip(b.dataset.flip);
-    else if (b.dataset.alsel) dzAlignSel(b.dataset.alsel);
-    else if (b.dataset.dist) dzDistribute(b.dataset.dist);
-    else if (b.dataset.anchor) { dzSnapshot(); dzSet(el, "text-anchor", b.dataset.anchor); dzBuildInspector(el); dzMarkDirty(); }
-    else if (b.dataset.italic) { dzSnapshot();
-      dzSet(el, "font-style", dzGet(el, "font-style", "") === "italic" ? "" : "italic");
-      dzBuildInspector(el); dzMarkDirty(); }
-  });
-  if (isText) {
-    on("dzText", e => { el.textContent = e.target.value; });
-    on("dzFont", e => dzSet(el, "font-family", e.target.value));
-    on("dzFS", e => dzSet(el, "font-size", e.target.value));
-    on("dzFW", e => dzSet(el, "font-weight", e.target.value));
-    document.querySelectorAll("#dzProps .dz-chip").forEach(ch => ch.onclick = () => {
-      const pair = DZ_PAIRS[+ch.dataset.pair];
-      dzSet(el, "font-family", pair[0]);
-      const sel = $("#dzFont"); if (sel) sel.value = DZ_FONTS.includes(pair[0]) ? pair[0] : sel.value;
-    });
-  }
-}
-
 // normaliza un color SVG (nombre/hex/rgb) a #rrggbb para el <input type=color>
 function dzHex(c) {
   c = (c || "").trim();

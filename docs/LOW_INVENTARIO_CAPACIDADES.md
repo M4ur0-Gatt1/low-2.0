@@ -102,7 +102,7 @@ lo prueba.
 | Texto en la hoja | sí | sí | sí | sí | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
 | Bomba de grosor sobre los tres tipos de trazo | sí | sí | sí | sí | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
 | Ayuda al pasar el puntero por la barra | sí | — | — | — | `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
-| Editor de esquinas e inspector de elemento | sí | sí | sí | sí | ninguna | **sin verificar** — trabajo de Codex, sin recorrido propio |
+| Editor de esquinas e inspector de elemento | sí | sí | sí | sí | `check_inspector_corners_ui` | **parcial** — propiedades y esquinas verificadas en Chromium; falta tableta/binario y recorrido completo del inspector |
 | Edición vectorial por nodos | sí | sí | sí | sí | `check_vector_nodes_ui`, `check_herramientas_vector_ui` | **funcional** (v4.39.0) |
 | Herramientas de vector: agregar punto, inflador, imán | sí | sí | sí | sí | `check_herramientas_vector_ui` | **funcional** (v4.39.0) |
 | Puntería de la selección y overlays | sí | — | — | — | `check_hit_test_ui`, `check_camara_encuadre_ui`, `check_drawing_workflow_ui` | **funcional** (v4.34.0) |
@@ -144,6 +144,9 @@ lo prueba.
   exportación corta dejaba los cuadros de la toma anterior en la carpeta. Los
   tres eran de los que se notan al final del trabajo, que es cuando ya no se
   puede revisar.
-- Lo que sigue sin prueba propia: el **editor de esquinas** y el **inspector de
-  elemento** de Codex. La exportación a **Premiere** dejó de ser parcial en
-  v4.37.0.
+- El **editor de esquinas** y los campos del **inspector de elemento** tienen
+  recorrido propio desde el 2026-09-18: foco sin Undo, edición agrupada en el
+  modelo, cancelación del arrastre, radio exacto, Undo/Redo y guardado/reapertura
+  con puente simulado. La revisión de tableta y ejecutable sigue pendiente;
+  esta prueba no cubre todos los comandos de alineación y distribución.
+  La exportación a **Premiere** dejó de ser parcial en v4.37.0.

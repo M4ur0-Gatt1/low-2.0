@@ -21,6 +21,26 @@
     const ok = (nombre, cond, detalle) => res.push({ nombre, ok: !!cond, detalle: detalle || "" });
     const cells = (ly, n) => Array.from({ length: n }, (_, i) => ly.cellAt(i + 1));
 
+    // Inspector: una intención agrupa entradas sólo del mismo dibujo y cima.
+    {
+      const doc = new animation.LowDoc(); doc.writeDrawing('<rect x="0"/>');
+      const h = new LOW.core.HistoryManager(); doc.setHistory(h);
+      doc.writeDrawing('<rect x="1"/>', {label:'Editar propiedad'});
+      const entry = h.undoStack.at(-1);
+      doc.writeDrawing('<rect x="2"/>', {coalesce:entry});
+      ok('propiedad agrupa entradas del mismo dibujo', h.undoStack.length === 1);
+      h.undo(); ok('undo agrupado conserva el inicio', doc.drawing.content === '<rect x="0"/>');
+      h.redo(); ok('redo agrupado conserva el final', doc.drawing.content === '<rect x="2"/>');
+      doc.writeDrawing('<rect x="3"/>');
+      doc.writeDrawing('<rect x="4"/>', {coalesce:entry});
+      ok('no agrupa atravesando otra intención', h.undoStack.length === 3 && entry.after === '<rect x="2"/>');
+      const latest = h.undoStack.at(-1);
+      h.undo(); doc.writeDrawing('<rect x="5"/>', {coalesce:latest});
+      ok('editar tras undo inicia otra rama', h.redoStack.length === 0 && h.undoStack.at(-1) !== latest);
+      doc.goTo(2); doc.writeDrawing('<circle r="1"/>', {coalesce:h.undoStack.at(-1)});
+      ok('otro dibujo no absorbe la intención anterior', doc.scene.level(doc.layer.levelId).byNumber(1).content === '<rect x="5"/>');
+    }
+
     // ── 1. Drawing ≠ Frame: un dibujo expuesto en varios frames es UN dibujo ──
     {
       const sc = new Scene({ fps: 24 });

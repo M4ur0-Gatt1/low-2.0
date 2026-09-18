@@ -16,6 +16,9 @@ tener una comprobación proporcional al riesgo.
 | HIST-01 | Cada comando destructivo publica nombres concretos para Undo y Redo. | Unidad | Automatizado |
 | HIST-02 | Copy/cut/paste desde Xsheet y Timeline ejecutan los mismos comandos y producen el mismo estado. | Modelo/interacción | Automatizado (comando único `shortcuts.cells`) |
 | HIST-03 | Una transacción compuesta se deshace en un solo paso y en orden inverso. | Unidad | Automatizado por HistoryManager |
+| PROP-01 | Enfocar un campo no agrega Undo; editar agrupa entradas de la misma intención, marca dirty y actualiza el Drawing. | Modelo/interacción | Automatizado (`check_inspector_corners_ui`, `run_2d_model_tests`); texto/color/posición y cursiva |
+| CORNER-01 | Arrastrar una esquina con Alt modifica sólo esa esquina; Escape, pointercancel o cambio de herramienta/cuadro restaura geometría y tipo sin agregar Undo. | Interacción | Automatizado (`check_inspector_corners_ui`); clic sin arrastre no convierte el rectángulo |
+| CORNER-02 | Radio exacto y arrastre tienen un solo Undo/Redo; la escena guardada vuelve a pintar la misma geometría al abrir. | Interacción/puente simulado | Automatizado (`check_inspector_corners_ui`); falta tableta y ejecutable empaquetado |
 | RECV-01 | Un checkpoint conserva ruta, contenido, hora y última operación. | Unidad | Automatizado |
 | RECV-02 | Tras cierre inesperado se ofrecen Recover, Discard y Compare sin cargar silenciosamente el archivo. | E2E | Automatizado (`check_save_recovery_ui.js`) |
 | RECV-03 | Descartar una recuperación no modifica el documento guardado ni vuelve a ofrecerla. | Unidad/E2E | Unidad automatizada |
