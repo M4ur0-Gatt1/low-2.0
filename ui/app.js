@@ -545,7 +545,7 @@ function bind() {
   $("#ctabRight").onclick = () => { $("#chatTabs").scrollBy({ left: 160, behavior: "smooth" }); setTimeout(updateChatNav, 260); };
   $("#chatTabs").addEventListener("scroll", updateChatNav);
   window.addEventListener("resize", updateChatNav);
-  window.addEventListener("resize", () => { if (DZ.rigMode) dzRigOverlayRender(); if (DZ.meshPaint) dzMeshOverlayRender(); });
+  dzAlinearSuperposicionesWire();
   $("#abSearch").onclick = () => $("#q").focus();
   $("#abGit").onclick = () => {
     const b = $("#branch").textContent;
