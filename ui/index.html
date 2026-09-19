@@ -749,6 +749,25 @@
             <span id="rigSmartDriver" class="rig2-smart-driver">—</span>
           </div>
         </section>
+        <section class="rig2-section rig2-vistas" data-rig-section="build" aria-label="Giro por vistas dibujadas">
+          <div class="rig2-title"><b>Giro por vistas</b><span id="rigVistasEstado">sin juego de vistas</span></div>
+          <p class="rig2-hint">La cabeza no gira sola: gira porque dibujás el frente, el tres cuartos y el
+             perfil. Acá cada dibujo dice en qué punto del control manda, y el giro se anima con ese control.</p>
+          <select id="rigVistasList" size="3" aria-label="Vistas del juego"></select>
+          <div class="rig2-vistas-acciones">
+            <button id="rigVistasNew" title="Crear el juego de vistas del slot elegido, conducido por un control">Nuevo juego</button>
+            <button id="rigVistasAdd" title="Sumar el dibujo activo como la vista de este punto del control">Agregar vista acá</button>
+            <button id="rigVistasBake" title="Clavar en este cuadro la vista que el control elige">Clavar en el cuadro</button>
+            <button id="rigVistasRemove" class="danger" title="Sacar la vista del juego (no borra el dibujo)">Quitar vista</button>
+          </div>
+          <div class="rig2-vistas-rango">
+            <label>Control<select id="rigVistasDriver" aria-label="Control que conduce el giro"></select></label>
+            <label>En<input id="rigVistasAt" type="number" step="1" value="0" title="Valor del control donde manda esta vista"></label>
+          </div>
+          <!-- Lo que el plan prohíbe prometer: acá se dice qué está dibujado y
+               qué falta, en vez de mostrar un giro de 360 que nadie dibujó. -->
+          <p class="rig2-vistas-cobertura" id="rigVistasCobertura">Todavía no hay vistas dibujadas.</p>
+        </section>
         <section class="rig2-section rig2-mesh" data-rig-section="mesh" aria-label="Malla y pesos">
           <div class="rig2-title"><b>Malla y pesos</b><span id="rigMeshEstado">sin malla</span></div>
           <p class="rig2-hint">Para que una pieza se doble en vez de girar entera: creá la malla, repartí los
@@ -1252,6 +1271,7 @@
 <script src="rigging/flexible-limb.js?v=4.44.0"></script>
 <script src="animation/canvas-content.js?v=4.44.0"></script>
   <script src="rigging/smart-action-ui.js?v=4.44.0"></script>
+  <script src="rigging/view-set-ui.js?v=4.44.0"></script>
   <script src="rigging/rig-export.js?v=4.44.0"></script>
 <script src="rigging/mesh-ui.js?v=4.44.0"></script>
 <script src="rigging/flexible-limb-ui.js?v=4.44.0"></script>

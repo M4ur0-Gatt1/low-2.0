@@ -112,6 +112,7 @@ jobs:
           node tools/check_function_editor_ui.js
           node tools/check_rig_weights_ui.js
           node tools/check_rig_control_ui.js
+          node tools/check_giro_vistas_ui.js
           node tools/check_smart_bones_ui.js
           node tools/check_lipsync_ui.js
           node tools/check_colab_ui.js
