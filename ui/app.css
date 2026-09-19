@@ -3616,3 +3616,50 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .sb2-visor-pie { font: 500 10.5px/1.35 Figtree, sans-serif; color: var(--fg, #e6e9f0); }
 /* el panel que suena ahora, para seguirlo en la lista sin perder el visor */
 .sb2-board.enAire { outline: 2px solid var(--accent, #F0450E); outline-offset: -2px; }
+
+/* ══ GIRO POR VISTAS (C04) y CONJUNTOS DE CONTROLES (C05) ═════════════════
+   Siguen el molde de la sección de Smart Bones: los paneles del rig se leen
+   como uno solo, y una sección con otra pinta se lee como otra herramienta. */
+.rig2-vistas-acciones { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin:4px 0; }
+.rig2-vistas-acciones button,
+.rig2-conj-fila button,
+.rig2-vistas-fix button { min-height:26px; padding:0 8px; border:1px solid var(--line2);
+  border-radius:var(--r-md,7px); background:var(--panel2); color:var(--fg); font-size:10.5px; }
+.rig2-vistas-acciones button:hover:not(:disabled),
+.rig2-conj-fila button:hover:not(:disabled),
+.rig2-vistas-fix button:hover:not(:disabled) { background:var(--dz-raised); }
+.rig2-vistas-acciones button:disabled,
+.rig2-conj-fila button:disabled,
+.rig2-vistas-fix button:disabled { opacity:.4; }
+.rig2-vistas-acciones button.danger:hover:not(:disabled) { color:#ff8a70; }
+.rig2-vistas-rango { display:grid; grid-template-columns:1.6fr 1fr; gap:6px; align-items:center; }
+.rig2-vistas-rango label { display:grid; grid-template-columns:auto 1fr; gap:5px; align-items:center;
+  color:var(--fg2); font-size:10px; }
+.rig2-vistas-rango input, .rig2-vistas-rango select,
+.rig2-vistas-fix input { width:100%; height:22px; padding:0 5px; border:1px solid var(--line2);
+  border-radius:var(--r-md,7px); background:var(--panel2); color:var(--fg); font-size:10.5px; }
+/* El aviso de cobertura: es la pieza que impide prometer un giro que nadie
+   dibujó, así que tiene que LEERSE, no ser una nota al pie gris. */
+.rig2-vistas-cobertura { margin:6px 0 0; padding:5px 6px; border-radius:var(--r-md,7px);
+  background:var(--dz-raised); border:1px solid var(--line2);
+  font-size:10px; line-height:1.45; color:var(--fg2); }
+.rig2-vistas-fix { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:6px;
+  padding-top:6px; border-top:1px dashed var(--line2); align-items:center; }
+.rig2-vistas-fix-titulo { grid-column:1/-1; font-size:10px; color:var(--fg2); }
+.rig2-vistas-fix label { display:grid; grid-template-columns:auto 1fr; gap:4px; align-items:center;
+  color:var(--fg2); font-size:10px; }
+.rig2-vistas-fix button { grid-column:span 3; }
+
+.rig2-conj-fila { display:grid; grid-template-columns:1fr auto auto; gap:4px; margin:4px 0; }
+.rig2-conj-fila select { height:26px; padding:0 5px; border:1px solid var(--line2);
+  border-radius:var(--r-md,7px); background:var(--panel2); color:var(--fg); font-size:10.5px; }
+/* El mapa rol→pieza a la vista: es la «vinculación explícita» del plan, así
+   que no puede estar escondido detrás de un botón. */
+.rig2-conj-mapa { display:flex; flex-direction:column; gap:3px; }
+.rig2-conj-rol { display:grid; grid-template-columns:96px 1fr; gap:5px; align-items:center;
+  color:var(--fg2); font-size:10px; }
+.rig2-conj-rol select { height:22px; padding:0 5px; border:1px solid var(--line2);
+  border-radius:var(--r-md,7px); background:var(--panel2); color:var(--fg); font-size:10.5px; }
+.rig2-conj-aviso { margin:6px 0 0; padding:5px 6px; border-radius:var(--r-md,7px);
+  background:var(--dz-raised); border:1px solid var(--line2);
+  font-size:10px; line-height:1.45; color:var(--fg2); }
