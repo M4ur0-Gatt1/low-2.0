@@ -749,6 +749,20 @@
             <span id="rigSmartDriver" class="rig2-smart-driver">—</span>
           </div>
         </section>
+        <section class="rig2-section rig2-conjuntos" data-rig-section="build" aria-label="Conjuntos de controles">
+          <div class="rig2-title"><b>Conjuntos</b><span id="rigConjEstado">ninguno aplicado</span></div>
+          <p class="rig2-hint">La cara armada de una vez: ojos, cejas, boca o manos. Crea los controles y
+             el juego de vistas de cada pieza, listo para que le pongas los dibujos.</p>
+          <div class="rig2-conj-fila">
+            <select id="rigConjLista" aria-label="Conjunto de controles"></select>
+            <button id="rigConjSugerir" title="Proponer qué pieza es cada cosa, mirando los nombres">Sugerir piezas</button>
+            <button id="rigConjAplicar" title="Aplicar el conjunto a este personaje">Aplicar</button>
+          </div>
+          <!-- El mapa a la vista: el conjunto NO adivina cuál es el ojo
+               izquierdo, y lo que no esté vinculado frena la aplicación. -->
+          <div id="rigConjMapa" class="rig2-conj-mapa"></div>
+          <p class="rig2-conj-aviso" id="rigConjAviso">Elegí un conjunto y vinculá cada pieza.</p>
+        </section>
         <section class="rig2-section rig2-vistas" data-rig-section="build" aria-label="Giro por vistas dibujadas">
           <div class="rig2-title"><b>Giro por vistas</b><span id="rigVistasEstado">sin juego de vistas</span></div>
           <p class="rig2-hint">La cabeza no gira sola: gira porque dibujás el frente, el tres cuartos y el
@@ -1282,7 +1296,9 @@
 <script src="rigging/flexible-limb.js?v=4.44.0"></script>
 <script src="animation/canvas-content.js?v=4.44.0"></script>
   <script src="rigging/smart-action-ui.js?v=4.44.0"></script>
+  <script src="rigging/control-sets.js?v=4.44.0"></script>
   <script src="rigging/view-set-ui.js?v=4.44.0"></script>
+  <script src="rigging/control-sets-ui.js?v=4.44.0"></script>
   <script src="rigging/rig-export.js?v=4.44.0"></script>
 <script src="rigging/mesh-ui.js?v=4.44.0"></script>
 <script src="rigging/flexible-limb-ui.js?v=4.44.0"></script>

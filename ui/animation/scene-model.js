@@ -321,6 +321,29 @@
     return out;
   };
 
+  /** CONJUNTOS DE CONTROLES APLICADOS (C05). Deja escrito en la escena quién
+   *  aplicó qué conjunto y sobre qué piezas. Sin esto, mañana no hay manera de
+   *  saber por qué existe un control llamado «boca_forma» ni a qué pieza
+   *  corresponde: el vínculo viviría sólo en la cabeza de quien lo armó.
+   *
+   *  NO se descarta un conjunto cuyas piezas ya no existan. Es tentador
+   *  limpiarlo, pero borrar el vínculo hace desaparecer la única pista de que
+   *  esos controles quedaron huérfanos; se conserva y `rigDiagnostics` lo
+   *  señala, que es lo que el resto del rig hace con las referencias rotas. */
+  const rigControlSetsData = (source = {}) => {
+    const out = {};
+    for (const [id, raw] of Object.entries(source || {})) {
+      if (!id || !raw) continue;
+      const mapa = {};
+      for (const [rol, pieza] of Object.entries(raw.mapa || {}))
+        if (rol && pieza) mapa[String(rol)] = String(pieza);
+      const controles = (Array.isArray(raw.controles) ? raw.controles : []).map(String);
+      out[id] = { id: String(id), setId: String(raw.setId || id),
+        name: raw.name || id, mapa, controles };
+    }
+    return out;
+  };
+
   /** Qué parte del recorrido está DIBUJADA, y qué falta.
    *
    *  Es la pieza que impide prometer un giro que no existe: devuelve el tramo
@@ -876,6 +899,7 @@
       constraintOrder: [...requestedOrder, ...remainder], controllers: clone(source.controllers || {}),
       actions: rigActionsData(source.actions), controls: rigControlsData(source.controls), channels, switches: rigSwitchesData(source.switches, attachments),
       viewSets: rigViewSetsData(source.viewSets, attachments, slots),
+      controlSets: rigControlSetsData(source.controlSets),
       physics: clone(source.physics || {}), diagnostics: { valid: true, errors: [], warnings: [] } };
     // `nodes` es sólo el nombre de compatibilidad usado por la UI v3. Comparte
     // la misma referencia que `bones`; el JSON canónico nunca serializa ambos.
@@ -1332,6 +1356,17 @@
     rigSlot(id) { return this.rig.slots[id] || null; }
     rigAttachment(id) { return this.rig.attachments[id] || null; }
     rigViewSet(id) { return (this.rig.viewSets || {})[id] || null; }
+    rigControlSet(id) { return (this.rig.controlSets || {})[id] || null; }
+    /** Conjuntos aplicados cuyo mapa apunta a una pieza que ya no está. Se
+     *  informan, no se limpian: borrarlos escondería que esos controles
+     *  quedaron colgados. */
+    rigControlSetsRotos() {
+      return Object.values(this.rig.controlSets || {})
+        .map((cs) => ({ id: cs.id, name: cs.name,
+          piezasRotas: Object.entries(cs.mapa).filter(([, pieza]) => !this.rigNode(pieza))
+            .map(([rol, pieza]) => ({ rol, pieza })) }))
+        .filter((x) => x.piezasRotas.length);
+    }
     /** Los juegos de vistas que gobiernan un slot. */
     rigViewSetsOf(slotId) {
       return Object.values(this.rig.viewSets || {}).filter((j) => j.slotId === slotId);

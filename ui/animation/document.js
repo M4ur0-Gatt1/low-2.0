@@ -1462,6 +1462,69 @@
         return antes !== JSON.stringify(limpio);
       });
     }
+    /* ── CONJUNTOS DE CONTROLES (C05) ────────────────────────────────────
+       Un conjunto es la receta de una cara: qué controles hay y qué piezas
+       necesita. Aplicarlo crea los controles y, para cada pieza, el juego de
+       vistas listo para recibir los dibujos — se apoya en C04 en vez de
+       inventar otro mecanismo. */
+
+    /** Aplica un conjunto a este personaje.
+     *
+     *  EXIGE EL MAPA rol→pieza, que es lo que el plan pide como «vinculación
+     *  explícita»: el conjunto no adivina cuál es el ojo izquierdo. Si falta
+     *  algún rol NO aplica nada y devuelve qué falta, porque aplicar a medias
+     *  deja controles colgados de ninguna pieza: se mueven, no pasa nada, y
+     *  después hay que descubrir por qué.
+     *
+     *  Es idempotente: aplicar dos veces el mismo conjunto no duplica ni pisa
+     *  lo que ya está — devuelve lo que ya existía. */
+    applyControlSet(setId, mapa = {}, { prefijo = "" } = {}) {
+      const sets = LOW.rigging && LOW.rigging.controlSets;
+      const conjunto = sets && sets.porId(setId);
+      if (!conjunto) return { ok: false, motivo: "no existe ese conjunto", faltan: [] };
+      const faltan = sets.faltantes(conjunto, mapa);
+      if (faltan.length) return { ok: false, motivo: "faltan piezas por vincular", faltan };
+      // una pieza mapeada que no existe es peor que una sin mapear: miente
+      const inexistentes = Object.entries(mapa)
+        .filter(([, pieza]) => !this.scene.rigNode(pieza))
+        .map(([rol, pieza]) => ({ key: rol, pieza }));
+      if (inexistentes.length)
+        return { ok: false, motivo: "hay piezas vinculadas que no existen", faltan: inexistentes };
+
+      const pre = prefijo || conjunto.id;
+      const creados = { controles: [], juegos: [], yaEstaban: [] };
+      for (const c of conjunto.controles) {
+        const id = pre + "_" + c.key;
+        if (this.scene.rigControl(id)) { creados.yaEstaban.push(id); continue; }
+        if (this.createRigControl(id, { name: c.name, min: c.min, max: c.max, default: c.default }) === false)
+          continue;
+        creados.controles.push(id);
+        if (!c.rol) continue;                      // un control sin pieza mueve lo que ya está
+        const pieza = mapa[c.rol];
+        const slot = this.ensureRigSlot(pieza, { name: pieza });
+        const slotId = typeof slot === "string" ? slot : (slot && slot.id) || null;
+        if (!slotId) continue;
+        const juegoId = "vistas_" + id;
+        // el juego nace VACÍO a propósito: los dibujos los pone quien dibuja,
+        // y hasta que estén el panel de C04 dice que el giro no existe
+        if (this.createRigViewSet(juegoId, { slotId, name: c.name,
+          driverPath: LOW.animation.rigControlPath(id), min: c.min, max: c.max }) !== false)
+          creados.juegos.push(juegoId);
+      }
+      // el vínculo queda ESCRITO en la escena: quién aplicó qué y sobre qué
+      // piezas. Sin esto, mañana no hay manera de saber por qué existe un
+      // control llamado «boca_forma» ni a qué pieza corresponde.
+      this._rigChange("Aplicar conjunto de controles", (rig) => {
+        rig.controlSets = rig.controlSets || {};
+        rig.controlSets[pre] = { id: pre, setId: conjunto.id, name: conjunto.name,
+          mapa: { ...mapa }, controles: [...creados.controles, ...creados.yaEstaban] };
+        return true;
+      });
+      return { ok: true, ...creados };
+    }
+    /** Los conjuntos ya aplicados a este personaje, con su mapa. */
+    controlSetsAplicados() { return Object.values(this.scene.rig.controlSets || {}); }
+
     /* NO HAY un «grabar corrección» automático todavía, y es a propósito: el
        gesto natural es acomodar la pieza a ojo con la vista puesta, pero eso
        escribe en la pose PROPIA de la pieza, que vale para todas las vistas.
