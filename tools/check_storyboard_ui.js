@@ -184,7 +184,43 @@ async function main() {
       reparto:guardado.shot.cast.length===vivo.shot.cast.length,
       referencia:!!guardado.drawingRef&&guardado.drawingRef.png===vivo.drawingRef.png};
 
-    return {apertura,alta,generar,tiempo,historial,escenario,encuadre,referencia,persiste};
+    /* 9. LA ANIMATICA. Un storyboard existe para juzgar el RITMO antes de
+          animar, y para eso hay que poder MIRARLO corriendo. Sin esto la
+          herramienta era una lista con duraciones escritas: no se podia ver.
+          Se mide que el panel en el aire CAMBIA con el tiempo —que es la
+          unica prueba de que reproduce de verdad y no ilumina uno fijo— y que
+          al terminar devuelve el rango de la escena como estaba. */
+    const rangoAntes={...doc.scene.range};
+    const btnAnim=[...document.querySelectorAll("#dzSbBody .sb2-tools button")]
+      .find(x=>x.textContent.includes("Animática"));
+    const animatica={hayBoton:!!btnAnim, paneles:doc.scene.storyboard.boards.length};
+    if(btnAnim){
+      btnAnim.click();
+      await espera(120);
+      animatica.arranco=!!DZ.playback&&DZ.playback.playing;
+      animatica.visor=!!document.querySelector("#dzSbBody .sb2-visor");
+      animatica.enAire=!!document.querySelector("#dzSbBody .sb2-board.enAire");
+      // que el panel en el aire CAMBIE: se anotan los ids que pasan
+      const vistos=new Set();
+      for(let i=0;i<40;i++){
+        const v=doc.scene.boardAt(doc.frame);
+        if(v) vistos.add(v.id);
+        if(vistos.size>1) break;
+        await espera(120);
+      }
+      animatica.panelesQuePasaron=vistos.size;
+      animatica.cuadroAvanzo=doc.frame>1;
+      // parar y comprobar que la escena queda como estaba
+      const btnParar=[...document.querySelectorAll("#dzSbBody .sb2-tools button")]
+        .find(x=>x.textContent.includes("Parar"))||btnAnim;
+      btnParar.click();
+      await espera(400);
+      animatica.paro=!DZ.playback.playing;
+      animatica.rangoDevuelto=doc.scene.range.in===rangoAntes.in&&doc.scene.range.out===rangoAntes.out;
+      animatica.visorSeVa=!document.querySelector("#dzSbBody .sb2-visor");
+    }
+
+    return {apertura,alta,generar,tiempo,historial,escenario,encuadre,referencia,persiste,animatica};
   })()`;
   const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   if (result.exceptionDetails)
@@ -192,7 +228,7 @@ async function main() {
   const value = result.result?.value || {};
 
   stage("verificar");
-  const { apertura, alta, generar, tiempo, historial, escenario, encuadre, referencia, persiste } = value;
+  const { apertura, alta, generar, tiempo, historial, escenario, encuadre, referencia, persiste, animatica } = value;
   if (!apertura?.visible || !apertura.vacioAvisa)
     throw Error("REGRESIÓN: el storyboard no abre desde el menú o no explica que está vacío: " + JSON.stringify(apertura));
   if (!alta?.hayPanel || !alta.traeCamara || !alta.tipoReal)
@@ -217,6 +253,18 @@ async function main() {
     throw Error("REGRESIÓN: la referencia no se toma, sale vacía o no llega a la lista: " + JSON.stringify(referencia));
   if (!persiste?.paneles || !persiste.toma || !persiste.duracion || !persiste.reparto || !persiste.referencia)
     throw Error("REGRESIÓN: el storyboard no sobrevive guardar y reabrir: " + JSON.stringify(persiste));
+  if (!animatica?.hayBoton)
+    throw Error("REGRESIÓN: no hay manera de reproducir el board: sin animática el storyboard no se puede mirar");
+  if (!animatica.arranco || !animatica.cuadroAvanzo)
+    throw Error("REGRESIÓN: la animática no reproduce: " + JSON.stringify(animatica));
+  if (!animatica.visor || !animatica.enAire)
+    throw Error("REGRESIÓN: reproduciendo no se ve qué panel está en el aire: " + JSON.stringify(animatica));
+  if (animatica.panelesQuePasaron < 2)
+    throw Error("REGRESIÓN: la animática se queda en un panel: no está pasando el board, " + JSON.stringify(animatica));
+  if (!animatica.paro || !animatica.visorSeVa)
+    throw Error("REGRESIÓN: la animática no se puede parar: " + JSON.stringify(animatica));
+  if (!animatica.rangoDevuelto)
+    throw Error("REGRESIÓN: la animática dejó la escena con el rango recortado: " + JSON.stringify(animatica));
   if (errores.length)
     throw Error("REGRESIÓN: la interfaz lanzó excepciones: " + errores.slice(0, 3).join(" | "));
   console.log("E2E storyboard OK: generador de tomas, tiempo, historial y persistencia", JSON.stringify(value));

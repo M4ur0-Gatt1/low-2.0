@@ -1121,6 +1121,20 @@
     boardDuration() {
       return this.storyboard.boards.reduce((total, board) => total + board.duration, 0);
     }
+    /** Qué panel se ve en un cuadro dado. Es lo que convierte la lista de
+     *  paneles en algo MIRABLE: sin esto el storyboard tiene tiempos escritos
+     *  pero no se puede reproducir, y un board que no se puede ver no cumple
+     *  su única función, que es juzgar el ritmo antes de animar.
+     *
+     *  Se resuelve desde `boardTiming()` y no con una segunda cuenta propia:
+     *  dos fuentes del mismo tiempo terminan discrepando. */
+    boardAt(frame) {
+      const f = Math.max(1, Math.round(Number(frame) || 1));
+      const tramo = this.boardTiming().find((t) => f >= t.from && f <= t.to);
+      if (!tramo) return null;
+      const board = this.storyboard.boards.find((b) => b.id === tramo.id);
+      return board ? { board, ...tramo, index: this.storyboard.boards.indexOf(board) } : null;
+    }
 
     compositionPlane(id) { return this.composition.planes[id] || null; }
     ensureCompositionPlane(id, source = {}) {

@@ -38,6 +38,68 @@
     dispose() { if (this._desuscribir) this._desuscribir(); if (this.host) this.host.innerHTML = ""; }
 
     _shots() { return storyboard.shots; }
+
+    /** ¿Está corriendo la animática? Se pregunta al reproductor de la escena,
+     *  que es el único que sabe: una bandera propia acá se desincronizaría en
+     *  cuanto alguien parara la reproducción desde la Timeline. */
+    _reproduciendo() { const p = this._reproductor(); return !!(p && p.playing && this._animatica); }
+
+    /** El reproductor de la escena. Se acepta inyectado (`this.playback`) y si
+     *  no, se toma el de la aplicación: uno solo, nunca dos.
+     *
+     *  OJO con `DZ`: en app.js es `const`, así que NO es propiedad de window y
+     *  leerlo como `global.DZ` da undefined EN SILENCIO. Se nombra suelto con
+     *  guarda `typeof`, que es lo que pide el contrato de interacción 2D. */
+    _reproductor() {
+      if (this.playback) return this.playback;
+      const app = (typeof DZ !== "undefined") ? DZ : null;
+      if (app && app.playback) return app.playback;
+      if (app && this.doc && LOW.animation && LOW.animation.Playback) {
+        app.playback = new LOW.animation.Playback(this.doc);
+        return app.playback;
+      }
+      return null;
+    }
+
+    /** Reproduce los paneles con su duración, o para si ya está corriendo.
+     *
+     *  Reusa el reproductor de la escena en vez de armar otro: ése avanza por
+     *  RELOJ REAL —si la máquina no llega saltea cuadros en vez de ir en cámara
+     *  lenta, que es lo que arruinaría el juicio de ritmo— y arrastra el audio.
+     *  El rango se pone en el del board y se DEVUELVE como estaba al terminar:
+     *  la animática no puede dejarte la escena recortada. */
+    animatica() {
+      const rep = this._reproductor();
+      if (!rep || !this.doc) return false;
+      if (this._reproduciendo()) { rep.stop(); return true; }
+      const total = this.doc.scene.boardDuration();
+      if (!total) return false;
+      this._rangoPrevio = { ...this.doc.scene.range };
+      this._animatica = true;
+      const restaurar = () => {
+        if (!this._animatica) return;
+        this._animatica = false;
+        if (this._rangoPrevio) { this.doc.scene.range = this._rangoPrevio; this._rangoPrevio = null; }
+        if (this._desPlayback) { this._desPlayback(); this._desPlayback = null; }
+        this.render();
+      };
+      /* El orden importa y me costó una corrida: `setRange` AVISA, y si uno se
+         suscribe antes de arrancar, ese primer aviso llega con el reproductor
+         todavía parado y el restaurador deshace la animática apenas empieza.
+         Primero se arranca; recién después se escucha para saber cuándo
+         termina. */
+      rep.setRange(1, total);
+      this.doc.goTo(1);
+      rep.play();
+      if (!rep.playing) { restaurar(); return false; }   // no arrancó: nada a medias
+      this._desPlayback = rep.subscribe(() => {
+        if (!rep.playing) restaurar(); else this.render();
+      });
+      if (this.status) this.status("Animática: " + this.doc.scene.storyboard.boards.length +
+        " panel(es), " + (total / Math.max(1, this.doc.scene.fps || 24)).toFixed(1) + " s");
+      this.render();
+      return true;
+    }
     _selected() {
       const boards = this.doc ? this.doc.scene.storyboard.boards : [];
       if (!boards.length) return null;
@@ -126,6 +188,16 @@
       boton("Escenario 3D", "Ver y armar la toma en el escenario", () => {
         if (this.onStage) this.onStage(this.selectedId);
       }).disabled = !elegido;
+      /* LA ANIMATICA. Un storyboard existe para juzgar el RITMO antes de
+         animar, y para eso hay que poder MIRARLO corriendo: una lista con
+         duraciones escritas no dice si la toma dura de mas. Reproduce sobre el
+         mismo reproductor de la escena —no uno paralelo—, que avanza por reloj
+         real y arrastra el audio si lo hay. */
+      const animatica = boton(this._reproduciendo() ? "■ Parar" : "▶ Animática",
+        "Reproducir los paneles con su duración, para ver el ritmo",
+        () => this.animatica());
+      animatica.disabled = !boards.length || !this._reproductor();
+      if (!this._reproductor()) animatica.title = "El reproductor de la escena todavía no está listo";
       const total = document.createElement("span");
       total.className = "sb2-total";
       const fps = Math.max(1, sc.fps || 24);
@@ -142,12 +214,43 @@
         return;
       }
 
+      /* EL VISOR. Mientras corre la animatica muestra el panel que toca, con
+         su referencia y su texto: sin esto la reproduccion seria una fila que
+         se ilumina, que no alcanza para leer una toma. */
+      const enCurso = this._reproduciendo() ? sc.boardAt(this.doc.frame) : null;
+      if (enCurso) {
+        const visor = document.createElement("div");
+        visor.className = "sb2-visor";
+        if (enCurso.board.drawingRef && enCurso.board.drawingRef.png) {
+          const img = document.createElement("img");
+          img.src = enCurso.board.drawingRef.png;
+          img.alt = "Panel " + (enCurso.index + 1);
+          visor.appendChild(img);
+        } else {
+          const sin = document.createElement("span");
+          sin.className = "sb2-visor-sin";
+          sin.textContent = "Panel " + (enCurso.index + 1) + " · sin referencia dibujada";
+          visor.appendChild(sin);
+        }
+        const pie = document.createElement("div");
+        pie.className = "sb2-visor-pie";
+        const tipoV = shots.SHOT_TYPES.find((x) => x.id === enCurso.board.shot.type);
+        const seg = (n) => (n / fps).toFixed(1);
+        pie.textContent = `${enCurso.index + 1}/${boards.length} · ` +
+          `${tipoV ? tipoV.name : enCurso.board.shot.type} · ` +
+          `${enCurso.board.action || enCurso.board.dialogue || "sin acción"} · ` +
+          `${seg(this.doc.frame - enCurso.from + 1)}/${seg(enCurso.duration)} s`;
+        visor.appendChild(pie);
+        raiz.appendChild(visor);
+      }
+
       // ── lista de paneles ──
       const lista = document.createElement("div"); lista.className = "sb2-list";
       boards.forEach((board, i) => {
         const t = tiempos[i];
         const fila = document.createElement("div");
-        fila.className = "sb2-board" + (board.id === this.selectedId ? " sel" : "");
+        fila.className = "sb2-board" + (board.id === this.selectedId ? " sel" : "") +
+          (enCurso && enCurso.board.id === board.id ? " enAire" : "");
         fila.tabIndex = 0;
         fila.onclick = () => { this.selectedId = board.id; this.render(); };
         const num = document.createElement("b"); num.textContent = String(i + 1);

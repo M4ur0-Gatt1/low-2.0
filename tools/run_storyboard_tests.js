@@ -148,6 +148,18 @@ check("clasificar sin cámara ni figura no explota",
     JSON.stringify(tiempos));
   check("la duración total es la suma de los paneles", doc.scene.boardDuration() === 20);
 
+  /* QUE PANEL SE VE EN CADA CUADRO. Sin esto el storyboard tiene tiempos
+     escritos pero no se puede reproducir, y un board que no se puede mirar no
+     cumple su unica funcion: juzgar el ritmo antes de animar. */
+  check("el cuadro 1 muestra el primer panel", doc.scene.boardAt(1).id === uno);
+  check("el ultimo cuadro del primer panel todavia es el primero",
+    doc.scene.boardAt(12).id === uno);
+  check("el cuadro siguiente ya es el segundo panel (el corte cae donde debe)",
+    doc.scene.boardAt(13).id === dos, JSON.stringify(doc.scene.boardAt(13)));
+  check("el ultimo cuadro del board es el ultimo panel", doc.scene.boardAt(20).id === dos);
+  check("pasado el final no hay panel que mostrar", doc.scene.boardAt(21) === null);
+  check("el panel sabe su posicion en la lista", doc.scene.boardAt(13).index === 1);
+
   const tres = doc.addStoryboardBoard({ action: "primer plano", duration: 6 }, 0);
   check("se puede insertar un panel ANTES de otro",
     doc.scene.storyboard.boards[0].id === tres && doc.scene.boardTiming()[1].from === 7);
