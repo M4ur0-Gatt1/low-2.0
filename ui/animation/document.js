@@ -1432,6 +1432,44 @@
         return true;
       });
     }
+    /** Guarda el CORRECTIVO de una vista: cuánto se corre una pieza mientras
+     *  esa vista manda. Al girar la cabeza las piezas de encima no caen solas
+     *  en su lugar —de tres cuartos el ojo se corre y la oreja se achica—, y
+     *  eso no se puede interpolar porque el dibujo cambió de golpe.
+     *
+     *  Pasar una pose vacía (o todo en cero) BORRA el correctivo: así se saca
+     *  sin tener que inventar otro comando. */
+    setRigViewFix(viewSetId, attachmentId, pieceId, pose = {}) {
+      if (!pieceId) return false;
+      return this._rigChange("Corregir la pieza en esta vista", (rig) => {
+        const juego = (rig.viewSets || {})[viewSetId];
+        const vista = juego && juego.views.find((v) => v.attachmentId === attachmentId);
+        if (!vista) return false;
+        const limpio = {};
+        for (const prop of ["x", "y", "r", "sx", "sy"]) {
+          const n = Number(pose[prop]);
+          if (Number.isFinite(n) && n !== 0) limpio[prop] = n;
+        }
+        const antes = JSON.stringify((vista.fix || {})[pieceId] || null);
+        if (!Object.keys(limpio).length) {
+          if (!vista.fix || !vista.fix[pieceId]) return false;
+          delete vista.fix[pieceId];
+          if (!Object.keys(vista.fix).length) vista.fix = null;
+          return true;
+        }
+        vista.fix = vista.fix || {};
+        vista.fix[pieceId] = limpio;
+        return antes !== JSON.stringify(limpio);
+      });
+    }
+    /* NO HAY un «grabar corrección» automático todavía, y es a propósito: el
+       gesto natural es acomodar la pieza a ojo con la vista puesta, pero eso
+       escribe en la pose PROPIA de la pieza, que vale para todas las vistas.
+       Pasar ese desplazamiento al correctivo exige además sacarlo de la pose,
+       o la corrección queda aplicada dos veces. Mientras esa cuenta no esté
+       medida con un personaje real, el correctivo se pone con valores
+       explícitos y no se finge un automatismo que puede duplicar. */
+
     /** Clava en el cuadro la vista que el juego elige AHORA. Es el puente con
      *  las sustituciones que ya existían: el giro se maneja con el control y,
      *  cuando hace falta forzar un cuadro, se hornea como sustitución normal. */

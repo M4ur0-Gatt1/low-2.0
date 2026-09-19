@@ -293,11 +293,26 @@
         const at = Number(v.at);
         if (!Number.isFinite(at)) continue;
         if (vistas.some((x) => x.attachmentId === v.attachmentId)) continue;
+        // EL CORRECTIVO DE LA VISTA. Al girar la cabeza las piezas que van
+        // encima no caen solas en su lugar: de tres cuartos el ojo se corre y
+        // la oreja se achica. Eso no es una interpolación —el dibujo cambió de
+        // golpe—, así que es un ajuste FIJO que vale mientras esa vista manda.
+        // Se suma en el mismo lugar que las acciones, para que compongan.
+        const fix = {};
+        for (const [pieza, pose] of Object.entries((v.fix && typeof v.fix === "object") ? v.fix : {})) {
+          const limpio = {};
+          for (const prop of ["x", "y", "r", "sx", "sy"]) {
+            const n = Number(pose && pose[prop]);
+            if (Number.isFinite(n) && n !== 0) limpio[prop] = n;
+          }
+          if (Object.keys(limpio).length) fix[String(pieza)] = limpio;
+        }
         vistas.push({ attachmentId: String(v.attachmentId), at,
           name: typeof v.name === "string" ? v.name : "",
           // el orden de los slots puede cambiar con la vista: de perfil, la
           // nariz cruza la cara y lo que estaba atrás pasa adelante
-          order: Array.isArray(v.order) ? v.order.map(String) : null });
+          order: Array.isArray(v.order) ? v.order.map(String) : null,
+          fix: Object.keys(fix).length ? fix : null });
       }
       vistas.sort((a, b) => a.at - b.at || a.attachmentId.localeCompare(b.attachmentId));
       out[id] = { id, name: raw.name || id, slotId, driver,
@@ -1539,12 +1554,36 @@
     rigPose(id, frame) {
       const base = this.rigPoseBase(id, frame);
       if (!base) return base;
-      const extra = this.rigActionDelta(id, frame);
-      if (!extra) return base;
+      const acciones = this.rigActionDelta(id, frame);
+      const vistas = this.rigViewDelta(id, frame);
+      if (!acciones && !vistas) return base;
+      const s = (a, b, prop) => (a ? a[prop] : 0) + (b ? b[prop] : 0);
       return { ...base,
-        x: base.x + extra.x, y: base.y + extra.y, r: base.r + extra.r,
-        sx: (base.sx == null ? 1 : base.sx) + extra.sx,
-        sy: (base.sy == null ? 1 : base.sy) + extra.sy };
+        x: base.x + s(acciones, vistas, "x"), y: base.y + s(acciones, vistas, "y"),
+        r: base.r + s(acciones, vistas, "r"),
+        sx: (base.sx == null ? 1 : base.sx) + s(acciones, vistas, "sx"),
+        sy: (base.sy == null ? 1 : base.sy) + s(acciones, vistas, "sy") };
+    }
+    /** Lo que los CORRECTIVOS DE LAS VISTAS activas le suman a una pieza.
+     *
+     *  Es discreto por definición: vale entero mientras esa vista manda y
+     *  desaparece cuando manda otra. No se interpola entre vistas porque el
+     *  dibujo tampoco se interpola — cambia de golpe, y la corrección tiene
+     *  que cambiar con él o quedaría arrastrando el ajuste del dibujo viejo. */
+    rigViewDelta(id, frame) {
+      const juegos = Object.values(this.rig.viewSets || {});
+      if (!juegos.length) return null;
+      let x = 0, y = 0, r = 0, sx = 0, sy = 0, hay = false;
+      for (const juego of juegos) {
+        if (!juego || juego.enabled === false || !juego.driver) continue;
+        const vista = this.rigViewAt(juego.id, frame);
+        const pose = vista && vista.fix && vista.fix[id];
+        if (!pose) continue;
+        hay = true;
+        x += pose.x || 0; y += pose.y || 0; r += pose.r || 0;
+        sx += pose.sx || 0; sy += pose.sy || 0;
+      }
+      return hay ? { x, y, r, sx, sy } : null;
     }
     /** Lo que las acciones le suman a una pieza en un cuadro, o null si nada. */
     rigActionDelta(id, frame) {

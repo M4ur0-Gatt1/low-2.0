@@ -217,5 +217,70 @@ function cabeza() {
     String(doc.scene.rigSwitchAt(slotId, 5)));
 }
 
+// ── 8. EL CORRECTIVO DE LA VISTA ──
+{
+  const { doc, slotId, vistas } = cabeza();
+  const ruta = global.LOW.animation.rigControlPath("giro_cabeza");
+  doc.createRigViewSet("giro", { slotId, driverPath: ruta, min: -90, max: 90 });
+  doc.addRigView("giro", vistas.frente, 0);
+  doc.addRigView("giro", vistas.perfil, 90);
+  // una pieza que va ENCIMA de la cabeza: el ojo
+  doc.ensureRigBone("ojo", { name: "ojo" });
+  const baseOjo = doc.scene.rigPoseBase("ojo", 1);
+
+  doc.setRigViewFix("giro", vistas.perfil, "ojo", { x: 12, sx: -0.2 });
+  doc.setRigControlValue("giro_cabeza", 1, 0);
+  const deFrente = doc.scene.rigPose("ojo", 1);
+  check("de frente el ojo no se mueve: la corrección es de la otra vista",
+    Math.abs(deFrente.x - baseOjo.x) < 1e-9, JSON.stringify(deFrente));
+
+  doc.setRigControlValue("giro_cabeza", 1, 90);
+  const dePerfil = doc.scene.rigPose("ojo", 1);
+  check("de perfil el ojo se corre lo que dice el correctivo",
+    Math.abs(dePerfil.x - (baseOjo.x + 12)) < 1e-9, JSON.stringify(dePerfil));
+  check("y se achica lo que dice el correctivo",
+    Math.abs(dePerfil.sx - ((baseOjo.sx == null ? 1 : baseOjo.sx) - 0.2)) < 1e-9,
+    JSON.stringify(dePerfil));
+
+  // volver a la otra vista tiene que SACAR la corrección, no arrastrarla
+  doc.setRigControlValue("giro_cabeza", 1, 0);
+  check("al volver al frente la corrección desaparece, no queda arrastrada",
+    Math.abs(doc.scene.rigPose("ojo", 1).x - baseOjo.x) < 1e-9);
+
+  // una pieza sin correctivo no se entera de nada
+  check("una pieza sin correctivo queda igual que su base",
+    doc.scene.rigViewDelta("cabeza", 1) === null);
+
+  // poner el correctivo en cero lo BORRA
+  doc.setRigControlValue("giro_cabeza", 1, 90);
+  doc.setRigViewFix("giro", vistas.perfil, "ojo", {});
+  check("un correctivo en cero se borra, no queda un cero guardado",
+    doc.scene.rigViewAt("giro", 1).fix === null,
+    JSON.stringify(doc.scene.rigViewAt("giro", 1).fix));
+
+  /* Y EL NORMALIZADOR TAMBIÉN LIMPIA. La comprobación de arriba pasa por el
+     comando, que filtra los ceros por su cuenta; si un archivo llega con un
+     cero escrito a mano —o lo escribe otra versión— el normalizador tiene que
+     descartarlo igual. Se midió: sin esto, romper el filtro del normalizador
+     no hacía caer ninguna prueba. */
+  {
+    const crudo = JSON.parse(JSON.stringify(doc.scene.toJSON()));
+    const vistaCruda = crudo.rig.viewSets.giro.views.find((v) => v.attachmentId === vistas.perfil);
+    vistaCruda.fix = { ojo: { x: 0, y: 0, r: 0 } };
+    const limpio = new global.LOW.animation.Scene(crudo);
+    const vistaLimpia = limpio.rigViewSet("giro").views.find((v) => v.attachmentId === vistas.perfil);
+    check("un correctivo escrito todo en cero no sobrevive al normalizador",
+      vistaLimpia.fix === null, JSON.stringify(vistaLimpia.fix));
+  }
+
+  // y sobrevive el archivo
+  doc.setRigViewFix("giro", vistas.perfil, "ojo", { y: -7 });
+  const reabierto = LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+  reabierto.setRigControlValue("giro_cabeza", 1, 90);
+  check("el correctivo sobrevive guardar y reabrir",
+    Math.abs(reabierto.scene.rigPose("ojo", 1).y - (baseOjo.y - 7)) < 1e-9,
+    JSON.stringify(reabierto.scene.rigPose("ojo", 1)));
+}
+
 console.log(`juegos de vistas: ${ok}/${ok + fallan}`);
 if (fallan) process.exit(1);

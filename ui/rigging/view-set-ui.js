@@ -29,11 +29,26 @@
     const slots = Object.values(d.scene.rig.slots || {});
     return slots.find((s) => s.boneId === hueso) || null;
   }
-  /** El juego de vistas del slot actual, si ya existe. */
+  /** El juego sobre el que se está trabajando.
+   *
+   *  NO se deriva sólo de la pieza elegida, y la razón salió de probarlo: para
+   *  corregir el ojo en el perfil hay que ELEGIR EL OJO, y ahí el panel perdía
+   *  el juego —que es de la cabeza— justo cuando se lo necesitaba. Entonces el
+   *  juego queda fijado en cuanto se lo toca, y la selección puede irse a
+   *  cualquier pieza sin perderlo. Se suelta si deja de existir. */
+  let juegoFijado = null;
   function juegoActual() {
-    const d = doc(), slot = slotActual();
-    if (!d || !slot) return null;
-    return d.scene.rigViewSetsOf(slot.id)[0] || null;
+    const d = doc();
+    if (!d) return null;
+    if (juegoFijado) {
+      const vivo = d.scene.rigViewSet(juegoFijado);
+      if (vivo) return vivo;
+      juegoFijado = null;                    // lo borraron: se suelta
+    }
+    const slot = slotActual();
+    const propio = slot ? d.scene.rigViewSetsOf(slot.id)[0] || null : null;
+    if (propio) juegoFijado = propio.id;
+    return propio;
   }
   const seleccionada = () => { const s = $("#rigVistasList"); return s && s.value ? s.value : null; };
 
@@ -51,6 +66,7 @@
       driverPath: LOW.animation.rigControlPath(control),
       min: ctl ? ctl.min : -90, max: ctl ? ctl.max : 90 });
     if (ok === false) return avisar("No pude crear el juego de vistas");
+    juegoFijado = id;
     avisar("Juego creado. Poné el control donde querés y tocá «Agregar vista acá»");
     sync();
   }
@@ -87,6 +103,41 @@
     if (!d || !juego) return avisar("Creá primero el juego de vistas");
     if (d.bakeRigViewAt(juego.id, d.frame) === false) return avisar("No hay vista que clavar en este cuadro");
     avisar("Vista clavada en el cuadro " + d.frame);
+    sync();
+  }
+
+  /** La pieza a la que se le va a corregir la posición: la elegida en el rig.
+   *  Es a propósito la MISMA selección con la que se trabaja el esqueleto, para
+   *  no tener dos nociones de «pieza elegida» que puedan discrepar. */
+  function piezaElegida() {
+    return (typeof DZ !== "undefined" && (DZ.rigSelectedId || (DZ.sel && DZ.sel.id))) || null;
+  }
+  /** La vista sobre la que se corrige: la elegida en la lista, y si no, la que
+   *  el control está mostrando en este cuadro. */
+  function vistaEnFoco() {
+    const d = doc(), juego = juegoActual();
+    if (!d || !juego) return null;
+    const id = seleccionada();
+    if (id) return juego.views.find((v) => v.attachmentId === id) || null;
+    const viva = d.scene.rigViewAt(juego.id, d.frame);
+    return viva ? juego.views.find((v) => v.attachmentId === viva.attachmentId) || null : null;
+  }
+  function guardarFix() {
+    const d = doc(), juego = juegoActual(), vista = vistaEnFoco(), pieza = piezaElegida();
+    if (!d || !juego || !vista) return avisar("Elegí la vista que querés corregir");
+    if (!pieza) return avisar("Elegí la pieza que hay que acomodar en esta vista");
+    const n = (sel) => Number($(sel) ? $(sel).value : 0) || 0;
+    const ok = d.setRigViewFix(juego.id, vista.attachmentId, pieza,
+      { x: n("#rigVistasFixX"), y: n("#rigVistasFixY"), r: n("#rigVistasFixR") });
+    avisar(ok === false ? "La corrección quedó igual que antes"
+      : "Corrección guardada para «" + pieza + "» en esta vista");
+    sync();
+  }
+  function borrarFix() {
+    const d = doc(), juego = juegoActual(), vista = vistaEnFoco(), pieza = piezaElegida();
+    if (!d || !juego || !vista || !pieza) return avisar("Elegí la vista y la pieza");
+    d.setRigViewFix(juego.id, vista.attachmentId, pieza, {});
+    avisar("Esa pieza ya no se corrige en esta vista");
     sync();
   }
 
@@ -153,13 +204,25 @@
     }
     if (previa) lista.value = previa;
 
-    estado.textContent = !slot ? "elegí una pieza"
-      : !juego ? "sin juego de vistas"
-      : juego.views.length + " vista(s)";
+    estado.textContent = !juego
+      ? (slot ? "sin juego de vistas" : "elegí una pieza")
+      : juego.views.length + " vista(s) · " + (juego.name || juego.slotId);
     if (cob) cob.textContent = d ? textoCobertura(d, juego) : "";
+
+    // los campos del correctivo muestran lo que hay guardado para la pieza
+    const vista = juego ? vistaEnFoco() : null, pieza = piezaElegida();
+    const fix = (vista && vista.fix && pieza && vista.fix[pieza]) || {};
+    const campo = (sel, v) => { const e = $(sel); if (e && document.activeElement !== e) e.value = v || 0; };
+    campo("#rigVistasFixX", fix.x); campo("#rigVistasFixY", fix.y); campo("#rigVistasFixR", fix.r);
+    const titulo = $("#rigVistasFixTitulo");
+    if (titulo) titulo.textContent = !vista ? "Corrección de la vista"
+      : !pieza ? "Corrección · elegí la pieza"
+      : "Corrección de «" + pieza + "» en " + (vista.name || vista.at);
 
     const hay = !!juego;
     const btn = (sel, on) => { const b = $(sel); if (b) b.disabled = !on; };
+    btn("#rigVistasFixSet", hay && !!vista && !!pieza);
+    btn("#rigVistasFixClear", hay && !!vista && !!pieza && !!Object.keys(fix).length);
     btn("#rigVistasNew", !!slot && !hay);
     btn("#rigVistasAdd", hay);
     btn("#rigVistasBake", hay && juego.views.length > 0);
@@ -174,6 +237,8 @@
     on("#rigVistasAdd", agregar);
     on("#rigVistasBake", clavar);
     on("#rigVistasRemove", quitar);
+    on("#rigVistasFixSet", guardarFix);
+    on("#rigVistasFixClear", borrarFix);
     const lista = $("#rigVistasList");
     if (lista) lista.onchange = () => sync();
   }
@@ -199,6 +264,7 @@
   else autoEnganche();
 
   rigging.viewSetUI = { wire, sync, nuevo, agregar, quitar, clavar, juegoActual, slotActual,
-    textoCobertura, autoEnganche };
+    textoCobertura, autoEnganche, guardarFix, borrarFix, vistaEnFoco, piezaElegida,
+    soltarJuego: () => { juegoFijado = null; } };
   global.dzVistasPanelSync = sync;
 })(window);

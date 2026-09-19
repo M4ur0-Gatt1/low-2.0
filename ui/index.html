@@ -766,6 +766,17 @@
           </div>
           <!-- Lo que el plan prohíbe prometer: acá se dice qué está dibujado y
                qué falta, en vez de mostrar un giro de 360 que nadie dibujó. -->
+          <!-- El correctivo: lo que hay que acomodar cuando el dibujo cambia.
+               De tres cuartos el ojo se corre y la oreja se achica, y eso no
+               se puede interpolar porque el dibujo cambió de golpe. -->
+          <div class="rig2-vistas-fix">
+            <span class="rig2-vistas-fix-titulo" id="rigVistasFixTitulo">Corrección de la vista</span>
+            <label>X<input id="rigVistasFixX" type="number" step="1" value="0"></label>
+            <label>Y<input id="rigVistasFixY" type="number" step="1" value="0"></label>
+            <label>Giro<input id="rigVistasFixR" type="number" step="1" value="0"></label>
+            <button id="rigVistasFixSet" title="Guardar esta corrección para la pieza elegida mientras manda esta vista">Guardar corrección</button>
+            <button id="rigVistasFixClear" title="Sacar la corrección de esta pieza en esta vista">Sin corrección</button>
+          </div>
           <p class="rig2-vistas-cobertura" id="rigVistasCobertura">Todavía no hay vistas dibujadas.</p>
         </section>
         <section class="rig2-section rig2-mesh" data-rig-section="mesh" aria-label="Malla y pesos">

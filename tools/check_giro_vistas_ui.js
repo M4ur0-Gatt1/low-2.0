@@ -106,6 +106,28 @@ async function main() {
       d.scene.rigViewAt(juego.id, d.frame));
     salida.avisaFuera = fuera && fuera.fuera === true;
 
+    /* EL CORRECTIVO POR VISTA. Al girar la cabeza las piezas de encima no
+       caen solas en su lugar, y eso no se interpola: el dibujo cambio de
+       golpe. Se comprueba que valga SOLO mientras esa vista manda — un
+       correctivo que se arrastra a las otras vistas es peor que ninguno,
+       porque desacomoda el frente para arreglar el perfil. */
+    d.ensureRigBone("ojo", { name:"ojo" });
+    DZ.rigSelectedId = "ojo";
+    LOW.rigging.viewSetUI.sync(); await wait(120);
+    const baseOjo = d.scene.rigPoseBase("ojo", d.frame);
+    // se corrige la vista de perfil desde el panel
+    d.setRigControlValue("giro_cabeza", d.frame, 90);
+    document.querySelector("#rigVistasList").value = att["Perfil"];
+    document.querySelector("#rigVistasList").dispatchEvent(new Event("change",{bubbles:true}));
+    await wait(120);
+    document.querySelector("#rigVistasFixX").value = "12";
+    document.querySelector("#rigVistasFixSet").click(); await wait(200);
+    salida.tituloFix = document.querySelector("#rigVistasFixTitulo").textContent;
+    salida.corrigeEnPerfil = Math.abs(d.scene.rigPose("ojo", d.frame).x - (baseOjo.x + 12)) < 1e-9;
+    d.setRigControlValue("giro_cabeza", d.frame, 0);
+    salida.noCorrigeEnFrente = Math.abs(d.scene.rigPose("ojo", d.frame).x - baseOjo.x) < 1e-9;
+    DZ.rigSelectedId = "cabeza";
+
     // quitar una vista no borra el dibujo
     document.querySelector("#rigVistasList").value = att["Perfil"];
     document.querySelector("#rigVistasList").dispatchEvent(new Event("change",{bubbles:true}));
@@ -129,6 +151,10 @@ async function main() {
   if (!r.en0 || !r.en90) mal("el control no elige el dibujo de cada extremo", r);
   if (!r.en80EsPerfil) mal("la elección no es discreta: en 80 tiene que mandar el perfil entero", r);
   if (!r.avisaFuera) mal("pasado lo dibujado el modelo no avisa que está fuera", r);
+  if (!/ojo/.test(r.tituloFix || "")) mal("el panel no dice a qué pieza le está corrigiendo la vista", r);
+  if (!r.corrigeEnPerfil) mal("la corrección de la vista no llega a la pose de la pieza", r);
+  if (!r.noCorrigeEnFrente)
+    mal("la corrección se arrastra a las otras vistas: desacomoda el frente para arreglar el perfil", r);
   if (r.trasQuitar !== 1) mal("quitar una vista no la saca del giro", r);
   if (!r.dibujoSigue) mal("quitar una vista BORRÓ el dibujo: sólo tenía que sacarlo del giro", r);
 
