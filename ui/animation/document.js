@@ -1371,6 +1371,77 @@
       });
     }
 
+    /* ── JUEGOS DE VISTAS (C04): el giro de cabeza con dibujos ───────────
+       Atan un slot a un control: animás el control y aparece la vista que
+       toca. Antes había que clavar la sustitución cuadro por cuadro, que es
+       justo el trabajo que un control de actuación viene a sacar. */
+
+    /** Crea el juego y lo ata a un control. No inventa vistas: nace vacío y se
+     *  le van agregando los dibujos que EXISTEN. */
+    createRigViewSet(id, { slotId, driverPath, min = -90, max = 90, name } = {}) {
+      if (!id || !slotId || !driverPath) return false;
+      return this._rigChange("Crear juego de vistas", (rig) => {
+        if (!rig.slots[slotId]) return false;
+        rig.viewSets = rig.viewSets || {};
+        if (rig.viewSets[id]) return false;
+        rig.viewSets[id] = { id, name: name || id, slotId, enabled: true,
+          driver: { path: String(driverPath), min: +min, max: +max }, views: [] };
+        return true;
+      });
+    }
+    /** Suma una vista dibujada en un punto del recorrido. `order` es el orden
+     *  de slots que esa vista impone: de perfil la nariz cruza la cara y lo
+     *  que estaba atrás pasa adelante. */
+    addRigView(viewSetId, attachmentId, at, { name, order } = {}) {
+      return this._rigChange("Agregar vista al juego", (rig) => {
+        const juego = (rig.viewSets || {})[viewSetId];
+        if (!juego || !rig.attachments[attachmentId]) return false;
+        if (juego.views.some((v) => v.attachmentId === attachmentId)) return false;
+        juego.views.push({ attachmentId: String(attachmentId), at: +at,
+          name: name || "", order: Array.isArray(order) ? order.map(String) : null });
+        juego.views.sort((a, b) => a.at - b.at || a.attachmentId.localeCompare(b.attachmentId));
+        return true;
+      });
+    }
+    /** Mueve una vista a otro punto del recorrido, sin tocar el dibujo. */
+    setRigViewAt(viewSetId, attachmentId, at) {
+      return this._rigChange("Mover la vista en el recorrido", (rig) => {
+        const juego = (rig.viewSets || {})[viewSetId];
+        const vista = juego && juego.views.find((v) => v.attachmentId === attachmentId);
+        if (!vista || !Number.isFinite(+at) || vista.at === +at) return false;
+        vista.at = +at;
+        juego.views.sort((a, b) => a.at - b.at || a.attachmentId.localeCompare(b.attachmentId));
+        return true;
+      });
+    }
+    /** Saca una vista del juego. NO borra el dibujo: el dibujo sigue en el
+     *  nivel y en el slot; lo que se saca es que este giro lo use. */
+    removeRigView(viewSetId, attachmentId) {
+      return this._rigChange("Quitar vista del juego", (rig) => {
+        const juego = (rig.viewSets || {})[viewSetId];
+        if (!juego) return false;
+        const antes = juego.views.length;
+        juego.views = juego.views.filter((v) => v.attachmentId !== attachmentId);
+        return juego.views.length !== antes;
+      });
+    }
+    removeRigViewSet(viewSetId) {
+      return this._rigChange("Quitar juego de vistas", (rig) => {
+        if (!rig.viewSets || !rig.viewSets[viewSetId]) return false;
+        delete rig.viewSets[viewSetId];
+        return true;
+      });
+    }
+    /** Clava en el cuadro la vista que el juego elige AHORA. Es el puente con
+     *  las sustituciones que ya existían: el giro se maneja con el control y,
+     *  cuando hace falta forzar un cuadro, se hornea como sustitución normal. */
+    bakeRigViewAt(viewSetId, frame) {
+      const juego = this.scene.rigViewSet(viewSetId);
+      const vista = this.scene.rigViewAt(viewSetId, frame == null ? this.frame : frame);
+      if (!juego || !vista) return false;
+      return this.setRigSwitchKey(juego.slotId, frame == null ? this.frame : frame, vista.attachmentId);
+    }
+
     /** Clava que dibujo se ve en este cuadro. Un dibujo no se interpola: vale
      *  desde su clave hasta la siguiente. */
     setRigSwitchKey(slotId, frame, attachmentId) {

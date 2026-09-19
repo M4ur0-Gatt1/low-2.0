@@ -254,6 +254,98 @@
     return out;
   };
 
+  /** JUEGOS DE VISTAS (C04) — el giro de cabeza hecho con dibujos, no con
+   *  matemática.
+   *
+   *  Una cabeza no gira interpolando: gira porque el animador DIBUJÓ el frente,
+   *  el tres cuartos y el perfil, y en cada punto del giro se muestra el dibujo
+   *  que corresponde. Eso ya se podía hacer a mano —las sustituciones por slot
+   *  existen— pero había que clavar la sustitución cuadro por cuadro, que es
+   *  justo el trabajo que un control de actuación viene a sacar.
+   *
+   *  Un juego de vistas ata un SLOT a un CONTROL: cada vista dice en qué valor
+   *  del control manda ella. Animás el control y aparece el dibujo que toca.
+   *
+   *  LO QUE NO HACE, a propósito: no inventa un giro de 360°. Si sólo dibujaste
+   *  frente y perfil, el juego cubre lo que va de uno a otro y lo DICE
+   *  (`rigViewSetCoverage`). Prometer un giro completo con dos dibujos es
+   *  mentirle a quien después tiene que animar con eso.
+   *
+   *  La sustitución es DISCRETA: dos dibujos no se mezclan. Entre dos vistas
+   *  manda la más cercana, y el empate cae siempre en la de valor menor, para
+   *  que el mismo valor dé siempre el mismo dibujo. */
+  const rigViewSetsData = (source = {}, attachments = {}, slots = {}) => {
+    const out = {};
+    for (const [id, raw] of Object.entries(source || {})) {
+      if (!id || !raw) continue;
+      const slotId = raw.slotId && slots[raw.slotId] ? String(raw.slotId) : null;
+      if (!slotId) continue;                       // un juego sin slot no muestra nada
+      const driver = raw.driver && raw.driver.path ? {
+        path: String(raw.driver.path),
+        min: Number.isFinite(+raw.driver.min) ? +raw.driver.min : -90,
+        max: Number.isFinite(+raw.driver.max) ? +raw.driver.max : 90,
+      } : null;
+      // Se descarta la vista que apunte a un dibujo que ya no existe: si no, el
+      // giro tendría un agujero y nadie se enteraría hasta verlo en pantalla.
+      const vistas = [];
+      for (const v of (Array.isArray(raw.views) ? raw.views : [])) {
+        if (!v || !attachments[v.attachmentId]) continue;
+        const at = Number(v.at);
+        if (!Number.isFinite(at)) continue;
+        if (vistas.some((x) => x.attachmentId === v.attachmentId)) continue;
+        vistas.push({ attachmentId: String(v.attachmentId), at,
+          name: typeof v.name === "string" ? v.name : "",
+          // el orden de los slots puede cambiar con la vista: de perfil, la
+          // nariz cruza la cara y lo que estaba atrás pasa adelante
+          order: Array.isArray(v.order) ? v.order.map(String) : null });
+      }
+      vistas.sort((a, b) => a.at - b.at || a.attachmentId.localeCompare(b.attachmentId));
+      out[id] = { id, name: raw.name || id, slotId, driver,
+        enabled: raw.enabled !== false, views: vistas };
+    }
+    return out;
+  };
+
+  /** Qué parte del recorrido está DIBUJADA, y qué falta.
+   *
+   *  Es la pieza que impide prometer un giro que no existe: devuelve el tramo
+   *  que cubren las vistas que hay, si llega a los extremos que el control
+   *  declara, y los huecos entre vistas contiguas. La interfaz muestra esto
+   *  en vez de un giro completo imaginario. */
+  const rigViewSetCoverage = (juego) => {
+    const vistas = (juego && juego.views) || [];
+    if (!vistas.length) return { vistas: 0, desde: null, hasta: null, completo: false, huecos: [] };
+    const desde = vistas[0].at, hasta = vistas[vistas.length - 1].at;
+    const huecos = [];
+    for (let i = 1; i < vistas.length; i++)
+      huecos.push({ desde: vistas[i - 1].at, hasta: vistas[i].at,
+                    salto: Math.abs(vistas[i].at - vistas[i - 1].at) });
+    const d = juego.driver;
+    const llegaAlMinimo = !d || desde <= d.min + 1e-9;
+    const llegaAlMaximo = !d || hasta >= d.max - 1e-9;
+    return { vistas: vistas.length, desde, hasta, huecos,
+             llegaAlMinimo, llegaAlMaximo,
+             completo: vistas.length >= 2 && llegaAlMinimo && llegaAlMaximo };
+  };
+
+  /** Qué vista manda para un valor del control. Discreta: la más cercana, y el
+   *  empate cae en la de valor menor. `fuera` avisa que el valor se pasó de lo
+   *  dibujado y se está sosteniendo el extremo — no es lo mismo que haber
+   *  dibujado esa vuelta. */
+  const rigViewAt = (juego, valor) => {
+    const vistas = (juego && juego.enabled !== false && juego.views) || [];
+    if (!vistas.length) return null;
+    const v = Number(valor);
+    if (!Number.isFinite(v)) return { ...vistas[0], fuera: false };
+    let elegida = vistas[0], mejor = Math.abs(vistas[0].at - v);
+    for (const vista of vistas) {
+      const d = Math.abs(vista.at - v);
+      if (d < mejor - 1e-9) { mejor = d; elegida = vista; }
+    }
+    const fuera = v < vistas[0].at - 1e-9 || v > vistas[vistas.length - 1].at + 1e-9;
+    return { ...elegida, fuera };
+  };
+
   /** Deformadores por pieza. Se descartan los que no tengan una curva usable:
    *  con menos de dos puntos no hay nada que doblar. */
   const rigDeformersData = (source = {}) => {
@@ -768,6 +860,7 @@
       deformers: rigDeformersData(source.deformers), constraints,
       constraintOrder: [...requestedOrder, ...remainder], controllers: clone(source.controllers || {}),
       actions: rigActionsData(source.actions), controls: rigControlsData(source.controls), channels, switches: rigSwitchesData(source.switches, attachments),
+      viewSets: rigViewSetsData(source.viewSets, attachments, slots),
       physics: clone(source.physics || {}), diagnostics: { valid: true, errors: [], warnings: [] } };
     // `nodes` es sólo el nombre de compatibilidad usado por la UI v3. Comparte
     // la misma referencia que `bones`; el JSON canónico nunca serializa ambos.
@@ -1223,6 +1316,23 @@
     rigBone(id) { return this.rigNode(id); }
     rigSlot(id) { return this.rig.slots[id] || null; }
     rigAttachment(id) { return this.rig.attachments[id] || null; }
+    rigViewSet(id) { return (this.rig.viewSets || {})[id] || null; }
+    /** Los juegos de vistas que gobiernan un slot. */
+    rigViewSetsOf(slotId) {
+      return Object.values(this.rig.viewSets || {}).filter((j) => j.slotId === slotId);
+    }
+    /** Qué parte del giro está dibujada. La interfaz muestra esto en vez de
+     *  prometer una vuelta completa que nadie dibujó. */
+    rigViewSetCoverage(id) { return rigViewSetCoverage(this.rigViewSet(id)); }
+    /** La vista vigente de un juego en un cuadro: lee el valor del control que
+     *  lo conduce y elige el dibujo más cercano. Devuelve también `fuera`, que
+     *  avisa cuando el control se pasó de lo dibujado y se sostiene el extremo. */
+    rigViewAt(id, frame) {
+      const juego = this.rigViewSet(id);
+      if (!juego || !juego.driver) return null;
+      const valor = this.rigChannelValue(juego.driver.path, frame, juego.driver.min);
+      return rigViewAt(juego, valor == null ? juego.driver.min : valor);
+    }
     /** El dibujo que va en un slot. Con `frame` respeta las claves de
      *  sustitucion; sin `frame`, el que este activo en el slot.
      *  Un dibujo NO se interpola: vale el de la ultima clave <= frame. */
