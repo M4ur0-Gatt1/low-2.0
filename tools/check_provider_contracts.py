@@ -188,6 +188,28 @@ class Providers(unittest.TestCase):
             self.assertEqual(result["status"], "error")
             self.assertNotIn("secret", result["message"])
 
+    def test_higgsfield_checks_draft_without_saving_or_generating(self):
+        api = main.Api.__new__(main.Api)
+        api.cfg = Mock(data={"providers": {"higgsfield": {"api_key": "old"}}})
+        with patch("requests.get") as get, patch("requests.post") as post:
+            for key in ("", "only-id", "Key id:secret", "id:"):
+                self.assertEqual(api.check_provider("higgsfield", {"api_key": key})["status"], "error")
+            result = api.check_provider("higgsfield", {"api_key": "id:secret", "model": "vendor/model"})
+            self.assertEqual(result["status"], "unverified")
+            self.assertNotIn("id:secret", result["message"])
+            get.assert_not_called()
+            post.assert_not_called()
+            self.assertEqual(api.cfg.data["providers"]["higgsfield"]["api_key"], "old")
+
+    def test_catalog_uses_draft_credentials(self):
+        api = main.Api.__new__(main.Api)
+        api.cfg = Mock(data={"providers": {}})
+        with patch("requests.get", return_value=response({"data": [{"id": "draft-model"}]})) as get:
+            result = api.check_provider("custom_test", {"api_key": "draft-key", "model": "draft-model", "base_url": "https://example.test/v1"})
+            self.assertEqual(result["status"], "catalog_ok")
+            self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "Bearer draft-key")
+            self.assertEqual(get.call_args.kwargs["timeout"], (5, 10))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

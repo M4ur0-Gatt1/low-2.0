@@ -3303,8 +3303,15 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 #designView .dz-shape-menu { position:fixed; z-index:800; display:grid; grid-template-columns:repeat(3,34px); gap:4px; padding:6px; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 34px rgba(0,0,0,.48); }
 #designView .dz-shape-menu[hidden] { display:none; }
 #designView .dz-canvas { background-color:#101012; }
-#designView .dz-inspector { width:258px; padding:11px 10px; border-left-color:var(--dz-hairline); }
-#designView .dz-style-row { min-height:30px; gap:6px; }
+#designView .dz-inspector { width:246px; padding:8px; border-left-color:var(--dz-hairline); }
+#designView .dz-style-row { min-height:24px; gap:6px; margin-bottom:4px; }
+#designView .dz-style-row .dz-chip {
+  appearance:none; background:transparent; color:var(--mut); border:1px solid var(--line);
+  border-radius:4px; height:22px; min-height:0; padding:0 6px;
+  font:500 10px 'Figtree',sans-serif; line-height:20px; flex:none;
+}
+#designView .dz-style-row .dz-chip:hover { background:var(--dz-raised); color:var(--txt); }
+#designView .dz-style-row .dz-chip.on { background:var(--redsoft); color:var(--redh); border-color:var(--red); }
 #designView .dz-lay-row { min-height:30px; padding:4px 6px; border-radius:7px; }
 #designView .dz-lay-row.sel { background:var(--redsoft); box-shadow:inset 2px 0 0 var(--red); }
 #designView .dz-lay-op,#designView .dz-lay-z { border:0; border-radius:5px; background:transparent; }

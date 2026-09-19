@@ -37,6 +37,18 @@ async function main() {
       {name:'cloudflare',key:'',model:'model',account_id:'account'},
       {name:'openai',key:'',model:'gpt-4o'}]; modalKeys();`);
     assert.equal(await evaluate('document.querySelectorAll(".provider-card").length'),3);
+    await evaluate(`window.__draft=null; api.check_provider=async(name,settings)=>{window.__draft={name,settings};return {message:'Revisado sin generar'};};
+      document.querySelector('[data-provider="higgsfield"][data-field="api_key"]').value='test-id:test-secret';
+      document.querySelector('[data-check="higgsfield"]').click();`);
+    await new Promise(resolve=>setTimeout(resolve,80));
+    assert.equal((await evaluate('window.__draft')).settings.api_key,'test-id:test-secret');
+    assert.match(await evaluate('document.querySelector("[data-result=higgsfield]").textContent'),/Revisado/);
+    await evaluate(`window.__realTimer=window.setTimeout;window.setTimeout=(fn,ms,...args)=>window.__realTimer(fn,ms===20000?30:ms,...args);
+      api.check_provider=()=>new Promise(()=>{});document.querySelector('[data-check="higgsfield"]').click();`);
+    await new Promise(resolve=>setTimeout(resolve,100));
+    assert.match(await evaluate('document.querySelector("[data-result=higgsfield]").textContent'),/20 segundos/);
+    assert.equal(await evaluate('document.querySelector("[data-check=higgsfield]").disabled'),false);
+    await evaluate('window.setTimeout=window.__realTimer');
     await evaluate('document.getElementById("addProvider").click()');
     await evaluate(`document.querySelector('#providerCards > :last-child [data-field="base_url"]').value='http://localhost:1234/v1';
       document.querySelector('#providerCards > :last-child [data-field="model"]').value='local';`);
@@ -59,7 +71,7 @@ async function main() {
     assert.match(await evaluate('document.getElementById("workbenchStatus").textContent'),/2 acciones · 1 archivo\(s\) · 1 error\(es\)/);
     assert.deepEqual(await evaluate('window.__errs'),[]);
     const screenshot = await send('Page.captureScreenshot',{format:'png'});
-    fs.writeFileSync('docs/provider-workbench-preview.png',Buffer.from(screenshot.data,'base64'));
+    if(process.env.LOW_E2E_SCREENSHOT)fs.writeFileSync(process.env.LOW_E2E_SCREENSHOT,Buffer.from(screenshot.data,'base64'));
     console.log('PROVIDER + WORKBENCH UI OK: settings, custom endpoint, JSON validation, events, files, errors');
   } finally { socket.close(); }
 }

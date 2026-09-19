@@ -17,7 +17,8 @@
       ${gateway || p.name === "fal" ? field(p, "image_model", "Modelo de imagen") : ""}
       ${gateway ? ["image", "video"].map(kind => `<label>Parámetros de ${kind === "image" ? "imagen" : "video"} (JSON del modelo)
         <textarea data-provider="${escape(p.name)}" data-field="${kind}_params" rows="3">${escape(JSON.stringify(p[kind + "_params"] || {}, null, 2))}</textarea></label>`).join("") : ""}
-      <button type="button" data-check="${escape(p.name)}">Comprobar catálogo guardado</button>
+      ${p.name === "higgsfield" ? '<small>Ingresá ID:SECRET de Higgsfield Console, sin el prefijo Key. Se necesitan ambas partes.</small>' : ''}
+      <button type="button" data-check="${escape(p.name)}">${p.media_only ? 'Revisar configuración' : 'Comprobar catálogo'}</button>
       <div data-result="${escape(p.name)}" role="status"></div>
       <small>La clave guardada no confirma saldo, acceso al modelo ni conexión.</small>
     </details>`;
@@ -34,9 +35,14 @@
         const button = event.target.closest("[data-check]");
         if (!button || !check) return;
         const card = button.closest(".provider-card"), result = card.querySelector("[data-result]");
-        button.disabled = true; result.textContent = "Comprobando la configuración guardada…";
+        button.disabled = true; result.textContent = "Comprobando los valores del formulario…";
+        let timer;
         try {
-          const reply = await check(button.dataset.check);
+          const settings = window.LOW.ProviderSettings.collect(card)[button.dataset.check];
+          const reply = await Promise.race([check(button.dataset.check, settings), new Promise((_, reject) => {
+            timer = setTimeout(() => reject(Error('La comprobación no respondió en 20 segundos. Podés reintentar; no se generó contenido.')), 20000);
+          })]);
+          if (!reply || typeof reply.message !== 'string') throw Error('El puente devolvió una respuesta inválida. Reiniciá LOW y reintentá.');
           result.textContent = reply.message;
           if (reply.models?.length) {
             card.querySelector("datalist")?.remove();
@@ -44,8 +50,8 @@
             reply.models.forEach(id => { const option = document.createElement("option"); option.value = id; list.append(option); });
             card.append(list); card.querySelector('[data-field="model"]').setAttribute("list", list.id);
           }
-        } catch { result.textContent = "No se pudo comprobar la conexión."; }
-        finally { button.disabled = false; }
+        } catch (error) { result.textContent = error.message || "No se pudo comprobar la conexión."; }
+        finally { clearTimeout(timer); button.disabled = false; }
       });
       document.getElementById("addProvider").onclick = () => {
         const name = "custom_" + Date.now().toString(36);
@@ -55,9 +61,9 @@
         card.querySelector('[data-field="base_url"]').focus();
       };
     },
-    collect() {
+    collect(root = document.getElementById('providerCards')) {
       const values = {};
-      document.querySelectorAll("#providerCards [data-field]").forEach(input => {
+      root.querySelectorAll("[data-field]").forEach(input => {
         const {provider, field} = input.dataset;
         const value = field.endsWith("_params") ? JSON.parse(input.value || "{}") : input.value.trim();
         if (field.endsWith("_params") && (!value || Array.isArray(value) || typeof value !== "object"))

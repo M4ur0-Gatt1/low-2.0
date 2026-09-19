@@ -2274,14 +2274,25 @@ class Api:
         return {**s._apis_state(), "provider": active, "model": model,
                 "models": [model] if model else []}
 
-    def check_provider(s, name):
+    def check_provider(s, name, settings=None):
         """Read the real catalog, never a static fallback or another provider."""
-        if name not in s.cfg.data.get("providers", {}):
+        if name not in PROVIDERS and not is_custom_provider(name):
+            return {"status": "error", "message": "Proveedor desconocido."}
+        if settings is None and name not in s.cfg.data.get("providers", {}):
             return {"status": "unverified", "message": "Guardá primero la configuración del proveedor."}
+        values = settings if isinstance(settings, dict) else s.cfg.data.get("providers", {}).get(name, {})
+        if name == "higgsfield":
+            key = str(values.get("api_key") or "").strip()
+            parts = key.split(":")
+            if len(parts) != 2 or not all(parts) or any(c.isspace() for c in key):
+                return {"status": "error", "message": "Higgsfield necesita ID:SECRET completos de Higgsfield Console, sin espacios ni el prefijo Key."}
+            if not values.get("model") and not values.get("image_model"):
+                return {"status": "error", "message": "Elegí un modelo de imagen o video de Higgsfield."}
+            return {"status": "unverified", "message": "Formato de clave y modelo completos. Guardá para aplicarlos. La autenticación y el acceso al modelo se comprueban al generar; no se envió una generación ni se verificó saldo."}
         if name in s.MEDIA_ONLY:
             return {"status": "unverified", "message": "La conexión de medios se verifica al generar; esta comprobación no genera contenido."}
         try:
-            provider = s._mk_provider(name)
+            provider = get_provider(name, **values)
             headers = {"Authorization": f"Bearer {provider.api_key or 'na'}"}
             if name == "anthropic":
                 headers = {"x-api-key": provider.api_key or "", "anthropic-version": "2023-06-01"}

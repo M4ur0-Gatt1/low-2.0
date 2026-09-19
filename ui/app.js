@@ -2225,7 +2225,7 @@ function modalKeys() {
       <button class="primary" id="mSave">Guardar</button>
     </div>`);
   api.config_path().then(p => { $("#cfgPath").textContent = "Se guardan en " + p; });
-  window.LOW.ProviderSettings.bind(name => api.check_provider(name));
+  window.LOW.ProviderSettings.bind((name, settings) => api.check_provider(name, settings));
   renderSocialCfg(true);
   $("#sysP").value = S.sysPrompt || "";
   $("#sysP").placeholder = S.defaultSp || "";
