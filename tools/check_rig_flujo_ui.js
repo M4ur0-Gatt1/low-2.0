@@ -68,7 +68,13 @@ async function main() {
   // ── 1. EL PERSONAJE DE EJEMPLO ES UN ESQUELETO DE VERDAD ──────────────────
   //      Es la puerta de entrada al rig: si el ejemplo no se puede tocar, el
   //      resto del entorno queda sin explicar.
-  await ev('(async()=>{ DZ.dirty = false; await dzRigEjemplo(); })()');
+  await ev(`(async()=>{ DZ.dirty = false; await (async()=>{ const esperar=ms=>new Promise(r=>setTimeout(r,ms));
+      const p = dzRigEjemplo();
+      // La confirmacion es nueva y es deliberada: el ejemplo REEMPLAZA el
+      // dibujo de la mesa. Se acepta, que es lo que haria una persona.
+      for (let i=0;i<20;i++){ const ok=document.querySelector("#dzEjOk");
+        if(ok){ ok.click(); break; } await esperar(100); }
+      return p; })(); })()`);
   await w(900);
   const ejemplo = await ev(`(()=>{ const ns = Object.values(DZ.doc.scene.rig.nodes);
     return { huesos: ns.length, conAlambre: ns.filter(n=>n.head&&n.tail).length,

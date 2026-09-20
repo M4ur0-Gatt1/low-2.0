@@ -11093,7 +11093,7 @@ const DZ_EJEMPLO_CLAVES = {
 const DZ_EJEMPLO_LARGO = 13;
 
 async function dzRigEjemplo() {
-  if (DZ.dirty || (DZ.doc && DZ.doc.scene.lastFrame() > 1)) {
+  if (DZ.dirty || dzHayDibujoEnLaMesa() || (DZ.doc && DZ.doc.scene.lastFrame() > 1)) {
     const sigo = await dzRigEjemploConfirmar();
     if (!sigo) return;
   }
@@ -11145,8 +11145,8 @@ async function dzRigEjemplo() {
 function dzRigEjemploConfirmar() {
   return new Promise(resolve => {
     openModal(`<h2>Abrir el personaje de ejemplo</h2>
-      <p class="sub">Reemplaza lo que hay en la mesa por un muñeco ya riggeado y animado.
-      Lo que tengas sin guardar se pierde.</p>
+      <p class="sub"><b>Reemplaza el dibujo que hay en la mesa</b> por un muñeco ya riggeado.
+      No se superpone: lo que está ahora se va, aunque esté guardado (se recupera reabriendo).</p>
       <div class="m-actions"><button class="ghost" id="dzEjX">Cancelar</button>
       <button class="primary" id="dzEjOk">Abrir el ejemplo</button></div>`);
     $("#dzEjX").onclick = () => { closeModal(); resolve(false); };

@@ -117,7 +117,12 @@ async function main() {
     const rigSampling={count:samples.length,
       transformed:Math.hypot(samples[0].x-expectedCenter.x,samples[0].y-expectedCenter.y)<.01};
     DZ.dirty=false;
-    await dzRigEjemplo();
+    await (async()=>{ const esperar=ms=>new Promise(r=>setTimeout(r,ms));
+      const p = dzRigEjemplo();
+      // confirmacion nueva y deliberada: el ejemplo REEMPLAZA el dibujo
+      for (let i=0;i<20;i++){ const ok=document.querySelector("#dzEjOk");
+        if(ok){ ok.click(); break; } await esperar(100); }
+      return p; })();
     const exampleIds=Object.keys(DZ_EJEMPLO_RIG);
     const example={pieces:exampleIds.length,allVisible:exampleIds.every(id=>document.getElementById(id)),
       allBound:exampleIds.every(id=>DZ.doc.scene.rigNode(id)?.binding?.elementId===id),
