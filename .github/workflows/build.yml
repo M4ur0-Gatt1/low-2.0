@@ -133,6 +133,7 @@ jobs:
           node tools/check_rig_herramienta_ui.js
           node tools/check_ejemplo_no_borra_ui.js
           node tools/check_ayuda_no_tapa_ui.js
+          node tools/check_marco_seleccion_ui.js
           node tools/check_arranque_recorrido_ui.js
           node tools/check_xsheet_columnas_ui.js
           node tools/check_flexible_limb_ui.js

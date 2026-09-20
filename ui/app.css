@@ -3663,3 +3663,20 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .rig2-conj-aviso { margin:6px 0 0; padding:5px 6px; border-radius:var(--r-md,7px);
   background:var(--dz-raised); border:1px solid var(--line2);
   font-size:10px; line-height:1.45; color:var(--fg2); }
+
+/* ══ MARCO DE SELECCION ═══════════════════════════════════════════════════
+   Tres estados que TIENEN que verse distintos, porque no son lo mismo:
+   una pieza (movés una), varias (movés varias sueltas) y un grupo (movés el
+   conjunto). Antes los tres se veían igual —y «varias» no se veía—. */
+.dz-selmarco { position: absolute; pointer-events: none; z-index: 5;
+  border: 1px solid var(--dz-sel, #33B5E8); border-radius: 2px; }
+.dz-selmarco[hidden] { display: none; }
+/* varias piezas sueltas: guionado, para distinguirlo de una sola */
+.dz-selmarco.varias { border-style: dashed; border-width: 1.5px; }
+/* un grupo: guionado y con una segunda línea, como el marco de grupo de
+   Illustrator — moverlo mueve todo lo de adentro */
+.dz-selmarco.grupo { border-style: dashed; border-width: 1.5px;
+  box-shadow: 0 0 0 2px rgba(51,181,232,.22); }
+.dz-selmarco-et { position: absolute; left: -1px; top: -19px; padding: 1px 6px;
+  border-radius: 3px 3px 0 0; background: var(--dz-sel, #33B5E8); color: #08121a;
+  font: 600 10px/1.5 Figtree, sans-serif; white-space: nowrap; font-style: normal; }
