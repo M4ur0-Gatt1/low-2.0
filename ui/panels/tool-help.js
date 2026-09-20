@@ -1,11 +1,32 @@
 /* Hover and keyboard help for the drawing toolbar. */
 (() => {
   let current=null,timer=null,bubble=null;
-  const hide=()=>{clearTimeout(timer);bubble?.remove();bubble=null;current=null;};
+  /* DOBLE CARTEL. Este globo se arma LEYENDO el `title`, y el navegador
+     muestra ademas SU tooltip nativo del mismo `title`: dos carteles con el
+     mismo texto, uno encima del otro. Reportado mirando la pantalla («aparece
+     doble cartel, es muy molesto») y se ve en la captura: el texto del rig
+     repetido y superpuesto.
+
+     Se saca el `title` mientras el globo esta a la vista y se DEVUELVE al
+     ocultarlo. No se borra para siempre porque el `title` es lo que leen los
+     lectores de pantalla y de donde sale el texto del propio globo. */
+  const guardarTitulo=(el)=>{
+    if(!el||el.dataset.tituloAyuda!=null)return;
+    const t=el.getAttribute('title');if(t==null)return;
+    el.dataset.tituloAyuda=t;el.removeAttribute('title');
+  };
+  const devolverTitulo=(el)=>{
+    if(!el||el.dataset.tituloAyuda==null)return;
+    el.setAttribute('title',el.dataset.tituloAyuda);delete el.dataset.tituloAyuda;
+  };
+  const textoDe=(el)=>(el?.dataset.tituloAyuda??el?.getAttribute('title'))||'';
+  const hide=()=>{clearTimeout(timer);bubble?.remove();bubble=null;devolverTitulo(current);current=null;};
   const show=(target)=>{
     if(current===target)return;hide();if(!target)return;current=target;
+    // se saca YA, no dentro del temporizador: el nativo aparece antes
+    guardarTitulo(target);
     timer=setTimeout(()=>{
-      if(!target.isConnected)return;const text=target.getAttribute('title');if(!text)return;
+      if(!target.isConnected)return;const text=textoDe(target);if(!text)return;
       bubble=document.createElement('div');bubble.className='dz-tool-tooltip';bubble.setAttribute('role','tooltip');bubble.textContent=text;document.body.appendChild(bubble);
       const rect=target.getBoundingClientRect(), b=bubble.getBoundingClientRect();
       bubble.style.left=Math.max(8,Math.min(innerWidth-b.width-8,rect.right+8))+'px';bubble.style.top=Math.max(8,Math.min(innerHeight-b.height-8,rect.top))+'px';
