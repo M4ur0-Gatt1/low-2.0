@@ -1164,10 +1164,21 @@ export class WebGLDesign3D {
       punto = new THREE.Vector3(radial.x * r, THREE.MathUtils.clamp(cerca.y, -h, h), radial.z * r);
       normal = radial;
     } else if (s.type === 'torus') {
-      // primero al círculo mayor (plano XY), después al tubo
+      // primero al circulo mayor (plano XY), despues al tubo
       const R = par.radius ?? 1;
       const tubo = par.tube ?? R * 0.35;
       const enPlano = new THREE.Vector3(cerca.x, cerca.y, 0);
+      // EL AGUJERO NO ES SUPERFICIE. Adentro del agujero el punto mas cercano
+      // del toro esta sobre el borde interno, del lado al que apunte `enPlano`
+      // — y al cruzar el centro ese lado se DA VUELTA. MEDIDO barriendo el
+      // cursor de izquierda a derecha por el medio de un toro (R=1.4,
+      // tubo=0.49): el punto se quedaba clavado en x=-0.91 mientras el cursor
+      // avanzaba, y al pasar el centro saltaba a x=+0.91. 1.82 de un cuadro al
+      // otro, un tercio del largo del trazo, y siempre DE COSTADO: la tinta se
+      // iba lejos del cursor. Devolver null deja que el llamador use el plano
+      // por el centro, que sigue al cursor y empalma sin escalon (en el borde
+      // del agujero la proyeccion ya daba z=0, que es la z de ese plano).
+      if (enPlano.length() < R - tubo) return null;
       if (enPlano.lengthSq() < 1e-12) enPlano.set(1, 0, 0);
       const centroTubo = enPlano.clone().normalize().multiplyScalar(R);
       const haciaFuera = cerca.clone().sub(centroTubo);

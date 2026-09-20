@@ -3680,3 +3680,23 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 .dz-selmarco-et { position: absolute; left: -1px; top: -19px; padding: 1px 6px;
   border-radius: 3px 3px 0 0; background: var(--dz-sel, #33B5E8); color: #08121a;
   font: 600 10px/1.5 Figtree, sans-serif; white-space: nowrap; font-style: normal; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   `hidden` TIENE QUE ESCONDER. SIEMPRE.
+
+   El navegador esconde lo que lleva `hidden` con una regla propia, pero
+   cualquier regla nuestra que fije `display` con una clase le gana por
+   especificidad. `.ibtn { display: inline-flex }` alcanza.
+
+   MEDIDO: cuatro cosas apagadas por código seguían ocupando la pantalla —
+   `#tlCamKey` (29×29, un botón que se podía APRETAR y no hacía nada porque
+   el modo cámara estaba apagado), el encabezado de la grilla de tiempo
+   (1366×21), el panel de paleta en Limpieza (220×794) y la columna de
+   herramientas en el espacio 3D (74×618).
+
+   Arriba hay cuarenta reglas `.loquesea[hidden] { display: none }`: cada una
+   es este mismo defecto parchado una vez, después de aparecer. Esta va última
+   —para ganar los empates de especificidad— y los cubre a todos, incluidos
+   los que todavía no molestaron.
+   ══════════════════════════════════════════════════════════════════════════ */
+[hidden] { display: none !important; }

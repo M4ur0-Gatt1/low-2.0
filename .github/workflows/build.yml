@@ -134,10 +134,12 @@ jobs:
           node tools/check_ejemplo_no_borra_ui.js
           node tools/check_ayuda_no_tapa_ui.js
           node tools/check_marco_seleccion_ui.js
+          node tools/check_hidden_esconde_ui.js
           node tools/check_arranque_recorrido_ui.js
           node tools/check_xsheet_columnas_ui.js
           node tools/check_flexible_limb_ui.js
           node tools/check_3d_studio_ui.js
+          node tools/check_3d_superficie_curva_ui.js
           node tools/check_safe_mode_ui.js
           node tools/check_drawing_workflow_ui.js
           node tools/check_camara_encuadre_ui.js
