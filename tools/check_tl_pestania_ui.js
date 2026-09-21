@@ -75,8 +75,12 @@ async function main() {
       texto: p ? (p.textContent || "").trim() : "",
       expandida: p ? p.getAttribute("aria-expanded") : null,
       anim: !!(typeof DZ !== "undefined" && DZ.anim),
-      cuadrosReales: (typeof DZ !== "undefined" && DZ.anim && DZ.anim.frames)
-        ? DZ.anim.frames.length : 0,
+      /* La referencia NO es el mismo dato que usa la pestaña —eso no
+         probaria nada—, sino la BARRA DE ESTADO de la app, que lo calcula
+         por otro camino (dzSbFrame). Si las dos partes de la pantalla no
+         coinciden, una miente. Es exactamente el defecto reportado: la
+         pestaña decia «sin cuadros» y la barra «cuadro 7/18». */
+      barraDeEstado: ((document.querySelector("#sbFrame")||{}).textContent || "").trim(),
       cuerpo, altoCuerpo: cuerpo.reduce((s, c) => s + (c.alto || 0), 0) };
   })()`;
 
@@ -122,18 +126,24 @@ async function main() {
         { desplegada: desplegada.altoCuerpo, trasPlegar: trasPlegar.altoCuerpo });
   if (!trasPlegar.seVe) mal("al plegar desapareció también la pestaña: no habría cómo volver", trasPlegar);
 
-  /* 4. Plegada tiene que DECIR algo cierto. Con cuadros, el número; sin
-     cuadros, que no hay — nunca un «0 / 0» que parece un dato y no lo es.
-     (La primera versión de este check exigía siempre un número y acusó al
-     módulo por decir «sin cuadros», que era justo lo correcto: en el mock la
-     línea de tiempo arranca vacía. El criterio estaba mal, no el módulo.) */
-  if (trasPlegar.cuadrosReales > 0) {
-    if (!new RegExp(String(trasPlegar.cuadrosReales)).test(trasPlegar.texto))
-      mal("hay " + trasPlegar.cuadrosReales + " cuadros y plegada no los dice: minimizar así " +
-          "pierde el dato por el que uno mira la línea de tiempo", trasPlegar);
+  /* 4. Plegada tiene que decir lo MISMO que la barra de estado. La primera
+     version comparaba contra `DZ.anim.frames`, que es el modelo viejo de los
+     `.svg` sueltos: con un `.low` da 0 y acusaba a la pestaña por decir la
+     verdad. Peor todavia, no habria detectado el defecto real —«sin cuadros»
+     con 18 cuadros en la hoja— porque su propia referencia era 0. */
+  const barra = trasPlegar.barraDeEstado;                 // p. ej. "cuadro 7/18"
+  const enLaBarra = /cuadro\s+(\d+)\s*\/\s*(\d+)/.exec(barra);
+  if (enLaBarra) {
+    const actual = enLaBarra[1], total = enLaBarra[2];
+    const enLaPestania = /(\d+)\s*\/\s*(\d+)/.exec(trasPlegar.texto);
+    if (!enLaPestania)
+      mal("la barra de estado dice «" + barra + "» y la pestaña no muestra ningún cuadro: " +
+          "dos partes de la pantalla contándote cosas distintas", trasPlegar);
+    else if (enLaPestania[1] !== actual || enLaPestania[2] !== total)
+      mal("la pestaña dice " + enLaPestania[1] + "/" + enLaPestania[2] +
+          " y la barra de estado dice " + actual + "/" + total, trasPlegar);
   } else if (!/sin cuadros|apagada/i.test(trasPlegar.texto)) {
-    mal("no hay cuadros y la pestaña no lo dice: mostrar un número donde no hay dato es peor " +
-        "que no mostrar nada", trasPlegar);
+    mal("la barra de estado no muestra cuadros y la pestaña tampoco lo dice", trasPlegar);
   }
 
   await ev(`document.getElementById("dzTlPestania").click()`);

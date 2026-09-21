@@ -73,12 +73,58 @@
     return n;
   }
 
-  /** Cuántos cuadros hay y en cuál estás, o null si no hay animación. */
+  /** Cuántos cuadros hay y en cuál estás, o null si no hay animación.
+   *
+   *  CORREGIDO. La primera versión leía sólo `DZ.anim.frames`, que es el
+   *  modelo VIEJO —los cuadros como archivos `_f001.svg` sueltos—. Un `.low`
+   *  guarda los cuadros en el DOCUMENTO y deja `DZ.anim.frames` vacío, así
+   *  que la pestaña anunciaba «sin cuadros» con 18 cuadros en la hoja de
+   *  tiempos, mientras la barra de estado decía «cuadro 7/18» a diez
+   *  centímetros de distancia. Es la familia de [asume DZ.path]: código que
+   *  da por hecho el modelo de los `.svg` sueltos.
+   *
+   *  Se sigue el mismo orden que usa `dzSbFrame` en app.js: manda el
+   *  documento, y `DZ.anim` es el respaldo. Copiar el orden y no inventar
+   *  otro es lo que evita que las dos partes de la pantalla se contradigan. */
   function cuadros() {
     const DZ = estado();
-    if (!DZ || !DZ.anim) return null;
+    if (!DZ) return null;
+    if (DZ.doc && DZ.doc.scene && typeof DZ.doc.scene.lastFrame === "function") {
+      const total = DZ.doc.scene.lastFrame() || 0;
+      if (total) return { actual: DZ.doc.frame || 1, total };
+    }
+    if (!DZ.anim) return null;
     const total = (DZ.anim.frames && DZ.anim.frames.length) || 0;
     return { actual: (DZ.anim.idx || 0) + 1, total };
+  }
+
+  /** ¿Hay línea de tiempo en pantalla? La verdad es el CUERPO, no `DZ.anim`.
+   *  Un `.low` puede tener la hoja de tiempos a la vista con `DZ.anim` en
+   *  null —es el modelo viejo de los `.svg` sueltos—, y atarse a esa bandera
+   *  hacía que la pestaña dijera «apagada» con la línea de tiempo delante.
+   *  Los que plegamos nosotros cuentan como presentes: los escondimos aposta. */
+  function hayCuerpo() {
+    for (const sel of CUERPO) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      if (el.dataset.plegadoPor === ID) return true;
+      if (!el.hidden) return true;
+    }
+    return false;
+  }
+
+  /* PONER LA AYUDA SIN ROMPER EL GLOBO.  El módulo de ayuda (panels/tool-help)
+     le SACA el `title` al botón mientras muestra su globo —lo guarda en
+     `dataset.tituloAyuda`— justamente para que el navegador no dibuje encima
+     su tooltip nativo y vuelva el cartel doble que se arregló en la v4.45.2.
+     Estas pestañas se repintan seguido (cambio de espacio, observador), y al
+     reescribir `title` a ciegas le devolvían el atributo en pleno globo. El
+     guardia `check_ayuda_no_tapa_ui` lo cazó. Si la ayuda lo tiene guardado,
+     se escribe AHÍ. */
+  function ponerAyuda(el, texto) {
+    if (!el) return;
+    if (el.dataset.tituloAyuda != null) el.dataset.tituloAyuda = texto;
+    else el.title = texto;
   }
 
   /** Pone la pantalla de acuerdo con el estado, sin decidir nada. */
@@ -86,8 +132,8 @@
     const n = pestania();
     if (!n) return;
     const DZ = estado();
-    const hayAnim = !!(DZ && DZ.anim);
     const c = cuadros();
+    const hayAnim = hayCuerpo() || !!(DZ && DZ.anim);
 
     for (const sel of CUERPO) {
       const el = document.querySelector(sel);
@@ -99,18 +145,28 @@
     n.classList.toggle("plegada", plegada || !hayAnim);
     const flecha = n.querySelector(".dz-tlp-flecha");
     if (flecha) flecha.textContent = (plegada || !hayAnim) ? "▴" : "▾";
+    /* El contador manda. «Apagada» sólo cuando de verdad no hay nada que
+       contar: decir «sin cuadros» con 18 cuadros en la hoja de tiempos, y la
+       barra de estado diciendo «cuadro 7/18» diez centímetros más abajo, es
+       la peor forma de perder la confianza de quien mira. */
     const dato = n.querySelector(".dz-tlp-dato");
-    if (dato) dato.textContent = !hayAnim ? "apagada"
-      : (c && c.total ? c.actual + " / " + c.total : "sin cuadros");
-    n.title = !hayAnim
+    if (dato) dato.textContent = (c && c.total)
+      ? (c.actual + " / " + c.total)
+      : (hayAnim ? "sin cuadros" : "apagada");
+    ponerAyuda(n, !hayAnim
       ? "Encender la línea de tiempo y desplegarla"
-      : (plegada ? "Desplegar la línea de tiempo" : "Plegar la línea de tiempo");
+      : (plegada ? "Desplegar la línea de tiempo" : "Plegar la línea de tiempo"));
     n.setAttribute("aria-expanded", String(hayAnim && !plegada));
   }
 
   async function alternar() {
     const DZ = estado();
-    // 1. apagada: la pestaña la PRENDE. No es un botón que no hace nada.
+    /* 1. Apagada: la pestaña la PRENDE. No es un botón que no hace nada.
+       El interruptor de la animación es `DZ.anim` y punto: `hayCuerpo()` sirve
+       para decidir QUÉ DECIR, no para decidir si hay que encenderla. Al usarlo
+       también acá, el clic se saltaba el encendido y sólo mostraba el cuerpo:
+       quedaba una tira de línea de tiempo sin animación detrás, que es la
+       misma clase de mentira que se estaba arreglando. */
     if (!DZ || !DZ.anim) {
       plegada = false; guardar(false);
       if (typeof global.dzAnimToggle === "function") {

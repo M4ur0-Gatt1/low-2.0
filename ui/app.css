@@ -3727,3 +3727,81 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
 /* el dato va a la derecha y en el color fuerte: plegada, es lo único que se ve */
 .dz-tlp-dato { margin-left: auto; color: var(--fg, #e6e9f0); font-variant-numeric: tabular-nums; }
 .dz-tl-pestania.plegada .dz-tlp-dato { color: var(--fg2, #8a93a6); }
+
+/* ══ PESTAÑAS DE LOS PANELES ══════════════════════════════════════════════
+   «Todas las ventanas de herramientas se deben poder esconder como
+   escondemos la línea de tiempo». Dos formas, dos plegados: una columna
+   lateral se achica DE ANCHO (plegarla hacia arriba no le devuelve nada a la
+   mesa: seguiría ocupando sus 246 px) y una barra, de alto. */
+/* El anclaje de la pestaña se pone SÓLO si el panel no tiene posición propia
+   (lo decide el módulo, midiendo). Ponerlo a todos con la clase pisó la
+   posición de `#dzStoryboard`, que ya tenía la suya, y el panel se estiró
+   encima del escenario. Un control para plegar no puede mover un panel. */
+.dz-plegable-anclado { position: relative; }
+.dz-panel-pestania {
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 8px; border: 0; background: var(--panel2, #1e2026);
+  color: var(--fg2, #8a93a6);
+  font: 500 10.5px/1.4 Figtree, sans-serif; text-align: left; cursor: pointer;
+}
+/* DESPLEGADO: la pestaña NO OCUPA LUGAR. Sale del flujo y se apoya en la
+   esquina. MEDIDO al dejarla en el flujo con `flex: 0 0 100%`: el riel de
+   herramientas —que a 768 px de alto entra JUSTO, 594 de contenido en 594 de
+   panel— pasó a 1047 px de contenido y dejó 15 de sus 16 botones fuera del
+   panel, sin barra de desplazamiento con qué alcanzarlos. No eran 27 px de
+   más: la fila completa le rompía el acomodado en dos columnas. Un control
+   para esconder paneles no puede costar quince herramientas. */
+.dz-plegable:not([data-plegado]) > .dz-panel-pestania {
+  position: absolute; top: 0; right: 0; z-index: 3;
+  width: 17px; height: 15px; padding: 0; gap: 0;
+  justify-content: center; border-bottom-left-radius: 4px;
+  background: var(--panel2, #1e2026); opacity: .55;
+}
+.dz-plegable:not([data-plegado]) > .dz-panel-pestania .dz-pp-tit { display: none; }
+.dz-plegable:not([data-plegado]) > .dz-panel-pestania:hover { opacity: 1; }
+/* PLEGADO: ahí sí es lo único que queda, y vuelve al flujo. */
+.dz-plegable[data-plegado] > .dz-panel-pestania {
+  position: static; width: 100%; opacity: 1; border-bottom: 1px solid var(--line);
+}
+.dz-panel-pestania:hover { color: var(--fg, #e6e9f0); background: var(--panel, #24262c); }
+.dz-panel-pestania:focus-visible { outline: 2px solid var(--accent, #F0450E); outline-offset: -2px; }
+.dz-pp-flecha { font-size: 9px; line-height: 1; opacity: .85; }
+/* Herramientas mide 74 px: el nombre no entra y cortado a la mitad es peor
+   que un ícono claro. Queda la flecha; el nombre pasa a la ayuda. */
+.dz-panel-pestania.angosta { justify-content: center; padding: 3px 0; }
+.dz-panel-pestania.angosta .dz-pp-tit { display: none; }
+
+/* plegado de ALTO: queda la tira y nada más */
+.dz-plegable[data-plegado] > *:not(.dz-panel-pestania) { display: none !important; }
+.dz-plegable[data-plegado="alto"] {
+  height: auto !important; min-height: 0 !important; flex: none !important;
+  overflow: hidden !important;
+}
+/* plegado de ANCHO: la columna se va a una tira vertical y devuelve la mesa.
+   El relleno del panel va a cero: con los 10 px de padding de `.dz-tools`, la
+   pestaña quedaba de 2 px de ancho — visible para el CSS e inútil para el
+   dedo, o sea sin forma de traer el panel de vuelta. Y el alto se estira,
+   porque si no la columna colapsa en las dos direcciones y queda un
+   cuadradito de 22×21. */
+.dz-plegable[data-plegado="ancho"] {
+  width: 22px !important; min-width: 22px !important; max-width: 22px !important;
+  flex: 0 0 22px !important; overflow: hidden !important;
+  padding: 0 !important; align-self: stretch !important; height: 100% !important;
+}
+.dz-plegable[data-plegado="ancho"] > .dz-panel-pestania {
+  flex: 1 1 auto; width: 22px; min-width: 22px; height: 100%; min-height: 48px;
+  justify-content: center; align-items: flex-start; padding: 6px 0; border-bottom: 0;
+}
+.dz-plegable[data-plegado="alto"] { padding-top: 0 !important; padding-bottom: 0 !important; }
+
+/* El aviso de «sostené al personaje», dentro del bloque de estado del rig.
+   Existe porque ese bloque decía «Rig listo para animar» en verde mientras
+   posar en el cuadro 12 no movía nada: el arte vivía sólo en el cuadro 1. */
+.rig-sostener { display: flex; flex-direction: column; gap: 5px; margin-top: 6px;
+  padding-top: 6px; border-top: 1px solid var(--line); }
+.rig-sostener-txt { font: 400 10.5px/1.4 Figtree, sans-serif; color: var(--fg2, #8a93a6);
+  font-style: normal; }
+.rig-sostener-btn { width: 100%; padding: 4px 8px; border-radius: 4px;
+  border: 1px solid var(--accent, #F0450E); background: transparent;
+  color: var(--accent, #F0450E); font: 600 11px/1.3 Figtree, sans-serif; cursor: pointer; }
+.rig-sostener-btn:hover { background: var(--accent, #F0450E); color: #fff; }
