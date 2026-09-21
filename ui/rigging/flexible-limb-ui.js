@@ -30,16 +30,29 @@
     }
     g.cursor.setAttribute("cx",e.clientX);g.cursor.setAttribute("cy",e.clientY);
   }
+  /* RECHAZAR NO ALCANZA. Si «Cortar pieza» no puede arrancar y avisa, uno
+     igual arrastra sobre el personaje esperando cortarlo — y como la
+     herramienta de dibujo sigue activa, lo que pasa es que DIBUJA una línea
+     encima. Reportado: «la herramienta para cortar piezas dibuja líneas».
+     Dejar la flecha activa hace que ese mismo gesto ELIJA la pieza, que es
+     justo lo que el mensaje está pidiendo. */
+  function rechazar(texto) {
+    if(typeof dzSetTool==="function" && typeof DZ!=="undefined" && DZ.tool!=="select"){
+      try{ dzSetTool("select"); }catch(_){ /* avisar importa más que el modo */ }
+    }
+    return message(texto);
+  }
+
   function start(kind) {
     cancel();
     const el=DZ.sel;
-    if(!DZ.doc || !el || !el.closest("#dzCanvas"))return message("Seleccioná el dibujo del brazo o la pierna primero");
-    if(el.matches("image") || el.querySelector("image,use,text"))return message("Esta herramienta necesita trazos vectoriales; la imagen todavía no admite esta malla");
-    if(!el.matches("path,rect,circle,ellipse,line,polyline,polygon,g"))return message("Elegí una forma o un grupo vectorial");
+    if(!DZ.doc || !el || !el.closest("#dzCanvas"))return rechazar("Elegí primero el dibujo del brazo o la pierna — tocalo en la mesa");
+    if(el.matches("image") || el.querySelector("image,use,text"))return rechazar("Esta herramienta necesita trazos vectoriales; la imagen todavía no admite esta malla");
+    if(!el.matches("path,rect,circle,ellipse,line,polyline,polygon,g"))return rechazar("Elegí una forma o un grupo vectorial");
     if([el,...el.querySelectorAll("*")].some(n=>n.hasAttribute("clip-path")||n.hasAttribute("mask")))
-      return message("La pieza usa una máscara o recorte; elegí sus trazos sin máscara para articularlos");
+      return rechazar("La pieza usa una máscara o recorte; elegí sus trazos sin máscara para articularlos");
     if(el.id && Object.values(DZ.doc.scene.rig.nodes).some(n=>n.id===el.id || n.elementId===el.id))
-      return message("La pieza ya está vinculada; elegí un dibujo sin rig");
+      return rechazar("La pieza ya está vinculada; elegí un dibujo sin rig");
     const canvas=$id("dzCanvas"), overlay=document.createElement("div");
     overlay.className="rig-limb-guide"; overlay.style.cssText="position:fixed;inset:0;pointer-events:none;z-index:10000";
     const previewSvg=document.createElementNS("http://www.w3.org/2000/svg","svg");

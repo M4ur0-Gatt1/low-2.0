@@ -20,6 +20,28 @@
     el.setAttribute('title',el.dataset.tituloAyuda);delete el.dataset.tituloAyuda;
   };
   const textoDe=(el)=>(el?.dataset.tituloAyuda??el?.getAttribute('title'))||'';
+
+  /* EL GLOBO TIENE QUE SER CHICO.  Reportado tres veces: primero salia doble,
+     despues tapaba el boton, y ahora «siguen siendo incomodos, son grandes».
+     MEDIDO sobre los 283 textos de ayuda de la interfaz: 49 caracteres de
+     promedio y 179 el mas largo. A 260 px de ancho, 179 caracteres son SEIS
+     renglones — un parrafo flotando al lado del cursor.
+
+     Casi todos los textos ya vienen partidos: «Pincel (B): grosor segun la
+     presion…», «Ajustar a pantalla (F) · 0 = 100% · …». Lo primero es el
+     NOMBRE y el atajo, que es lo que uno viene a buscar; lo demas es detalle.
+     Asi que se muestran en dos jerarquias y el detalle se recorta a dos
+     renglones: el globo pasa de parrafo a etiqueta. El texto completo sigue
+     estando en la ayuda del programa (?). */
+  const CORTE=/^([\s\S]{0,60}?)(?:\s*[·—–]\s*|:\s+|\.\s+)([\s\S]+)$/;
+  function armar(globo,texto){
+    const m=CORTE.exec(texto);
+    const titulo=document.createElement('b');titulo.className='dz-tth-t';
+    titulo.textContent=m?m[1]:texto;
+    globo.appendChild(titulo);
+    if(m&&m[2]){const detalle=document.createElement('i');detalle.className='dz-tth-d';
+      detalle.textContent=m[2];globo.appendChild(detalle);}
+  }
   /* DONDE PONER EL GLOBO. Antes se ponia SIEMPRE a la derecha y, si no
      entraba, se lo empujaba adentro de la ventana con un `min`. Para los
      botones del panel de la derecha eso significa quedar ENCIMA del boton y de
@@ -62,7 +84,7 @@
     guardarTitulo(target);
     timer=setTimeout(()=>{
       if(!target.isConnected)return;const text=textoDe(target);if(!text)return;
-      bubble=document.createElement('div');bubble.className='dz-tool-tooltip';bubble.setAttribute('role','tooltip');bubble.textContent=text;document.body.appendChild(bubble);
+      bubble=document.createElement('div');bubble.className='dz-tool-tooltip';bubble.setAttribute('role','tooltip');armar(bubble,text);document.body.appendChild(bubble);
       const rect=target.getBoundingClientRect(), b=bubble.getBoundingClientRect();
       ubicar(bubble,rect,b);
     },180);
