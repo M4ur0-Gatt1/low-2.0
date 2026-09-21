@@ -3708,3 +3708,22 @@ footer #ver { color: var(--mut); border-color: transparent; background: var(--pa
    los que todavía no molestaron.
    ══════════════════════════════════════════════════════════════════════════ */
 [hidden] { display: none !important; }
+
+/* ══ LA PESTAÑA DE LA LÍNEA DE TIEMPO ═════════════════════════════════════
+   Una tira fina, siempre presente en todos los espacios, con el número de
+   cuadro a la vista. Plegar existía pero escondido en un doble clic sobre un
+   separador de 4 px, y la línea de tiempo aparecía o no según el espacio: el
+   tiempo, que se necesita en todos, era lo que menos a mano estaba. */
+.dz-tl-pestania {
+  flex: none; display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 3px 12px; border: 0; border-top: 1px solid var(--line);
+  background: var(--panel2, #1e2026); color: var(--fg2, #8a93a6);
+  font: 500 11px/1.4 Figtree, sans-serif; text-align: left; cursor: pointer;
+}
+.dz-tl-pestania:hover { color: var(--fg, #e6e9f0); background: var(--panel, #24262c); }
+.dz-tl-pestania:focus-visible { outline: 2px solid var(--accent, #F0450E); outline-offset: -2px; }
+.dz-tlp-flecha { font-size: 10px; line-height: 1; opacity: .8; }
+.dz-tlp-tit { letter-spacing: .02em; }
+/* el dato va a la derecha y en el color fuerte: plegada, es lo único que se ve */
+.dz-tlp-dato { margin-left: auto; color: var(--fg, #e6e9f0); font-variant-numeric: tabular-nums; }
+.dz-tl-pestania.plegada .dz-tlp-dato { color: var(--fg2, #8a93a6); }
