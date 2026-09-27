@@ -224,7 +224,12 @@
 
     setLayerProperty(id, key, value, label) {
       const ly = this.scene.layer(id);
-      if (!ly || !["name", "visible", "locked", "opacity", "z"].includes(key)) return false;
+      if (!ly || !["name", "visible", "locked", "opacity", "z", "blend", "lightTable"].includes(key)) return false;
+      // los valores se normalizan IGUAL que al cargar: si no, una fusión inválida
+      // se vería en la sesión y desaparecería al reabrir
+      if (key === "blend" && !animation.LAYER_BLENDS.includes(value)) return false;
+      if (key === "opacity") value = Math.max(0, Math.min(1, Number(value) || 0));
+      if (key === "lightTable" || key === "visible" || key === "locked") value = !!value;
       const before = ly[key];
       if (before === value) return false;
       ly[key] = value; this.touch(); this.emit("layers");
@@ -235,6 +240,85 @@
             layer[key] = next; doc.touch(); doc.emit("layers"); doc.emit("frame"); } });
       }
       return true;
+    }
+
+    /** Aplica una lista de capas como estado (para Undo/Redo de orden, alta y
+     *  baja): mismo camino en las dos direcciones, sin copias a mano. */
+    _setLayersState(state) {
+      // Se REUSAN las capas que ya existen (sólo cambia el orden) y se crean las
+      // que faltan: rearmarlas todas dejaba colgada cualquier referencia a una
+      // capa —la cazó la prueba: tras deshacer un reordenar, la capa que uno
+      // tenía en la mano ya no era la de la escena—.
+      const vivas = new Map(this.scene.layers.map((l) => [l.id, l]));
+      this.scene.layers = state.layers.map((l) => vivas.get(l.id) || new animation.Layer(l));
+      for (const lv of state.levels || []) if (!this.scene.level(lv.id)) this.scene.levels.push(new animation.Level(lv));
+      this.scene.levels = this.scene.levels.filter((lv) => !(state.dropLevels || []).includes(lv.id));
+      this.layerId = this.scene.layer(state.layerId) ? state.layerId : (this.scene.layers[0] ? this.scene.layers[0].id : null);
+      this.touch(); this.emit("layers"); this.emit("cells"); this.emit("frame");
+    }
+    _layersSnapshot() {
+      return { layers: this.scene.layers.map((l) => l.toJSON()), layerId: this.layerId };
+    }
+    _pushLayersChange(label, before, after) {
+      if (!this.history) return;
+      const doc = this;
+      this.history.push({ label, domain: "anim", before, after,
+        apply: (_dir, value) => doc._setLayersState(value) });
+    }
+
+    /** Mueve una capa a otro lugar del apilado. Índice 0 = la de más ATRÁS
+     *  (así compone el export); la línea de tiempo la muestra abajo de todo. */
+    moveLayer(id, index) {
+      const at = this.scene.layers.findIndex((l) => l.id === id);
+      if (at < 0) return false;
+      const to = Math.max(0, Math.min(this.scene.layers.length - 1, Math.round(index)));
+      if (to === at) return false;
+      const before = this._layersSnapshot();
+      const [ly] = this.scene.layers.splice(at, 1);
+      this.scene.layers.splice(to, 0, ly);
+      const after = this._layersSnapshot();
+      this.touch(); this.emit("layers"); this.emit("frame");
+      this._pushLayersChange(to > at ? "Traer capa adelante" : "Llevar capa atrás", before, after);
+      return true;
+    }
+
+    /** Quita una capa. Nunca la última: una escena sin capas no tiene dónde
+     *  dibujar. Su nivel se va con ella si ninguna otra capa lo usa, y vuelve
+     *  entero con Deshacer. */
+    removeLayer(id) {
+      const at = this.scene.layers.findIndex((l) => l.id === id);
+      if (at < 0 || this.scene.layers.length <= 1) return false;
+      const ly = this.scene.layers[at];
+      const compartido = this.scene.layers.some((l) => l !== ly && l.levelId === ly.levelId);
+      const lv = !compartido && this.scene.level(ly.levelId);
+      const before = { ...this._layersSnapshot(), levels: lv ? [lv.toJSON()] : [] };
+      this.scene.layers.splice(at, 1);
+      if (lv) this.scene.levels = this.scene.levels.filter((x) => x !== lv);
+      if (this.layerId === id) this.layerId = (this.scene.layers[Math.max(0, at - 1)] || this.scene.layers[0]).id;
+      const after = { ...this._layersSnapshot(), dropLevels: lv ? [lv.id] : [] };
+      this.touch(); this.emit("layers"); this.emit("cells"); this.emit("frame");
+      this._pushLayersChange("Eliminar capa", before, after);
+      return true;
+    }
+
+    /** Duplica una capa ENCIMA de la original, con un nivel propio: los dibujos
+     *  se copian, así retocar la copia no toca la original. */
+    duplicateLayer(id) {
+      const at = this.scene.layers.findIndex((l) => l.id === id);
+      if (at < 0) return null;
+      const src = this.scene.layers[at], lvSrc = this.scene.level(src.levelId);
+      const before = this._layersSnapshot();
+      const lv = this.scene.addLevel((lvSrc ? lvSrc.name : src.name) + " copia", lvSrc ? lvSrc.type : undefined);
+      if (lvSrc) for (const d of lvSrc.drawings) lv.addDrawing(d.number, d.content);
+      const data = src.toJSON(); delete data.id;
+      const copia = new animation.Layer({ ...data, name: src.name + " copia", levelId: lv.id });
+      this.scene.layers.splice(at + 1, 0, copia);
+      this.layerId = copia.id;
+      const after = { ...this._layersSnapshot(), levels: [lv.toJSON()] };
+      before.dropLevels = [lv.id];
+      this.touch(); this.emit("layers"); this.emit("cells"); this.emit("frame");
+      this._pushLayersChange("Duplicar capa", before, after);
+      return copia;
     }
 
     setCompositionTransform(id, transform, { frame = null, source = {}, label = "Transformar plano" } = {}) {

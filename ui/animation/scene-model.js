@@ -960,7 +960,9 @@
     constructor(data = {}) {
       this.id = data.id || uid("lv");
       this.name = data.name || "Nivel";
-      this.type = data.type === "raster" ? "raster" : "vector";
+      // «reference» (calco/rotoscopía) se conservaba al crear y se perdía al
+      // reabrir, convertido en «vector»
+      this.type = data.type === "raster" || data.type === "reference" ? data.type : "vector";
       this.paletteId = data.paletteId || null;
       this.drawings = (data.drawings || []).map((d) => new Drawing(d));
     }
@@ -1085,6 +1087,14 @@
 
   /** Una columna de la xsheet: qué dibujo se ve en cada frame.
    *  `cells` es disperso — índice = frame - 1; un hueco es una celda vacía. */
+  /** Modos de fusión de capa. Son los de CSS mix-blend-mode: el editor y el
+   *  PNG exportado los componen con el MISMO motor, así lo que se ve es lo que
+   *  sale. Sobreexposición/subexposición lineal, restar y dividir (Photoshop)
+   *  no existen ahí y no se prometen. */
+  const LAYER_BLENDS = ["normal", "multiply", "screen", "overlay", "darken", "lighten",
+    "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion",
+    "hue", "saturation", "color", "luminosity"];
+
   class Layer {
     constructor(data = {}) {
       this.id = data.id || uid("ly");
@@ -1092,8 +1102,14 @@
       this.levelId = data.levelId || null;
       this.visible = data.visible !== false;
       this.locked = !!data.locked;
-      this.opacity = data.opacity == null ? 1 : Number(data.opacity);
+      this.opacity = data.opacity == null ? 1 : Math.max(0, Math.min(1, Number(data.opacity) || 0));
       this.z = Number(data.z) || 0;            // profundidad para la cámara multiplano
+      // Modo de fusión con las capas de abajo, como Photoshop/Harmony. Sólo los
+      // que el motor compone igual en el editor y en el PNG (CSS mix-blend-mode).
+      this.blend = LAYER_BLENDS.includes(data.blend) ? data.blend : "normal";
+      // Mesa de luz de ESTA capa: se ve lavada para calcar encima. Es de la
+      // vista: no cambia el render.
+      this.lightTable = !!data.lightTable;
       this.cells = Array.isArray(data.cells) ? data.cells.slice() : [];
     }
     /** Celda en un frame (1-based): número de dibujo, o null si está vacía. */
@@ -1136,7 +1152,8 @@
     }
     toJSON() {
       return { id: this.id, name: this.name, levelId: this.levelId, visible: this.visible,
-               locked: this.locked, opacity: this.opacity, z: this.z, cells: this.cells.slice() };
+               locked: this.locked, opacity: this.opacity, z: this.z, blend: this.blend,
+               lightTable: this.lightTable, cells: this.cells.slice() };
     }
   }
 
@@ -1898,6 +1915,7 @@
   animation.Scene = Scene;
   animation.Level = Level;
   animation.Layer = Layer;
+  animation.LAYER_BLENDS = LAYER_BLENDS;
   animation.Drawing = Drawing;
   animation.Palette = Palette;
   animation.Style = Style;

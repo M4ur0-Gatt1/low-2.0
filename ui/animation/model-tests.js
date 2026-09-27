@@ -1727,6 +1727,58 @@
       ok("y el siguiente Deshacer quita la capa", !doc.scene.layer(ly.id));
     }
 
+    // ── CAPAS COMO EN HARMONY/PHOTOSHOP (v4.52): orden, fusión, mesa de luz,
+    //    eliminar y duplicar, todo con Deshacer y por archivo ──
+    {
+      const doc = new animation.LowDoc(), h = new LOW.core.HistoryManager(); doc.setHistory(h);
+      doc.writeDrawing('<rect id="a"/>');
+      const A = doc.layer, B = doc.addLayer("B"), C = doc.addLayer("C");
+      doc.writeDrawing('<circle id="c"/>');
+      const orden = () => doc.scene.layers.map((l) => l.name).join(",");
+      const inicio = orden();
+      ok("reordenar: llevar C al fondo", doc.moveLayer(C.id, 0) && orden() === "C," + A.name + ",B", orden());
+      h.undo(); ok("reordenar: Deshacer vuelve al orden", orden() === inicio, orden());
+      h.redo(); ok("reordenar: Rehacer repite", orden().startsWith("C,"), orden());
+      h.undo();
+      ok("reordenar al mismo lugar no apila historial", doc.moveLayer(C.id, 2) === false);
+
+      ok("fusión válida se aplica", doc.setLayerProperty(B.id, "blend", "multiply") && B.blend === "multiply");
+      ok("fusión inválida se rechaza", doc.setLayerProperty(B.id, "blend", "linear-burn") === false && B.blend === "multiply");
+      doc.setLayerProperty(B.id, "lightTable", true);
+      doc.setLayerProperty(B.id, "opacity", 7);
+      ok("opacidad fuera de rango se acota", B.opacity === 1);
+      const reab = animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+      const rB = reab.scene.layer(B.id);
+      ok("fusión y mesa de luz sobreviven a guardar y reabrir", rB && rB.blend === "multiply" && rB.lightTable === true);
+      ok("una fusión inválida en el archivo vuelve a normal",
+        new animation.Layer({ blend: "nada" }).blend === "normal" && new animation.Layer({}).lightTable === false);
+      const lvRef = doc.scene.addLevel("Calco", "reference");
+      ok("el nivel de calco conserva su tipo al reabrir",
+        new animation.Scene(JSON.parse(JSON.stringify(doc.scene.toJSON()))).level(lvRef.id).type === "reference");
+
+      const dup = doc.duplicateLayer(C.id);
+      const lvDup = dup && doc.scene.level(dup.levelId), lvC = doc.scene.level(C.levelId);
+      ok("duplicar pone la copia ENCIMA de la original", dup && doc.scene.layers.indexOf(dup) === doc.scene.layers.indexOf(C) + 1);
+      ok("duplicar copia los dibujos en un nivel propio", lvDup && lvDup !== lvC && lvDup.byNumber(1) &&
+        lvDup.byNumber(1).content.includes("circle"));
+      lvDup.byNumber(1).content = "<rect/>";
+      ok("retocar la copia no toca la original", lvC.byNumber(1).content.includes("circle"));
+      const niveles = doc.scene.levels.length;
+      h.undo();
+      ok("Deshacer duplicar quita capa Y nivel", !doc.scene.layer(dup.id) && doc.scene.levels.length === niveles - 1);
+
+      const nivelesAntes = doc.scene.levels.length;
+      ok("eliminar una capa", doc.removeLayer(C.id) && !doc.scene.layer(C.id) && doc.scene.levels.length === nivelesAntes - 1);
+      ok("eliminar la activa deja otra activa", !!doc.scene.layer(doc.layerId));
+      h.undo();
+      const vuelta = doc.scene.layer(C.id);
+      ok("Deshacer eliminar la devuelve con su dibujo y en su lugar",
+        vuelta && doc.scene.layers.indexOf(vuelta) === 2 && doc.scene.drawingAt(C.id, 1) &&
+        doc.scene.drawingAt(C.id, 1).content.includes("circle"));
+      const sola = new animation.LowDoc();
+      ok("no se elimina la ÚLTIMA capa", sola.removeLayer(sola.layerId) === false && sola.scene.layers.length === 1);
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }
