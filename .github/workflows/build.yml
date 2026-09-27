@@ -149,6 +149,8 @@ jobs:
           node tools/check_cebolla_poses_ui.js
           node tools/check_arranque_recorrido_ui.js
           node tools/check_xsheet_columnas_ui.js
+          node tools/check_capas_harmony_ui.js
+          node tools/check_rescate_tope_ui.js
           node tools/check_flexible_limb_ui.js
           node tools/check_3d_studio_ui.js
           node tools/check_3d_superficie_curva_ui.js

@@ -51,6 +51,12 @@ async function main() {
     const result = await send("Runtime.evaluate", { awaitPromise: true, returnByValue: true, expression: `(async()=>{
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       const assert=(v,m)=>{if(!v)throw Error(m)};
+      // AISLAMIENTO: los recorridos comparten navegador y por lo tanto el
+      // localStorage del origen. Con 25 claves de corridas anteriores —entre
+      // ellas low.workspace.active— este recorrido fallaba con «el arrastre
+      // no movio el valor del control», y con el almacen limpio pasa. Medido
+      // las dos veces: sin esto acusa un defecto que no existe.
+      try{localStorage.clear()}catch(e){}
       await openDesign(${design}); await dzDocInit(); await wait(500);
       if(typeof closeL3d==='function')closeL3d();
       if(!DZ.anim)await dzAnimToggle();

@@ -1,6 +1,10 @@
 (function (global) {
   "use strict";
   const workspace = (global.LOW = global.LOW || {}).workspace = global.LOW.workspace || {};
+  /* Cuantos puntos de recuperacion se conservan. Doce cubre de sobra «lo que
+     estaba haciendo» sin llenar la cuota del navegador. */
+  const TOPE = 12;
+
   class DocumentRecovery {
     constructor(storage = global.localStorage) { this.storage = storage; this.prefix = "low.document.recovery."; this.timers = new Map(); }
     key(path) { let hash = 2166136261; for (const c of String(path)) { hash ^= c.charCodeAt(0); hash = Math.imul(hash, 16777619); }
@@ -37,19 +41,41 @@
       catch (_) { return []; }
     }
     _writeIndex(items) { this.storage?.setItem(this.indexKey, JSON.stringify([...new Set(items.filter(Boolean))])); }
+    /* EL ALMACEN TIENE QUE TENER FONDO. Cada escena que se abre deja su punto de
+       recuperacion y NADA los borraba: medido en la maquina de pruebas, 64
+       escenas viejas ocupando cientos de KB. El navegador da ~5 MB por origen y
+       cuando se llena `setItem` TIRA: el catch se lo tragaba y devolvia false,
+       asi que LOW dejaba de guardar el rescate EN SILENCIO. El dia que se cae,
+       no hay nada que recuperar y nada dijo por que. Se guardan los TOPE mas
+       recientes; si aun asi no entra, se tiran los mas viejos y se reintenta. */
+    _podar(protegida) {
+      const registros = this.list();                       // ya vienen del mas nuevo al mas viejo
+      const sobran = registros.slice(TOPE).filter((r) => r.identity !== protegida);
+      for (const viejo of sobran) this.clear(viejo.identity);
+      return sobran.length;
+    }
     saveNow(identity, content, metadata = {}) {
       if (!identity || !content || content.format !== "lowscene") return false;
       const record = { schema: 2, kind: "lowscene", identity,
         path: metadata.path || null, sceneId: content.scene?.id || metadata.sceneId || null,
         name: metadata.name || content.scene?.name || "Escena", savedAt: Date.now(), metadata,
         content };
-      try {
+      const escribir = () => {
         this.storage?.setItem(this.key(identity), JSON.stringify(record));
         const verified = this.get(identity);
         if (!verified || verified.identity !== identity) return false;
         this._writeIndex([...this._index(), identity]);
         return true;
-      } catch (_) { return false; }
+      };
+      let guardado = false;
+      try { guardado = escribir(); }
+      catch (_) {
+        // sin espacio: se hace lugar con lo mas viejo y se reintenta UNA vez.
+        // Perder un rescate viejo es barato; perder el de ahora, no.
+        try { this._podar(identity); guardado = escribir(); } catch (__) { return false; }
+      }
+      if (guardado) { try { this._podar(identity); } catch (_) { /* podar es higiene, no la promesa */ } }
+      return guardado;
     }
     get(identity) {
       if (!identity) return null;

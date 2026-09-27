@@ -42,7 +42,13 @@ async function main() {
   const estado = () => ev(`(()=>{const L=DZ.doc.scene.layers;const c=i=>{const d=DZ.doc.scene.drawingAt(L[i].id,1);return d?d.content:'';};
     return {activa:DZ.doc.scene.layer(DZ.doc.layerId).name,capa1:c(0).length,capa1Circulo:c(0).includes('circle'),
       capa2:c(1),capa2Paths:(c(1).match(/<path/g)||[]).length,
-      lienzoCirculo:!!document.querySelector('#dzCanvas > svg circle'),lienzoPaths:document.querySelectorAll('#dzCanvas > svg path').length};})()`);
+      lienzoCirculo:!!document.querySelector('#dzCanvas > svg circle'),lienzoPaths:document.querySelectorAll('#dzCanvas > svg path').length,
+      // DESDE EL MODELO DE CAPAS (v4.52): las OTRAS capas se ven en la mesa a
+      // proposito, dibujadas aparte en grupos g.dz-capa. Lo que nunca puede
+      // pasar es que el dibujo ajeno este DENTRO del grupo de arte activo,
+      // porque de ahi sale lo que se guarda en la capa.
+      circuloEnLaActiva:[...document.querySelectorAll('#dzCanvas > svg > g[data-low-art]')].some(g=>g.querySelector('circle')),
+      circuloDeOtraCapa:!!document.querySelector('#dzCanvas > svg > g.dz-capa circle')};})()`);
   try {
     await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
     await send("Network.setCacheDisabled", { cacheDisabled: true });
@@ -72,7 +78,12 @@ async function main() {
     await clickEn(nombre("Capa 2"));
     const vacia = await estado();
     assert.equal(vacia.activa, "Capa 2");
-    assert.equal(vacia.lienzoCirculo, false, "la Capa 2 muestra el dibujo de la Capa 1: " + JSON.stringify(vacia));
+    // Antes se exigia que el circulo NO se viera. Desde el modelo de capas se ve
+    // a proposito —es el punto: dibujar viendo las demas—, asi que lo que se
+    // exige es lo que de verdad protege el dibujo: que no este en el grupo
+    // activo (de ahi sale lo que se guarda) y que la Capa 2 siga vacia.
+    assert.equal(vacia.circuloEnLaActiva, false, "el dibujo de la Capa 1 está DENTRO del grupo activo: el próximo volcado lo guarda en la Capa 2: " + JSON.stringify(vacia));
+    assert.equal(vacia.circuloDeOtraCapa, true, "la Capa 1 tiene que verse en la mesa como capa de fondo (mesa de luz del modelo de capas): " + JSON.stringify(vacia));
     assert.equal(vacia.capa2Paths, 0, "la Capa 2 recibió una copia de la Capa 1: " + JSON.stringify(vacia));
 
     // 4: lo de una capa no aparece en la otra

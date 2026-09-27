@@ -483,10 +483,16 @@
       // ── una fila por capa ──
       const visibleLayers = this._timeline().visibleLayers
         ? this._timeline().visibleLayers(sc.layers, this.view, doc.layerId) : sc.layers;
-      for (const ly of visibleLayers) {
+      /* La de ADELANTE arriba, como en Harmony, Photoshop o After Effects. En
+         el modelo el índice 0 es la de más atrás (así compone el export), así
+         que las filas se recorren al revés. La X-sheet sigue como OpenToonz:
+         la columna de más a la derecha es la de adelante. */
+      for (const ly of visibleLayers.slice().reverse()) {
         const fila = document.createElement("div");
         fila.className = "tl2-row" + (ly.id === doc.layerId ? " sel" : "")
-          + (this._isCollapsed(ly.id) ? " collapsed" : "");
+          + (this._isCollapsed(ly.id) ? " collapsed" : "")
+          + (ly.locked ? " bloqueada" : "") + (ly.lightTable ? " luz" : "");
+        fila.dataset.layerRow = ly.id;
 
         const cab = document.createElement("div");
         cab.className = "tl2-name";
@@ -506,7 +512,35 @@
         const txt = document.createElement("span");
         txt.textContent = ly.name;
         cab.title = ly.name;          // compactada, el nombre vive en el tooltip
-        cab.append(foldButton(ly.id), ojo, lock, txt);
+        // MESA DE LUZ de esta capa: se ve lavada para calcar encima (no cambia el render)
+        const luz = document.createElement("button");
+        luz.className = "tl2-eye tl2-luz" + (ly.lightTable ? " on" : "");
+        luz.innerHTML = icon("i-sun");
+        luz.title = ly.lightTable ? "Mesa de luz: apagar (la capa vuelve a verse normal)"
+          : "Mesa de luz: ver esta capa lavada para calcar encima";
+        luz.setAttribute("aria-label", luz.title); luz.setAttribute("aria-pressed", String(!!ly.lightTable));
+        luz.onclick = (e) => { e.stopPropagation(); doc.setLayerProperty(ly.id, "lightTable", !ly.lightTable,
+          ly.lightTable ? "Apagar mesa de luz" : "Mesa de luz"); };
+        const props = document.createElement("button");
+        props.className = "tl2-eye tl2-props" + ((ly.opacity != null && ly.opacity < 1) || (ly.blend && ly.blend !== "normal") ? " on" : "");
+        props.innerHTML = icon("i-mixer");
+        props.title = "Opacidad, modo de fusión y orden de la capa";
+        props.setAttribute("aria-label", props.title);
+        props.onclick = (e) => { e.stopPropagation(); if (typeof global.dzCapaPropiedades === "function") global.dzCapaPropiedades(doc, ly.id, props); };
+        cab.append(foldButton(ly.id), ojo, lock, luz, props, txt);
+        // ARRASTRAR el nombre para reordenar. Tipo propio: las celdas también se
+        // arrastran (exposiciones) y no se pueden confundir.
+        cab.draggable = true;
+        cab.ondragstart = (e) => { e.dataTransfer.setData("application/x-low-capa", ly.id); e.dataTransfer.effectAllowed = "move"; };
+        cab.ondragover = (e) => { if ([...e.dataTransfer.types].includes("application/x-low-capa")) { e.preventDefault(); fila.classList.add("soltar"); } };
+        cab.ondragleave = () => fila.classList.remove("soltar");
+        cab.ondrop = (e) => {
+          fila.classList.remove("soltar");
+          const origen = e.dataTransfer.getData("application/x-low-capa");
+          if (!origen || origen === ly.id) return;
+          e.preventDefault();
+          doc.moveLayer(origen, sc.layers.findIndex((l) => l.id === ly.id));
+        };
         cab.onclick = () => doc.selectLayer(ly.id);
         // renombrar como en la X-sheet: el mismo gesto en los dos lugares
         cab.ondblclick = async (e) => {

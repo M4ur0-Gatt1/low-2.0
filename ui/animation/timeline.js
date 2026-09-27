@@ -17,7 +17,7 @@
   // La columna de nombres es el ÚNICO costo horizontal fijo de la timeline:
   // aparece en todas las filas y queda pegada al borde con el scroll. Angostarla
   // es lo que devuelve ancho real para tiempo; la escala la sigue mandando el zoom.
-  const NAME_WIDTHS = Object.freeze({ normal: 128, compact: 34 });
+  const NAME_WIDTHS = Object.freeze({ normal: 170, compact: 34 });   // 170: ojo, candado, luz, propiedades y el nombre
   const FRAME_WIDTHS = Object.freeze([6, 8, 10, 12, 16, 20, 24, 32, 40, 48]);
   const DENSITIES = Object.freeze(["compact", "normal", "comfortable"]);
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
