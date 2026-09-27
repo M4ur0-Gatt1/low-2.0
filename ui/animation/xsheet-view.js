@@ -89,8 +89,8 @@
       }
       const mas = document.createElement("button");
       mas.className = "xs2-addcol";
-      mas.textContent = "+";
-      mas.title = "Agregar capa";
+      mas.textContent = "+ Capa";
+      mas.title = "Nueva capa de animación (una columna más)";
       mas.onclick = () => doc.addLayer();
       head.appendChild(mas);
 

@@ -77,6 +77,12 @@ async function main() {
     dzRedo(); await wait(350); kids=dzCompositionElements(document.querySelector("#dzCanvas > svg")); el=kids[0];
     const redone={z:DZ.doc.scene.compositionTransformAt(ref.id).z,attr:+el.getAttribute("data-z")||0};
     if(!auto.classList.contains("active")) auto.click();
+    /* El cuadro 8 tiene que tener DIBUJO: se sostiene el 1 hasta ahí, como en
+       cut-out. Antes esta prueba iba a un cuadro VACÍO y pasaba sólo porque el
+       volcado creaba ahí un dibujo fantasma con los planos de arte vacíos —el
+       defecto que dejaba Deshacer en bucle (v4.51.1)—. Lo que se prueba sigue
+       igual: la clave del 8 tiene que salir en el export del 8. */
+    for (let f = 2; f <= 8; f++) DZ.doc.setCell(f, 1);
     DZ.doc.goTo(8); await wait(350); kids=dzCompositionElements(document.querySelector("#dzCanvas > svg")); el=kids[0]; dzSelect(el); dzZPanelRender();
     dzCompositionViewRender(); exact=root.querySelector('.cmp3-inspector input[data-p="z"]'); exact.value="240"; exact.dispatchEvent(new Event("change",{bubbles:true})); await wait(350);
     const rotation=root.querySelector('.cmp3-inspector input[data-p="rotationZ"]'); rotation.value="12"; rotation.dispatchEvent(new Event("change",{bubbles:true})); await wait(350);

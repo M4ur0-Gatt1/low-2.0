@@ -21,6 +21,10 @@
   "use strict";
   const LOW = global.LOW = global.LOW || {};
   const animation = LOW.animation = LOW.animation || {};
+  /** ¿El contenido de un dibujo está vacío? Cuentan como vacío los planos de
+   *  arte Color/Línea que el lienzo agrega solos, si no tienen nada adentro. */
+  animation.drawingIsEmpty = (contenido) =>
+    !contenido || /^(\s*<g\b[^>]*\bdata-low-art="(?:colour|line)"[^>]*>\s*<\/g>)*\s*$/.test(String(contenido));
 
   /** Nombres de las operaciones, para que el historial diga qué se deshace. */
   const ETIQUETAS = {
@@ -369,6 +373,14 @@
     writeDrawing(contenido, { label = "Dibujar", coalesce = null } = {}) {
       const lyAntes = this.layer ? this.layer.cells.slice() : null;
       const habia = this.cell != null;
+      /* NADA DIBUJADO NO ES UN DIBUJO. El lienzo le pone a toda hoja los dos
+         planos de arte vacíos (Color y Línea), y el volcado con retardo los
+         escribía: con eso, agregar una capa creaba un dibujo fantasma en su
+         cuadro, y Deshacer quedaba en BUCLE —volvía el dibujo a "", el lienzo
+         lo repintaba con los planos, el volcado lo reescribía y apilaba otro
+         «Dibujar»—. Medido: ocho Ctrl+Z seguidos no llegaban a la capa. */
+      if (animation.drawingIsEmpty(contenido) &&
+          (!habia || animation.drawingIsEmpty(this.drawing ? this.drawing.content : ""))) return false;
       const d = this.ensureDrawing();
       if (!d) return false;
       const antes = d.content;

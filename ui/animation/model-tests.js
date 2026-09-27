@@ -1701,6 +1701,32 @@
       ok("retocar la copia no toca el original", (original.content || "").includes("circle"));
     }
 
+    // ── NADA DIBUJADO NO ES UN DIBUJO (v4.51.1): los planos Color/Línea vacíos
+    //    que pone el lienzo creaban un dibujo fantasma en cada capa nueva y
+    //    dejaban Deshacer en bucle ──
+    {
+      const PLANOS = '<g data-low-art="colour" aria-label="Color"></g><g data-low-art="line" aria-label="Línea"></g>';
+      ok("los planos de arte vacíos cuentan como dibujo vacío",
+        animation.drawingIsEmpty(PLANOS) && animation.drawingIsEmpty("") && animation.drawingIsEmpty(null));
+      ok("un plano con algo adentro NO está vacío",
+        !animation.drawingIsEmpty('<g data-low-art="line"><path d="M0 0L1 1"/></g>'));
+      const doc = new animation.LowDoc(), h = new LOW.core.HistoryManager(); doc.setHistory(h);
+      const ly = doc.addLayer();
+      const pila = h.undoStack.length;
+      ok("volcar una hoja vacía en una capa nueva no crea dibujo",
+        doc.writeDrawing(PLANOS) === false && ly.cellAt(doc.frame) == null && h.undoStack.length === pila);
+      doc.writeDrawing('<g data-low-art="line"><path d="M0 0L9 9"/></g>');
+      ok("dibujar de verdad sí crea el dibujo", ly.cellAt(doc.frame) != null);
+      // Deshacer el trazo lo deja vacío; el lienzo repinta los planos y el volcado vuelve a escribir.
+      for (let i = 0; i < 10 && h.undoStack.length > pila; i++) {   // tope: con el defecto, esto no termina
+        h.undo();
+        doc.writeDrawing(PLANOS);      // lo que hace dzMarkDirty después de repintar
+      }
+      ok("deshacer el trazo NO apila otro «Dibujar» (sin bucle)", h.undoStack.length === pila, h.undoStack.map((e) => e.label).join(","));
+      h.undo();
+      ok("y el siguiente Deshacer quita la capa", !doc.scene.layer(ly.id));
+    }
+
     const fallan = res.filter((r) => !r.ok);
     return { total: res.length, ok: res.length - fallan.length, fallan, detalle: res };
   }

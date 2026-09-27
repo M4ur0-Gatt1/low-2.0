@@ -149,7 +149,9 @@
       if (!this.host || !this.doc) return;
       this.host.querySelectorAll(".actual").forEach((n) => n.classList.remove("actual"));
       this.host.querySelectorAll(`[data-frame="${this.doc.frame}"]`).forEach((n) => n.classList.add("actual"));
-      const label = this.host.querySelector(".tl2-rulername");
+      // sólo el CONTADOR: la celda también lleva «+ Capa», y reescribir su
+      // textContent entero se lo llevaba puesto en cada cuadro
+      const label = this.host.querySelector(".tl2-rulername .tl2-framepos") || this.host.querySelector(".tl2-rulername");
       if (label) label.textContent = this.view.compact ? String(this.doc.frame)
         : `${this.doc.frame} / ${this.doc.scene.playRange().out}`;
       const active = this.host.querySelector(`.tl2-cell[data-layer-id="${this.doc.layerId}"][data-frame="${this.doc.frame}"]`);
@@ -273,8 +275,22 @@
       regla.className = "tl2-ruler";
       const nombre = document.createElement("div");
       nombre.className = "tl2-name tl2-rulername";
-      nombre.textContent = this.view.compact ? String(doc.frame) : `${doc.frame} / ${sc.playRange().out}`;
-      nombre.title = `Cuadro ${doc.frame} de ${sc.playRange().out}`;
+      const pos = document.createElement("span");
+      pos.className = "tl2-framepos";
+      pos.textContent = this.view.compact ? String(doc.frame) : `${doc.frame} / ${sc.playRange().out}`;
+      pos.title = `Cuadro ${doc.frame} de ${sc.playRange().out}`;
+      /* «+ CAPA», CON PALABRAS Y SIEMPRE A LA VISTA. Reportado: «no veo cómo
+         generar una nueva capa» y «el + sirve para agregar un frame». La única
+         entrada era el segundo ícono, sin texto, de una barra de 29. Va en la
+         celda de la regla porque la regla es fija arriba: debajo de la última
+         capa se iba de la vista en cuanto había dos capas (medido). */
+      const mas = document.createElement("button");
+      mas.type = "button"; mas.className = "tl2-addlayer";
+      mas.textContent = this.view.compact ? "+" : "+ Capa";
+      mas.title = "Nueva capa de animación (una columna más en la X-sheet)";
+      mas.setAttribute("aria-label", mas.title);
+      mas.onclick = (e) => { e.stopPropagation(); doc.addLayer(); doc.emit("frame"); };
+      nombre.append(pos, mas);
       regla.appendChild(nombre);
       const pista = document.createElement("div");
       pista.className = "tl2-track";
@@ -492,6 +508,12 @@
         cab.title = ly.name;          // compactada, el nombre vive en el tooltip
         cab.append(foldButton(ly.id), ojo, lock, txt);
         cab.onclick = () => doc.selectLayer(ly.id);
+        // renombrar como en la X-sheet: el mismo gesto en los dos lugares
+        cab.ondblclick = async (e) => {
+          if (e.target.closest("button") || typeof global.dzPromptModal !== "function") return;
+          const n = await global.dzPromptModal("Nombre de la capa", "nombre", ly.name);
+          if (n) doc.setLayerProperty(ly.id, "name", n, "Renombrar capa");
+        };
         fila.appendChild(cab);
 
         const track = document.createElement("div");
