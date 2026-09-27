@@ -1180,6 +1180,10 @@
       // Un panel de cero cuadros no se vería nunca: no es un panel.
       duration: Math.max(1, Math.round(Number(data.duration) || 1)),
       drawingRef: data.drawingRef == null ? null : clone(data.drawingRef),
+      // De dónde vino el panel si se importó (p. ej. Storyboarder: su toma
+      // «1A», la cámara y los personajes del Shot Generator). Se guarda tal
+      // cual para no perder nada que LOW todavía no sepa usar.
+      source: data.source && typeof data.source === "object" ? clone(data.source) : null,
       shot: { type: typeof shot.type === "string" ? shot.type : "plano-medio",
         angle: typeof shot.angle === "string" ? shot.angle : "nivel",
         camera: clone(shot.camera || null), subject: clone(shot.subject || null),

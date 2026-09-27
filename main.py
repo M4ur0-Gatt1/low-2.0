@@ -1396,6 +1396,107 @@ class Api:
         return {"data": f"data:{mime};base64," + base64.b64encode(raw).decode("ascii"),
                 "name": fp.name}
 
+    # Orden de capas de un panel de Storyboarder, de abajo hacia arriba. Es el
+    # FORMATO del archivo (qué capa tapa a cuál), no código de Storyboarder:
+    # sin esto un panel importado sale con el calco encima de la tinta.
+    SB_LAYERS = ("shot-generator", "reference", "fill", "tone", "pencil", "ink", "notes")
+    SB_MAX_FILE = 12_000_000
+    SB_MAX_TOTAL = 250_000_000
+
+    @classmethod
+    def _read_storyboarder(cls, fp):
+        """Lee un proyecto .storyboarder (JSON + carpeta images/) y devuelve los
+        paneles con sus capas como data URI. No toca el documento: eso lo hace
+        la interfaz, para que entre en Undo."""
+        fp = Path(fp)
+        try:
+            data = json.loads(fp.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as e:
+            return {"error": f"No pude leer el proyecto de Storyboarder: {e}"}
+        if not isinstance(data, dict) or not isinstance(data.get("boards"), list):
+            return {"error": "El archivo no parece un proyecto de Storyboarder (no tiene «boards»)."}
+        images = fp.parent / "images"
+        total, faltan = 0, []
+
+        def uri(name, avisar=True):
+            nonlocal total
+            if not name or not isinstance(name, str):
+                return None
+            f = images / Path(name).name          # nunca salir de images/
+            if not f.is_file():
+                if avisar:
+                    faltan.append(Path(name).name)
+                return None
+            mime = cls.IMG_MIME.get(f.suffix.lower())
+            if not mime or f.stat().st_size > cls.SB_MAX_FILE:
+                return None
+            raw = f.read_bytes()
+            total += len(raw)
+            if total > cls.SB_MAX_TOTAL:
+                raise MemoryError
+            return f"data:{mime};base64," + base64.b64encode(raw).decode("ascii")
+
+        boards = []
+        try:
+            for b in data["boards"]:
+                if not isinstance(b, dict):
+                    continue
+                layers = b.get("layers") if isinstance(b.get("layers"), dict) else {}
+                capas = []
+                for name in cls.SB_LAYERS:
+                    info = layers.get(name) if isinstance(layers.get(name), dict) else {}
+                    url, avisar = info.get("url"), True
+                    # los proyectos viejos (<1.0) guardaban el dibujo principal
+                    # en board.url, sin capa «fill»; en los nuevos ese archivo
+                    # no existe y no es una falta
+                    if name == "fill" and not url:
+                        url, avisar = b.get("url"), False
+                    d = uri(url, avisar)
+                    if d:
+                        op = info.get("opacity")
+                        if op is None:
+                            op = 0.75 if name == "reference" else 1
+                        capas.append({"name": name, "data": d, "opacity": float(op)})
+                url = b.get("url") or ""
+                poster = uri(url.replace(".png", "-posterframe.jpg")) if not capas and url else None
+                if not capas and not poster:
+                    faltan.append(Path(url).name or ("panel " + str(len(boards) + 1)))
+                audio = b.get("audio") if isinstance(b.get("audio"), dict) else None
+                boards.append({
+                    "uid": b.get("uid"), "number": b.get("number"), "shot": b.get("shot"),
+                    "newShot": bool(b.get("newShot")), "duration": b.get("duration"),
+                    "dialogue": b.get("dialogue") or "", "action": b.get("action") or "",
+                    "notes": b.get("notes") or "", "layers": capas, "posterframe": poster,
+                    "audio": ({"filename": audio.get("filename"),
+                               "found": (images / Path(str(audio.get("filename") or "_")).name).is_file()}
+                              if audio else None),
+                    "sg": b.get("sg") if isinstance(b.get("sg"), dict) else None,
+                })
+        except MemoryError:
+            return {"error": "El proyecto pesa más de 250 MB en imágenes: importalo por escenas."}
+        try:
+            aspect = float(data.get("aspectRatio") or 16 / 9)
+        except (TypeError, ValueError):
+            aspect = 16 / 9
+        return {"name": fp.stem, "version": str(data.get("version") or ""),
+                "fps": data.get("fps"), "aspectRatio": aspect,
+                "defaultBoardTiming": data.get("defaultBoardTiming") or 2000,
+                "boards": boards, "missing": sorted(set(faltan))}
+
+    def import_storyboarder(s):
+        """Diálogo para elegir un .storyboarder y leerlo."""
+        if not s._window:
+            return {"error": "sin ventana"}
+        try:
+            r = s._window.create_file_dialog(
+                webview.OPEN_DIALOG, allow_multiple=False,
+                file_types=("Proyecto de Storyboarder (*.storyboarder)",))
+        except Exception as e:
+            return {"error": str(e)}
+        if not r:
+            return {"cancel": True}
+        return s._read_storyboarder(r[0] if isinstance(r, (list, tuple)) else r)
+
     def import_character_art(s):
         """Importa arte destinado a rigging, no una referencia de calco.
 

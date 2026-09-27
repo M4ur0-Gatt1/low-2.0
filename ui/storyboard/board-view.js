@@ -188,6 +188,18 @@
         crear.dataset.sb = "create";
         if (crear.disabled) crear.title = "Capturá una imagen para cada plano antes de crear el animatic";
       }
+      const sbImport = storyboard.storyboarderImport;
+      if (sbImport) {
+        /* La puesta con monigotes 3D posables se hace en Storyboarder (Shot
+           Generator) y se trae acá: no se rehace, se importa su archivo. */
+        const importar = boton("Importar Storyboarder", "Traer los paneles de un proyecto .storyboarder", async () => {
+          importar.disabled = true;
+          try { await sbImport.importInto(this); }
+          catch (error) { if (this.status) this.status(error.message); }
+          finally { importar.disabled = false; }
+        });
+        importar.dataset.sb = "import-storyboarder";
+      }
       boton("+ Antes", "Insertar un panel antes del elegido", () => {
         const at = boards.findIndex((b) => b.id === this.selectedId);
         nuevoPanel(at < 0 ? 0 : at);
@@ -229,7 +241,8 @@
         const vacio = document.createElement("div");
         vacio.className = "sb2-empty";
         vacio.textContent = "1. «+ Panel» agrega un plano: escribí su acción. 2. «Capturar dibujo» toma el cuadro actual. " +
-          "3. Ajustá la duración y mirá el ritmo con ▶ Animática. 4. «Crear animatic» abre otra escena para animar y exportar.";
+          "3. Ajustá la duración y mirá el ritmo con ▶ Animática. 4. «Crear animatic» abre otra escena para animar y exportar. " +
+          "¿Armaste la puesta en Storyboarder? «Importar Storyboarder» trae sus paneles.";
         raiz.appendChild(vacio);
         this.host.appendChild(raiz);
         return;

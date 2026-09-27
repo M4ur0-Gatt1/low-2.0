@@ -300,6 +300,21 @@
       return id;
     }
 
+    /** Varios paneles de una vez (importar un proyecto): UNA sola entrada de
+     *  Undo, no una por panel. Devuelve los ids en orden. */
+    addStoryboardBoards(list = [], label = "Importar paneles") {
+      const ids = [];
+      if (!Array.isArray(list) || !list.length) return ids;
+      this._storyboardChange(label, (storyboard) => {
+        for (const data of list) {
+          const board = animation.storyboardBoard(data || {}, storyboard.boards.length);
+          storyboard.boards.push(board); ids.push(board.id);
+        }
+        return true;
+      });
+      return ids;
+    }
+
     updateStoryboardBoard(id, patch = {}, label = "Editar panel") {
       return this._storyboardChange(label, (storyboard) => {
         const board = storyboard.boards.find((b) => b.id === id);

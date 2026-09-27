@@ -20,6 +20,7 @@ cargar("ui/animation/document.js");
 cargar("ui/animation/audio.js");
 cargar("ui/storyboard/shot-model.js");
 cargar("ui/storyboard/workflow.js");
+cargar("ui/storyboard/storyboarder-import.js");
 
 const S = LOW.storyboard.shots, fallan = [];
 const check = (nombre, condicion, detalle) => {
@@ -281,6 +282,43 @@ check("clasificar sin cámara ni figura no explota",
   check('arranque después de entrada usa tiempo correcto',starts[1][0]===100&&starts[1][1]===1);
   track.offset=-24;track.playFrom(1);
   check('offset negativo recorta principio',starts[2][1]===1);
+}
+{
+  // IMPORTAR STORYBOARDER: tiempos, lo que no se usa todavía no se pierde, un solo Undo
+  const I = LOW.storyboard.storyboarderImport;
+  check("storyboarder: 1500 ms a 24 fps son 36 cuadros", I.cuadros(1500, 24) === 36);
+  check("storyboarder: se conservan los segundos, no los cuadros", I.cuadros(1500, 12) === 18);
+  check("storyboarder: sin duración ni default válidos, 2 s", I.cuadros(undefined, 24) === 48 && I.cuadros(-5, 24) === 48);
+  const sg = { version: "2.0.1", data: { sceneObjects: { c: { type: "camera", fov: 22.25 },
+    p: { type: "character", model: "adult-male", skeleton: { Head: { rotation: { x: 0.1, y: 0, z: 0 } } } } } } };
+  const project = { name: "escena", version: "2.0.1", defaultBoardTiming: 1000, boards: [
+    { uid: "AAAAA", shot: "1A", newShot: true, duration: 1500, dialogue: "Hola", action: "Entra", notes: "lento",
+      audio: { filename: "a1.wav", found: true }, sg },
+    { uid: "BBBBB", shot: "1B" } ] };
+  const datos = I.toBoards(project, 24);
+  check("storyboarder: toma, diálogo, acción y notas", datos[0].name === "1A" && datos[0].dialogue === "Hola" &&
+    datos[0].action === "Entra" && datos[0].notes === "lento");
+  check("storyboarder: sin duración usa el default DEL PROYECTO", datos[1].duration === 24);
+  const doc = new LOW.animation.LowDoc(), history = new LOW.core.HistoryManager(); doc.setHistory(history);
+  doc.addStoryboardBoard({ duration: 5, action: "previo" });
+  const ids = doc.addStoryboardBoards(datos.map((d) => ({ ...d, drawingRef: { kind: "storyboarder", png: "data:image/png;base64,aGVsbG8=" } })), "Importar Storyboarder");
+  check("storyboarder: se agregan al final, en orden", ids.length === 2 && doc.scene.storyboard.boards.length === 3 &&
+    doc.scene.storyboard.boards[1].name === "1A" && doc.scene.storyboard.boards[2].name === "1B");
+  // IDA Y VUELTA POR ARCHIVO: si el normalizador no conoce «source», se pierde al guardar
+  const reab = LOW.animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(doc.toJSON())));
+  const src = reab.scene.board(ids[0]) && reab.scene.board(ids[0]).source;
+  check("storyboarder: el Shot Generator sobrevive a guardar y reabrir",
+    !!src && src.app === "storyboarder" && src.sg.data.sceneObjects.c.fov === 22.25 &&
+    src.sg.data.sceneObjects.p.skeleton.Head.rotation.x === 0.1 && src.audio.filename === "a1.wav");
+  check("storyboarder: un panel sin origen sigue sin origen", reab.scene.storyboard.boards[0].source === null);
+  history.undo();
+  check("storyboarder: importar es UN solo Deshacer", doc.scene.storyboard.boards.length === 1 &&
+    doc.scene.storyboard.boards[0].action === "previo");
+  history.redo();
+  check("storyboarder: rehacer vuelve a traer los dos", doc.scene.storyboard.boards.length === 3);
+  const texto = I.resumen({ name: "escena", missing: ["x.png"] }, { boards: datos, sinImagen: [2] });
+  check("storyboarder: el resumen DICE lo que no entró", /sin imagen: 2/.test(texto) && /x\.png/.test(texto) &&
+    /audio/.test(texto) && /Shot Generator/.test(texto));
 }
 console.log(`TOTAL ${fallan.length === 0 ? "OK" : "FALLAN " + fallan.length}`);
 if (fallan.length) { fallan.forEach((f) => console.error("FALLO: " + f)); process.exit(1); }

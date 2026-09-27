@@ -56,6 +56,7 @@ jobs:
           python tools/check_provider_contracts.py
           python tools/check_multiplane_backend.py
           python tools/check_asset_import_backend.py
+          python tools/check_storyboarder_import_backend.py
           python tools/check_relay_server.py
           python tools/check_app_js_budget.py
           python tools/check_safe_mode_backend.py
@@ -107,6 +108,7 @@ jobs:
           node tools/check_brush_vector_import_ui.js
           node tools/check_storyboard_ui.js
           node tools/check_storyboard_workflow_ui.js
+          node tools/check_storyboarder_import_ui.js
           node tools/check_document_tabs_ui.js
           node tools/check_papelera_ui.js
           node tools/check_save_recovery_ui.js
