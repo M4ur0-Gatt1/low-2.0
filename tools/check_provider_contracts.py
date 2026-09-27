@@ -50,6 +50,50 @@ class Providers(unittest.TestCase):
                     events = list(provider.chat_stream([{"role": "user", "content": "test"}]))
                     self.assertTrue(any(event["type"] == "done" for event in events))
 
+    def test_registered_providers_are_offered_and_offered_ones_exist(self):
+        """Un proveedor a medio enchufar no se nota hasta que alguien lo busca.
+
+        Hay dos formas de dejarlo a medias y ninguna hace ruido:
+
+        · la CLASE registrada en PROVIDERS pero el proveedor sin entrada en
+          DEFAULT_CONFIG: la tarjeta no aparece nunca en la pantalla de APIs,
+          asi que no hay donde poner la clave. Funciona todo menos poder
+          usarlo.
+        · la entrada en DEFAULT_CONFIG sin clase: la tarjeta aparece y falla
+          al primer uso.
+
+        Agregar un proveedor toca cuatro lugares (la clase, PROVIDERS,
+        DEFAULT_CONFIG y el orden de respaldo); esto cuida los dos que dejan
+        el resultado invisible o roto.
+        """
+        registrados = set(PROVIDERS)
+        ofrecidos = set(DEFAULT_CONFIG["providers"])
+        sin_tarjeta = sorted(registrados - ofrecidos)
+        self.assertFalse(sin_tarjeta,
+            "registrados en PROVIDERS pero sin entrada en DEFAULT_CONFIG, asi que "
+            "su tarjeta no aparece y no hay donde poner la clave: " + ", ".join(sin_tarjeta))
+        sin_clase = sorted(ofrecidos - registrados)
+        self.assertFalse(sin_clase,
+            "ofrecidos en DEFAULT_CONFIG pero sin clase en PROVIDERS, asi que la "
+            "tarjeta aparece y falla al usarla: " + ", ".join(sin_clase))
+
+    def test_chat_providers_have_a_reachable_default_endpoint(self):
+        """Todo proveedor de chat tiene que saber a DONDE hablar sin que le
+        completen la Base URL a mano: el campo es opcional en la tarjeta y
+        queda vacio por defecto, asi que si la clase no trae BASE_URL el
+        proveedor no sirve recien cuando alguien ya puso su clave."""
+        for name, cls in PROVIDERS.items():
+            if not issubclass(cls, OpenAICompatProvider):
+                continue
+            with self.subTest(provider=name):
+                url = (getattr(cls, "BASE_URL", "") or
+                       DEFAULT_CONFIG["providers"].get(name, {}).get("base_url", ""))
+                self.assertTrue(url.startswith("http"),
+                    name + " no tiene endpoint por defecto ni en la clase ni en la "
+                    "configuracion: con la Base URL vacia no hay a donde hablar")
+                self.assertTrue(cls.default_model(),
+                    name + " no declara modelo por defecto")
+
     def test_anthropic_native_auth_endpoint_and_tool_conversion(self):
         provider = get_provider("anthropic", api_key="test-key", base_url="https://example.test/v1/", model="chosen")
         with patch("requests.post", return_value=response({"content": [{"type": "tool_use", "id": "1", "name": "read_file", "input": {"path": "a"}}]})) as post:

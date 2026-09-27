@@ -2564,6 +2564,7 @@ class Api:
         "siliconflow": "deepseek-ai/DeepSeek-V3",
         "openai": "gpt-4o-mini",
         "qwen": "qwen-plus",
+        "stepfun": "step-3.5-flash",
         "glm": "glm-4-flash",
         "xai": "grok-2",
         "digitalocean": "llama3.3-70b-instruct",
@@ -2592,7 +2593,7 @@ class Api:
         # Orden configurable por el usuario (); si no, el default histórico
         pref = s.cfg.data.get("failover_order") or [
             "deepseek", "siliconflow", "nvidia", "groq", "gemini", "openai",
-            "anthropic", "qwen", "glm", "xai", "openrouter", "huggingface",
+            "anthropic", "qwen", "stepfun", "glm", "xai", "openrouter", "huggingface",
             "digitalocean", "agnes", "aimlapi", "custom"]
         rest = sorted((p for p in provs if p != active and p not in s.MEDIA_ONLY),
                       key=lambda p: pref.index(p) if p in pref else 99)

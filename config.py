@@ -36,7 +36,7 @@ DEFAULT_CONFIG = {
     # Solo se usan los que tienen API key cargada. Si no se configura, usa el orden
     # por defecto (deepseek  siliconflow  nvidia  groq  openai  ...  custom).
     "failover_order": ["deepseek", "siliconflow", "nvidia", "groq", "gemini",
-                       "openai", "anthropic", "qwen", "glm", "xai", "kimi",
+                       "openai", "anthropic", "qwen", "glm", "xai", "kimi", "stepfun",
                        "perplexity", "openrouter", "huggingface",
                        "mistral", "cohere", "together", "fireworks", "cerebras",
                        "cloudflare", "digitalocean", "agnes", "aimlapi", "custom"],
@@ -81,6 +81,7 @@ DEFAULT_CONFIG = {
         # Kimi (Moonshot AI) — OpenAI-compatible con 1M contexto y razonamiento
         # Key: https://platform.kimi.ai/console/api-keys
         "kimi": {"api_key": "", "model": "kimi-k3", "base_url": ""},
+        "stepfun": {"api_key": "", "model": "step-3.7-flash", "base_url": ""},
         # Perplexity — multi-provider con búsqueda web integrada y citas
         # Key: https://console.perplexity.ai/group/keys
         "perplexity": {"api_key": "", "model": "sonar", "base_url": ""},

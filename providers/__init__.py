@@ -15,6 +15,7 @@ from providers.fal_provider import FALProvider
 from providers.aimlapi_provider import AIMLAPIProvider
 from providers.agnes_provider import AgnesProvider
 from providers.kimi_provider import KimiProvider
+from providers.stepfun_provider import StepFunProvider
 from providers.grok_provider import GrokProvider
 from providers.perplexity_provider import PerplexityProvider
 from providers.huggingface_provider import HuggingFaceProvider
@@ -35,6 +36,7 @@ PROVIDERS = {
     "xai": XAIProvider, "nvidia": NVIDIAProvider, "siliconflow": SiliconFlowProvider,
     "digitalocean": DigitalOceanProvider, "ltx": LTXProvider, "fal": FALProvider,
     "aimlapi": AIMLAPIProvider, "agnes": AgnesProvider, "custom": CustomProvider,
+    "stepfun": StepFunProvider,
     "kimi": KimiProvider, "grok": GrokProvider, "perplexity": PerplexityProvider,
     "huggingface": HuggingFaceProvider, "openrouter": OpenRouterProvider,
     "gemini": GeminiProvider,
