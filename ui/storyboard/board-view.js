@@ -168,6 +168,26 @@
         this.selectedId = id; this.render();
       };
       boton("+ Panel", "Agregar un panel al final", () => nuevoPanel(null), "primary");
+      const flujo = storyboard.workflow;
+      if (flujo) {
+        boton("Duplicar", "Duplicar el plano elegido con imagen y notas", () => {
+          const copia = LOW.animation.clone(elegido); delete copia.id;
+          this.selectedId = this.doc.addStoryboardBoard(copia, boards.indexOf(elegido) + 1);
+          this.render();
+        }).disabled = !elegido;
+        const capturar = boton("Capturar dibujo", "Usar el cuadro actual como imagen del plano", async () => {
+          capturar.disabled = true;
+          try { await flujo.capture(this); } catch (error) { if (this.status) this.status(error.message); }
+          finally { capturar.disabled = false; }
+        });
+        capturar.disabled = !elegido; capturar.dataset.sb = "capture";
+        const crear = boton("Crear animatic", "Crear otra escena con las imágenes y duraciones de los planos", () => {
+          try { flujo.openAnimatic(this); } catch (error) { if (this.status) this.status(error.message); }
+        });
+        crear.disabled = !boards.length || boards.some((b) => !flujo.imageOf(b));
+        crear.dataset.sb = "create";
+        if (crear.disabled) crear.title = "Capturá una imagen para cada plano antes de crear el animatic";
+      }
       boton("+ Antes", "Insertar un panel antes del elegido", () => {
         const at = boards.findIndex((b) => b.id === this.selectedId);
         nuevoPanel(at < 0 ? 0 : at);
@@ -208,7 +228,8 @@
       if (!boards.length) {
         const vacio = document.createElement("div");
         vacio.className = "sb2-empty";
-        vacio.textContent = "Todavía no hay paneles. «+ Panel» crea el primero y ahí elegís la toma.";
+        vacio.textContent = "1. «+ Panel» agrega un plano: escribí su acción. 2. «Capturar dibujo» toma el cuadro actual. " +
+          "3. Ajustá la duración y mirá el ritmo con ▶ Animática. 4. «Crear animatic» abre otra escena para animar y exportar.";
         raiz.appendChild(vacio);
         this.host.appendChild(raiz);
         return;
@@ -253,6 +274,9 @@
           (enCurso && enCurso.board.id === board.id ? " enAire" : "");
         fila.tabIndex = 0;
         fila.onclick = () => { this.selectedId = board.id; this.render(); };
+        fila.onkeydown = (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.selectedId = board.id; this.render(); }
+        };
         const num = document.createElement("b"); num.textContent = String(i + 1);
         let miniatura;
         if (board.drawingRef && board.drawingRef.png) {
@@ -266,7 +290,7 @@
         const cuerpo = document.createElement("div"); cuerpo.className = "sb2-board-body";
         const tipo = shots.SHOT_TYPES.find((x) => x.id === board.shot.type);
         const cab = document.createElement("span"); cab.className = "sb2-shot";
-        cab.textContent = (tipo ? tipo.name : board.shot.type) +
+        cab.textContent = (board.name ? board.name + " · " : "") + (tipo ? tipo.name : board.shot.type) +
           (board.shot.angle && board.shot.angle !== "nivel" ? " · " + board.shot.angle : "");
         const acc = document.createElement("small");
         acc.textContent = board.action || board.dialogue || "sin acción";
@@ -289,6 +313,10 @@
         const s = document.createElement("span"); s.textContent = etiqueta;
         l.append(s, control); gen.appendChild(l); return control;
       };
+      const nombre = document.createElement("input");
+      nombre.type = "text"; nombre.value = elegido.name || ""; nombre.placeholder = "ej.: 010 · Entrada al taller";
+      nombre.onchange = () => this.doc.updateStoryboardBoard(elegido.id, { name: nombre.value }, "Nombrar el plano");
+      campo("Nombre", nombre);
       const tipoSel = document.createElement("select");
       shots.SHOT_TYPES.forEach((t) => {
         const o = document.createElement("option"); o.value = t.id; o.textContent = t.name;
@@ -329,6 +357,11 @@
       dialogo.type = "text"; dialogo.value = elegido.dialogue; dialogo.placeholder = "diálogo o voz en off";
       dialogo.onchange = () => this.doc.updateStoryboardBoard(elegido.id, { dialogue: dialogo.value }, "Escribir el diálogo");
       campo("Diálogo", dialogo);
+
+      const notas = document.createElement("textarea");
+      notas.rows = 2; notas.value = elegido.notes || ""; notas.placeholder = "continuidad, sonido o indicaciones para animación";
+      notas.onchange = () => this.doc.updateStoryboardBoard(elegido.id, { notes: notas.value }, "Anotar el plano");
+      campo("Notas", notas);
 
       // Lectura de la cámara: la decisión se ve en números, no hay que creerle.
       const lectura = document.createElement("div"); lectura.className = "sb2-read";

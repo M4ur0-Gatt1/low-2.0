@@ -17,7 +17,9 @@ cargar("ui/animation/exposures.js");
 cargar("ui/animation/onion.js");
 cargar("ui/animation/mocap.js");
 cargar("ui/animation/document.js");
+cargar("ui/animation/audio.js");
 cargar("ui/storyboard/shot-model.js");
+cargar("ui/storyboard/workflow.js");
 
 const S = LOW.storyboard.shots, fallan = [];
 const check = (nombre, condicion, detalle) => {
@@ -240,6 +242,46 @@ check("clasificar sin cámara ni figura no explota",
     new A.LowDoc().scene.boardDuration() === 0 && new A.LowDoc().scene.boardTiming().length === 0);
 }
 
+{
+  const doc=new LOW.animation.LowDoc(), history=new LOW.core.HistoryManager();doc.setHistory(history);
+  const png='data:image/png;base64,aGVsbG8=';
+  const a=doc.addStoryboardBoard({duration:3,action:'Entrada',drawingRef:{png}});
+  const b=doc.addStoryboardBoard({duration:5,dialogue:'Hola',drawingRef:{png}});
+  let frames=0;doc.subscribe((d,reason)=>{if(reason==='frame')frames++;});
+  doc.updateStoryboardBoard(a,{notes:'Continuidad'});history.undo();history.redo();
+  check('anotar storyboard y deshacer no repinta el dibujo',frames===0);
+  doc.audio=new LOW.animation.AudioTrack(doc);
+  doc.audio.fromJSON({name:'Voz.wav',offset:24,volume:0.6,peaks:[0.2,0.8]});
+  doc.audio.buffer={duration:3};
+  const before=JSON.stringify(doc.scene.toJSON()), out=LOW.storyboard.workflow.buildAnimatic(doc);
+  check('animatic conserva audio con transporte independiente',out.audio!==doc.audio&&out.audio.doc===out&&out.audio.buffer===doc.audio.buffer&&out.audio.offset===24);
+  out.audio.offset=12;
+  check('retimar audio derivado no cambia el original',doc.audio.offset===24);
+  check('animatic no modifica la escena original',JSON.stringify(doc.scene.toJSON())===before);
+  check('animatic conserva dimensiones y fps',out.scene.width===doc.scene.width&&out.scene.fps===doc.scene.fps);
+  check('duraciones se convierten en exposiciones exactas',out.layer.cellAt(1)===1&&out.layer.cellAt(3)===1&&out.layer.cellAt(4)===2&&out.layer.cellAt(8)===2&&out.layer.cellAt(9)==null);
+  check('rango de export coincide con el storyboard',out.scene.range.out===8);
+  const loaded=LOW.animation.LowDoc.fromJSON(JSON.parse(JSON.stringify(out.toJSON())));
+  check('audio reabre con metadatos sin fingir muestras cargadas',loaded.audio.name==='Voz.wav'&&loaded.audio.offset===12&&!loaded.audio.buffer);
+  check('animatic reabre con imagen y notas',loaded.level.byNumber(1).content.includes(png)&&loaded.scene.board(a).notes==='Continuidad');
+  doc.updateStoryboardBoard(b,{drawingRef:null});let rejected=false;
+  try{LOW.storyboard.workflow.buildAnimatic(doc);}catch(e){rejected=/2/.test(e.message);}
+  check('no crea planos vacíos silenciosamente',rejected);
+}
+{
+  const doc=new LOW.animation.LowDoc();doc.scene.fps=24;
+  const track=new LOW.animation.AudioTrack(doc),starts=[];
+  track.buffer={duration:10};track.offset=48;
+  track.ctx={currentTime:100,createBufferSource:()=>({connect(){return this;},start(...args){starts.push(args);},stop(){}}),createGain:()=>({gain:{value:1,setValueAtTime(){},linearRampToValueAtTime(){}},connect(){return this;}})};
+  track.playFrom(1);
+  check('offset positivo espera hasta el cuadro de entrada',starts[0][0]===102&&starts[0][1]===0);
+  track.scrub(24);
+  check('scrub antes de la entrada permanece en silencio',starts.length===1);
+  track.playFrom(73);
+  check('arranque después de entrada usa tiempo correcto',starts[1][0]===100&&starts[1][1]===1);
+  track.offset=-24;track.playFrom(1);
+  check('offset negativo recorta principio',starts[2][1]===1);
+}
 console.log(`TOTAL ${fallan.length === 0 ? "OK" : "FALLAN " + fallan.length}`);
 if (fallan.length) { fallan.forEach((f) => console.error("FALLO: " + f)); process.exit(1); }
 console.log("STORYBOARD OK: óptica, clasificación de tomas, generador de cámara y ángulos");

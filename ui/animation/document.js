@@ -273,13 +273,13 @@
       this.scene.storyboard = animation.storyboardData(this.scene.storyboard);
       const after = animation.clone(this.scene.storyboard);
       if (JSON.stringify(before) === JSON.stringify(after)) return result;
-      this.touch(); this.emit("storyboard"); this.emit("frame");
+      this.touch(); this.emit("storyboard");
       if (this.history) {
         const doc = this;
         this.history.push({ label, domain: "storyboard", before, after,
           apply: (_direction, value) => {
             doc.scene.storyboard = animation.storyboardData(value);
-            doc.touch(); doc.emit("storyboard"); doc.emit("frame");
+            doc.touch(); doc.emit("storyboard");
           } });
       }
       return result;

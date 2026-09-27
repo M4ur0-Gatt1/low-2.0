@@ -106,6 +106,7 @@ jobs:
           node tools/check_composition_ui.js
           node tools/check_brush_vector_import_ui.js
           node tools/check_storyboard_ui.js
+          node tools/check_storyboard_workflow_ui.js
           node tools/check_document_tabs_ui.js
           node tools/check_papelera_ui.js
           node tools/check_save_recovery_ui.js

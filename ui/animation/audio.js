@@ -107,7 +107,12 @@
       const gain = ctx.createGain();
       gain.gain.value = this.volume;
       src.connect(gain).connect(ctx.destination);
-      src.start(0, t);
+      // Con desfase POSITIVO el audio entra más adelante: si se arranca antes
+      // de ese cuadro hay que ESPERAR, no sonar desde el principio del archivo
+      // (sonaba adelantado). _tiempoDe ya da 0 en ese caso; falta la espera.
+      const fps = this.doc ? this.doc.scene.fps || 24 : 24;
+      const espera = Math.max(0, (this.offset - (frame - 1)) / fps);
+      src.start(ctx.currentTime + espera, t);
       this.fuente = src;
     }
 
@@ -122,6 +127,7 @@
      *  una sílaba: se arrastra y se escucha, no se reproduce todo. */
     scrub(frame) {
       if (!this.buffer || this.muted) return;
+      if (frame - 1 < this.offset) return;          // antes de que entre el audio: silencio
       const ctx = this._ctx();
       if (!ctx) return;
       const ahora = ctx.currentTime;
@@ -149,6 +155,14 @@
     }
     setMuted(v) { this.muted = !!v; if (this.muted) this.stop(); if (this.doc) this.doc.emit("audio"); }
     setVolume(v) { this.volume = Math.max(0, Math.min(1, v)); if (this.doc) this.doc.emit("audio"); }
+
+    /** Otra pista con transporte PROPIO para otro documento (el animatic): las
+     *  muestras decodificadas se comparten, sólo lectura; desfase y volumen no. */
+    cloneFor(doc) {
+      const track = new AudioTrack(doc).fromJSON(this.toJSON());
+      track.buffer = this.buffer;
+      return track;
+    }
 
     toJSON() {
       return { name: this.name, offset: this.offset, muted: this.muted,
